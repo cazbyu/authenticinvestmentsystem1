@@ -1,0 +1,329 @@
+/**
+ * Date utilities for handling local dates without timezone shifts
+ */
+
+/**
+ * Checks if a string is a valid ISO date string
+ */
+export function isValidISODate(dateString?: string | null): boolean {
+  if (!dateString || dateString === 'null' || typeof dateString !== 'string') {
+    return false;
+  }
+  return !isNaN(Date.parse(dateString));
+}
+
+/**
+ * Formats a date as YYYY-MM-DD using local time (no UTC conversion)
+ */
+export function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Parses a YYYY-MM-DD string as a local date (no timezone conversion)
+ */
+export function parseLocalDate(dateString: string): Date {
+  if (typeof dateString !== 'string' || dateString.trim() === '') {
+    return new Date(NaN);
+  }
+  // If an ISO string with time component is provided (e.g. 2025-06-01T00:00:00Z),
+  // strip everything after the date portion before parsing.
+  const datePart = dateString.split('T')[0];
+
+  const parts = datePart.split('-');
+  if (parts.length !== 3) {
+    return new Date(NaN);
+  }
+
+  const [year, month, day] = parts.map(Number);
+  if ([year, month, day].some((n) => Number.isNaN(n))) {
+    return new Date(NaN);
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+/**
+ * Gets the start of the week for a given date and week start preference
+ */
+export function getWeekStart(date: Date, weekStartDay: 'sunday' | 'monday' = 'sunday'): Date {
+  console.log('=== GET WEEK START DEBUG ===');
+  console.log('Input date:', date.toISOString());
+  console.log('Week start day preference:', weekStartDay);
+  const d = new Date(date);
+  const currentDay = d.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  console.log('Current day of week (0=Sun, 6=Sat):', currentDay);
+  const targetDay = weekStartDay === 'sunday' ? 0 : 1;
+  console.log('Target day of week:', targetDay);
+  
+  let daysToSubtract = currentDay - targetDay;
+  if (daysToSubtract < 0) {
+    daysToSubtract += 7;
+  }
+  console.log('Days to subtract:', daysToSubtract);
+  
+  d.setDate(d.getDate() - daysToSubtract);
+  console.log('Calculated week start:', d.toISOString());
+  console.log('=== END GET WEEK START DEBUG ===');
+  return d;
+}
+
+/**
+ * Gets the end of the week for a given date and week start preference
+ */
+export function getWeekEnd(date: Date, weekStartDay: 'sunday' | 'monday' = 'sunday'): Date {
+  const weekStart = getWeekStart(date, weekStartDay);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  return weekEnd;
+}
+
+/**
+ * Generates week windows for a 12-week cycle
+ */
+export function generateCycleWeeks(
+  startDate: string,
+  weekStartDay: 'sunday' | 'monday' = 'sunday',
+  endDate?: string   // NEW optional arg for custom timelines
+): Array<{ week_number: number; start_date: string; end_date: string }> {
+  // Validate startDate before proceeding
+  if (!isValidISODate(startDate)) {
+    console.warn('Invalid startDate provided to generateCycleWeeks:', startDate);
+    return [];
+  }
+
+  const weeks = [];
+  const cycleStart = parseLocalDate(startDate);
+  
+  // Ensure the cycle starts on the correct day of the week
+  const alignedStart = getWeekStart(cycleStart, weekStartDay);
+  
+  // Decide how many weeks to generate
+let totalWeeks = 12;
+if (endDate && isValidISODate(endDate)) {
+  const cycleEnd = parseLocalDate(endDate);
+  const diffDays = Math.ceil((cycleEnd.getTime() - alignedStart.getTime()) / (1000 * 60 * 60 * 24));
+  totalWeeks = Math.ceil(diffDays / 7);
+}
+for (let i = 0; i < totalWeeks; i++) {
+
+    const weekStart = new Date(alignedStart);
+    weekStart.setDate(alignedStart.getDate() + (i * 7));
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    
+    weeks.push({
+      week_number: i + 1,
+      start_date: formatLocalDate(weekStart),
+      end_date: formatLocalDate(weekEnd),
+    });
+  }
+  
+  return weeks;
+}
+
+/**
+ * Formats a date range for display
+ */
+export function formatDateRange(startDate: string, endDate: string): string {
+  // Validate input dates first
+  if (!isValidISODate(startDate) || !isValidISODate(endDate)) {
+    return 'Invalid date';
+  }
+  
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+  
+  const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+  const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
+  
+  if (start.getFullYear() === end.getFullYear()) {
+    if (start.getMonth() === end.getMonth()) {
+      // Same month: "31 Aug - 6 Sep"
+      return `${start.getDate()} ${startMonth} - ${end.getDate()} ${endMonth}`;
+    } else {
+      // Different months, same year: "31 Aug - 6 Sep"
+      return `${start.getDate()} ${startMonth} - ${end.getDate()} ${endMonth}`;
+    }
+  } else {
+    // Different years: "31 Aug 2024 - 6 Sep 2025"
+    return `${start.getDate()} ${startMonth} ${start.getFullYear()} - ${end.getDate()} ${endMonth} ${end.getFullYear()}`;
+  }
+}
+
+/**
+ * Gets available week start options for the next 8 weeks
+ */
+export function getAvailableWeekStarts(weekStartDay: 'sunday' | 'monday' = 'sunday'): Array<{
+  start: string;
+  end: string;
+  label: string;
+}> {
+  const weeks = [];
+  const today = new Date();
+  const currentDay = today.getDay();
+  const targetDay = weekStartDay === 'sunday' ? 0 : 1;
+  
+  // Generate next 8 weeks
+  for (let i = 0; i < 8; i++) {
+    const weekStart = new Date(today);
+    
+    if (i === 0 && currentDay === targetDay) {
+      // Today is the target day, use today as start
+      // weekStart is already set to today
+    } else {
+      // Calculate days to the next occurrence of target day
+      let daysToAdd = targetDay - currentDay;
+      if (daysToAdd <= 0) {
+        daysToAdd += 7; // Move to next week if target day has passed
+      }
+      
+      // For subsequent weeks, add the appropriate offset
+      if (currentDay === targetDay) {
+        // If today is target day, subsequent weeks are i weeks later
+        daysToAdd += i * 7;
+      } else {
+        // If today is not target day, add weeks for subsequent options
+        if (i > 0) {
+          daysToAdd += (i - 1) * 7;
+        }
+      }
+      
+      weekStart.setDate(weekStart.getDate() + daysToAdd);
+    }
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 83); // 12 weeks = 84 days, minus 1 = 83
+    
+    const startStr = formatLocalDate(weekStart);
+    const endStr = formatLocalDate(weekEnd);
+    
+    const label = formatDateRange(startStr, endStr);
+    
+    weeks.push({
+      start: startStr,
+      end: endStr,
+      label
+    });
+  }
+
+  return weeks;
+}
+
+/**
+ * Returns an array of all dates between start and end (inclusive)
+ */
+export function getWeekDatesArray(weekStart: string, weekEnd: string): string[] {
+  if (!isValidISODate(weekStart) || !isValidISODate(weekEnd)) {
+    return [];
+  }
+
+  const dates: string[] = [];
+  const start = parseLocalDate(weekStart);
+  const end = parseLocalDate(weekEnd);
+
+  const current = new Date(start);
+  while (current <= end) {
+    dates.push(formatLocalDate(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  return dates;
+}
+
+/**
+ * Finds the most recent incomplete date working backwards from today
+ * Returns null if all dates in the week are complete or if today is not in the week
+ */
+export function getMostRecentIncompleteDate(
+  completedDates: string[],
+  weekStart: string,
+  weekEnd: string
+): string | null {
+  const today = formatLocalDate(new Date());
+  const weekDates = getWeekDatesArray(weekStart, weekEnd);
+
+  // Check if today is within the week range
+  if (!weekDates.includes(today)) {
+    return null;
+  }
+
+  // Work backwards from today to find the first incomplete date
+  for (let i = weekDates.length - 1; i >= 0; i--) {
+    const date = weekDates[i];
+
+    // Stop checking dates after today
+    if (date > today) {
+      continue;
+    }
+
+    // If this date is not completed, return it
+    if (!completedDates.includes(date)) {
+      return date;
+    }
+
+    // If we reach today and it's complete, all dates up to today are complete
+    if (date === today) {
+      break;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Checks if a date is in the current week
+ */
+export function isDateInCurrentWeek(date: string, weekStartDay: 'sunday' | 'monday' = 'sunday'): boolean {
+  if (!isValidISODate(date)) {
+    return false;
+  }
+
+  const today = new Date();
+  const weekStart = getWeekStart(today, weekStartDay);
+  const weekEnd = getWeekEnd(today, weekStartDay);
+
+  const weekStartStr = formatLocalDate(weekStart);
+  const weekEndStr = formatLocalDate(weekEnd);
+
+  return date >= weekStartStr && date <= weekEndStr;
+}
+
+/**
+ * Calculates which week number a date falls into for a given timeline
+ * Returns null if the date is outside the timeline range
+ */
+export function getCurrentWeekNumber(
+  timelineStartDate: string,
+  targetDate?: string,
+  weekStartDay: 'sunday' | 'monday' = 'sunday'
+): number | null {
+  if (!isValidISODate(timelineStartDate)) {
+    return null;
+  }
+
+  const today = targetDate ? parseLocalDate(targetDate) : new Date();
+  const todayStr = formatLocalDate(today);
+
+  const cycleStart = parseLocalDate(timelineStartDate);
+  const alignedStart = getWeekStart(cycleStart, weekStartDay);
+  const alignedStartStr = formatLocalDate(alignedStart);
+
+  // Check if today is before the timeline starts
+  if (todayStr < alignedStartStr) {
+    return null;
+  }
+
+  // Calculate the difference in days
+  const diffTime = today.getTime() - alignedStart.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  // Calculate week number (1-indexed)
+  const weekNumber = Math.floor(diffDays / 7) + 1;
+
+  return weekNumber;
+}
