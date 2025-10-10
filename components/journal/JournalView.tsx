@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FileText, Plus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
+import { calculateTaskPoints } from '@/lib/taskUtils';
 
 interface JournalEntry {
   id: string;
@@ -37,16 +38,6 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const previousScopeRef = React.useRef<string>('');
-
-  // --- deterministic, simple points so deposits are not 0.0 ---
-  const calculateTaskPoints = (task: any) => {
-    const roleCount = Array.isArray(task?.roles) ? task.roles.length : 0;
-    const domainCount = Array.isArray(task?.domains) ? task.domains.length : 0;
-    const base = 1;      // every completed task is at least 1 point
-    const perRole = 1;   // +1 per role
-    const perDomain = 0.5; // +0.5 per domain
-    return base + roleCount * perRole + domainCount * perDomain;
-  };
 
   // helper to group records by parent_id for fast lookup
   const groupByParentId = <T extends { parent_id: string }>(rows: T[] | null | undefined) => {
@@ -100,7 +91,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       if (filter === 'all' || filter === 'deposits') {
         let tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, completed_at')
+          .select('id, title, completed_at, is_authentic_deposit, is_urgent, is_important')
           .eq('user_id', user.id)
           .eq('status', 'completed')
           .not('completed_at', 'is', null);
@@ -153,8 +144,8 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
                 goal_type,
                 twelve_wk_goal_id,
                 custom_goal_id,
-                tw:0008-ap-goals-12wk(id,title),
-                cg:0008-ap-goals-custom(id,title)
+                tw:0008-ap-goals-12wk(id,title,status),
+                cg:0008-ap-goals-custom(id,title,status)
               `)
               .in('parent_id', taskIds)
               .eq('parent_type', 'task'),
@@ -207,16 +198,24 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
               .filter(Boolean);
             const notes = (notesByTask.get(t.id) ?? []).map((n: any) => n.note).filter(Boolean);
             const goals = (goalsByTask.get(t.id) ?? []).map((g: any) => {
-              if (g.goal_type === 'twelve_wk_goal') return { type: '12wk', id: g.tw?.id, title: g.tw?.title };
-              if (g.goal_type === 'custom_goal') return { type: 'custom', id: g.cg?.id, title: g.cg?.title };
-              // fallback if goal_type isn't set but IDs exist:
-              if (g.tw?.id) return { type: '12wk', id: g.tw.id, title: g.tw.title };
-              if (g.cg?.id) return { type: 'custom', id: g.cg.id, title: g.cg.title };
+              if (g.goal_type === 'twelve_wk_goal' && g.tw) {
+                const goal = g.tw;
+                if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                  return null;
+                }
+                return { ...goal, goal_type: '12week' };
+              } else if (g.goal_type === 'custom_goal' && g.cg) {
+                const goal = g.cg;
+                if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                  return null;
+                }
+                return { ...goal, goal_type: 'custom' };
+              }
               return null;
             }).filter(Boolean);
 
             const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
-            const points = calculateTaskPoints({ roles, domains });
+            const points = calculateTaskPoints(t, roles, domains, goals);
 
             journalEntries.push({
               id: t.id,
