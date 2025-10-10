@@ -10,7 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { X, Plus, Calendar, Target, Trash2, CreditCard as Edit, Archive, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { X, Plus, Calendar, Target, Trash2, Pencil as Edit, Archive, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Calendar as RNCalendar } from 'react-native-calendars';
 import { formatLocalDate, parseLocalDate, formatDateRange } from '@/lib/dateUtils';

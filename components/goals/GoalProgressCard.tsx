@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
-import { Target, Calendar, Plus, TrendingUp, Check, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Target, Calendar, Plus, TrendingUp, Check, Pencil as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { GoalProgress } from '@/hooks/useGoalProgress';
 import { parseLocalDate, formatLocalDate } from '@/lib/dateUtils';
 

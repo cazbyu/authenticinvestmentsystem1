@@ -9,7 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { X, Plus, Trash2, CreditCard as Edit, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { X, Plus, Trash2, Pencil as Edit, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 
 interface OneYearGoal {
