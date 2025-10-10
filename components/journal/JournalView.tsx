@@ -24,9 +24,11 @@ interface JournalViewProps {
   };
   onEntryPress: (entry: JournalEntry) => void;
   onAddWithdrawal?: () => void;
+  periodScore?: number;
+  onDateRangeChange?: (dateRange: 'week' | 'month' | 'all') => void;
 }
 
-export function JournalView({ scope, onEntryPress, onAddWithdrawal }: JournalViewProps) {
+export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore, onDateRangeChange }: JournalViewProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<'all' | 'deposits' | 'withdrawals'>('all');
@@ -479,7 +481,12 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal }: JournalVie
                 <TouchableOpacity
                   key={rangeOption}
                   style={[styles.filterButton, dateRange === rangeOption && styles.activeFilterButton]}
-                  onPress={() => setDateRange(rangeOption)}
+                  onPress={() => {
+                    setDateRange(rangeOption);
+                    if (onDateRangeChange) {
+                      onDateRangeChange(rangeOption);
+                    }
+                  }}
                 >
                   <Text style={[styles.filterButtonText, dateRange === rangeOption && styles.activeFilterButtonText]}>
                     {rangeOption.charAt(0).toUpperCase() + rangeOption.slice(1)}
@@ -498,6 +505,16 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal }: JournalVie
           )}
         </View>
       </View>
+
+      {/* Period Score Display - Only show when periodScore is provided */}
+      {periodScore !== undefined && (
+        <View style={styles.periodScoreContainer}>
+          <View style={styles.periodScoreContent}>
+            <Text style={styles.periodScoreLabel}>{getHeaderTitle()}</Text>
+            <Text style={styles.periodScoreValue}>{formatBalance(periodScore)}</Text>
+          </View>
+        </View>
+      )}
 
       {/* Journal Header */}
       <View style={styles.journalHeader}>
@@ -550,6 +567,28 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal }: JournalVie
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
+  periodScoreContainer: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: '#e5e7eb',
+  },
+  periodScoreContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  periodScoreLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  periodScoreValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#0078d4',
+  },
   filterContainer: {
     backgroundColor: '#f8fafc',
     paddingHorizontal: 16,

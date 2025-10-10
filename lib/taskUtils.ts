@@ -710,3 +710,203 @@ export async function getWeekCompletionStatus(
     return [];
   }
 }
+
+/**
+ * Calculate Authentic Score for a specific time period
+ * @param supabase - Supabase client
+ * @param userId - User ID
+ * @param dateRange - 'week', 'month', or 'all'
+ * @param scopeFilter - Optional filter for role, domain, or key_relationship
+ */
+export async function calculateAuthenticScoreForPeriod(
+  supabase: SupabaseClient,
+  userId: string,
+  dateRange: 'week' | 'month' | 'all',
+  scopeFilter?: { type: 'role' | 'domain' | 'key_relationship'; id: string }
+): Promise<number> {
+  try {
+    console.log('[AuthenticScoreForPeriod] Starting calculation for:', { userId, dateRange, scopeFilter });
+
+    // Calculate date filter
+    let startDate: string | null = null;
+    if (dateRange !== 'all') {
+      const now = new Date();
+      const days = dateRange === 'week' ? 7 : 30;
+      const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+      startDate = since.toISOString().split('T')[0];
+    }
+
+    // 1. Completed tasks (deposits) with optional date filter
+    let tasksQuery = supabase
+      .from('0008-ap-tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .not('completed_at', 'is', null);
+
+    if (startDate) {
+      tasksQuery = tasksQuery.gte('completed_at', startDate);
+    }
+
+    const { data: tasksData, error: tasksErr } = await tasksQuery;
+
+    if (tasksErr) throw tasksErr;
+    if (!tasksData || tasksData.length === 0) {
+      console.log('[AuthenticScoreForPeriod] No completed tasks found.');
+      return 0;
+    }
+
+    const taskIds = tasksData.map(t => t.id);
+
+    // 2. Roles + Domains + Key Relationships + Goals via join tables
+    const [
+      { data: rolesData, error: rolesErr },
+      { data: domainsData, error: domainsErr },
+      { data: keyRelsData, error: keyRelsErr },
+      { data: goalsData, error: goalsErr }
+    ] = await Promise.all([
+      supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id, role:0008-ap-roles(id, label)')
+        .in('parent_id', taskIds)
+        .eq('parent_type', 'task'),
+      supabase
+        .from('0008-ap-universal-domains-join')
+        .select('parent_id, domain:0008-ap-domains(id, name)')
+        .in('parent_id', taskIds)
+        .eq('parent_type', 'task'),
+      supabase
+        .from('0008-ap-universal-key-relationships-join')
+        .select('parent_id, key_relationship:0008-ap-key-relationships(id, name)')
+        .in('parent_id', taskIds)
+        .eq('parent_type', 'task'),
+      supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title, status), custom_goal:0008-ap-goals-custom(id, title, status)')
+        .in('parent_id', taskIds)
+        .eq('parent_type', 'task'),
+    ]);
+
+    if (rolesErr) throw rolesErr;
+    if (domainsErr) throw domainsErr;
+    if (keyRelsErr) throw keyRelsErr;
+    if (goalsErr) throw goalsErr;
+
+    // 3. Apply scope filter if provided
+    let filteredTaskIds = taskIds;
+    if (scopeFilter) {
+      if (scopeFilter.type === 'role') {
+        filteredTaskIds = rolesData?.filter(r => r.role?.id === scopeFilter.id).map(r => r.parent_id) || [];
+      } else if (scopeFilter.type === 'domain') {
+        filteredTaskIds = domainsData?.filter(d => d.domain?.id === scopeFilter.id).map(d => d.parent_id) || [];
+      } else if (scopeFilter.type === 'key_relationship') {
+        filteredTaskIds = keyRelsData?.filter(kr => kr.key_relationship?.id === scopeFilter.id).map(kr => kr.parent_id) || [];
+      }
+    }
+
+    const filteredTasks = tasksData.filter(task => filteredTaskIds.includes(task.id));
+
+    // 4. Calculate deposits for filtered tasks
+    let totalDeposits = 0;
+    for (const task of filteredTasks) {
+      const roles =
+        rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) ?? [];
+      const domains =
+        domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) ?? [];
+
+      // Transform polymorphic goals
+      const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => {
+        if (g.goal_type === 'twelve_wk_goal' && g.twelve_wk_goal) {
+          const goal = g.twelve_wk_goal;
+          if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+            return null;
+          }
+          return { ...goal, goal_type: '12week' };
+        } else if (g.goal_type === 'custom_goal' && g.custom_goal) {
+          const goal = g.custom_goal;
+          if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+            return null;
+          }
+          return { ...goal, goal_type: 'custom' };
+        }
+        return null;
+      }).filter(Boolean) || [];
+
+      const pts = calculateTaskPoints(task, roles, domains, taskGoals);
+      totalDeposits += pts;
+    }
+
+    // 5. Withdrawals with date filter and optional scope filter
+    let withdrawalsQuery = supabase
+      .from('0008-ap-withdrawals')
+      .select('id, amount, withdrawn_at')
+      .eq('user_id', userId);
+
+    if (startDate) {
+      withdrawalsQuery = withdrawalsQuery.gte('withdrawn_at', startDate);
+    }
+
+    const { data: withdrawalsData, error: withdrawalsErr } = await withdrawalsQuery;
+
+    if (withdrawalsErr) throw withdrawalsErr;
+
+    let totalWithdrawals = 0;
+
+    if (scopeFilter && withdrawalsData && withdrawalsData.length > 0) {
+      // Filter withdrawals by scope
+      const withdrawalIds = withdrawalsData.map(w => w.id);
+
+      if (scopeFilter.type === 'role') {
+        const { data: wRoles } = await supabase
+          .from('0008-ap-universal-roles-join')
+          .select('parent_id')
+          .in('parent_id', withdrawalIds)
+          .eq('parent_type', 'withdrawal')
+          .eq('role_id', scopeFilter.id);
+
+        const scopedWithdrawalIds = new Set(wRoles?.map(r => r.parent_id) || []);
+        totalWithdrawals = withdrawalsData
+          .filter(w => scopedWithdrawalIds.has(w.id))
+          .reduce((sum, w) => sum + parseFloat(w.amount.toString()), 0);
+      } else if (scopeFilter.type === 'domain') {
+        const { data: wDomains } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id')
+          .in('parent_id', withdrawalIds)
+          .eq('parent_type', 'withdrawal')
+          .eq('domain_id', scopeFilter.id);
+
+        const scopedWithdrawalIds = new Set(wDomains?.map(d => d.parent_id) || []);
+        totalWithdrawals = withdrawalsData
+          .filter(w => scopedWithdrawalIds.has(w.id))
+          .reduce((sum, w) => sum + parseFloat(w.amount.toString()), 0);
+      } else if (scopeFilter.type === 'key_relationship') {
+        const { data: wKRs } = await supabase
+          .from('0008-ap-universal-key-relationships-join')
+          .select('parent_id')
+          .in('parent_id', withdrawalIds)
+          .eq('parent_type', 'withdrawal')
+          .eq('key_relationship_id', scopeFilter.id);
+
+        const scopedWithdrawalIds = new Set(wKRs?.map(kr => kr.parent_id) || []);
+        totalWithdrawals = withdrawalsData
+          .filter(w => scopedWithdrawalIds.has(w.id))
+          .reduce((sum, w) => sum + parseFloat(w.amount.toString()), 0);
+      }
+    } else {
+      // No scope filter, use all withdrawals in period
+      totalWithdrawals = withdrawalsData?.reduce((sum, w) => sum + parseFloat(w.amount.toString()), 0) || 0;
+    }
+
+    console.log('[AuthenticScoreForPeriod] Deposits:', totalDeposits);
+    console.log('[AuthenticScoreForPeriod] Withdrawals:', totalWithdrawals);
+
+    const finalScore = Math.round((totalDeposits - totalWithdrawals) * 10) / 10;
+    console.log('[AuthenticScoreForPeriod] Final Score:', finalScore);
+
+    return finalScore;
+  } catch (err) {
+    console.error('Error calculating authentic score for period:', err);
+    return 0;
+  }
+}

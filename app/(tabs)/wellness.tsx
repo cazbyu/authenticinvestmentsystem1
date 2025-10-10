@@ -10,13 +10,13 @@ import { JournalView } from '@/components/journal/JournalView';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { getSupabaseClient } from '@/lib/supabase';
-import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu } from 'lucide-react-native';
+import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { DraggableFab } from '@/components/DraggableFab';
-import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain } from '@/lib/taskUtils';
+import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -52,6 +52,8 @@ export default function Wellness() {
   const [domainAuthenticScore, setDomainAuthenticScore] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scoreAbortControllerRef = useRef<AbortController | null>(null);
+  const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
+  const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
 
   // 12-Week Goals for selected domain (only fetch when domain is selected)
   const goalProgressScope = useMemo(() =>
@@ -308,6 +310,15 @@ export default function Wellness() {
     };
   }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
 
+  useEffect(() => {
+    // Calculate period score when journal view is active and domain is selected
+    if (activeView === 'journal' && selectedDomain) {
+      calculatePeriodScore(journalDateRange, selectedDomain.id);
+    } else {
+      setPeriodScore(undefined);
+    }
+  }, [activeView, selectedDomain?.id, journalDateRange, calculatePeriodScore]);
+
   const handleViewChange = useCallback((view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
     if (selectedDomain && (view === 'deposits' || view === 'ideas')) {
@@ -460,6 +471,32 @@ export default function Wellness() {
     }
   }, []);
 
+  const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const score = await calculateAuthenticScoreForPeriod(
+        supabase,
+        user.id,
+        dateRange,
+        { type: 'domain', id: domainId }
+      );
+      setPeriodScore(score);
+    } catch (error) {
+      console.error('Error calculating period score:', error);
+      setPeriodScore(undefined);
+    }
+  }, []);
+
+  const handleJournalDateRangeChange = useCallback((dateRange: 'week' | 'month' | 'all') => {
+    setJournalDateRange(dateRange);
+    if (selectedDomain) {
+      calculatePeriodScore(dateRange, selectedDomain.id);
+    }
+  }, [selectedDomain, calculatePeriodScore]);
+
   const getDomainColor = useCallback((domainName: string) => {
     const colors: Record<string, string> = {
       'Community': '#7c3aed',
@@ -490,9 +527,11 @@ export default function Wellness() {
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedDomain.name}</Text>
             </View>
-            <View style={styles.customScoreContainer}>
-              <Text style={styles.customScoreLabel}>Authentic Score</Text>
-              <Text style={styles.customScoreValue}>{authenticScore}</Text>
+            <View style={styles.customHeaderRight}>
+              <View style={styles.customScoreContainer}>
+                <Text style={styles.customScoreLabel}>Authentic Score</Text>
+                <Text style={styles.customScoreValue}>{domainAuthenticScore}</Text>
+              </View>
             </View>
           </View>
           <View style={styles.customHeaderBottom}>
@@ -596,6 +635,8 @@ export default function Wellness() {
               <JournalView
                 scope={{ type: 'domain', id: selectedDomain.id, name: selectedDomain.name }}
                 onEntryPress={handleJournalEntryPress}
+                periodScore={periodScore}
+                onDateRangeChange={handleJournalDateRangeChange}
               />
             ) : activeView === 'analytics' ? (
               <AnalyticsView
@@ -885,6 +926,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '700',
+  },
+  customHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  customEditButton: {
+    padding: 4,
   },
   customScoreContainer: {
     alignItems: 'flex-end',

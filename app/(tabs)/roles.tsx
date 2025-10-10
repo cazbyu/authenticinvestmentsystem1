@@ -14,12 +14,12 @@ import { EditKRModal } from '@/components/settings/EditKRModal';
 import { JournalView } from '@/components/journal/JournalView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
-import { Plus, Users, CreditCard as Edit, UserX, Ban, Menu } from 'lucide-react-native';
+import { Plus, Users, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoals } from '@/hooks/useGoals';
-import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData } from '@/lib/taskUtils';
+import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -76,6 +76,8 @@ export default function Roles() {
   const [roleAuthenticScore, setRoleAuthenticScore] = useState(0);
   const [isCalculatingScore, setIsCalculatingScore] = useState(false);
   const [isLoadingRole, setIsLoadingRole] = useState(false);
+  const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
+  const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
   const fetchAbortController = useRef<AbortController | null>(null);
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
   const previousRoleIdRef = useRef<string | null>(null);
@@ -115,6 +117,34 @@ export default function Roles() {
     if (!selectedKR || !selectedRole) return null;
     return { type: 'key_relationship' as const, id: selectedKR.id, name: selectedKR.name };
   }, [selectedKR?.id, selectedKR?.name, selectedRole?.id]);
+
+  const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', scopeType: 'role' | 'key_relationship', scopeId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const score = await calculateAuthenticScoreForPeriod(
+        supabase,
+        user.id,
+        dateRange,
+        { type: scopeType, id: scopeId }
+      );
+      setPeriodScore(score);
+    } catch (error) {
+      console.error('Error calculating period score:', error);
+      setPeriodScore(undefined);
+    }
+  }, []);
+
+  const handleJournalDateRangeChange = useCallback((dateRange: 'week' | 'month' | 'all') => {
+    setJournalDateRange(dateRange);
+    if (selectedRole) {
+      calculatePeriodScore(dateRange, 'role', selectedRole.id);
+    } else if (selectedKR) {
+      calculatePeriodScore(dateRange, 'key_relationship', selectedKR.id);
+    }
+  }, [selectedRole, selectedKR, calculatePeriodScore]);
 
   const handleJournalEntryPress = (entry: any) => {
     if (entry.source_type === 'task') {
@@ -607,6 +637,17 @@ export default function Roles() {
     }
   }, [selectedRole?.id, goalsLoading, twelveWeekGoals.length, fetchState]);
 
+  useEffect(() => {
+    // Calculate period score when journal view is active and role/KR is selected
+    if (activeView === 'journal' && selectedRole) {
+      calculatePeriodScore(journalDateRange, 'role', selectedRole.id);
+    } else if (krJournalView === 'journal' && selectedKR) {
+      calculatePeriodScore(journalDateRange, 'key_relationship', selectedKR.id);
+    } else {
+      setPeriodScore(undefined);
+    }
+  }, [activeView, krJournalView, selectedRole?.id, selectedKR?.id, journalDateRange, calculatePeriodScore]);
+
   const handleViewChange = (view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
     if (selectedRole && (view === 'deposits' || view === 'ideas')) {
@@ -899,9 +940,18 @@ export default function Roles() {
               <Text style={styles.customHeaderTitle}>{selectedKR.name}</Text>
               <Text style={styles.customHeaderSubtitle}>Key Relationship in {selectedRole?.label}</Text>
             </View>
-            <View style={styles.customScoreContainer}>
-              <Text style={styles.customScoreLabel}>Authentic Score</Text>
-              <Text style={styles.customScoreValue}>{authenticScore}</Text>
+            <View style={styles.customHeaderRight}>
+              <TouchableOpacity
+                style={styles.customEditButton}
+                onPress={() => handleEditKR(selectedKR)}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                <Edit2 size={20} color="#ffffff" />
+              </TouchableOpacity>
+              <View style={styles.customScoreContainer}>
+                <Text style={styles.customScoreLabel}>Authentic Score</Text>
+                <Text style={styles.customScoreValue}>{authenticScore}</Text>
+              </View>
             </View>
           </View>
           <View style={styles.customHeaderBottom}>
@@ -937,9 +987,18 @@ export default function Roles() {
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedRole.label}</Text>
             </View>
-            <View style={styles.customScoreContainer}>
-              <Text style={styles.customScoreLabel}>Authentic Score</Text>
-              <Text style={styles.customScoreValue}>{authenticScore}</Text>
+            <View style={styles.customHeaderRight}>
+              <TouchableOpacity
+                style={styles.customEditButton}
+                onPress={() => handleEditRole(selectedRole)}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                <Edit2 size={20} color="#ffffff" />
+              </TouchableOpacity>
+              <View style={styles.customScoreContainer}>
+                <Text style={styles.customScoreLabel}>Authentic Score</Text>
+                <Text style={styles.customScoreValue}>{roleAuthenticScore}</Text>
+              </View>
             </View>
           </View>
           <View style={styles.customHeaderBottom}>
@@ -1025,6 +1084,8 @@ export default function Roles() {
                 <JournalView
                   scope={krJournalScope}
                   onEntryPress={handleJournalEntryPress}
+                  periodScore={periodScore}
+                  onDateRangeChange={handleJournalDateRangeChange}
                 />
               )
             ) : krJournalView === 'analytics' ? (
@@ -1128,6 +1189,8 @@ export default function Roles() {
                 <JournalView
                   scope={journalScope}
                   onEntryPress={handleJournalEntryPress}
+                  periodScore={periodScore}
+                  onDateRangeChange={handleJournalDateRangeChange}
                 />
               )
             ) : activeView === 'analytics' ? (
@@ -1805,6 +1868,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     opacity: 0.9,
+  },
+  customHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  customEditButton: {
+    padding: 4,
   },
   customScoreContainer: {
     alignItems: 'flex-end',
