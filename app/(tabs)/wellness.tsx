@@ -287,6 +287,25 @@ export default function Wellness() {
     fetchDomains();
   }, [fetchDomains]);
 
+  const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const score = await calculateAuthenticScoreForPeriod(
+        supabase,
+        user.id,
+        dateRange,
+        { type: 'domain', id: domainId }
+      );
+      setPeriodScore(score);
+    } catch (error) {
+      console.error('Error calculating period score:', error);
+      setPeriodScore(undefined);
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedDomain) {
       if (activeView === 'deposits' || activeView === 'ideas') {
@@ -468,25 +487,6 @@ export default function Wellness() {
       };
       setEditingTask(editData);
       setTaskFormVisible(true);
-    }
-  }, []);
-
-  const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const score = await calculateAuthenticScoreForPeriod(
-        supabase,
-        user.id,
-        dateRange,
-        { type: 'domain', id: domainId }
-      );
-      setPeriodScore(score);
-    } catch (error) {
-      console.error('Error calculating period score:', error);
-      setPeriodScore(undefined);
     }
   }, []);
 
