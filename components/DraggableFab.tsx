@@ -8,6 +8,7 @@ import Animated, {
   withSpring,
   clamp,
 } from 'react-native-reanimated';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface DraggableFabProps {
   onPress: () => void;
@@ -22,8 +23,10 @@ export function DraggableFab({
   children,
   style,
   size = 48,
-  backgroundColor = '#0078d4'
+  backgroundColor
 }: DraggableFabProps) {
+  const { colors } = useTheme();
+  const fabBackgroundColor = backgroundColor || colors.primary;
   const screenDimensions = useRef(Dimensions.get('window'));
   const hasInitialized = useRef(false);
 
@@ -114,7 +117,7 @@ export function DraggableFab({
             width: size,
             height: size,
             borderRadius: size / 2,
-            backgroundColor,
+            backgroundColor: fabBackgroundColor,
           },
           animatedStyle,
           style,

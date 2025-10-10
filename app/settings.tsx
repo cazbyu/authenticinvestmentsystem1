@@ -24,7 +24,7 @@ const redirectUri = AuthSession.makeRedirectUri({
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { isDarkMode, toggleDarkMode, colors, refreshThemeColor } = useTheme();
+  const { isDarkMode, toggleDarkMode, colors, setThemeColorImmediate } = useTheme();
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -322,8 +322,7 @@ export default function SettingsScreen() {
 
   const handleThemeColorChange = async (color: string) => {
     setProfile(prev => ({ ...prev, theme_color: color }));
-    await updateProfile({ theme_color: color } as any);
-    refreshThemeColor();
+    await setThemeColorImmediate(color);
   };
 
   const connectToGoogle = async () => {
@@ -638,7 +637,7 @@ export default function SettingsScreen() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>North Star</Text>
             <TouchableOpacity onPress={() => setShowNorthStarEditor(false)}>
-              <Text style={styles.closeModalButton}>Done</Text>
+              <Text style={[styles.closeModalButton, { color: colors.primary }]}>Done</Text>
             </TouchableOpacity>
           </View>
           <NorthStarEditor onUpdate={() => {
@@ -652,7 +651,7 @@ export default function SettingsScreen() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Timeline Archive</Text>
             <TouchableOpacity onPress={() => setShowTimelineArchive(false)}>
-              <Text style={styles.closeModalButton}>Done</Text>
+              <Text style={[styles.closeModalButton, { color: colors.primary }]}>Done</Text>
             </TouchableOpacity>
           </View>
           <ArchivedTimelinesView onUpdate={() => {}} />
@@ -719,5 +718,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
-  closeModalButton: { fontSize: 16, fontWeight: '600', color: '#0078d4' },
+  closeModalButton: { fontSize: 16, fontWeight: '600' },
 });

@@ -6,6 +6,7 @@ interface ThemeContextType {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   refreshThemeColor: () => Promise<void>;
+  setThemeColorImmediate: (color: string) => Promise<void>;
   colors: {
     background: string;
     surface: string;
@@ -102,6 +103,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     await loadUserThemeColor();
   };
 
+  const setThemeColorImmediate = async (color: string) => {
+    setThemeColor(color);
+    await AsyncStorage.setItem('themeColor', color);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('0008-ap-users')
+        .update({ theme_color: color, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+    } catch (error) {
+      console.error('Error saving theme color to database:', error);
+    }
+  };
+
   const toggleDarkMode = async () => {
     try {
       const newMode = !isDarkMode;
@@ -115,7 +134,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const colors = isDarkMode ? getDarkColors(themeColor) : getLightColors(themeColor);
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode, refreshThemeColor, colors }}>
+    <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode, refreshThemeColor, setThemeColorImmediate, colors }}>
       {children}
     </ThemeContext.Provider>
   );

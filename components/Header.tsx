@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { Menu, ArrowUpDown, ChevronLeft, CreditCard as Edit } from 'lucide-react-native';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -39,6 +40,7 @@ export function Header({
   const router = useRouter();
   const canGoBack = router.canGoBack();
   const { authenticScore: contextAuthenticScore } = useAuthenticScore();
+  const { colors } = useTheme();
 
   // Use prop if provided (for role/domain-specific scores), otherwise use context
   const displayScore = propAuthenticScore ?? contextAuthenticScore;
@@ -55,8 +57,10 @@ export function Header({
     }
   };
 
+  const headerBackgroundColor = backgroundColor || colors.primary;
+
   return (
-    <View style={[styles.container, backgroundColor && { backgroundColor }]}>
+    <View style={[styles.container, { backgroundColor: headerBackgroundColor }]}>
       {/* Top section with menu and score */}
       <View style={styles.topSection}>
         <TouchableOpacity style={styles.menuButton} onPress={handleLeftButtonPress}>
@@ -106,7 +110,7 @@ export function Header({
               style={[styles.toggleButton, activeView === 'deposits' && styles.activeToggle]}
               onPress={() => onViewChange && onViewChange('deposits')}
             >
-              <Text style={[styles.toggleText, activeView === 'deposits' && styles.activeToggleText]}>
+              <Text style={[styles.toggleText, activeView === 'deposits' && { color: headerBackgroundColor }]}>
                 Deposits
               </Text>
             </TouchableOpacity>
@@ -115,7 +119,7 @@ export function Header({
               style={[styles.toggleButton, activeView === 'ideas' && styles.activeToggle]}
               onPress={() => onViewChange && onViewChange('ideas')}
             >
-              <Text style={[styles.toggleText, activeView === 'ideas' && styles.activeToggleText]}>
+              <Text style={[styles.toggleText, activeView === 'ideas' && { color: headerBackgroundColor }]}>
                 Ideas
               </Text>
             </TouchableOpacity>
@@ -124,7 +128,7 @@ export function Header({
               style={[styles.toggleButton, activeView === 'journal' && styles.activeToggle]}
               onPress={() => onViewChange && onViewChange('journal')}
             >
-              <Text style={[styles.toggleText, activeView === 'journal' && styles.activeToggleText]}>
+              <Text style={[styles.toggleText, activeView === 'journal' && { color: headerBackgroundColor }]}>
                 Journal
               </Text>
             </TouchableOpacity>
@@ -133,7 +137,7 @@ export function Header({
               style={[styles.toggleButton, activeView === 'analytics' && styles.activeToggle]}
               onPress={() => onViewChange && onViewChange('analytics')}
             >
-              <Text style={[styles.toggleText, activeView === 'analytics' && styles.activeToggleText]}>
+              <Text style={[styles.toggleText, activeView === 'analytics' && { color: headerBackgroundColor }]}>
                 Analytics
               </Text>
             </TouchableOpacity>
@@ -155,7 +159,6 @@ export function Header({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#0078d4',
     paddingTop: 8,
     paddingBottom: 16,
     paddingHorizontal: 16,
@@ -273,9 +276,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  activeToggleText: {
-    color: '#0078d4',
   },
   sortButton: {
     flexDirection: 'row',
