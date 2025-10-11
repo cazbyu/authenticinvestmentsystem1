@@ -1763,8 +1763,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   repeatSwitchContainer: {
-    width: '60%',
-    maxWidth: 600,
+    width: '20%',
+    minWidth: 180,
   },
   checkboxGrid: {
     flexDirection: 'row',
