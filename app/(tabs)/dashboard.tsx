@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
-import { X, Plus, Pencil, UserX, Ban } from 'lucide-react-native';
+import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { Header } from '@/components/Header';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
@@ -16,6 +16,8 @@ import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { DraggableFab } from '@/components/DraggableFab';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
+import { handleActionCompletion } from '@/lib/completionHandler';
+import { getWeeklyCompletionCount, syncCompletionAcrossViews, completionEvents, CompletionEvent } from '@/lib/completionSync';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 
 // --- Main Dashboard Screen Component ---
@@ -45,15 +47,25 @@ export default function Dashboard() {
       if (!user) return;
 
       if (activeView === 'deposits') {
-        // Fetch only standalone tasks (exclude timeline-based actions from Goal Bank)
+        // Calculate current week boundaries
+        const today = new Date();
+        const todayStr = formatLocalDate(today);
+        const dayOfWeek = today.getDay(); // 0=Sunday, 6=Saturday
+        const mondayOffset = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() + mondayOffset);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        const weekStartStr = formatLocalDate(weekStart);
+        const weekEndStr = formatLocalDate(weekEnd);
+
+        // Fetch parent tasks (both standalone and timeline-based actions)
         const { data: tasksData, error: tasksError } = await supabase
           .from('0008-ap-tasks')
-          .select('*')
+          .select('*, user_global_timeline_id, custom_timeline_id')
           .eq('user_id', user.id)
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .is('user_global_timeline_id', null)
-          .is('custom_timeline_id', null)
           .neq('status', 'completed')
           .neq('status', 'cancelled')
           .in('type', ['task', 'event']);
@@ -66,7 +78,148 @@ export default function Dashboard() {
           return;
         }
 
-        const taskIds = tasksData.map(t => t.id);
+        // Separate standalone tasks from timeline-based actions
+        const standaloneTasks = tasksData.filter(task =>
+          !task.user_global_timeline_id && !task.custom_timeline_id
+        );
+
+        const timelineBasedTasks = tasksData.filter(task =>
+          task.user_global_timeline_id || task.custom_timeline_id
+        );
+
+        // For timeline-based tasks, check if they have week plans for current week
+        let tasksWithCurrentWeek: any[] = [];
+        if (timelineBasedTasks.length > 0) {
+          const timelineTaskIds = timelineBasedTasks.map(t => t.id);
+
+          // Get unique timeline IDs
+          const globalTimelineIds = [...new Set(timelineBasedTasks.map(t => t.user_global_timeline_id).filter(Boolean))];
+          const customTimelineIds = [...new Set(timelineBasedTasks.map(t => t.custom_timeline_id).filter(Boolean))];
+
+          // Fetch timeline start dates
+          const timelineStartDates = new Map();
+
+          if (globalTimelineIds.length > 0) {
+            const { data: globalTimelines } = await supabase
+              .from('0008-ap-user-global-timelines')
+              .select('id, start_date')
+              .in('id', globalTimelineIds);
+
+            globalTimelines?.forEach(tl => {
+              timelineStartDates.set(tl.id, tl.start_date);
+            });
+          }
+
+          if (customTimelineIds.length > 0) {
+            const { data: customTimelines } = await supabase
+              .from('0008-ap-user-custom-timelines')
+              .select('id, start_date')
+              .in('id', customTimelineIds);
+
+            customTimelines?.forEach(tl => {
+              timelineStartDates.set(tl.id, tl.start_date);
+            });
+          }
+
+          // Fetch week plans
+          const { data: weekPlans, error: weekPlansError } = await supabase
+            .from('0008-ap-task-week-plan')
+            .select('task_id, week_number, target_days, user_global_timeline_id, user_custom_timeline_id')
+            .in('task_id', timelineTaskIds)
+            .is('deleted_at', null);
+
+          if (weekPlansError) throw weekPlansError;
+
+          // Calculate current week number for each task
+          const { getCurrentWeekNumber } = await import('@/lib/dateUtils');
+
+          tasksWithCurrentWeek = timelineBasedTasks.map(task => {
+            const timelineId = task.user_global_timeline_id || task.custom_timeline_id;
+            const startDate = timelineStartDates.get(timelineId);
+
+            if (!startDate) {
+              console.warn('[Dashboard] No start date found for timeline:', timelineId);
+              return null;
+            }
+
+            const currentWeekNum = getCurrentWeekNumber(startDate);
+
+            if (!currentWeekNum) {
+              console.warn('[Dashboard] Task is outside timeline range:', task.id);
+              return null;
+            }
+
+            // Find the week plan for the current week
+            const currentWeekPlan = weekPlans?.find(
+              wp => wp.task_id === task.id && wp.week_number === currentWeekNum
+            );
+
+            if (!currentWeekPlan) {
+              return null; // Task not scheduled for current week
+            }
+
+            return {
+              ...task,
+              currentWeekNumber: currentWeekNum,
+              currentWeekPlan,
+              weekPlans: weekPlans?.filter(wp => wp.task_id === task.id) || []
+            };
+          }).filter(Boolean);
+        }
+
+        // Combine standalone and timeline-based tasks
+        const allTasks = [...standaloneTasks, ...tasksWithCurrentWeek];
+
+        if (allTasks.length === 0) {
+          setTasks([]);
+          setDepositIdeas([]);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch completion counts for timeline-based actions this week using shared function
+        const timelineTaskIdsWithWeek = tasksWithCurrentWeek.map(t => t.id);
+        let completionCounts = new Map();
+
+        if (timelineTaskIdsWithWeek.length > 0) {
+          for (const taskId of timelineTaskIdsWithWeek) {
+            try {
+              const countResult = await getWeeklyCompletionCount(
+                supabase,
+                taskId,
+                weekStartStr,
+                weekEndStr
+              );
+              completionCounts.set(taskId, countResult.completedCount);
+            } catch (error) {
+              console.error('[Dashboard] Error fetching completion count for task:', taskId, error);
+              completionCounts.set(taskId, 0);
+            }
+          }
+        }
+
+        // Filter out timeline-based actions that have reached weekly target
+        const currentTasks = allTasks.filter(task => {
+          if (!task.currentWeekPlan) return true; // Keep standalone tasks
+
+          const completedCount = completionCounts.get(task.id) || 0;
+          const targetDays = task.currentWeekPlan.target_days;
+
+          // Only show if not yet complete for the week
+          return completedCount < targetDays;
+        }).map(task => ({
+          ...task,
+          weeklyCompletedCount: completionCounts.get(task.id) || 0,
+          weeklyTargetCount: task.currentWeekPlan?.target_days || 0,
+        }));
+
+        if (currentTasks.length === 0) {
+          setTasks([]);
+          setDepositIdeas([]);
+          setLoading(false);
+          return;
+        }
+        const taskIds = currentTasks.map(t => t.id);
 
         const [
           { data: rolesData, error: rolesError },
@@ -91,7 +244,11 @@ export default function Dashboard() {
         if (delegatesError) throw delegatesError;
         if (keyRelationshipsError) throw keyRelationshipsError;
 
-        const transformedTasks = tasksData.map(task => {
+        const transformedTasks = currentTasks.map(task => {
+          // Derive timeline information for recurring tasks
+          const timeline_id = task.custom_timeline_id || task.user_global_timeline_id || null;
+          const timeline_source = task.user_global_timeline_id ? 'global' : 'custom';
+
           // Transform polymorphic goals
           const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => {
             if (g.goal_type === 'twelve_wk_goal' && g.twelve_wk_goal) {
@@ -116,6 +273,8 @@ export default function Dashboard() {
 
           return {
             ...task,
+            timeline_id,
+            timeline_source,
             roles: rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [],
             domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
             goals: taskGoals,
@@ -210,6 +369,47 @@ export default function Dashboard() {
     fetchData();
   }, [activeView, sortOption]);
 
+  useEffect(() => {
+    console.log('[Dashboard] Setting up completion event listener');
+    const unsubscribe = completionEvents.subscribeToAll((event: CompletionEvent) => {
+      console.log('[Dashboard] Received completion event:', event.type, event.taskId);
+
+      if (activeView === 'deposits' && event.type === 'week_progress_updated' && event.completionCount) {
+        const { taskId, completionCount } = event;
+
+        setTasks(prevTasks => {
+          const taskIndex = prevTasks.findIndex(t => t.id === taskId);
+
+          if (taskIndex !== -1) {
+            const updatedTasks = [...prevTasks];
+            updatedTasks[taskIndex] = {
+              ...updatedTasks[taskIndex],
+              weeklyCompletedCount: completionCount.completedCount,
+              weeklyTargetCount: completionCount.targetCount
+            };
+
+            if (completionCount.isComplete) {
+              return updatedTasks.filter(t => t.id !== taskId);
+            }
+
+            return updatedTasks;
+          } else if (!completionCount.isComplete && event.completionCount.completedCount < event.completionCount.targetCount) {
+            fetchData();
+          }
+
+          return prevTasks;
+        });
+
+        refreshScore(true);
+      }
+    });
+
+    return () => {
+      console.log('[Dashboard] Cleaning up completion event listener');
+      unsubscribe();
+    };
+  }, [activeView, refreshScore]);
+
   const handleCompleteTask = async (task: Task) => {
     try {
       console.log('[Dashboard] Completing task:', task.id, task.title);
@@ -217,16 +417,107 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // For standalone tasks, update status and remove from UI
-      const { error } = await supabase
-        .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', task.id);
+      if (task.recurrence_rule && (task.user_global_timeline_id || task.custom_timeline_id)) {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() + mondayOffset);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        const weekStartStr = formatLocalDate(weekStart);
+        const weekEndStr = formatLocalDate(weekEnd);
 
-      if (error) throw error;
+        const { getWeekCompletionStatus } = await import('@/lib/taskUtils');
+        const completedDates = await getWeekCompletionStatus(supabase, task.id, weekStartStr, weekEndStr);
 
-      // Only remove from UI after successful database update
-      setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
+        const { getMostRecentIncompleteDate } = await import('@/lib/dateUtils');
+        const dateToComplete = getMostRecentIncompleteDate(completedDates, weekStartStr, weekEndStr);
+
+        if (!dateToComplete) {
+          console.log('[Dashboard] All dates in current week are already complete');
+          setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
+          Alert.alert('Complete', 'All available completions for this week are done!');
+          return;
+        }
+
+        const timeline = task.custom_timeline_id
+          ? { id: task.custom_timeline_id, source: 'custom' as const }
+          : task.user_global_timeline_id
+            ? { id: task.user_global_timeline_id, source: 'global' as const }
+            : null;
+
+        if (!timeline) {
+          throw new Error('No timeline found for recurring task');
+        }
+
+        const result = await handleActionCompletion(
+          supabase,
+          user.id,
+          task.id,
+          dateToComplete,
+          timeline,
+          task.weeklyTargetCount
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to complete action');
+        }
+
+        console.log('[Dashboard] Action completed, recalculating count');
+        const countResult = await getWeeklyCompletionCount(
+          supabase,
+          task.id,
+          weekStartStr,
+          weekEndStr
+        );
+
+        const goalId = task.goals && task.goals.length > 0 ? task.goals[0].id : undefined;
+
+        setTasks(prevTasks => {
+          const updatedTasks = prevTasks.map(t => {
+            if (t.id === task.id) {
+              return {
+                ...t,
+                weeklyCompletedCount: countResult.completedCount,
+                weeklyTargetCount: task.weeklyTargetCount || 0
+              };
+            }
+            return t;
+          });
+
+          if (result.shouldRemoveFromUI || countResult.completedCount >= (task.weeklyTargetCount || 0)) {
+            return updatedTasks.filter(t => t.id !== task.id);
+          }
+
+          return updatedTasks;
+        });
+
+        if (timeline && goalId) {
+          const currentWeekNumber = Math.ceil((today.getTime() - new Date(weekStartStr).getTime()) / (7 * 24 * 60 * 60 * 1000));
+          await syncCompletionAcrossViews(
+            supabase,
+            task.id,
+            goalId,
+            currentWeekNumber,
+            weekStartStr,
+            weekEndStr,
+            timeline,
+            true
+          );
+        }
+      } else {
+        // For standalone tasks, update status first, then remove from UI
+        const { error } = await supabase
+          .from('0008-ap-tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', task.id);
+
+        if (error) throw error;
+
+        // Only remove from UI after successful database update
+        setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
+      }
 
       console.log('[Dashboard] Waiting for database commits, then refreshing score');
       // Small delay to ensure all database writes (including RPC joins) complete
@@ -234,7 +525,7 @@ export default function Dashboard() {
       await refreshScore(true);
     } catch (error) {
       console.error('[Dashboard] Error completing task:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to complete task.');
+      Alert.alert('Error', (error as Error).message || 'Failed to complete action.');
       fetchData();
     }
   };
