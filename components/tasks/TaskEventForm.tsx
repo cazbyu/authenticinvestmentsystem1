@@ -1703,7 +1703,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   checkboxContainer: {
+    width: '100%',
     borderWidth: 1,
+    borderStyle: 'solid',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
