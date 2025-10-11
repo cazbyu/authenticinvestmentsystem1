@@ -528,6 +528,9 @@ export default function Dashboard() {
           initialData={editingTask || undefined}
           onSubmitSuccess={handleFormSubmitSuccess}
           onClose={handleFormClose}
+          onScoreUpdate={async () => {
+            await refreshScore(true);
+          }}
         />
       </Modal>
       <TaskDetailModal visible={isDetailModalVisible} task={selectedTask} onClose={() => setIsDetailModalVisible(false)} onUpdate={handleUpdateTask} onDelegate={handleDelegateTask} onCancel={handleCancelTask} />
