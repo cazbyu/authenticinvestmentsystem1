@@ -1628,6 +1628,7 @@ const styles = StyleSheet.create({
   dateRow: {
     flexDirection: 'row',
     gap: 12,
+    alignItems: 'flex-start',
   },
   dateTimeRow: {
     flexDirection: 'row',
@@ -1640,6 +1641,7 @@ const styles = StyleSheet.create({
   dateFieldWrapper: {
     flex: 1,
     minWidth: 0,
+    maxWidth: '48%',
   },
   timeInputInline: {
     borderWidth: 1,
@@ -1714,14 +1716,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '46%',
     marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: 12,
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 1,
     borderRadius: 3,
-    marginRight: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
