@@ -939,20 +939,58 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
           {formData.type === 'event' && (
-            <View style={styles.dateRow}>
-              {renderDateField('Start Date', formData.startDate, 'start')}
-              {renderDateField('End Date', formData.endDate, 'end')}
+            <View style={styles.eventDateTimeContainer}>
+              <View style={styles.eventDateTimeRow}>
+                <View style={styles.eventDateField}>
+                  <Text style={[styles.label, { color: colors.text }]}>Start Date</Text>
+                  <TouchableOpacity
+                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('start')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.startDate)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.eventTimeField}>
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>Start Time</Text>
+                  <TextInput
+                    style={[styles.timeInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                    value={formData.startTime}
+                    onChangeText={(value) => setFormData(prev => ({ ...prev, startTime: value }))}
+                    placeholder="HH:MM"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+              </View>
+              <View style={styles.eventDateTimeRow}>
+                <View style={styles.eventDateField}>
+                  <Text style={[styles.label, { color: colors.text }]}>End Date</Text>
+                  <TouchableOpacity
+                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('end')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.endDate)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.eventTimeField}>
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>End Time</Text>
+                  <TextInput
+                    style={[styles.timeInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                    value={formData.endTime}
+                    onChangeText={(value) => setFormData(prev => ({ ...prev, endTime: value }))}
+                    placeholder="HH:MM"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+              </View>
             </View>
           )}
           {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
-
-          {/* Time Fields for Events */}
-          {formData.type === 'event' && (
-            <View style={styles.timeRow}>
-              {renderTimeField('Start Time', formData.startTime, (value) => setFormData(prev => ({ ...prev, startTime: value })))}
-              {renderTimeField('End Time', formData.endTime, (value) => setFormData(prev => ({ ...prev, endTime: value })))}
-            </View>
-          )}
 
           {/* Amount field for withdrawals */}
           {formData.type === 'withdrawal' && (
@@ -970,9 +1008,13 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Repeat toggle */}
-          {(formData.type === 'task' || formData.type === 'event') && 
-            renderSwitchField('Repeat', formData.hasRepeat, (value) => setFormData(prev => ({ ...prev, hasRepeat: value })))
-          }
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <View style={styles.repeatSwitchWrapper}>
+              <View style={styles.repeatSwitchContainer}>
+                {renderSwitchField('Repeat', formData.hasRepeat, (value) => setFormData(prev => ({ ...prev, hasRepeat: value })))}
+              </View>
+            </View>
+          )}
 
           {/* Inline Recurrence Picker (when Repeat is ON but Goal is OFF) */}
           {formData.hasRepeat && !formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
@@ -1704,6 +1746,30 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 14,
     textAlign: 'center',
+  },
+  eventDateTimeContainer: {
+    marginBottom: 24,
+  },
+  eventDateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+    alignItems: 'flex-end',
+  },
+  eventDateField: {
+    flex: 2,
+  },
+  eventTimeField: {
+    flex: 1,
+  },
+  repeatSwitchWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  repeatSwitchContainer: {
+    width: '30%',
+    minWidth: 200,
   },
   checkboxGrid: {
     flexDirection: 'row',
