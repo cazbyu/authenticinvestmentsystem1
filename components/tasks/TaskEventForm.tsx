@@ -65,6 +65,7 @@ interface FormData {
   type: SchedulingType;
   title: string;
   dueDate: string;
+  dueTime: string;
   startDate: string;
   endDate: string;
   startTime: string;
@@ -104,6 +105,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     type: 'task',
     title: '',
     dueDate: formatLocalDate(new Date()),
+    dueTime: '',
     startDate: formatLocalDate(new Date()),
     endDate: formatLocalDate(new Date()),
     startTime: '',
@@ -314,6 +316,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       type: initialData.type || 'task',
       title: initialData.title || '',
       dueDate: initialData.due_date || formatLocalDate(new Date()),
+      dueTime: (initialData.type === 'task' ? initialData.end_time : '') || '',
       startDate: initialData.start_date || formatLocalDate(new Date()),
       endDate: initialData.end_date || formatLocalDate(new Date()),
       startTime: initialData.start_time || '',
@@ -530,8 +533,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           due_date: formData.type === 'task' ? formData.dueDate : null,
           start_date: formData.type === 'event' ? formData.startDate : null,
           end_date: formData.type === 'event' ? formData.endDate : null,
-          start_time: formData.startTime || null,
-          end_time: formData.endTime || null,
+          start_time: formData.type === 'event' ? formData.startTime : null,
+          end_time: formData.type === 'event' ? formData.endTime : (formData.type === 'task' ? formData.dueTime : null),
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,
           is_important: formData.isImportant,
@@ -736,7 +739,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
   const renderSwitchField = (label: string, value: boolean, onChange: (value: boolean) => void) => (
     <View style={styles.switchField}>
-      <Text style={[styles.switchLabel, { color: colors.text }]}>{label}</Text>
+      <Text style={[styles.switchLabel, { color: colors.text }]} numberOfLines={1}>{label}</Text>
       <Switch
         value={value}
         onValueChange={onChange}
@@ -902,8 +905,35 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
           {/* Date Fields */}
           {formData.type === 'task' && (
-            <View style={styles.dateRow}>
-              {renderDateField('Due Date', formData.dueDate, 'due')}
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Due Date & Time</Text>
+              <View style={styles.dateTimeRow}>
+                <TouchableOpacity
+                  style={[styles.dateButton, styles.dateButtonHalf, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleCalendarOpen('due')}
+                >
+                  <CalendarIcon size={16} color={colors.textSecondary} />
+                  <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                    {formatDateForDisplay(formData.dueDate)}
+                  </Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[styles.timeInputInline, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                  value={formData.dueTime}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, dueTime: text }))}
+                  placeholder="HH:MM"
+                  placeholderTextColor={colors.textSecondary}
+                />
+                <View style={styles.anytimeToggleInline}>
+                  <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
+                  <Switch
+                    value={formData.isAnytime}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+              </View>
             </View>
           )}
           {formData.type === 'event' && (
@@ -921,9 +951,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               {renderTimeField('End Time', formData.endTime, (value) => setFormData(prev => ({ ...prev, endTime: value })))}
             </View>
           )}
-
-          {/* Anytime toggle for tasks */}
-          {formData.type === 'task' && renderSwitchField('Anytime', formData.isAnytime, (value) => setFormData(prev => ({ ...prev, isAnytime: value })))}
 
           {/* Amount field for withdrawals */}
           {formData.type === 'withdrawal' && (
@@ -950,41 +977,55 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.text }]}>Repeat Frequency</Text>
               <View style={styles.recurrenceOptions}>
-                {(['daily', 'weekly'] as const).map((freq) => (
-                  <TouchableOpacity
-                    key={freq}
-                    style={[
-                      styles.recurrenceOption,
-                      { borderColor: colors.border, backgroundColor: colors.surface },
-                      formData.recurrenceRule === `RRULE:FREQ=${freq.toUpperCase()}` && { backgroundColor: colors.primary, borderColor: colors.primary }
-                    ]}
-                    onPress={() => setFormData(prev => ({ 
-                      ...prev, 
-                      recurrenceRule: `RRULE:FREQ=${freq.toUpperCase()}` 
-                    }))}
-                  >
-                    <Text style={[
-                      styles.recurrenceOptionText,
-                      { color: formData.recurrenceRule === `RRULE:FREQ=${freq.toUpperCase()}` ? '#ffffff' : colors.text }
-                    ]}>
-                      {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {(['daily', 'weekly'] as const).map((freq) => {
+                  const isActive = freq === 'weekly'
+                    ? formData.recurrenceRule?.startsWith('RRULE:FREQ=WEEKLY')
+                    : formData.recurrenceRule === `RRULE:FREQ=${freq.toUpperCase()}`;
+
+                  return (
+                    <TouchableOpacity
+                      key={freq}
+                      style={[
+                        styles.recurrenceOption,
+                        { borderColor: colors.border, backgroundColor: colors.surface },
+                        isActive && { backgroundColor: colors.primary, borderColor: colors.primary }
+                      ]}
+                      onPress={() => setFormData(prev => ({
+                        ...prev,
+                        recurrenceRule: `RRULE:FREQ=${freq.toUpperCase()}`
+                      }))}
+                    >
+                      <Text style={[
+                        styles.recurrenceOptionText,
+                        { color: isActive ? '#ffffff' : colors.text }
+                      ]}>
+                        {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
                 <TouchableOpacity
                   style={[
                     styles.recurrenceOption,
                     { borderColor: colors.border, backgroundColor: colors.surface },
-                    formData.recurrenceRule?.includes('CUSTOM') && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    (formData.recurrenceRule?.includes('CUSTOM') ||
+                     formData.recurrenceRule?.includes('INTERVAL=2') ||
+                     (formData.recurrenceRule?.includes('BYDAY=') && formData.recurrenceRule?.includes('MONTHLY'))) &&
+                    { backgroundColor: colors.primary, borderColor: colors.primary }
                   ]}
-                  onPress={() => setFormData(prev => ({ 
-                    ...prev, 
-                    recurrenceRule: 'CUSTOM' 
-                  }))}
+                  onPress={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      recurrenceRule: 'CUSTOM'
+                    }));
+                    setCustomRecurrenceType('biweekly');
+                  }}
                 >
                   <Text style={[
                     styles.recurrenceOptionText,
-                    { color: formData.recurrenceRule?.includes('CUSTOM') ? '#ffffff' : colors.text }
+                    { color: (formData.recurrenceRule?.includes('CUSTOM') ||
+                             formData.recurrenceRule?.includes('INTERVAL=2') ||
+                             (formData.recurrenceRule?.includes('BYDAY=') && formData.recurrenceRule?.includes('MONTHLY'))) ? '#ffffff' : colors.text }
                   ]}>
                     Custom
                   </Text>
@@ -1041,7 +1082,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               )}
 
               {/* Custom Recurrence Options */}
-              {formData.recurrenceRule?.includes('CUSTOM') && (
+              {(formData.recurrenceRule?.includes('CUSTOM') ||
+                formData.recurrenceRule?.includes('INTERVAL=2') ||
+                formData.recurrenceRule?.includes('BYDAY=')) &&
+                !formData.recurrenceRule?.startsWith('RRULE:FREQ=WEEKLY;BYDAY=') &&
+                !formData.recurrenceRule?.startsWith('RRULE:FREQ=DAILY') && (
                 <View style={[styles.customRecurrenceContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Text style={[styles.subLabel, { color: colors.text }]}>Custom Frequency</Text>
                   
@@ -1552,31 +1597,66 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     marginBottom: 16,
+    paddingHorizontal: 16,
   },
   switchesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '50%',
+    width: '60%',
     maxWidth: 600,
+    gap: 24,
   },
   switchField: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     flex: 1,
-    gap: 12,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 8,
   },
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
+    flex: 1,
+    marginRight: 16,
   },
   dateRow: {
     flexDirection: 'row',
     gap: 12,
   },
+  dateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  dateButtonHalf: {
+    flex: 1,
+  },
+  timeInputInline: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    textAlign: 'center',
+    width: 100,
+  },
+  anytimeToggleInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 12,
+  },
+  anytimeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   checkboxContainer: {
     borderRadius: 8,
-    padding: 12,
+    padding: 16,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
