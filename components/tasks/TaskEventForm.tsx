@@ -908,15 +908,17 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.text }]}>Due Date & Time</Text>
               <View style={styles.dateTimeRow}>
-                <TouchableOpacity
-                  style={[styles.dateButton, styles.dateButtonHalf, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  onPress={() => handleCalendarOpen('due')}
-                >
-                  <CalendarIcon size={16} color={colors.textSecondary} />
-                  <Text style={[styles.dateButtonText, { color: colors.text }]}>
-                    {formatDateForDisplay(formData.dueDate)}
-                  </Text>
-                </TouchableOpacity>
+                <View style={styles.dateFieldWrapper}>
+                  <TouchableOpacity
+                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('due')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.dueDate)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 <TextInput
                   style={[styles.timeInputInline, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                   value={formData.dueTime}
@@ -1556,7 +1558,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   subLabel: {
     fontSize: 14,
@@ -1635,6 +1637,10 @@ const styles = StyleSheet.create({
   dateButtonHalf: {
     flex: 1,
   },
+  dateFieldWrapper: {
+    flex: 1,
+    minWidth: 0,
+  },
   timeInputInline: {
     borderWidth: 1,
     borderRadius: 8,
@@ -1656,7 +1662,7 @@ const styles = StyleSheet.create({
   },
   checkboxContainer: {
     borderRadius: 8,
-    padding: 16,
+    padding: 20,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1700,13 +1706,15 @@ const styles = StyleSheet.create({
   checkboxGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 16,
+    padding: 4,
   },
   checkboxItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '48%',
-    marginBottom: 8,
+    width: '46%',
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   checkbox: {
     width: 18,
