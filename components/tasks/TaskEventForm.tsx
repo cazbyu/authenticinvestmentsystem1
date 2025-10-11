@@ -1703,10 +1703,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   checkboxContainer: {
+    borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    borderWidth: 1,
   },
   dateButton: {
     flexDirection: 'row',
