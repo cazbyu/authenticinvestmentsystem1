@@ -93,10 +93,9 @@ interface TaskEventFormProps {
   initialData?: any;
   onSubmitSuccess: () => void;
   onClose: () => void;
-  onScoreUpdate?: () => Promise<void>;
 }
 
-export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, onScoreUpdate }: TaskEventFormProps) {
+export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose }: TaskEventFormProps) {
   const { colors } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   
@@ -587,14 +586,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       }
 
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
-
-      // If editing a journal entry (task/withdrawal), update the score
-      if (mode === 'edit' && onScoreUpdate) {
-        // Small delay to ensure database consistency
-        await new Promise(resolve => setTimeout(resolve, 200));
-        await onScoreUpdate();
-      }
-
       onSubmitSuccess();
     } catch (error) {
       console.error('Error saving:', error);

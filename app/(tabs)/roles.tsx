@@ -1488,11 +1488,6 @@ export default function Roles() {
           initialData={editingTask || undefined}
           onSubmitSuccess={handleFormSubmitSuccess}
           onClose={handleFormClose}
-          onScoreUpdate={async () => {
-            if (selectedRole) {
-              await refreshScoreForRole(selectedRole.id, true);
-            }
-          }}
         />
       </Modal>
 
