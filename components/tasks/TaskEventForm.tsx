@@ -754,27 +754,29 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   ) => (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>{title}</Text>
-      <View style={styles.checkboxGrid}>
-        {items.map(item => {
-          const isSelected = selectedIds.includes(item.id);
-          const displayName = item.label || item.name || '';
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.checkboxItem}
-              onPress={() => onToggle(item.id)}
-            >
-              <View style={[
-                styles.checkbox,
-                { borderColor: colors.border },
-                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-              ]}>
-                {isSelected && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <Text style={[styles.checkboxLabel, { color: colors.text }]}>{displayName}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={[styles.checkboxContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.checkboxGrid}>
+          {items.map(item => {
+            const isSelected = selectedIds.includes(item.id);
+            const displayName = item.label || item.name || '';
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.checkboxItem}
+                onPress={() => onToggle(item.id)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  { borderColor: colors.border },
+                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}>
+                  {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={[styles.checkboxLabel, { color: colors.text }]}>{displayName}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -848,14 +850,18 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           {/* Switches Row - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
             <>
-              <View style={styles.switchesRow}>
-                {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
-                {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+              <View style={styles.switchesRowWrapper}>
+                <View style={styles.switchesRow}>
+                  {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
+                  {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+                </View>
               </View>
 
-              <View style={styles.switchesRow}>
-                {renderSwitchField('Authentic Deposit', formData.isAuthenticDeposit, (value) => setFormData(prev => ({ ...prev, isAuthenticDeposit: value })))}
-                {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+              <View style={styles.switchesRowWrapper}>
+                <View style={styles.switchesRow}>
+                  {renderSwitchField('Authentic Deposit', formData.isAuthenticDeposit, (value) => setFormData(prev => ({ ...prev, isAuthenticDeposit: value })))}
+                  {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                </View>
               </View>
             </>
           )}
@@ -895,7 +901,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Date Fields */}
-          {formData.type === 'task' && renderDateField('Due Date', formData.dueDate, 'due')}
+          {formData.type === 'task' && (
+            <View style={styles.dateRow}>
+              {renderDateField('Due Date', formData.dueDate, 'due')}
+            </View>
+          )}
           {formData.type === 'event' && (
             <View style={styles.dateRow}>
               {renderDateField('Start Date', formData.startDate, 'start')}
@@ -1493,6 +1503,7 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: 16,
+    backgroundColor: '#f8f9fa',
   },
   field: {
     marginBottom: 24,
@@ -1537,17 +1548,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  switchesRowWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   switchesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    width: '50%',
+    maxWidth: 600,
   },
   switchField: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     flex: 1,
-    marginHorizontal: 4,
+    gap: 12,
   },
   switchLabel: {
     fontSize: 16,
@@ -1556,6 +1573,16 @@ const styles = StyleSheet.create({
   dateRow: {
     flexDirection: 'row',
     gap: 12,
+  },
+  checkboxContainer: {
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   dateButton: {
     flexDirection: 'row',
