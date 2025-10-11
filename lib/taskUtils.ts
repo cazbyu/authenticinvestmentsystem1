@@ -12,9 +12,9 @@ export function calculateTaskPoints(
 ): number {
   let points = 0;
 
-  // Role + Domain points
-  if (roles.length > 0) points += roles.length;
-  if (domains.length > 0) points += domains.length;
+  // Role + Domain points (binary scoring: 1 point if any exist)
+  if (roles.length > 0) points += 1;
+  if (domains.length > 0) points += 1;
 
   // Authentic deposit bonus
   if (task.is_authentic_deposit) points += 2;

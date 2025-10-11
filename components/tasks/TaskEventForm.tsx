@@ -149,11 +149,46 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [goalMode, setGoalMode] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
 
+  // Completed task warning state
+  const [showCompletedWarning, setShowCompletedWarning] = useState(false);
+  const [dontShowWarningAgain, setDontShowWarningAgain] = useState(false);
+  const [isEditingCompletedTask, setIsEditingCompletedTask] = useState(false);
+
   useEffect(() => {
     fetchFormData();
     if (initialData) {
       loadInitialData();
     }
+  }, [mode, initialData]);
+
+  // Check if editing a completed task and show warning
+  useEffect(() => {
+    const checkCompletedTaskWarning = async () => {
+      if (mode === 'edit' && initialData?.status === 'completed' && (initialData.type === 'task' || initialData.type === 'event')) {
+        setIsEditingCompletedTask(true);
+
+        // Check user preference
+        try {
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data: userProfile } = await supabase
+            .from('0008-ap-users')
+            .select('hide_completed_task_warning')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (!userProfile?.hide_completed_task_warning) {
+            setShowCompletedWarning(true);
+          }
+        } catch (error) {
+          console.error('Error checking completed task warning preference:', error);
+        }
+      }
+    };
+
+    checkCompletedTaskWarning();
   }, [mode, initialData]);
 
   // Flip goal mode when a goal is chosen while goal toggle is ON
@@ -390,6 +425,24 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     return { start, end };
   };
 
+  const handleDismissCompletedWarning = async () => {
+    if (dontShowWarningAgain) {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase
+            .from('0008-ap-users')
+            .update({ hide_completed_task_warning: true })
+            .eq('user_id', user.id);
+        }
+      } catch (error) {
+        console.error('Error updating completed task warning preference:', error);
+      }
+    }
+    setShowCompletedWarning(false);
+  };
+
   const handleSubmit = async () => {
     if (!formData.title.trim()) {
       Alert.alert('Error', 'Please enter a title');
@@ -482,7 +535,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           recurrence_rule: formData.recurrenceRule || null,
           // Preserve completion status and timestamp when editing
           ...(mode === 'edit' && initialData?.id ? {
-            status: initialData.status || 'pending',
+            // Explicitly preserve completed status - never change it back to pending
+            status: initialData.status === 'completed' ? 'completed' : (initialData.status || 'pending'),
             completed_at: initialData.completed_at || null,
             updated_at: new Date().toISOString()
           } : {
@@ -740,9 +794,16 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         <TouchableOpacity onPress={onClose}>
           <X size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          {initialData?.id ? 'Edit' : 'New'} {formData.type === 'depositIdea' ? 'Item' : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)}
-        </Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {initialData?.id ? 'Edit' : 'New'} {formData.type === 'depositIdea' ? 'Item' : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)}
+          </Text>
+          {isEditingCompletedTask && (
+            <View style={[styles.completedBadge, { backgroundColor: '#16a34a' }]}>
+              <Text style={styles.completedBadgeText}>✓ Completed</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
           style={[
             styles.saveButton,
@@ -1328,6 +1389,52 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           mode="create"
         />
       )}
+
+      {/* Completed Task Warning Modal */}
+      <Modal visible={showCompletedWarning} transparent animationType="fade">
+        <View style={styles.warningOverlay}>
+          <View style={[styles.warningContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.warningHeader}>
+              <Text style={[styles.warningTitle, { color: colors.text }]}>
+                Editing Completed Task
+              </Text>
+            </View>
+            <View style={styles.warningBody}>
+              <Text style={[styles.warningText, { color: colors.text }]}>
+                You are updating a completed task.
+              </Text>
+              <View style={styles.warningCheckboxRow}>
+                <TouchableOpacity
+                  style={styles.checkboxContainer}
+                  onPress={() => setDontShowWarningAgain(!dontShowWarningAgain)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.checkbox,
+                    { borderColor: colors.border },
+                    dontShowWarningAgain && { backgroundColor: colors.primary, borderColor: colors.primary }
+                  ]}>
+                    {dontShowWarningAgain && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </View>
+                  <Text style={[styles.checkboxLabel, { color: colors.textSecondary }]}>
+                    Don't show this warning again
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.warningFooter}>
+              <TouchableOpacity
+                style={[styles.warningButton, { backgroundColor: colors.primary }]}
+                onPress={handleDismissCompletedWarning}
+              >
+                <Text style={styles.warningButtonText}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1344,8 +1451,24 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
   headerTitle: {
     fontSize: 18,
+    fontWeight: '600',
+  },
+  completedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  completedBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
     fontWeight: '600',
   },
   saveButton: {
@@ -1673,5 +1796,81 @@ const styles = StyleSheet.create({
   existingNoteDate: {
     fontSize: 12,
     fontStyle: 'italic',
+  },
+  warningOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  warningContainer: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  warningHeader: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  warningTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  warningBody: {
+    padding: 20,
+  },
+  warningText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  warningCheckboxRow: {
+    alignItems: 'center',
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmark: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  checkboxLabel: {
+    fontSize: 14,
+  },
+  warningFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  warningButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  warningButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
