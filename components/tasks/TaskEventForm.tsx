@@ -939,7 +939,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
           {formData.type === 'event' && (
-            <View style={styles.eventDateTimeContainer}>
+            <View style={styles.field}>
               <View style={styles.eventDateTimeRow}>
                 <View style={styles.eventDateField}>
                   <Text style={[styles.label, { color: colors.text }]}>Start Date</Text>
@@ -963,8 +963,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     placeholderTextColor={colors.textSecondary}
                   />
                 </View>
-              </View>
-              <View style={styles.eventDateTimeRow}>
                 <View style={styles.eventDateField}>
                   <Text style={[styles.label, { color: colors.text }]}>End Date</Text>
                   <TouchableOpacity
@@ -1706,7 +1704,7 @@ const styles = StyleSheet.create({
   },
   checkboxContainer: {
     borderRadius: 8,
-    padding: 20,
+    padding: 12,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1747,29 +1745,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  eventDateTimeContainer: {
-    marginBottom: 24,
-  },
   eventDateTimeRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
     alignItems: 'flex-end',
   },
   eventDateField: {
-    flex: 2,
+    flex: 2.5,
   },
   eventTimeField: {
-    flex: 1,
+    flex: 1.5,
   },
   repeatSwitchWrapper: {
     width: '100%',
     alignItems: 'center',
     marginBottom: 16,
+    paddingHorizontal: 16,
   },
   repeatSwitchContainer: {
-    width: '30%',
-    minWidth: 200,
+    width: '60%',
+    maxWidth: 600,
   },
   checkboxGrid: {
     flexDirection: 'row',
