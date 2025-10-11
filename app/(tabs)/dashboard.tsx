@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [journalRefreshKey, setJournalRefreshKey] = useState(0);
 
   // Import functions from useGoalProgress hook
   const {
@@ -441,15 +442,25 @@ export default function Dashboard() {
     }
   };
   const handleUpdateTask = (task: Task) => {
+    console.log('[Dashboard] Opening task for edit:', {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      completed_at: task.completed_at
+    });
     setEditingTask(task);
     setIsDetailModalVisible(false);
     setTimeout(() => setIsFormModalVisible(true), 100); // Small delay to ensure modal transition
   };
   const handleDelegateTask = (task: Task) => { Alert.alert('Delegate', 'Delegation functionality coming soon!'); setIsDetailModalVisible(false); };
-  const handleFormSubmitSuccess = () => {
+  const handleFormSubmitSuccess = async () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
     fetchData();
+    // Trigger Journal refresh if we're on Journal view
+    setJournalRefreshKey(prev => prev + 1);
+    // Refresh the authentic score
+    await refreshScore(true);
   };
 
   const handleFormClose = () => {
@@ -459,6 +470,12 @@ export default function Dashboard() {
 
   const handleJournalEntryPress = (entry: any) => {
     if (entry.source_type === 'task') {
+      console.log('[Dashboard] Journal entry pressed - Task data:', {
+        id: entry.source_data.id,
+        title: entry.source_data.title,
+        status: entry.source_data.status,
+        completed_at: entry.source_data.completed_at
+      });
       setSelectedTask(entry.source_data);
       setIsDetailModalVisible(true);
     } else if (entry.source_type === 'withdrawal') {
@@ -492,6 +509,7 @@ export default function Dashboard() {
           <JournalView
             scope={{ type: 'user' }}
             onEntryPress={handleJournalEntryPress}
+            refreshKey={journalRefreshKey}
           />
         ) : activeView === 'analytics' ? (
           <AnalyticsView

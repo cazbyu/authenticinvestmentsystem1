@@ -518,6 +518,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         mainRecordId = mainRecord.id;
       } else {
         // Task or Event
+        // Log to verify status preservation
+        if (mode === 'edit' && initialData?.id) {
+          console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
+        }
+
         const taskPayload = {
           user_id: user.id,
           title: formData.title.trim(),
@@ -543,6 +548,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             status: 'pending'
           })
         };
+
+        console.log('[TaskEventForm] Task payload status:', taskPayload.status, 'Task payload completed_at:', taskPayload.completed_at);
 
         if (mode === 'edit' && initialData?.id) {
           const { data, error } = await supabase
@@ -1401,7 +1408,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
             <View style={styles.warningBody}>
               <Text style={[styles.warningText, { color: colors.text }]}>
-                You are updating a completed task.
+                You are updating a completed task. Your changes will be saved and the task will remain in your Journal with the updated information and recalculated points.
               </Text>
               <View style={styles.warningCheckboxRow}>
                 <TouchableOpacity

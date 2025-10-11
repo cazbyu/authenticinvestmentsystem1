@@ -27,9 +27,10 @@ interface JournalViewProps {
   onAddWithdrawal?: () => void;
   periodScore?: number;
   onDateRangeChange?: (dateRange: 'week' | 'month' | 'all') => void;
+  refreshKey?: number;
 }
 
-export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore, onDateRangeChange }: JournalViewProps) {
+export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore, onDateRangeChange, refreshKey }: JournalViewProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<'all' | 'deposits' | 'withdrawals'>('all');
@@ -91,7 +92,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       if (filter === 'all' || filter === 'deposits') {
         let tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, completed_at, is_authentic_deposit, is_urgent, is_important')
+          .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_authentic_deposit, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
           .eq('user_id', user.id)
           .eq('status', 'completed')
           .not('completed_at', 'is', null);
@@ -390,8 +391,8 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
     // Create a stable scope key for comparison
     const scopeKey = JSON.stringify(scope);
 
-    // Only fetch if scope actually changed
-    if (scopeKey === previousScopeRef.current && !filter && !dateRange) {
+    // Only fetch if scope actually changed (unless refreshKey changed which forces refresh)
+    if (scopeKey === previousScopeRef.current && !filter && !dateRange && refreshKey === undefined) {
       return;
     }
 
@@ -421,7 +422,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, filter, dateRange]);
+  }, [scope, filter, dateRange, refreshKey]);
 
   const formatDate = (dateString: string) => {
     const d = new Date(dateString);
