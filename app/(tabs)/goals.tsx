@@ -293,6 +293,10 @@ export default function Goals() {
                 ...goalActions.slice(actionIndex + 1)
               ];
 
+              if (result.shouldRemoveFromUI || countResult.isComplete) {
+                updatedActions[goalId] = updatedActions[goalId].filter(a => a.id !== actionId);
+              }
+
               break;
             }
           }
