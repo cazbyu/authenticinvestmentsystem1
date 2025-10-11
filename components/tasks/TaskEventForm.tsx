@@ -757,8 +757,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   ) => (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>{title}</Text>
-      <View style={[styles.checkboxContainer, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-        <View style={styles.checkboxGrid}>
+      <View style={[styles.checkboxContainer, { borderColor: colors.border }]}>
+        <View style={[styles.checkboxGrid, { backgroundColor: colors.surface }]}>
           {items.map(item => {
             const isSelected = selectedIds.includes(item.id);
             const displayName = item.label || item.name || '';
