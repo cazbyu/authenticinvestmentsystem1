@@ -1641,7 +1641,7 @@ const styles = StyleSheet.create({
   dateFieldWrapper: {
     flex: 1,
     minWidth: 0,
-    maxWidth: '48%',
+    maxWidth: '35%',
   },
   timeInputInline: {
     borderWidth: 1,
