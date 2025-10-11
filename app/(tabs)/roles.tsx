@@ -294,7 +294,30 @@ export default function Roles() {
           return;
         }
 
+        // Filter out Goal Bank actions by checking for week plans
         const taskIds = tasksData.map(t => t.id);
+        const { data: weekPlans, error: weekPlansError } = await supabase
+          .from('0008-ap-task-week-plan')
+          .select('task_id')
+          .in('task_id', taskIds)
+          .is('deleted_at', null);
+
+        if (weekPlansError) throw weekPlansError;
+
+        // Create a Set of task IDs that have week plans (Goal Bank actions)
+        const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
+
+        // Only include standalone tasks (tasks WITHOUT week plans)
+        const allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
+
+        if (allTasks.length === 0) {
+          setTasks([]);
+          setDepositIdeas([]);
+          setLoading(false);
+          return;
+        }
+
+        const taskIdsForJoins = allTasks.map(t => t.id);
 
         const [
           { data: rolesData, error: rolesError },
@@ -303,11 +326,11 @@ export default function Roles() {
           { data: notesData, error: notesError },
           { data: delegatesData, error: delegatesError }
         ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
+          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
         ]);
 
         if (rolesError) throw rolesError;
@@ -318,7 +341,7 @@ export default function Roles() {
 
         // Filter tasks that have the selected role
         const roleTaskIds = rolesData?.filter(r => r.role?.id === roleId).map(r => r.parent_id) || [];
-        const filteredTasks = tasksData.filter(task => roleTaskIds.includes(task.id));
+        const filteredTasks = allTasks.filter(task => roleTaskIds.includes(task.id));
 
         const transformedTasks = filteredTasks.map(task => ({
           ...task,
@@ -424,7 +447,30 @@ export default function Roles() {
           return;
         }
 
+        // Filter out Goal Bank actions by checking for week plans
         const taskIds = tasksData.map(t => t.id);
+        const { data: weekPlans, error: weekPlansError } = await supabase
+          .from('0008-ap-task-week-plan')
+          .select('task_id')
+          .in('task_id', taskIds)
+          .is('deleted_at', null);
+
+        if (weekPlansError) throw weekPlansError;
+
+        // Create a Set of task IDs that have week plans (Goal Bank actions)
+        const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
+
+        // Only include standalone tasks (tasks WITHOUT week plans)
+        const allKRTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
+
+        if (allKRTasks.length === 0) {
+          setTasks([]);
+          setDepositIdeas([]);
+          setLoading(false);
+          return;
+        }
+
+        const taskIdsForJoins = allKRTasks.map(t => t.id);
 
         const [
           { data: rolesData, error: rolesError },
@@ -434,12 +480,12 @@ export default function Roles() {
           { data: delegatesData, error: delegatesError },
           { data: keyRelationshipsData, error: keyRelationshipsError }
         ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
+          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
         ]);
 
         if (rolesError) throw rolesError;
@@ -451,7 +497,7 @@ export default function Roles() {
 
         // Filter tasks that have the selected key relationship
         const krTaskIds = keyRelationshipsData?.filter(kr => kr.key_relationship?.id === krId).map(kr => kr.parent_id) || [];
-        const filteredTasks = tasksData.filter(task => krTaskIds.includes(task.id));
+        const filteredTasks = allKRTasks.filter(task => krTaskIds.includes(task.id));
 
         const transformedTasks = filteredTasks.map(task => ({
           ...task,
@@ -682,7 +728,28 @@ export default function Roles() {
         .eq('id', taskId);
 
       if (error) throw error;
-      
+
+      if (selectedRole) {
+        fetchRoleTasks(selectedRole.id, activeView);
+      }
+      if (selectedKR) {
+        fetchKRTasks(selectedKR.id, krView);
+      }
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
       if (selectedRole) {
         fetchRoleTasks(selectedRole.id, activeView);
       }
@@ -1110,7 +1177,8 @@ export default function Roles() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    onComplete={handleCompleteTask}
+                    onComplete={() => handleCompleteTask(task.id)}
+                    onDelete={() => handleDeleteTask(task.id)}
                     onDoublePress={handleTaskDoublePress}
                   />
                 ))
@@ -1215,7 +1283,8 @@ export default function Roles() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    onComplete={handleCompleteTask}
+                    onComplete={() => handleCompleteTask(task.id)}
+                    onDelete={() => handleDeleteTask(task.id)}
                     onDoublePress={handleTaskDoublePress}
                   />
                 ))

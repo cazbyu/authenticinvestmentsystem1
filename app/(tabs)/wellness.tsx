@@ -161,7 +161,35 @@ export default function Wellness() {
           return;
         }
 
+        // Filter out Goal Bank actions by checking for week plans
         const taskIds = tasksData.map(t => t.id);
+        const { data: weekPlans, error: weekPlansError } = await supabase
+          .from('0008-ap-task-week-plan')
+          .select('task_id')
+          .in('task_id', taskIds)
+          .is('deleted_at', null);
+
+        if (weekPlansError) throw weekPlansError;
+
+        // Check if aborted
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        // Create a Set of task IDs that have week plans (Goal Bank actions)
+        const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
+
+        // Only include standalone tasks (tasks WITHOUT week plans)
+        const allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
+
+        if (allTasks.length === 0) {
+          setTasks([]);
+          setDepositIdeas([]);
+          setLoading(false);
+          return;
+        }
+
+        const taskIdsForJoins = allTasks.map(t => t.id);
 
         const [
           { data: rolesData, error: rolesError },
@@ -170,11 +198,11 @@ export default function Wellness() {
           { data: notesData, error: notesError },
           { data: keyRelationshipsData, error: keyRelationshipsError }
         ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
+          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
         ]);
 
         if (rolesError) throw rolesError;
@@ -190,7 +218,7 @@ export default function Wellness() {
 
         // Filter tasks that have the selected domain
         const domainTaskIds = domainsData?.filter(d => d.domain?.id === domainId).map(d => d.parent_id) || [];
-        const filteredTasks = tasksData.filter(task => domainTaskIds.includes(task.id));
+        const filteredTasks = allTasks.filter(task => domainTaskIds.includes(task.id));
 
         const transformedTasks = filteredTasks.map(task => ({
           ...task,
@@ -360,6 +388,26 @@ export default function Wellness() {
         fetchDomainTasks(selectedDomain.id, activeView);
       }
       // Refresh score after task completion
+      fetchAuthenticScoreLocal(true);
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message);
+    }
+  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
+
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      if (selectedDomain) {
+        fetchDomainTasks(selectedDomain.id, activeView);
+      }
+      // Refresh score after task deletion
       fetchAuthenticScoreLocal(true);
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
@@ -655,7 +703,8 @@ export default function Wellness() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    onComplete={handleCompleteTask}
+                    onComplete={() => handleCompleteTask(task.id)}
+                    onDelete={() => handleDeleteTask(task.id)}
                     onDoublePress={handleTaskDoublePress}
                   />
                 ))
