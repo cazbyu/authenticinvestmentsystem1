@@ -281,6 +281,7 @@ export default function Roles() {
           .select('*, custom_timeline_id')
           .eq('user_id', user.id)
           .is('deleted_at', null)
+          .is('parent_task_id', null)
           .not('status', 'in', '(completed,cancelled)')
           .in('type', ['task', 'event']);
 
@@ -410,6 +411,7 @@ export default function Roles() {
           .select('*')
           .eq('user_id', user.id)
           .is('deleted_at', null)
+          .is('parent_task_id', null)
           .not('status', 'in', '(completed,cancelled)')
           .in('type', ['task', 'event']);
 

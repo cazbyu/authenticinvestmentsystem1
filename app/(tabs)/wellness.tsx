@@ -143,6 +143,7 @@ export default function Wellness() {
           .select('*, custom_timeline_id')
           .eq('user_id', user.id)
           .is('deleted_at', null)
+          .is('parent_task_id', null)
           .not('status', 'in', '(completed,cancelled)')
           .in('type', ['task', 'event']);
 

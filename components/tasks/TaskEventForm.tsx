@@ -265,6 +265,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
     setExistingNotes(notesArray);
 
+    // Check if there are active goals associated with this task
+    const hasActiveGoals = initialData.goals && Array.isArray(initialData.goals) && initialData.goals.length > 0;
+    let firstActiveGoal = null;
+
+    if (hasActiveGoals) {
+      // Find the first active goal to set as selectedGoal
+      firstActiveGoal = initialData.goals[0];
+    }
+
     // Build formData, handling both edit mode (with id) and create mode (pre-fill only)
     const newFormData: FormData = {
       type: initialData.type || 'task',
@@ -280,12 +289,13 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       isUrgent: initialData.is_urgent || false,
       isImportant: initialData.is_important || false,
       isAuthenticDeposit: initialData.is_authentic_deposit || false,
-      isGoal: initialData.is_twelve_week_goal || false,
+      isGoal: hasActiveGoals || initialData.is_twelve_week_goal || false,
       hasRepeat: !!initialData.recurrence_rule,
       selectedRoleIds: initialData.roles?.map((r: any) => r.id) || initialData.selectedRoleIds || [],
       selectedDomainIds: initialData.domains?.map((d: any) => d.id) || initialData.selectedDomainIds || [],
       selectedKeyRelationshipIds: initialData.keyRelationships?.map((kr: any) => kr.id) || initialData.selectedKeyRelationshipIds || [],
       selectedGoalIds: initialData.goals?.map((g: any) => g.id) || initialData.selectedGoalIds || [],
+      selectedGoal: firstActiveGoal,
       notes: notesString,
       recurrenceRule: initialData.recurrence_rule || undefined,
     };
@@ -470,8 +480,14 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           is_authentic_deposit: formData.isAuthenticDeposit,
           is_twelve_week_goal: formData.isGoal,
           recurrence_rule: formData.recurrenceRule || null,
-          status: 'pending',
-          ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
+          // Preserve completion status and timestamp when editing
+          ...(mode === 'edit' && initialData?.id ? {
+            status: initialData.status || 'pending',
+            completed_at: initialData.completed_at || null,
+            updated_at: new Date().toISOString()
+          } : {
+            status: 'pending'
+          })
         };
 
         if (mode === 'edit' && initialData?.id) {
