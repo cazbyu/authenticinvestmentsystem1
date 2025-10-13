@@ -174,7 +174,7 @@ BEGIN
   IF v_has_user_preference_column THEN
     SELECT week_start_day INTO v_user_preference
     FROM "0008-ap-users"
-    WHERE user_id = v_user_id;
+    WHERE id = v_user_id;
   END IF;
 
   -- Use provided preference or fall back to user's stored preference or default
@@ -231,7 +231,7 @@ BEGIN
   IF v_has_user_preference_column AND p_week_start_day IS NOT NULL AND p_week_start_day != v_user_preference THEN
     UPDATE "0008-ap-users"
     SET week_start_day = v_final_preference
-    WHERE user_id = v_user_id;
+    WHERE id = v_user_id;
 
     RAISE NOTICE 'Updated user preference to: %', v_final_preference;
   END IF;
