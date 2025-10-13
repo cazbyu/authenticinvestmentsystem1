@@ -90,7 +90,7 @@ export default function SettingsScreen() {
       const { data, error } = await supabase
         .from('0008-ap-users')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (error && (error as any).code !== 'PGRST116') throw error;
@@ -276,7 +276,7 @@ export default function SettingsScreen() {
       if (!user) throw new Error('No user found');
 
       const payload = {
-        user_id: user.id,
+        id: user.id,
         ...profile,
         ...updates,
         updated_at: new Date().toISOString(),
@@ -284,11 +284,15 @@ export default function SettingsScreen() {
 
       const { error } = await supabase
         .from('0008-ap-users')
-        .upsert(payload, { onConflict: 'user_id' });
+        .upsert(payload, { onConflict: 'id' });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating profile:', error);
+        throw error;
+      }
 
       setProfile(prev => ({ ...prev, ...updates }));
+      console.log('[Settings] Profile updated successfully:', updates);
 
       if (updates.profile_image) {
         try {

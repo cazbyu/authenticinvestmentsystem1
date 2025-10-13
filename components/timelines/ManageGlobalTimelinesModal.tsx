@@ -524,7 +524,10 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
   };
 
   const renderAvailableCycles = () => {
-    if (availableCycles.length === 0) {
+    // Filter out already-activated cycles from the display
+    const unactivatedCycles = availableCycles.filter(cycle => !cycle.isAlreadyActivated);
+
+    if (unactivatedCycles.length === 0) {
       return (
         <View style={styles.emptySection}>
           <TrendingUp size={48} color="#6b7280" />
@@ -538,7 +541,7 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
     return (
       <View style={styles.availableCyclesList}>
-        {availableCycles.map(cycle => {
+        {unactivatedCycles.map(cycle => {
           const displayTitle = cycle.global_cycle?.title || cycle.title || 'Global 12-Week Cycle';
           const isActivated = cycle.isAlreadyActivated === true;
           const isCurrent = cycle.isCurrent === true;
@@ -563,10 +566,7 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
           }
 
           return (
-            <View key={cycle.global_cycle_id || cycle.id} style={[
-              styles.availableCycleCard,
-              isActivated && styles.activatedCycleCard
-            ]}>
+            <View key={cycle.global_cycle_id || cycle.id} style={styles.availableCycleCard}>
               <View style={styles.cycleCardHeader}>
                 <View style={styles.titleRow}>
                   <Text style={styles.cycleTitle}>{displayTitle}</Text>
@@ -581,11 +581,6 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
                     </View>
                   )}
                 </View>
-                {isActivated && (
-                  <View style={styles.activatedBadge}>
-                    <Text style={styles.activatedBadgeText}>Activated</Text>
-                  </View>
-                )}
                 <Text style={styles.cycleDates}>
                   {formatDateRange(
                     cycle.global_cycle?.start_date || cycle.start_date,
@@ -594,38 +589,28 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
                 </Text>
               </View>
 
-              {!isActivated ? (
-                <>
-                  <TouchableOpacity
-                    style={[
-                      styles.activateButton,
-                      !canActivate && styles.activateButtonDisabled
-                    ]}
-                    onPress={() => handleActivateButtonPress(cycle.global_cycle || cycle)}
-                    disabled={activating || !canActivate}
-                  >
-                    {activating ? (
-                      <ActivityIndicator size="small" color="#ffffff" />
-                    ) : (
-                      <Text style={[
-                        styles.activateButtonText,
-                        !canActivate && styles.activateButtonTextDisabled
-                      ]}>
-                        {canActivate ? 'Activate' : 'Locked'}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                  {lockedMessage && (
-                    <View style={styles.lockedMessage}>
-                      <Text style={styles.lockedMessageText}>{lockedMessage}</Text>
-                    </View>
-                  )}
-                </>
-              ) : (
-                <View style={styles.alreadyActivatedMessage}>
-                  <Text style={styles.alreadyActivatedText}>
-                    This cycle is already activated and appears in your Active Timelines above
+              <TouchableOpacity
+                style={[
+                  styles.activateButton,
+                  !canActivate && styles.activateButtonDisabled
+                ]}
+                onPress={() => handleActivateButtonPress(cycle.global_cycle || cycle)}
+                disabled={activating || !canActivate}
+              >
+                {activating ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={[
+                    styles.activateButtonText,
+                    !canActivate && styles.activateButtonTextDisabled
+                  ]}>
+                    {canActivate ? 'Activate' : 'Locked'}
                   </Text>
+                )}
+              </TouchableOpacity>
+              {lockedMessage && (
+                <View style={styles.lockedMessage}>
+                  <Text style={styles.lockedMessageText}>{lockedMessage}</Text>
                 </View>
               )}
             </View>
