@@ -128,7 +128,6 @@ WITH ordered_cycles AS (
   SELECT
     gc.id AS global_cycle_id,
     gc.title,
-    gc.description,
     gc.start_date,
     gc.end_date,
     gc.reflection_start,
@@ -148,7 +147,6 @@ current_cycle AS (
 SELECT
   oc.global_cycle_id,
   oc.title,
-  oc.description,
   oc.start_date,
   oc.end_date,
   oc.reflection_start,
