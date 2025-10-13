@@ -23,7 +23,6 @@ const formatDateDisplay = (dateString: string): string => {
 interface GlobalCycle {
   id: string;
   title?: string;
-  description?: string;
   start_date: string;
   end_date: string;
   reflection_start: string;
@@ -125,7 +124,6 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
           global_cycle:0008-ap-global-cycles!inner(
             id,
             title,
-            description,
             start_date,
             end_date,
             reflection_start,
@@ -187,7 +185,17 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
             activated_at: '',
             created_at: cycle.created_at,
             updated_at: '',
-            global_cycle: cycle as GlobalCycle
+            global_cycle: {
+              id: cycle.global_cycle_id,
+              title: cycle.title,
+              start_date: cycle.start_date,
+              end_date: cycle.end_date,
+              reflection_start: cycle.reflection_start,
+              reflection_end: cycle.reflection_end,
+              status: cycle.status,
+              cycle_position: cycle.cycle_position,
+              can_activate: cycle.can_activate
+            } as GlobalCycle
           } as ActiveTimelineWithCycle);
         });
       }
