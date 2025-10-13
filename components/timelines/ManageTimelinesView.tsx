@@ -14,8 +14,11 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<ManageTimelinesSubTab>('global');
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showGlobalModal, setShowGlobalModal] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleUpdate = () => {
+    console.log('[ManageTimelinesView] handleUpdate called, triggering parent update');
+    setRefreshTrigger(prev => prev + 1);
     onUpdate?.();
   };
 

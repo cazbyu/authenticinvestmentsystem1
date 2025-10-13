@@ -83,23 +83,39 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
   useEffect(() => {
     if (visible) {
+      console.log('[ManageGlobalTimelinesModal] Modal became visible, fetching data...');
       fetchData();
+    } else {
+      console.log('[ManageGlobalTimelinesModal] Modal hidden');
     }
   }, [visible]);
 
+  // Refetch available cycles whenever active timelines change
+  useEffect(() => {
+    if (visible && activeTimelines.length >= 0) {
+      console.log('[ManageGlobalTimelinesModal] Active timelines changed, refetching available cycles...');
+      fetchAvailableCycles();
+    }
+  }, [activeTimelines.length, visible]);
+
   const fetchData = async () => {
+    console.log('[ManageGlobalTimelinesModal] fetchData called');
     setLoading(true);
     try {
-      await Promise.all([
-        fetchActiveTimeline(),
-        fetchAvailableCycles()
-      ]);
+      // Fetch active timelines first, then available cycles
+      // This ensures availableCycles can properly check against activeTimelines
+      await fetchActiveTimeline();
+      await fetchAvailableCycles();
+      console.log('[ManageGlobalTimelinesModal] fetchData completed successfully');
+    } catch (error) {
+      console.error('[ManageGlobalTimelinesModal] Error in fetchData:', error);
+      // Don't show alert here, individual functions already handle errors
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchActiveTimeline = async () => {
+  const fetchActiveTimeline = async (retryCount = 0) => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -142,11 +158,26 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
         timelines: data?.map(t => ({ id: t.id, cycle_id: t.global_cycle_id, title: t.global_cycle?.title }))
       });
 
-      if (error) throw error;
-      setActiveTimelines(data || []);
+      if (error) {
+        // Retry once if it's a network error
+        if (retryCount < 1 && (error.message?.includes('network') || error.message?.includes('timeout'))) {
+          console.log('[ManageGlobalTimelinesModal] Network error, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return fetchActiveTimeline(retryCount + 1);
+        }
+        throw error;
+      }
+
+      // Ensure data is an array even if null/undefined
+      const timelinesData = Array.isArray(data) ? data : [];
+      setActiveTimelines(timelinesData);
+
+      console.log('[ManageGlobalTimelinesModal] Set activeTimelines state with', timelinesData.length, 'timelines');
     } catch (error) {
       console.error('[ManageGlobalTimelinesModal] Error fetching active timelines:', error);
-      Alert.alert('Error', (error as Error).message);
+      if (retryCount === 0) {
+        Alert.alert('Error Loading Timelines', 'Failed to load active timelines. Please try again.');
+      }
     }
   };
 
@@ -154,7 +185,12 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('[ManageGlobalTimelinesModal] No user found when fetching available cycles');
+        return;
+      }
+
+      console.log('[ManageGlobalTimelinesModal] Fetching available cycles from v_global_cycles...');
 
       // Query the new v_global_cycles view
       const { data: cycleData, error } = await supabase
@@ -163,16 +199,36 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
         .in('cycle_position', ['active', '2nd_in_line', '3rd_in_line', '4th_in_line'])
         .order('start_date', { ascending: true });
 
+      console.log('[ManageGlobalTimelinesModal] Available cycles query result:', {
+        count: cycleData?.length || 0,
+        error: error,
+        cycles: cycleData?.map(c => ({
+          id: c.global_cycle_id,
+          title: c.title,
+          position: c.cycle_position,
+          can_activate: c.can_activate
+        }))
+      });
+
       if (error) throw error;
 
       const availableCyclesWithStatus: ActiveTimelineWithCycle[] = [];
 
       if (cycleData) {
         const activatedCycleIds = activeTimelines.map(t => t.global_cycle_id);
+        console.log('[ManageGlobalTimelinesModal] Activated cycle IDs:', activatedCycleIds);
 
         cycleData.forEach(cycle => {
           const isAlreadyActivated = activatedCycleIds.includes(cycle.global_cycle_id);
           const isCurrent = cycle.cycle_position === 'active';
+
+          console.log('[ManageGlobalTimelinesModal] Processing cycle:', {
+            id: cycle.global_cycle_id,
+            title: cycle.title,
+            isAlreadyActivated,
+            isCurrent,
+            can_activate: cycle.can_activate
+          });
 
           availableCyclesWithStatus.push({
             ...cycle,
@@ -200,9 +256,10 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
         });
       }
 
+      console.log('[ManageGlobalTimelinesModal] Set availableCycles with', availableCyclesWithStatus.length, 'cycles');
       setAvailableCycles(availableCyclesWithStatus);
     } catch (error) {
-      console.error('Error fetching available cycles:', error);
+      console.error('[ManageGlobalTimelinesModal] Error fetching available cycles:', error);
       Alert.alert('Error', (error as Error).message);
     }
   };
@@ -498,6 +555,17 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
       if (error) {
         console.error('[ManageGlobalTimelinesModal] RPC Error:', error);
+
+        // Handle "already activated" error gracefully
+        if (error.message?.includes('already activated') || error.code === 'P0001') {
+          console.log('[ManageGlobalTimelinesModal] Timeline already activated, refreshing data...');
+          // Silently refresh the data to show the already-activated timeline
+          await fetchData();
+          onUpdate?.();
+          Alert.alert('Already Active', 'This timeline is already activated and appears in your Active Timelines.');
+          return;
+        }
+
         throw error;
       }
 

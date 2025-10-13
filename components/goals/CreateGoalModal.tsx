@@ -90,8 +90,8 @@ export function CreateGoalModal({
   useEffect(() => {
     if (visible) {
       console.log('[CreateGoalModal] Modal opened');
-      console.log('[CreateGoalModal] Available timelines:', allTimelines.length);
-      console.log('[CreateGoalModal] Timeline details:', allTimelines.map(t => ({
+      console.log('[CreateGoalModal] Available timelines:', allTimelines?.length || 0);
+      console.log('[CreateGoalModal] Timeline details:', (allTimelines || []).map(t => ({
         id: t.id,
         source: t.source,
         title: t.title
@@ -100,6 +100,11 @@ export function CreateGoalModal({
       fetchData();
       // Set the initial timeline selection based on the prop
       setCurrentSelectedTimeline(selectedTimeline);
+
+      // Warn if no timelines are available
+      if (!allTimelines || allTimelines.length === 0) {
+        console.warn('[CreateGoalModal] No timelines available. User may need to activate a timeline first.');
+      }
     } else {
       resetForm();
     }
