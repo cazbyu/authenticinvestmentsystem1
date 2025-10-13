@@ -37,7 +37,8 @@ export default function SettingsScreen() {
     first_name: '',
     last_name: '',
     profile_image: '',
-    theme_color: '#0078d4'
+    theme_color: '#0078d4',
+    week_start_day: 'sunday'
   });
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -95,7 +96,13 @@ export default function SettingsScreen() {
       if (error && (error as any).code !== 'PGRST116') throw error;
 
       if (data) {
-        setProfile(data);
+        setProfile({
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          profile_image: data.profile_image || '',
+          theme_color: data.theme_color || '#0078d4',
+          week_start_day: data.week_start_day || 'sunday'
+        });
 
         if (data.profile_image) {
           try {
@@ -494,6 +501,53 @@ export default function SettingsScreen() {
 
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Week Start Day</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>{
+                profile.week_start_day === 'sunday' ? 'Weeks start on Sunday' : 'Weeks start on Monday'
+              }</Text>
+            </View>
+            <View style={styles.weekStartButtonGroup}>
+              <TouchableOpacity
+                style={[
+                  styles.weekStartButton,
+                  profile.week_start_day === 'sunday' && styles.weekStartButtonActive,
+                  { borderColor: colors.border }
+                ]}
+                onPress={async () => {
+                  const updatedProfile = { ...profile, week_start_day: 'sunday' };
+                  setProfile(updatedProfile);
+                  await updateProfile({ week_start_day: 'sunday' });
+                }}
+              >
+                <Text style={[
+                  styles.weekStartButtonText,
+                  profile.week_start_day === 'sunday' && [styles.weekStartButtonTextActive, { color: colors.primary }],
+                  { color: colors.textSecondary }
+                ]}>Sun</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.weekStartButton,
+                  profile.week_start_day === 'monday' && styles.weekStartButtonActive,
+                  { borderColor: colors.border }
+                ]}
+                onPress={async () => {
+                  const updatedProfile = { ...profile, week_start_day: 'monday' };
+                  setProfile(updatedProfile);
+                  await updateProfile({ week_start_day: 'monday' });
+                }}
+              >
+                <Text style={[
+                  styles.weekStartButtonText,
+                  profile.week_start_day === 'monday' && [styles.weekStartButtonTextActive, { color: colors.primary }],
+                  { color: colors.textSecondary }
+                ]}>Mon</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: colors.text }]}>Default 12-Week Global Cycle</Text>
               <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
                 Automatically sync with community cycles
@@ -703,6 +757,11 @@ const styles = StyleSheet.create({
   checkmarkText: { color: '#1f2937', fontSize: 12, fontWeight: 'bold' },
   settingInfo: { flex: 1 },
   settingDescription: { fontSize: 14, marginTop: 2 },
+  weekStartButtonGroup: { flexDirection: 'row', gap: 8 },
+  weekStartButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, borderWidth: 1, backgroundColor: 'transparent', minWidth: 50, alignItems: 'center' },
+  weekStartButtonActive: { backgroundColor: '#f0f9ff', borderColor: '#0078d4', borderWidth: 2 },
+  weekStartButtonText: { fontSize: 14, fontWeight: '500' },
+  weekStartButtonTextActive: { fontWeight: '700' },
   connectButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 },
   connectButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
   disconnectButton: { backgroundColor: '#dc2626' },

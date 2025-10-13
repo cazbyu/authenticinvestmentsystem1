@@ -12,17 +12,25 @@ import {
 import { X, TriangleAlert as AlertTriangle, Calendar, TrendingUp, ChevronRight, Archive, Trash2 } from 'lucide-react-native';
 import { InfoTooltip } from '@/components/InfoTooltip';
 import { getSupabaseClient } from '@/lib/supabase';
-import { formatDateRange } from '@/lib/dateUtils';
+import { formatDateRange, parseLocalDate } from '@/lib/dateUtils';
+
+// Helper function to format dates without timezone shift
+const formatDateDisplay = (dateString: string): string => {
+  const date = parseLocalDate(dateString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 interface GlobalCycle {
   id: string;
   title?: string;
-  cycle_label?: string;
+  description?: string;
   start_date: string;
   end_date: string;
+  reflection_start: string;
   reflection_end: string;
-  is_active: boolean;
-  status?: string;
+  status: string;
+  cycle_position: 'active' | '2nd_in_line' | '3rd_in_line' | '4th_in_line' | 'archived' | 'future';
+  can_activate: boolean;
 }
 
 interface UserGlobalTimeline {
@@ -117,11 +125,11 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
           global_cycle:0008-ap-global-cycles!inner(
             id,
             title,
-            cycle_label,
+            description,
             start_date,
             end_date,
+            reflection_start,
             reflection_end,
-            is_active,
             status
           ),
           goals:0008-ap-goals-12wk(id, status)
@@ -150,61 +158,36 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const today = new Date().toISOString().split('T')[0];
-
+      // Query the new v_global_cycles view
       const { data: cycleData, error } = await supabase
-        .from('0008-ap-global-cycles')
-        .select('id, title, cycle_label, start_date, end_date, reflection_end, is_active, status')
-        .eq('status', 'active')
-        .gte('reflection_end', today)
+        .from('v_global_cycles')
+        .select('*')
+        .in('cycle_position', ['active', '2nd_in_line', '3rd_in_line', '4th_in_line'])
         .order('start_date', { ascending: true });
 
       if (error) throw error;
 
-      const currentDate = new Date().toISOString().split('T')[0];
       const availableCyclesWithStatus: ActiveTimelineWithCycle[] = [];
 
       if (cycleData) {
         const activatedCycleIds = activeTimelines.map(t => t.global_cycle_id);
 
-        const currentCycle = cycleData.find(cycle =>
-          cycle.start_date <= currentDate && currentDate <= cycle.end_date
-        );
+        cycleData.forEach(cycle => {
+          const isAlreadyActivated = activatedCycleIds.includes(cycle.global_cycle_id);
+          const isCurrent = cycle.cycle_position === 'active';
 
-        if (currentCycle) {
-          availableCyclesWithStatus.push({
-            ...currentCycle,
-            isAlreadyActivated: activatedCycleIds.includes(currentCycle.id),
-            isCurrent: true,
-            id: currentCycle.id,
-            user_id: user.id,
-            global_cycle_id: currentCycle.id,
-            status: 'active',
-            week_start_day: 'sunday',
-            activated_at: '',
-            created_at: '',
-            updated_at: '',
-            global_cycle: currentCycle
-          } as ActiveTimelineWithCycle);
-        }
-
-        const futureCycles = cycleData.filter(cycle => cycle.start_date > currentDate);
-        const nextTwoUpcoming = futureCycles.slice(0, 2);
-
-        nextTwoUpcoming.forEach(cycle => {
           availableCyclesWithStatus.push({
             ...cycle,
-            isAlreadyActivated: activatedCycleIds.includes(cycle.id),
-            isCurrent: false,
-            id: cycle.id,
+            id: cycle.global_cycle_id,
+            isAlreadyActivated,
+            isCurrent,
             user_id: user.id,
-            global_cycle_id: cycle.id,
-            status: 'active',
+            global_cycle_id: cycle.global_cycle_id,
             week_start_day: 'sunday',
             activated_at: '',
-            created_at: '',
+            created_at: cycle.created_at,
             updated_at: '',
-            global_cycle: cycle
+            global_cycle: cycle as GlobalCycle
           } as ActiveTimelineWithCycle);
         });
       }
@@ -548,9 +531,28 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
     return (
       <View style={styles.availableCyclesList}>
         {availableCycles.map(cycle => {
-          const displayTitle = cycle.global_cycle?.title || cycle.global_cycle?.cycle_label || cycle.title || cycle.cycle_label || 'Global 12-Week Cycle';
+          const displayTitle = cycle.global_cycle?.title || cycle.title || 'Global 12-Week Cycle';
           const isActivated = cycle.isAlreadyActivated === true;
           const isCurrent = cycle.isCurrent === true;
+          const canActivate = cycle.global_cycle?.can_activate || cycle.can_activate || false;
+          const cyclePosition = cycle.global_cycle?.cycle_position || cycle.cycle_position;
+
+          // Get position badge text
+          let positionBadgeText = '';
+          if (cyclePosition === '2nd_in_line') positionBadgeText = 'Next';
+          else if (cyclePosition === '3rd_in_line') positionBadgeText = '3rd';
+          else if (cyclePosition === '4th_in_line') positionBadgeText = '4th';
+
+          // Get locked message for cycles that can't be activated
+          let lockedMessage = '';
+          if (!canActivate && !isActivated) {
+            if (cyclePosition === '2nd_in_line') {
+              const reflectionStart = cycle.global_cycle?.reflection_start || cycle.reflection_start;
+              lockedMessage = `Available starting ${formatDateDisplay(reflectionStart)} (during current cycle's reflection week)`;
+            } else if (cyclePosition === '3rd_in_line' || cyclePosition === '4th_in_line') {
+              lockedMessage = 'This cycle will become available when it moves to next in line';
+            }
+          }
 
           return (
             <View key={cycle.global_cycle_id || cycle.id} style={[
@@ -563,6 +565,11 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
                   {isCurrent && (
                     <View style={styles.currentBadge}>
                       <Text style={styles.currentBadgeText}>Current</Text>
+                    </View>
+                  )}
+                  {!isCurrent && positionBadgeText && (
+                    <View style={styles.positionBadge}>
+                      <Text style={styles.positionBadgeText}>{positionBadgeText}</Text>
                     </View>
                   )}
                 </View>
@@ -580,17 +587,32 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
               </View>
 
               {!isActivated ? (
-                <TouchableOpacity
-                  style={styles.activateButton}
-                  onPress={() => handleActivateButtonPress(cycle.global_cycle || cycle)}
-                  disabled={activating}
-                >
-                  {activating ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Text style={styles.activateButtonText}>Activate</Text>
+                <>
+                  <TouchableOpacity
+                    style={[
+                      styles.activateButton,
+                      !canActivate && styles.activateButtonDisabled
+                    ]}
+                    onPress={() => handleActivateButtonPress(cycle.global_cycle || cycle)}
+                    disabled={activating || !canActivate}
+                  >
+                    {activating ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={[
+                        styles.activateButtonText,
+                        !canActivate && styles.activateButtonTextDisabled
+                      ]}>
+                        {canActivate ? 'Activate' : 'Locked'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  {lockedMessage && (
+                    <View style={styles.lockedMessage}>
+                      <Text style={styles.lockedMessageText}>{lockedMessage}</Text>
+                    </View>
                   )}
-                </TouchableOpacity>
+                </>
               ) : (
                 <View style={styles.alreadyActivatedMessage}>
                   <Text style={styles.alreadyActivatedText}>
@@ -640,7 +662,7 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
             <View style={styles.section}>
               <View style={styles.sectionTitleContainer}>
-                <Text style={styles.sectionTitle}>Available Timelines</Text>
+                <Text style={styles.sectionTitle}>Upcoming 12 Week Timelines</Text>
                 <InfoTooltip
                   content="To activate a timeline, select your preferred week start day (Sunday or Monday) by tapping one of the buttons below each timeline. You can have multiple active timelines running simultaneously."
                   iconSize={18}
@@ -649,7 +671,7 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
                 />
               </View>
               <Text style={styles.sectionSubtitle}>
-                Current and upcoming standardized 12-week cycles available for activation
+                Current and upcoming standardized 12-week cycles. Only the current cycle and the next cycle (during reflection week) can be activated.
               </Text>
               {renderAvailableCycles()}
             </View>
@@ -1117,6 +1139,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
   },
+  positionBadge: {
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  positionBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   cycleDates: {
     fontSize: 14,
     color: '#0078d4',
@@ -1131,10 +1164,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
   },
+  activateButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.6,
+  },
   activateButtonText: {
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  activateButtonTextDisabled: {
+    color: '#e5e7eb',
+  },
+  lockedMessage: {
+    backgroundColor: '#fef3c7',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    marginTop: 8,
+  },
+  lockedMessageText: {
+    color: '#92400e',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   warningOverlay: {
     flex: 1,
