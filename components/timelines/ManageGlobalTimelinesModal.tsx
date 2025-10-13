@@ -559,7 +559,10 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
           if (!canActivate && !isActivated) {
             if (cyclePosition === '2nd_in_line') {
               const reflectionStart = cycle.global_cycle?.reflection_start || cycle.reflection_start;
-              lockedMessage = `Available starting ${formatDateDisplay(reflectionStart)} (during current cycle's reflection week)`;
+              const formattedDate = reflectionStart ? formatDateDisplay(reflectionStart) : '';
+              lockedMessage = formattedDate
+                ? `Available starting ${formattedDate} (during current cycle's reflection week)`
+                : 'This cycle will become available during the current cycle\'s reflection week';
             } else if (cyclePosition === '3rd_in_line' || cyclePosition === '4th_in_line') {
               lockedMessage = 'This cycle will become available when it moves to next in line';
             }

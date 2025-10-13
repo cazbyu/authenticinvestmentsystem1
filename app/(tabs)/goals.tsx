@@ -496,9 +496,14 @@ export default function Goals() {
   } = useGoals();
 
   useEffect(() => {
-    fetchAllTimelines();
-    refreshScore();
-    fetchNorthStarData();
+    console.log('[Goals] Component mounted, initializing...');
+    try {
+      fetchAllTimelines();
+      refreshScore();
+      fetchNorthStarData();
+    } catch (error) {
+      console.error('[Goals] Error in initialization:', error);
+    }
 
     // Cleanup undo timeout on unmount
     return () => {
