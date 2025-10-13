@@ -11,9 +11,9 @@ interface ManageTimelinesViewProps {
 }
 
 export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<ManageTimelinesSubTab>('custom');
+  const [activeSubTab, setActiveSubTab] = useState<ManageTimelinesSubTab>('global');
   const [showCustomModal, setShowCustomModal] = useState(false);
-  const [showGlobalModal, setShowGlobalModal] = useState(false);
+  const [showGlobalModal, setShowGlobalModal] = useState(true);
 
   const handleUpdate = () => {
     onUpdate?.();
@@ -111,7 +111,11 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
 
       <ManageCustomTimelinesModal
         visible={showCustomModal}
-        onClose={() => setShowCustomModal(false)}
+        onClose={() => {
+          setShowCustomModal(false);
+          setActiveSubTab('global');
+          setShowGlobalModal(true);
+        }}
         onUpdate={handleUpdate}
       />
 

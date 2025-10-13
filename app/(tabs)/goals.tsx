@@ -619,7 +619,10 @@ export default function Goals() {
           activated_at,
           created_at,
           updated_at,
-          global_cycle:0008-ap-global-cycles!inner(
+          snapshot_title,
+          snapshot_start_date,
+          snapshot_end_date,
+          global_cycle:0008-ap-global-cycles(
             id,
             title,
             cycle_label,
@@ -647,12 +650,24 @@ export default function Goals() {
 
       if (globalData) {
         globalData.forEach(timeline => {
+          // Use snapshot data if global_cycle join failed
+          const title = timeline.global_cycle?.title
+            || timeline.global_cycle?.cycle_label
+            || timeline.snapshot_title
+            || 'Global Timeline';
+          const startDate = timeline.global_cycle?.start_date
+            || timeline.snapshot_start_date
+            || '';
+          const endDate = timeline.global_cycle?.end_date
+            || timeline.snapshot_end_date
+            || '';
+
           timelines.push({
             id: timeline.id,
             source: 'global',
-            title: timeline.global_cycle?.title || timeline.global_cycle?.cycle_label || 'Global Timeline',
-            start_date: timeline.global_cycle?.start_date || '',
-            end_date: timeline.global_cycle?.end_date || '',
+            title: title,
+            start_date: startDate,
+            end_date: endDate,
             global_cycle_id: timeline.global_cycle_id ?? timeline.global_cycle?.id,
             global_cycle: timeline.global_cycle || null,
           });

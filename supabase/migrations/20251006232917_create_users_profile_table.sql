@@ -13,6 +13,7 @@
        - `vision_timeframe` (text) - Vision timeframe type
        - `primary_color` (text) - User's primary theme color
        - `accent_color` (text) - User's accent theme color
+       - `week_start_day` (text) - Added in migration 20251013000000
        - `created_at` (timestamptz)
        - `updated_at` (timestamptz)
 
@@ -24,6 +25,7 @@
      - This table stores user profile data including North Star aspirations
      - Each auth user should have exactly one profile record
      - The `user_id` field is unique and references auth.users
+     - The `week_start_day` column was added later in migration 20251013000000
 */
 
 -- Create the users profile table
