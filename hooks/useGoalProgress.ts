@@ -141,9 +141,9 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
 
       if (timeline.source === 'global') {
         const { data, error } = await supabase
-          .from('v_user_global_timeline_weeks')
+          .from('v_unified_timeline_weeks')
           .select('*')
-          .eq('user_global_timeline_id', timeline.id)
+          .eq('timeline_id', timeline.id)
           .order('week_number');
 
         if (error) throw error;

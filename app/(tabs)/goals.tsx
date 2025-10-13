@@ -41,7 +41,6 @@ interface Timeline {
     cycle_label?: string | null;
     start_date?: string | null;
     end_date?: string | null;
-    is_active?: boolean | null;
   } | null;
 }
 
@@ -627,8 +626,7 @@ export default function Goals() {
             title,
             cycle_label,
             start_date,
-            end_date,
-            is_active
+            end_date
           )
         `)
         .eq('user_id', user.id)
