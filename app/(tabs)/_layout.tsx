@@ -10,16 +10,12 @@ export default function TabLayout() {
   const { resetTab } = useTabReset();
 
   const handleTabPress = (tabRoute: string, tabName: string) => {
-    // Check if we're already on this tab
-    const isOnThisTab = pathname.startsWith(tabRoute);
+    // Always trigger the reset handler first to ensure clean state
+    resetTab(tabName);
 
-    if (isOnThisTab) {
-      // If already on this tab, trigger the reset handler
-      resetTab(tabName);
-    } else {
-      // If on a different tab, navigate normally
-      router.push(tabRoute);
-    }
+    // Then navigate to the tab route
+    // The router will handle if we're already on this route
+    router.push(tabRoute);
   };
 
   return (

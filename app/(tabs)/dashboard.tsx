@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
@@ -55,13 +54,6 @@ export default function Dashboard() {
     setTasks([]);
     setDepositIdeas([]);
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      // Reset to main landing page every time the tab is focused
-      resetToMain();
-    }, [resetToMain])
-  );
 
   const fetchData = async () => {
     setLoading(true);

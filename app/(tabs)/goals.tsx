@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
@@ -538,13 +537,6 @@ export default function Goals() {
     });
     initializedWeekRef.current = false;
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      // Reset to main landing page every time the tab is focused
-      resetToMain();
-    }, [resetToMain])
-  );
 
   useEffect(() => {
     console.log('[Goals] Component mounted, initializing...');

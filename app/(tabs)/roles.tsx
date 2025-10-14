@@ -15,7 +15,7 @@ import { JournalView } from '@/components/journal/JournalView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { Plus, Users, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoals } from '@/hooks/useGoals';
@@ -637,13 +637,6 @@ export default function Roles() {
     }
     fetchInProgressRef.current = false;
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      // Reset to main landing page every time the tab is focused
-      resetToMain();
-    }, [resetToMain])
-  );
 
   useEffect(() => {
     // Register reset handler for this tab
