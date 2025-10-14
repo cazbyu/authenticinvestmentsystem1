@@ -247,11 +247,14 @@ export default function Roles() {
         return;
       }
 
+      // CRITICAL: Filter by role_id to ensure KRs are scoped to their role
+      // When viewing "Father" role, only children (KRs with Father's role_id) are shown
+      // When viewing "Husband" role, only spouse (KRs with Husband's role_id) are shown
       const { data, error } = await supabase
         .from('0008-ap-key-relationships')
         .select('*')
         .eq('user_id', user.id)
-        .eq('role_id', roleId)
+        .eq('role_id', roleId) // This ensures role-specific filtering
         .order('name');
 
       if (error) throw error;
@@ -924,15 +927,22 @@ export default function Roles() {
 
   const handleAddKR = async (roleId: string) => {
     try {
+      // Validate role_id before creating KR
+      if (!roleId) {
+        Alert.alert('Error', 'A valid role must be selected to create a key relationship.');
+        return;
+      }
+
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Create new KR with role_id - this permanently links the KR to the role
       const { data, error } = await supabase
         .from('0008-ap-key-relationships')
         .insert({
           name: 'New Key Relationship',
-          role_id: roleId,
+          role_id: roleId, // Critical: KR is permanently linked to this role
           user_id: user.id
         })
         .select()
@@ -946,7 +956,7 @@ export default function Roles() {
         setSelectedRole(role);
       }
 
-      // Refresh KRs and open edit modal for the new one
+      // Refresh KRs - will only fetch KRs for this specific roleId
       await fetchKeyRelationships(roleId);
       await fetchAllKeyRelationships();
       setEditingKR(data);
