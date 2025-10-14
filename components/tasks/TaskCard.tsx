@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Check, FileText, Paperclip, Users, X, Trash2 } from 'lucide-react-native';
+import { calculateTaskPoints } from '@/lib/taskUtils';
 
 // Interface for a Task
 export interface Task {
@@ -57,21 +58,15 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
     return "#9ca3af";
   };
 
-  // Calculates points for completing a task
+  // Calculate points using centralized function to ensure consistency
+  // This ensures the displayed score matches the actual score awarded on completion
   const calculatePoints = () => {
-    let points = 0;
-    if (task.roles && task.roles.length > 0) points += task.roles.length;
-    if (task.domains && task.domains.length > 0) points += task.domains.length;
-    if (task.is_authentic_deposit) points += 2;
-    if (task.is_urgent && task.is_important) points += 1.5;
-    else if (!task.is_urgent && task.is_important) points += 3;
-    else if (task.is_urgent && !task.is_important) points += 1;
-    else points += 0.5;
-
-    const activeGoals = (task.goals || []).filter((g: any) => g.goal_type !== 'deleted' && g.status !== 'archived' && g.status !== 'cancelled');
-    if (activeGoals.length > 0 && task.is_twelve_week_goal) points += 2;
-
-    return Math.round(points * 10) / 10;
+    return calculateTaskPoints(
+      task,
+      task.roles || [],
+      task.domains || [],
+      task.goals || []
+    );
   };
 
   // Formats the due date string
