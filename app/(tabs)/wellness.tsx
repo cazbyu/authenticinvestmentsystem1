@@ -318,6 +318,24 @@ export default function Wellness() {
   // Reset to main Wellness Bank view when tab is pressed
   const resetToMain = useCallback(() => {
     setSelectedDomain(null);
+    setActiveMainTab('domains');
+    setActiveView('deposits');
+    setTasks([]);
+    setDepositIdeas([]);
+    setLoading(false);
+    setTaskFormVisible(false);
+    setTaskDetailVisible(false);
+    setDepositIdeaDetailVisible(false);
+    setSelectedTask(null);
+    setSelectedDepositIdea(null);
+    setEditingTask(null);
+    setDomainAuthenticScore(0);
+    setPeriodScore(undefined);
+    setJournalDateRange('week');
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    scoreAbortControllerRef.current?.abort();
+    scoreAbortControllerRef.current = null;
   }, []);
 
   useFocusEffect(
