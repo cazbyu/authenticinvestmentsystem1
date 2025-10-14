@@ -861,12 +861,12 @@ export default function Roles() {
       Alert.alert('Error', (error as Error).message || 'Failed to activate deposit idea.');
     }
   };
-  const handleTaskDoublePress = (task: Task) => {
+  const handleTaskPress = (task: Task) => {
     setSelectedTask(task);
     setTaskDetailVisible(true);
   };
 
-  const handleDepositIdeaDoublePress = (depositIdea: any) => {
+  const handleDepositIdeaPress = (depositIdea: any) => {
     setSelectedDepositIdea(depositIdea);
     setDepositIdeaDetailVisible(true);
   };
@@ -1234,7 +1234,7 @@ export default function Roles() {
                     task={task}
                     onComplete={() => handleCompleteTask(task.id)}
                     onDelete={() => handleDeleteTask(task.id)}
-                    onDoublePress={handleTaskDoublePress}
+                    onPress={handleTaskPress}
                   />
                 ))
               )
@@ -1250,7 +1250,7 @@ export default function Roles() {
                     depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
-                    onDoublePress={handleDepositIdeaDoublePress}
+                    onPress={handleDepositIdeaPress}
                   />
                 ))
               )
@@ -1340,7 +1340,7 @@ export default function Roles() {
                     task={task}
                     onComplete={() => handleCompleteTask(task.id)}
                     onDelete={() => handleDeleteTask(task.id)}
-                    onDoublePress={handleTaskDoublePress}
+                    onPress={handleTaskPress}
                   />
                 ))
               )
@@ -1356,7 +1356,7 @@ export default function Roles() {
                     depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
-                    onDoublePress={handleDepositIdeaDoublePress}
+                    onPress={handleDepositIdeaPress}
                   />
                 ))
               )

@@ -329,11 +329,11 @@ export default function Dashboard() {
     }
   };
 
-  const handleTaskDoublePress = (task: Task) => { setSelectedTask(task); setIsDetailModalVisible(true); };
+  const handleTaskPress = (task: Task) => { setSelectedTask(task); setIsDetailModalVisible(true); };
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
   const [isDepositIdeaDetailVisible, setIsDepositIdeaDetailVisible] = useState(false);
 
-  const handleDepositIdeaDoublePress = (depositIdea: any) => { 
+  const handleDepositIdeaPress = (depositIdea: any) => {
     setSelectedDepositIdea(depositIdea);
     setIsDepositIdeaDetailVisible(true);
   };
@@ -544,13 +544,13 @@ export default function Dashboard() {
               <FlatList
                 data={tasks}
                 renderItem={({ item }) => (
-                  <TaskCard 
-                    task={item} 
-                    onComplete={handleCompleteTask} 
-                    onDelete={handleDeleteTask} 
-                    onLongPress={() => {}} 
-                    onDoublePress={handleTaskDoublePress} 
-                    isDragging={false} 
+                  <TaskCard
+                    task={item}
+                    onComplete={handleCompleteTask}
+                    onDelete={handleDeleteTask}
+                    onLongPress={() => {}}
+                    onPress={handleTaskPress}
+                    isDragging={false}
                   />
                 )}
                 keyExtractor={(item) => item.id}
@@ -562,13 +562,13 @@ export default function Dashboard() {
               <DraggableFlatList 
                 data={tasks} 
                 renderItem={({ item, drag, isActive }) => (
-                  <TaskCard 
-                    task={item} 
-                    onComplete={handleCompleteTask} 
-                    onDelete={handleDeleteTask} 
-                    onLongPress={drag} 
-                    onDoublePress={handleTaskDoublePress} 
-                    isDragging={isActive} 
+                  <TaskCard
+                    task={item}
+                    onComplete={handleCompleteTask}
+                    onDelete={handleDeleteTask}
+                    onLongPress={drag}
+                    onPress={handleTaskPress}
+                    isDragging={isActive}
                   />
                 )}
                 keyExtractor={(item) => item.id} 
@@ -587,12 +587,12 @@ export default function Dashboard() {
             >
               <View style={styles.taskList}>
                 {depositIdeas.map(depositIdea => 
-                  <DepositIdeaCard 
-                    key={depositIdea.id} 
-                    depositIdea={depositIdea} 
+                  <DepositIdeaCard
+                    key={depositIdea.id}
+                    depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
-                    onDoublePress={handleDepositIdeaDoublePress} 
+                    onPress={handleDepositIdeaPress}
                   />
                 )}
               </View>

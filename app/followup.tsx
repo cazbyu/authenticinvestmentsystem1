@@ -176,7 +176,7 @@ export default function FollowUpScreen() {
     }
   };
 
-  const handleTaskDoublePress = (task: Task) => {
+  const handleTaskPress = (task: Task) => {
     setSelectedTask(task);
     setIsDetailModalVisible(true);
   };
@@ -253,7 +253,7 @@ export default function FollowUpScreen() {
                 onComplete={handleCompleteTask}
                 onDelete={handleDeleteTask}
                 onLongPress={() => {}}
-                onDoublePress={handleTaskDoublePress}
+                onPress={handleTaskPress}
                 isDragging={false}
               />
             )}
@@ -271,7 +271,7 @@ export default function FollowUpScreen() {
                 onComplete={handleCompleteTask}
                 onDelete={handleDeleteTask}
                 onLongPress={drag}
-                onDoublePress={handleTaskDoublePress}
+                onPress={handleTaskPress}
                 isDragging={isActive}
               />
             )}

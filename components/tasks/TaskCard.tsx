@@ -39,15 +39,14 @@ interface TaskCardProps {
   onComplete: (task: Task) => void;
   onDelete?: (task: Task) => void;
   onLongPress?: () => void;
-  onDoublePress?: (task: Task) => void;
+  onPress?: (task: Task) => void;
   isDragging?: boolean;
 }
 
 // --- TaskCard Component ---
 // Renders a single task item in the list
 export const TaskCard = React.forwardRef<View, TaskCardProps>(
-  ({ task, onComplete, onDelete, onLongPress, onDoublePress, isDragging }, ref) => {
-    const [lastTap, setLastTap] = useState(0);
+  ({ task, onComplete, onDelete, onLongPress, onPress, isDragging }, ref) => {
 
   // Determines the border color based on task priority
   const getBorderColor = () => {
@@ -87,16 +86,8 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
     }
   };
 
-  const DOUBLE_PRESS_DELAY = 300;
-
   const handlePress = () => {
-    const now = Date.now();
-    if (lastTap && (now - lastTap) < DOUBLE_PRESS_DELAY) {
-      setLastTap(0); // Reset to prevent triple-tap issues
-      onDoublePress?.(task);
-    } else {
-      setLastTap(now);
-    }
+    onPress?.(task);
   };
 
 

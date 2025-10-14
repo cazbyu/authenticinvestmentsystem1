@@ -222,7 +222,7 @@ export default function CalendarScreen() {
     }
   };
 
-  const handleTaskDoublePress = (task: Task) => {
+  const handleTaskPress = (task: Task) => {
     setSelectedTask(task);
     setIsDetailModalVisible(true);
   };
@@ -418,7 +418,7 @@ const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly])
             currentTimePosition={currentTimePosition}
             currentTimeString={currentTimeString}
             onCompleteTask={handleCompleteTask}
-            onTaskDoublePress={handleTaskDoublePress}
+            onTaskPress={handleTaskPress}
             viewMode="daily"
           />
         </View>
@@ -527,7 +527,7 @@ const dayEvents = expandedTasks.map(task => ({
             currentTimePosition={currentTimePosition}
             currentTimeString={currentTimeString}
             onCompleteTask={handleCompleteTask}
-            onTaskDoublePress={handleTaskDoublePress}
+            onTaskPress={handleTaskPress}
             viewMode="weekly"
           />
         </View>
@@ -579,7 +579,7 @@ const dayEvents = expandedTasks.map(task => ({
             currentTimePosition={currentTimePosition}
             currentTimeString={currentTimeString}
             onCompleteTask={handleCompleteTask}
-            onTaskDoublePress={handleTaskDoublePress}
+            onTaskPress={handleTaskPress}
             viewMode="monthly"
           />
         </View>

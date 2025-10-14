@@ -14,7 +14,7 @@ interface HourlyCalendarGridProps {
   currentTimePosition: number;
   currentTimeString: string;
   onCompleteTask: (taskId: string) => void;
-  onTaskDoublePress: (task: Task) => void;
+  onTaskPress: (task: Task) => void;
   viewMode?: 'daily' | 'weekly' | 'monthly';
 }
 
@@ -98,7 +98,7 @@ export function HourlyCalendarGrid({
   currentTimePosition,
   currentTimeString,
   onCompleteTask,
-  onTaskDoublePress,
+  onTaskPress,
   viewMode = 'daily',
 }: HourlyCalendarGridProps) {
   const scrollRef = useRef<ScrollView>(null);
@@ -167,7 +167,7 @@ export function HourlyCalendarGrid({
                 key={`${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`}
                 task={task}
                 onComplete={onCompleteTask}
-                onDoublePress={onTaskDoublePress}
+                onPress={onTaskPress}
               />
             ))}
           </View>
@@ -213,7 +213,7 @@ export function HourlyCalendarGrid({
               <CalendarEventDisplay
                 key={`${event.id}-${event.start_time || ''}-${event.end_time || ''}-${selectedDate}-${event.type}-${idx}`}
                 task={event}
-                onDoublePress={onTaskDoublePress}
+                onPress={onTaskPress}
                 style={{
                   position: 'absolute',
                   top,

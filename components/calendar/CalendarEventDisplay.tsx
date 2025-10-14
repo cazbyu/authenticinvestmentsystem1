@@ -4,11 +4,11 @@ import { Task } from '@/components/tasks/TaskCard';
 
 interface CalendarEventDisplayProps {
   task: Task;
-  onDoublePress: (task: Task) => void;
+  onPress: (task: Task) => void;
   style?: any;
 }
 
-export function CalendarEventDisplay({ task, onDoublePress, style }: CalendarEventDisplayProps) {
+export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisplayProps) {
   const formatTime = (timeString: string) => {
     const date = new Date(timeString);
     return date.toLocaleTimeString('en-US', { 
@@ -33,7 +33,7 @@ export function CalendarEventDisplay({ task, onDoublePress, style }: CalendarEve
         { borderLeftColor: getBorderColor() },
         style
       ]}
-      onPress={() => onDoublePress(task)}
+      onPress={() => onPress(task)}
       activeOpacity={0.8}
     >
       <View style={styles.eventContent}>

@@ -493,12 +493,12 @@ export default function Wellness() {
       Alert.alert('Error', (error as Error).message || 'Failed to activate deposit idea.');
     }
   }, []);
-  const handleTaskDoublePress = useCallback((task: Task) => {
+  const handleTaskPress = useCallback((task: Task) => {
     setSelectedTask(task);
     setTaskDetailVisible(true);
   }, []);
 
-  const handleDepositIdeaDoublePress = useCallback((depositIdea: any) => {
+  const handleDepositIdeaPress = useCallback((depositIdea: any) => {
     setSelectedDepositIdea(depositIdea);
     setDepositIdeaDetailVisible(true);
   }, []);
@@ -735,7 +735,7 @@ export default function Wellness() {
                     task={task}
                     onComplete={() => handleCompleteTask(task.id)}
                     onDelete={() => handleDeleteTask(task.id)}
-                    onDoublePress={handleTaskDoublePress}
+                    onPress={handleTaskPress}
                   />
                 ))
               )
@@ -751,7 +751,7 @@ export default function Wellness() {
                     depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
-                    onDoublePress={handleDepositIdeaDoublePress}
+                    onPress={handleDepositIdeaPress}
                   />
                 ))
               )
