@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
@@ -494,6 +495,16 @@ export default function Goals() {
     undoDeleteTask,
     undoDeleteTaskWeekPlan,
   } = useGoals();
+
+
+  // Reset to main Goal Bank view when tab is pressed
+  useFocusEffect(
+    useCallback(() => {
+      // Reset to main landing page every time the tab is focused
+      setSelectedTimeline(null);
+      setActiveTab('timelines');
+    }, [])
+  );
 
   useEffect(() => {
     console.log('[Goals] Component mounted, initializing...');

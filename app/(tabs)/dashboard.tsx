@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
@@ -38,6 +39,15 @@ export default function Dashboard() {
     deleteTask,
   } = useGoalProgress();
   
+
+  // Reset to main Actions & Ideas view when tab is pressed
+  useFocusEffect(
+    useCallback(() => {
+      // Reset to main landing page every time the tab is focused
+      setActiveView('deposits');
+    }, [])
+  );
+
   const fetchData = async () => {
     setLoading(true);
     try {
