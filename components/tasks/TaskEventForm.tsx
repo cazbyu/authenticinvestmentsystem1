@@ -99,7 +99,7 @@ interface TaskEventFormProps {
 }
 
 export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose }: TaskEventFormProps) {
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
@@ -1043,7 +1043,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   value={formData.dueTime}
                   onChange={(time) => setFormData(prev => ({ ...prev, dueTime: time }))}
                   placeholder="Select time"
-                  isDark={theme === 'dark'}
+                  isDark={isDarkMode}
                 />
                 <View style={styles.anytimeToggleInline}>
                   <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
@@ -1078,7 +1078,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     value={formData.startTime}
                     onChange={(time) => setFormData(prev => ({ ...prev, startTime: time }))}
                     placeholder="Select time"
-                    isDark={theme === 'dark'}
+                    isDark={isDarkMode}
                   />
                 </View>
                 <View style={styles.eventDateField}>
@@ -1105,7 +1105,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     endDate={formData.endDate}
                     minTime={formData.startTime}
                     placeholder="Select time"
-                    isDark={theme === 'dark'}
+                    isDark={isDarkMode}
                   />
                 </View>
               </View>
