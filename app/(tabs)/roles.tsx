@@ -604,6 +604,38 @@ export default function Roles() {
   const resetToMain = useCallback(() => {
     setSelectedRole(null);
     setSelectedKR(null);
+    setActiveMainTab('roles');
+    setActiveView('deposits');
+    setKRView('deposits');
+    setKRJournalView('deposits');
+    setJournalDateRange('week');
+    setPeriodScore(undefined);
+    setTasks([]);
+    setDepositIdeas([]);
+    setFetchState('idle');
+    setLoading(false);
+    setKRLoading(false);
+    setIsLoadingRole(false);
+    setGoalProgress({});
+    setLoadingGoalProgress(false);
+    setManageRolesVisible(false);
+    setEditRoleVisible(false);
+    setEditKRVisible(false);
+    setTaskFormVisible(false);
+    setTaskDetailVisible(false);
+    setDepositIdeaDetailVisible(false);
+    setSelectedTask(null);
+    setSelectedDepositIdea(null);
+    setEditingTask(null);
+    setEditingRole(null);
+    setEditingKR(null);
+    fetchAbortController.current?.abort();
+    fetchAbortController.current = null;
+    if (roleClickTimeout.current) {
+      clearTimeout(roleClickTimeout.current);
+      roleClickTimeout.current = null;
+    }
+    fetchInProgressRef.current = false;
   }, []);
 
   useFocusEffect(

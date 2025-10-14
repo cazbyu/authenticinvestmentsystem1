@@ -501,8 +501,42 @@ export default function Goals() {
 
   // Reset to main Goal Bank view when tab is pressed
   const resetToMain = useCallback(() => {
-    setSelectedTimeline(null);
     setActiveTab('timelines');
+    setSelectedTimeline(null);
+    setCurrentWeekIndex(0);
+    setTimelineWeeks([]);
+    setTimelineGoals([]);
+    setTimelinesWithGoals([]);
+    setTimelineGoalProgress({});
+    setTotalGoalProgress({});
+    setWeekGoalActions({});
+    setLoadingWeekActions(false);
+    setTimelineDaysLeft(null);
+    setExpandedGoals({});
+    setSelectedGoal(null);
+    setSelectedGoalForAction(null);
+    setEditingAction(null);
+    setEditingActionGoal(null);
+    setActionModalMode('create');
+    setCreateGoalModalVisible(false);
+    setEditGoalModalVisible(false);
+    setActionEffortModalVisible(false);
+    setManageCustomTimelinesModalVisible(false);
+    setManageGlobalTimelinesModalVisible(false);
+    setWithdrawalFormVisible(false);
+    setNorthStarEditorVisible(false);
+    setNorthStarInitialSection('mission');
+    setDeleteConfirmVisible(false);
+    setDeleteActionData(null);
+    setUndoConfirmVisible(false);
+    setUndoMessage('');
+    setUndoState(prev => {
+      if (prev?.timeout) {
+        clearTimeout(prev.timeout);
+      }
+      return null;
+    });
+    initializedWeekRef.current = false;
   }, []);
 
   useFocusEffect(

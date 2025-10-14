@@ -45,6 +45,15 @@ export default function Dashboard() {
   // Reset to main Actions & Ideas view when tab is pressed
   const resetToMain = useCallback(() => {
     setActiveView('deposits');
+    setSortOption('due_date');
+    setIsSortModalVisible(false);
+    setIsFormModalVisible(false);
+    setIsDetailModalVisible(false);
+    setSelectedTask(null);
+    setEditingTask(null);
+    setSelectedDepositIdea(null);
+    setTasks([]);
+    setDepositIdeas([]);
   }, []);
 
   useFocusEffect(
