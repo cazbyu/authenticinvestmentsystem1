@@ -159,6 +159,77 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [dontShowWarningAgain, setDontShowWarningAgain] = useState(false);
   const [isEditingCompletedTask, setIsEditingCompletedTask] = useState(false);
 
+  // Helper function to get next 15-minute interval + 15 min buffer
+  const getDefaultStartTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 15) * 15;
+    now.setMinutes(roundedMinutes + 15);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    const isPM = hours >= 12;
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
+  };
+
+  // Helper function to combine date and time into ISO timestamp
+  const combineDateTime = (dateStr: string, timeStr: string): string | null => {
+    if (!dateStr || !timeStr) return null;
+    try {
+      // Parse time string like "7:00 pm" or "14:30"
+      const timeLower = timeStr.toLowerCase().trim();
+      let hours = 0;
+      let minutes = 0;
+
+      if (timeLower.includes('am') || timeLower.includes('pm')) {
+        // 12-hour format
+        const isPM = timeLower.includes('pm');
+        const timeOnly = timeLower.replace(/am|pm/g, '').trim();
+        const [h, m] = timeOnly.split(':').map(s => parseInt(s.trim(), 10));
+        hours = h === 12 ? (isPM ? 12 : 0) : (isPM ? h + 12 : h);
+        minutes = m || 0;
+      } else {
+        // 24-hour format
+        const [h, m] = timeStr.split(':').map(s => parseInt(s.trim(), 10));
+        hours = h || 0;
+        minutes = m || 0;
+      }
+
+      const date = new Date(dateStr);
+      date.setHours(hours, minutes, 0, 0);
+      return date.toISOString();
+    } catch (e) {
+      console.error('Error combining date and time:', e);
+      return null;
+    }
+  };
+
+  // Helper function to calculate duration between two times
+  const calculateDuration = (startTime: string, endTime: string): string => {
+    if (!startTime || !endTime) return '';
+    try {
+      const start = new Date(`2000-01-01 ${startTime}`);
+      const end = new Date(`2000-01-01 ${endTime}`);
+      const diffMs = end.getTime() - start.getTime();
+      if (diffMs <= 0) return '';
+
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (hours === 0) {
+        return `(${minutes} m)`;
+      } else if (minutes === 0) {
+        return `(${hours} h)`;
+      } else {
+        return `(${hours} h ${minutes} m)`;
+      }
+    } catch (e) {
+      return '';
+    }
+  };
+
   useEffect(() => {
     fetchFormData();
     if (initialData) {
@@ -536,8 +607,14 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           due_date: formData.type === 'task' ? formData.dueDate : null,
           start_date: formData.type === 'event' ? formData.startDate : null,
           end_date: formData.type === 'event' ? formData.endDate : null,
-          start_time: formData.type === 'event' ? formData.startTime : null,
-          end_time: formData.type === 'event' ? formData.endTime : (formData.type === 'task' ? formData.dueTime : null),
+          start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
+            ? combineDateTime(formData.startDate, formData.startTime)
+            : null,
+          end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
+            ? combineDateTime(formData.endDate, formData.endTime)
+            : (formData.type === 'task' && formData.dueTime && !formData.isAnytime
+              ? combineDateTime(formData.dueDate, formData.dueTime)
+              : null),
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,
           is_important: formData.isImportant,
@@ -555,7 +632,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           })
         };
 
-        console.log('[TaskEventForm] Task payload status:', taskPayload.status, 'Task payload completed_at:', taskPayload.completed_at);
+        console.log('[TaskEventForm] Complete task payload:', JSON.stringify(taskPayload, null, 2));
 
         if (mode === 'edit' && initialData?.id) {
           const { data, error } = await supabase
@@ -672,7 +749,24 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       onSubmitSuccess();
     } catch (error) {
       console.error('Error saving:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to save');
+      const errorObj = error as any;
+      const errorMessage = errorObj?.message || 'Failed to save';
+      const errorCode = errorObj?.code || '';
+      const errorDetails = errorObj?.details || '';
+      const errorHint = errorObj?.hint || '';
+
+      console.error('Full error details:', {
+        message: errorMessage,
+        code: errorCode,
+        details: errorDetails,
+        hint: errorHint,
+        payload: errorObj
+      });
+
+      Alert.alert(
+        'Error',
+        `${errorMessage}${errorCode ? `\n\nCode: ${errorCode}` : ''}${errorDetails ? `\n\nDetails: ${errorDetails}` : ''}`
+      );
     } finally {
       setSaving(false);
     }
@@ -694,7 +788,16 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               { borderColor: colors.border },
               formData.type === type && { backgroundColor: colors.primary }
             ]}
-            onPress={() => setFormData(prev => ({ ...prev, type }))}
+            onPress={() => {
+              setFormData(prev => {
+                const updates: any = { type };
+                // Set smart defaults when switching to event type
+                if (type === 'event' && prev.type !== 'event' && mode !== 'edit') {
+                  updates.startTime = getDefaultStartTime();
+                }
+                return { ...prev, ...updates };
+              });
+            }}
           >
             <Text style={[
               styles.typeButtonText,
@@ -962,7 +1065,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     style={[styles.timeInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                     value={formData.startTime}
                     onChangeText={(value) => setFormData(prev => ({ ...prev, startTime: value }))}
-                    placeholder="HH:MM"
+                    placeholder="7:00 pm"
                     placeholderTextColor={colors.textSecondary}
                   />
                 </View>
@@ -979,12 +1082,14 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   </TouchableOpacity>
                 </View>
                 <View style={styles.eventTimeField}>
-                  <Text style={[styles.timeLabel, { color: colors.text }]}>End Time</Text>
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>
+                    End Time {calculateDuration(formData.startTime, formData.endTime)}
+                  </Text>
                   <TextInput
                     style={[styles.timeInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                     value={formData.endTime}
                     onChangeText={(value) => setFormData(prev => ({ ...prev, endTime: value }))}
-                    placeholder="HH:MM"
+                    placeholder="9:15 pm"
                     placeholderTextColor={colors.textSecondary}
                   />
                 </View>
