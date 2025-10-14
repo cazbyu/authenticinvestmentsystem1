@@ -397,7 +397,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       endTime: initialData.end_time || '',
       withdrawalDate: initialData.withdrawn_at || formatLocalDate(new Date()),
       amount: initialData.amount?.toString() || '',
-      isAnytime: initialData.is_anytime || false,
+      isAnytime: initialData.is_all_day || false,
       isUrgent: initialData.is_urgent || false,
       isImportant: initialData.is_important || false,
       isAuthenticDeposit: initialData.is_authentic_deposit || false,
