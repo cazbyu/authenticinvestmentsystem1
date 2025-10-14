@@ -18,6 +18,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
+import { TimePickerDropdown } from './TimePickerDropdown';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'depositIdea' | 'withdrawal';
@@ -632,12 +633,25 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           })
         };
 
-        console.log('[TaskEventForm] Complete task payload:', JSON.stringify(taskPayload, null, 2));
+        // Sanitize: Convert any empty strings to null for timestamp fields
+        const sanitizeTimestamps = (payload: any) => {
+          const timestampFields = ['start_time', 'end_time', 'completed_at'];
+          timestampFields.forEach(field => {
+            if (payload[field] === '') {
+              console.warn(`[TaskEventForm] Converting empty string to null for field: ${field}`);
+              payload[field] = null;
+            }
+          });
+          return payload;
+        };
+
+        const sanitizedPayload = sanitizeTimestamps(taskPayload);
+        console.log('[TaskEventForm] Complete task payload:', JSON.stringify(sanitizedPayload, null, 2));
 
         if (mode === 'edit' && initialData?.id) {
           const { data, error } = await supabase
             .from('0008-ap-tasks')
-            .update(taskPayload)
+            .update(sanitizedPayload)
             .eq('id', initialData.id)
             .select()
             .single();
@@ -646,7 +660,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         } else {
           const { data, error } = await supabase
             .from('0008-ap-tasks')
-            .insert(taskPayload)
+            .insert(sanitizedPayload)
             .select()
             .single();
           if (error) throw error;
@@ -1025,12 +1039,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     </Text>
                   </TouchableOpacity>
                 </View>
-                <TextInput
-                  style={[styles.timeInputInline, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                <TimePickerDropdown
                   value={formData.dueTime}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, dueTime: text }))}
-                  placeholder="HH:MM"
-                  placeholderTextColor={colors.textSecondary}
+                  onChange={(time) => setFormData(prev => ({ ...prev, dueTime: time }))}
+                  placeholder="Select time"
+                  isDark={theme === 'dark'}
                 />
                 <View style={styles.anytimeToggleInline}>
                   <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
@@ -1061,12 +1074,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 </View>
                 <View style={styles.eventTimeField}>
                   <Text style={[styles.timeLabel, { color: colors.text }]}>Start Time</Text>
-                  <TextInput
-                    style={[styles.timeInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                  <TimePickerDropdown
                     value={formData.startTime}
-                    onChangeText={(value) => setFormData(prev => ({ ...prev, startTime: value }))}
-                    placeholder="7:00 pm"
-                    placeholderTextColor={colors.textSecondary}
+                    onChange={(time) => setFormData(prev => ({ ...prev, startTime: time }))}
+                    placeholder="Select time"
+                    isDark={theme === 'dark'}
                   />
                 </View>
                 <View style={styles.eventDateField}>
@@ -1083,14 +1095,17 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 </View>
                 <View style={styles.eventTimeField}>
                   <Text style={[styles.timeLabel, { color: colors.text }]}>
-                    End Time {calculateDuration(formData.startTime, formData.endTime)}
+                    End Time
                   </Text>
-                  <TextInput
-                    style={[styles.timeInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                  <TimePickerDropdown
                     value={formData.endTime}
-                    onChangeText={(value) => setFormData(prev => ({ ...prev, endTime: value }))}
-                    placeholder="9:15 pm"
-                    placeholderTextColor={colors.textSecondary}
+                    onChange={(time) => setFormData(prev => ({ ...prev, endTime: time }))}
+                    referenceTime={formData.startTime}
+                    startDate={formData.startDate}
+                    endDate={formData.endDate}
+                    minTime={formData.startTime}
+                    placeholder="Select time"
+                    isDark={theme === 'dark'}
                   />
                 </View>
               </View>
