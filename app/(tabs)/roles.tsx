@@ -21,6 +21,7 @@ import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoals } from '@/hooks/useGoals';
 import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useTabReset } from '@/contexts/TabResetContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -43,6 +44,7 @@ interface KeyRelationship {
 export default function Roles() {
   const navigation = useNavigation<DrawerNavigation>();
   const { authenticScore, refreshScoreForRole } = useAuthenticScore();
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [keyRelationships, setKeyRelationships] = useState<KeyRelationship[]>([]);
@@ -599,19 +601,27 @@ export default function Roles() {
 
 
   // Reset to main Role Bank view when tab is pressed
+  const resetToMain = useCallback(() => {
+    setSelectedRole(null);
+    setSelectedKR(null);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       // Reset to main landing page every time the tab is focused
-      setSelectedRole(null);
-      setSelectedKR(null);
-    }, [])
+      resetToMain();
+    }, [resetToMain])
   );
 
   useEffect(() => {
+    // Register reset handler for this tab
+    registerResetHandler('roles', resetToMain);
+
     fetchRoles();
     fetchAllKeyRelationships();
 
     return () => {
+      unregisterResetHandler('roles');
       if (roleClickTimeout.current) {
         clearTimeout(roleClickTimeout.current);
       }
@@ -619,7 +629,7 @@ export default function Roles() {
         fetchAbortController.current.abort();
       }
     };
-  }, []);
+  }, [registerResetHandler, unregisterResetHandler, resetToMain]);
 
   useEffect(() => {
     if (selectedRole && !isLoadingRole && !fetchInProgressRef.current) {

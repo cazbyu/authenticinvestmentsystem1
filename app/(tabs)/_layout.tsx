@@ -1,27 +1,21 @@
-import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { ChartBar as BarChart3, Heart, Target, User } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { CommonActions } from '@react-navigation/native';
+import { useTabReset } from '@/contexts/TabResetContext';
 
 export default function TabLayout() {
   const { colors, isDarkMode } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
-  const navigation = useNavigation();
+  const { resetTab } = useTabReset();
 
-  const handleTabPress = (tabRoute: string) => {
+  const handleTabPress = (tabRoute: string, tabName: string) => {
     // Check if we're already on this tab
     const isOnThisTab = pathname.startsWith(tabRoute);
 
     if (isOnThisTab) {
-      // If already on this tab, use navigation reset to go back to the tab root
-      // This will trigger useFocusEffect hooks
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: tabRoute.replace('/(tabs)/', '') }],
-        })
-      );
+      // If already on this tab, trigger the reset handler
+      resetTab(tabName);
     } else {
       // If on a different tab, navigate normally
       router.push(tabRoute);
@@ -63,7 +57,7 @@ export default function TabLayout() {
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            handleTabPress('/(tabs)/dashboard');
+            handleTabPress('/(tabs)/dashboard', 'dashboard');
           },
         }}
       />
@@ -78,7 +72,7 @@ export default function TabLayout() {
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            handleTabPress('/(tabs)/roles');
+            handleTabPress('/(tabs)/roles', 'roles');
           },
         }}
       />
@@ -93,7 +87,7 @@ export default function TabLayout() {
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            handleTabPress('/(tabs)/wellness');
+            handleTabPress('/(tabs)/wellness', 'wellness');
           },
         }}
       />
@@ -108,7 +102,7 @@ export default function TabLayout() {
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            handleTabPress('/(tabs)/goals');
+            handleTabPress('/(tabs)/goals', 'goals');
           },
         }}
       />

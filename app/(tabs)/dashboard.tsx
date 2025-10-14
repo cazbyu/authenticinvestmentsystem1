@@ -18,10 +18,12 @@ import { DraggableFab } from '@/components/DraggableFab';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useTabReset } from '@/contexts/TabResetContext';
 
 // --- Main Dashboard Screen Component ---
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
@@ -41,11 +43,15 @@ export default function Dashboard() {
   
 
   // Reset to main Actions & Ideas view when tab is pressed
+  const resetToMain = useCallback(() => {
+    setActiveView('deposits');
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       // Reset to main landing page every time the tab is focused
-      setActiveView('deposits');
-    }, [])
+      resetToMain();
+    }, [resetToMain])
   );
 
   const fetchData = async () => {
@@ -258,8 +264,12 @@ export default function Dashboard() {
 
 
   useEffect(() => {
+    registerResetHandler('dashboard', resetToMain);
     fetchData();
-  }, [activeView, sortOption]);
+    return () => {
+      unregisterResetHandler('dashboard');
+    };
+  }, [activeView, sortOption, registerResetHandler, unregisterResetHandler, resetToMain]);
 
   const handleCompleteTask = async (task: Task) => {
     try {

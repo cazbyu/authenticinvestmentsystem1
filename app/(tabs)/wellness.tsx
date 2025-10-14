@@ -18,6 +18,7 @@ import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { DraggableFab } from '@/components/DraggableFab';
 import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useTabReset } from '@/contexts/TabResetContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -30,6 +31,7 @@ interface Domain {
 export default function Wellness() {
   const navigation = useNavigation<DrawerNavigation>();
   const { authenticScore, refreshScoreForDomain } = useAuthenticScore();
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -314,16 +316,24 @@ export default function Wellness() {
 
 
   // Reset to main Wellness Bank view when tab is pressed
+  const resetToMain = useCallback(() => {
+    setSelectedDomain(null);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       // Reset to main landing page every time the tab is focused
-      setSelectedDomain(null);
-    }, [])
+      resetToMain();
+    }, [resetToMain])
   );
 
   useEffect(() => {
+    registerResetHandler('wellness', resetToMain);
     fetchDomains();
-  }, [fetchDomains]);
+    return () => {
+      unregisterResetHandler('wellness');
+    };
+  }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain]);
 
   const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
     try {

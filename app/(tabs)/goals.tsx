@@ -27,6 +27,7 @@ import { DraggableFab } from '@/components/DraggableFab';
 import { router } from 'expo-router';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTabReset } from '@/contexts/TabResetContext';
 
 interface Timeline {
   id: string;
@@ -53,6 +54,7 @@ interface TimelineWeek {
 export default function Goals() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { colors } = useTheme();
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const [activeTab, setActiveTab] = useState<GoalBankTab>('timelines');
   const [selectedTimeline, setSelectedTimeline] = useState<Timeline | null>(null);
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
@@ -498,16 +500,21 @@ export default function Goals() {
 
 
   // Reset to main Goal Bank view when tab is pressed
+  const resetToMain = useCallback(() => {
+    setSelectedTimeline(null);
+    setActiveTab('timelines');
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       // Reset to main landing page every time the tab is focused
-      setSelectedTimeline(null);
-      setActiveTab('timelines');
-    }, [])
+      resetToMain();
+    }, [resetToMain])
   );
 
   useEffect(() => {
     console.log('[Goals] Component mounted, initializing...');
+    registerResetHandler('goals', resetToMain);
     try {
       fetchAllTimelines();
       refreshScore();
@@ -518,11 +525,12 @@ export default function Goals() {
 
     // Cleanup undo timeout on unmount
     return () => {
+      unregisterResetHandler('goals');
       if (undoState?.timeout) {
         clearTimeout(undoState.timeout);
       }
     };
-  }, []);
+  }, [registerResetHandler, unregisterResetHandler, resetToMain]);
 
   useEffect(() => {
     if (selectedTimeline) {
