@@ -10,6 +10,7 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { X, Calendar as CalendarIcon, Repeat } from 'lucide-react-native';
@@ -99,6 +100,8 @@ interface TaskEventFormProps {
 export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose }: TaskEventFormProps) {
   const { colors } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const { width: screenWidth } = useWindowDimensions();
+  const isMobile = screenWidth < 768;
   
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -765,7 +768,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             return (
               <TouchableOpacity
                 key={item.id}
-                style={styles.checkboxItem}
+                style={[styles.checkboxItem, isMobile && styles.checkboxItemMobile]}
                 onPress={() => onToggle(item.id)}
               >
                 <View style={[
@@ -775,7 +778,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 ]}>
                   {isSelected && <Text style={styles.checkmark}>✓</Text>}
                 </View>
-                <Text style={[styles.checkboxLabel, { color: colors.text }]}>{displayName}</Text>
+                <Text style={[styles.checkboxLabel, { color: colors.text }]} numberOfLines={2}>{displayName}</Text>
               </TouchableOpacity>
             );
           })}
@@ -853,15 +856,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           {/* Switches Row - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
             <>
-              <View style={styles.switchesRowWrapper}>
-                <View style={styles.switchesRow}>
+              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
                   {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
                   {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
                 </View>
               </View>
 
-              <View style={styles.switchesRowWrapper}>
-                <View style={styles.switchesRow}>
+              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
                   {renderSwitchField('Authentic Deposit', formData.isAuthenticDeposit, (value) => setFormData(prev => ({ ...prev, isAuthenticDeposit: value })))}
                   {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
                 </View>
@@ -1641,12 +1644,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
   },
+  switchesRowWrapperMobile: {
+    paddingHorizontal: 8,
+  },
   switchesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '60%',
     maxWidth: 600,
     gap: 24,
+  },
+  switchesRowMobile: {
+    width: '100%',
+    gap: 12,
   },
   switchField: {
     flexDirection: 'row',
@@ -1663,7 +1673,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     flex: 1,
-    marginRight: 16,
+    marginRight: 8,
   },
   dateRow: {
     flexDirection: 'row',
@@ -1776,6 +1786,9 @@ const styles = StyleSheet.create({
     width: '46%',
     marginBottom: 12,
     gap: 12,
+  },
+  checkboxItemMobile: {
+    width: '100%',
   },
   checkbox: {
     width: 20,
