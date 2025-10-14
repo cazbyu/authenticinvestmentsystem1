@@ -1,22 +1,9 @@
-import { Tabs, usePathname, useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { ChartBar as BarChart3, Heart, Target, User } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useTabReset } from '@/contexts/TabResetContext';
 
 export default function TabLayout() {
-  const { colors, isDarkMode } = useTheme();
-  const pathname = usePathname();
-  const router = useRouter();
-  const { resetTab } = useTabReset();
-
-  const handleTabPress = (tabRoute: string, tabName: string) => {
-    // Always trigger the reset handler first to ensure clean state
-    resetTab(tabName);
-
-    // Then navigate to the tab route
-    // The router will handle if we're already on this route
-    router.push(tabRoute);
-  };
+  const { colors } = useTheme();
 
   return (
     <Tabs
@@ -36,11 +23,6 @@ export default function TabLayout() {
           fontSize: 12,
           fontWeight: '500',
         },
-        tabBarItemStyle: {
-          backgroundColor: 'transparent',
-        },
-        tabBarPressColor: 'transparent',
-        tabBarPressOpacity: 1,
       }}>
       <Tabs.Screen
         name="dashboard"
@@ -49,12 +31,6 @@ export default function TabLayout() {
           tabBarIcon: ({ size, color }) => (
             <BarChart3 size={size} color={color} />
           ),
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            handleTabPress('/(tabs)/dashboard', 'dashboard');
-          },
         }}
       />
       <Tabs.Screen
@@ -65,12 +41,6 @@ export default function TabLayout() {
             <User size={size} color={color} />
           ),
         }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            handleTabPress('/(tabs)/roles', 'roles');
-          },
-        }}
       />
       <Tabs.Screen
         name="wellness"
@@ -80,12 +50,6 @@ export default function TabLayout() {
             <Heart size={size} color={color} />
           ),
         }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            handleTabPress('/(tabs)/wellness', 'wellness');
-          },
-        }}
       />
       <Tabs.Screen
         name="goals"
@@ -94,12 +58,6 @@ export default function TabLayout() {
           tabBarIcon: ({ size, color }) => (
             <Target size={size} color={color} />
           ),
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            handleTabPress('/(tabs)/goals', 'goals');
-          },
         }}
       />
     </Tabs>
