@@ -7,6 +7,19 @@ export default function TabLayout() {
   const pathname = usePathname();
   const router = useRouter();
 
+  const handleTabPress = (tabRoute: string) => {
+    // Check if we're already on this tab
+    const isOnThisTab = pathname.startsWith(tabRoute);
+
+    if (isOnThisTab) {
+      // If already on this tab, use replace to force navigation and trigger focus events
+      router.replace(tabRoute);
+    } else {
+      // If on a different tab, navigate normally
+      router.push(tabRoute);
+    }
+  };
+
   return (
     <Tabs
       screenOptions={{
@@ -41,9 +54,8 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => {
-            // Always navigate to dashboard, even if already on the tab
             e.preventDefault();
-            router.push('/(tabs)/dashboard');
+            handleTabPress('/(tabs)/dashboard');
           },
         }}
       />
@@ -57,9 +69,8 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => {
-            // Always navigate to roles, even if already on the tab
             e.preventDefault();
-            router.push('/(tabs)/roles');
+            handleTabPress('/(tabs)/roles');
           },
         }}
       />
@@ -73,9 +84,8 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => {
-            // Always navigate to wellness, even if already on the tab
             e.preventDefault();
-            router.push('/(tabs)/wellness');
+            handleTabPress('/(tabs)/wellness');
           },
         }}
       />
@@ -89,9 +99,8 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => {
-            // Always navigate to goals, even if already on the tab
             e.preventDefault();
-            router.push('/(tabs)/goals');
+            handleTabPress('/(tabs)/goals');
           },
         }}
       />
