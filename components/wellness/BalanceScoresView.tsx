@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { getSupabaseClient } from '@/lib/supabase';
 import { BalanceWheelChart } from './BalanceWheelChart';
 import { BalanceBarChart } from './BalanceBarChart';
+import { ChartErrorBoundary } from './ChartErrorBoundary';
 import { calculateAuthenticScoreForDomain } from '@/lib/taskUtils';
 
 interface Domain {
@@ -232,9 +233,13 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
             </Text>
           </View>
         ) : activeChartView === 'wheel' ? (
-          <BalanceWheelChart data={domainScores} />
+          <ChartErrorBoundary>
+            <BalanceWheelChart data={domainScores} />
+          </ChartErrorBoundary>
         ) : (
-          <BalanceBarChart data={domainScores} />
+          <ChartErrorBoundary>
+            <BalanceBarChart data={domainScores} />
+          </ChartErrorBoundary>
         )}
 
         {!loading && domainScores.length > 0 && (
