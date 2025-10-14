@@ -9,6 +9,7 @@ import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDet
 import { JournalView } from '@/components/journal/JournalView';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
+import { BalanceScoresView } from '@/components/wellness/BalanceScoresView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -40,7 +41,7 @@ export default function Wellness() {
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
 
   // Main tab navigation state
-  const [activeMainTab, setActiveMainTab] = useState<'domains' | 'manage'>('domains');
+  const [activeMainTab, setActiveMainTab] = useState<'domains' | 'balance'>('domains');
 
   // Modal states
   const [taskFormVisible, setTaskFormVisible] = useState(false);
@@ -661,11 +662,11 @@ export default function Wellness() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.customToggleButton, activeMainTab === 'manage' && styles.customActiveToggle]}
-              onPress={() => setActiveMainTab('manage')}
+              style={[styles.customToggleButton, activeMainTab === 'balance' && styles.customActiveToggle]}
+              onPress={() => setActiveMainTab('balance')}
             >
-              <Text style={[styles.customToggleText, activeMainTab === 'manage' && styles.customActiveToggleText]}>
-                Manage Domains
+              <Text style={[styles.customToggleText, activeMainTab === 'balance' && styles.customActiveToggleText]}>
+                Balance Scores
               </Text>
             </TouchableOpacity>
           </View>
@@ -806,19 +807,8 @@ export default function Wellness() {
           </ScrollView>
         )}
 
-        {activeMainTab === 'manage' && (
-          <ScrollView style={styles.manageContent}>
-            <View style={styles.manageHeader}>
-              <Text style={styles.manageTitle}>Manage Wellness Domains</Text>
-            </View>
-            <View style={styles.managePlaceholder}>
-              <Heart size={48} color="#9ca3af" />
-              <Text style={styles.managePlaceholderTitle}>Domain Management Coming Soon</Text>
-              <Text style={styles.managePlaceholderText}>
-                Future updates will allow you to customize domain names, add custom domains, and set priorities.
-              </Text>
-            </View>
-          </ScrollView>
+        {activeMainTab === 'balance' && (
+          <BalanceScoresView getDomainColor={getDomainColor} />
         )}
       </View>
     );
