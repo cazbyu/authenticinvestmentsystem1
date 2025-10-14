@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,6 +18,23 @@ const menuItems = [
 export function SideMenu() {
   const router = useRouter();
   const { colors } = useTheme();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchUserEmail();
+  }, []);
+
+  const fetchUserEmail = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email) {
+        setUserEmail(user.email);
+      }
+    } catch (error) {
+      console.error('Error fetching user email:', error);
+    }
+  };
 
   const handleMenuPress = (route: string) => {
     router.push(route as any);
@@ -62,15 +79,27 @@ export function SideMenu() {
             </TouchableOpacity>
           );
         })}
+
+        <View style={styles.versionContainer}>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>v 0.01</Text>
+        </View>
       </ScrollView>
       
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
-        {/* --- UPDATE THIS BUTTON --- */}
+        {userEmail && (
+          <View style={styles.userEmailContainer}>
+            <Text style={[styles.userEmailText, { color: colors.textSecondary }]} numberOfLines={1}>
+              Signed in as {userEmail}
+            </Text>
+          </View>
+        )}
+
+        <View style={[styles.separator, { backgroundColor: colors.border }]} />
+
         <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
           <LogOut size={20} color={colors.error} />
           <Text style={[styles.logoutText, { color: colors.error }]}>Sign Out</Text>
         </TouchableOpacity>
-        {/* -------------------------- */}
       </View>
     </SafeAreaView>
   );
@@ -117,6 +146,18 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopWidth: 1,
   },
+  userEmailContainer: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  userEmailText: {
+    fontSize: 13,
+    fontWeight: '400',
+  },
+  separator: {
+    height: 1,
+    marginVertical: 12,
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -126,5 +167,14 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
     fontWeight: '500',
+  },
+  versionContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  versionText: {
+    fontSize: 13,
+    fontWeight: '400',
   },
 });
