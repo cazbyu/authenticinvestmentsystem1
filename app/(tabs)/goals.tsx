@@ -623,9 +623,9 @@ export default function Goals() {
           activated_at,
           created_at,
           updated_at,
-          snapshot_title,
-          snapshot_start_date,
-          snapshot_end_date,
+          title,
+          start_date,
+          end_date,
           global_cycle:0008-ap-global-cycles(
             id,
             title,
@@ -656,13 +656,13 @@ export default function Goals() {
           // Use snapshot data if global_cycle join failed
           const title = timeline.global_cycle?.title
             || timeline.global_cycle?.cycle_label
-            || timeline.snapshot_title
+            || timeline.title
             || 'Global Timeline';
           const startDate = timeline.global_cycle?.start_date
-            || timeline.snapshot_start_date
+            || timeline.start_date
             || '';
           const endDate = timeline.global_cycle?.end_date
-            || timeline.snapshot_end_date
+            || timeline.end_date
             || '';
 
           timelines.push({
