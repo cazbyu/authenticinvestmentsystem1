@@ -343,7 +343,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
             <ActivityIndicator size="large" color="#0078d4" />
             <Text style={styles.loadingText}>Calculating balance scores...</Text>
           </View>
-        ) : domainScores.length === 0 ? (
+        ) : domains.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Wellness Domains</Text>
             <Text style={styles.emptyText}>
