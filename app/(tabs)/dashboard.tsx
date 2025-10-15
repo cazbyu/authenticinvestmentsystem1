@@ -57,6 +57,7 @@ export default function Dashboard() {
   }, []);
 
   const fetchData = async () => {
+    console.log('[Dashboard] fetchData called, activeView:', activeView);
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
@@ -88,61 +89,69 @@ export default function Dashboard() {
           .in('type', ['task', 'event']);
 
         if (tasksError) throw tasksError;
-        if (!tasksData || tasksData.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
-        }
 
         // Filter out Goal Bank actions by checking for week plans
         // Goal Bank actions are identified by having entries in task-week-plan table
-        const taskIds = tasksData.map(t => t.id);
-        const { data: weekPlans, error: weekPlansError } = await supabase
-          .from('0008-ap-task-week-plan')
-          .select('task_id')
-          .in('task_id', taskIds)
-          .is('deleted_at', null);
+        let allTasks: any[] = [];
 
-        if (weekPlansError) throw weekPlansError;
+        if (tasksData && tasksData.length > 0) {
+          const taskIds = tasksData.map(t => t.id);
+          const { data: weekPlans, error: weekPlansError } = await supabase
+            .from('0008-ap-task-week-plan')
+            .select('task_id')
+            .in('task_id', taskIds)
+            .is('deleted_at', null);
 
-        // Create a Set of task IDs that have week plans (Goal Bank actions)
-        const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
+          if (weekPlansError) throw weekPlansError;
 
-        // Only include standalone tasks (tasks WITHOUT week plans)
-        const allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
+          // Create a Set of task IDs that have week plans (Goal Bank actions)
+          const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
 
-        if (allTasks.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
+          // Only include standalone tasks (tasks WITHOUT week plans)
+          allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
         }
 
-        const taskIdsForJoins = allTasks.map(t => t.id);
+        // Fetch join data only if we have tasks
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let goalsData: any[] = [];
+        let notesData: any[] = [];
+        let delegatesData: any[] = [];
+        let keyRelationshipsData: any[] = [];
 
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: goalsData, error: goalsError },
-          { data: notesData, error: notesError },
-          { data: delegatesData, error: delegatesError },
-          { data: keyRelationshipsData, error: keyRelationshipsError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title, status), custom_goal:0008-ap-goals-custom(id, title, status)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
-        ]);
+        if (allTasks.length > 0) {
+          const taskIdsForJoins = allTasks.map(t => t.id);
 
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (goalsError) throw goalsError;
-        if (notesError) throw notesError;
-        if (delegatesError) throw delegatesError;
-        if (keyRelationshipsError) throw keyRelationshipsError;
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: goalsDataResult, error: goalsError },
+            { data: notesDataResult, error: notesError },
+            { data: delegatesDataResult, error: delegatesError },
+            { data: keyRelationshipsDataResult, error: keyRelationshipsError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title, status), custom_goal:0008-ap-goals-custom(id, title, status)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (goalsError) throw goalsError;
+          if (notesError) throw notesError;
+          if (delegatesError) throw delegatesError;
+          if (keyRelationshipsError) throw keyRelationshipsError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          goalsData = goalsDataResult || [];
+          notesData = notesDataResult || [];
+          delegatesData = delegatesDataResult || [];
+          keyRelationshipsData = keyRelationshipsDataResult || [];
+        }
 
         const transformedTasks = allTasks.map(task => {
           // Derive timeline information for recurring tasks
@@ -201,6 +210,7 @@ export default function Dashboard() {
         else if (sortOption === 'goals') sortedTasks.sort((a, b) => (b.goals?.length || 0) - (a.goals?.length || 0));
         else if (sortOption === 'delegated') sortedTasks.sort((a, b) => (b.has_delegates ? 1 : 0) - (a.has_delegates ? 1 : 0));
 
+        console.log('[Dashboard] Setting tasks:', sortedTasks.length, 'tasks found');
         setTasks(sortedTasks);
         setDepositIdeas([]);
 
@@ -214,33 +224,40 @@ export default function Dashboard() {
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
-        if (!depositIdeasData || depositIdeasData.length === 0) {
-          setDepositIdeas([]);
-          setTasks([]);
-          setLoading(false);
-          return;
+
+        // Fetch join data only if we have deposit ideas
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let krData: any[] = [];
+        let notesData: any[] = [];
+
+        if (depositIdeasData && depositIdeasData.length > 0) {
+          const depositIdeaIds = depositIdeasData.map(di => di.id);
+
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: krDataResult, error: krError },
+            { data: notesDataResult, error: notesError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (krError) throw krError;
+          if (notesError) throw notesError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          krData = krDataResult || [];
+          notesData = notesDataResult || [];
         }
 
-        const depositIdeaIds = depositIdeasData.map(di => di.id);
-
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: krData, error: krError },
-          { data: notesData, error: notesError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
-        ]);
-
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (krError) throw krError;
-        if (notesError) throw notesError;
-
-        const transformedDepositIdeas = depositIdeasData.map(di => ({
+        const transformedDepositIdeas = (depositIdeasData || []).map(di => ({
           ...di,
           roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
@@ -249,6 +266,7 @@ export default function Dashboard() {
           has_attachments: false,
         }));
 
+        console.log('[Dashboard] Setting deposit ideas:', transformedDepositIdeas.length, 'ideas found');
         setDepositIdeas(transformedDepositIdeas);
         setTasks([]);
       }

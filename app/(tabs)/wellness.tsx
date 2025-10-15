@@ -153,67 +153,72 @@ export default function Wellness() {
 
         if (tasksError) throw tasksError;
 
-        if (!tasksData || tasksData.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
-        }
-
         // Check if aborted
         if (controller.signal.aborted) {
           return;
         }
 
         // Filter out Goal Bank actions by checking for week plans
-        const taskIds = tasksData.map(t => t.id);
-        const { data: weekPlans, error: weekPlansError } = await supabase
-          .from('0008-ap-task-week-plan')
-          .select('task_id')
-          .in('task_id', taskIds)
-          .is('deleted_at', null);
+        let allTasks: any[] = [];
 
-        if (weekPlansError) throw weekPlansError;
+        if (tasksData && tasksData.length > 0) {
+          const taskIds = tasksData.map(t => t.id);
+          const { data: weekPlans, error: weekPlansError } = await supabase
+            .from('0008-ap-task-week-plan')
+            .select('task_id')
+            .in('task_id', taskIds)
+            .is('deleted_at', null);
 
-        // Check if aborted
-        if (controller.signal.aborted) {
-          return;
+          if (weekPlansError) throw weekPlansError;
+
+          // Check if aborted
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          // Create a Set of task IDs that have week plans (Goal Bank actions)
+          const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
+
+          // Only include standalone tasks (tasks WITHOUT week plans)
+          allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
         }
 
-        // Create a Set of task IDs that have week plans (Goal Bank actions)
-        const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
+        // Fetch join data only if we have tasks
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let goalsData: any[] = [];
+        let notesData: any[] = [];
+        let keyRelationshipsData: any[] = [];
 
-        // Only include standalone tasks (tasks WITHOUT week plans)
-        const allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
+        if (allTasks.length > 0) {
+          const taskIdsForJoins = allTasks.map(t => t.id);
 
-        if (allTasks.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: goalsDataResult, error: goalsError },
+            { data: notesDataResult, error: notesError },
+            { data: keyRelationshipsDataResult, error: keyRelationshipsError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (goalsError) throw goalsError;
+          if (notesError) throw notesError;
+          if (keyRelationshipsError) throw keyRelationshipsError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          goalsData = goalsDataResult || [];
+          notesData = notesDataResult || [];
+          keyRelationshipsData = keyRelationshipsDataResult || [];
         }
-
-        const taskIdsForJoins = allTasks.map(t => t.id);
-
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: goalsData, error: goalsError },
-          { data: notesData, error: notesError },
-          { data: keyRelationshipsData, error: keyRelationshipsError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
-        ]);
-
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (goalsError) throw goalsError;
-        if (notesError) throw notesError;
-        if (keyRelationshipsError) throw keyRelationshipsError;
 
         // Check if aborted before processing
         if (controller.signal.aborted) {
@@ -249,36 +254,42 @@ export default function Wellness() {
 
         if (depositIdeasError) throw depositIdeasError;
 
-        if (!depositIdeasData || depositIdeasData.length === 0) {
-          setDepositIdeas([]);
-          setTasks([]);
-          setLoading(false);
-          return;
-        }
-
         // Check if aborted
         if (controller.signal.aborted) {
           return;
         }
 
-        const depositIdeaIds = depositIdeasData.map(di => di.id);
+        // Fetch join data only if we have deposit ideas
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let krData: any[] = [];
+        let notesData: any[] = [];
 
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: krData, error: krError },
-          { data: notesData, error: notesError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
-        ]);
+        if (depositIdeasData && depositIdeasData.length > 0) {
+          const depositIdeaIds = depositIdeasData.map(di => di.id);
 
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (krError) throw krError;
-        if (notesError) throw notesError;
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: krDataResult, error: krError },
+            { data: notesDataResult, error: notesError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (krError) throw krError;
+          if (notesError) throw notesError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          krData = krDataResult || [];
+          notesData = notesDataResult || [];
+        }
 
         // Check if aborted before processing
         if (controller.signal.aborted) {
@@ -287,7 +298,7 @@ export default function Wellness() {
 
         // Filter deposit ideas that have the selected domain
         const domainDepositIdeaIds = domainsData?.filter(d => d.domain?.id === domainId).map(d => d.parent_id) || [];
-        const filteredDepositIdeas = depositIdeasData.filter(di => domainDepositIdeaIds.includes(di.id));
+        const filteredDepositIdeas = (depositIdeasData || []).filter(di => domainDepositIdeaIds.includes(di.id));
 
         const transformedDepositIdeas = filteredDepositIdeas.map(di => ({
           ...di,
