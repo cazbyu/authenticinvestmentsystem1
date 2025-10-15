@@ -21,6 +21,7 @@ interface HeaderProps {
   daysRemaining?: number;
   cycleProgressPercentage?: number;
   cycleTitle?: string;
+  forceShowMenu?: boolean;
 }
 
 export function Header({
@@ -34,7 +35,8 @@ export function Header({
   onEditPress,
   daysRemaining,
   cycleProgressPercentage,
-  cycleTitle
+  cycleTitle,
+  forceShowMenu = false
 }: HeaderProps) {
   const navigation = useNavigation<DrawerNavigation>();
   const router = useRouter();
@@ -48,6 +50,10 @@ export function Header({
   const handleLeftButtonPress = () => {
     if (onBackPress) {
       onBackPress();
+      return;
+    }
+    if (forceShowMenu) {
+      navigation.openDrawer();
       return;
     }
     if (canGoBack) {
@@ -64,7 +70,7 @@ export function Header({
       {/* Top section with menu and score */}
       <View style={styles.topSection}>
         <TouchableOpacity style={styles.menuButton} onPress={handleLeftButtonPress}>
-          {canGoBack ? <ChevronLeft size={24} color="#ffffff" /> : <Menu size={24} color="#ffffff" />}
+          {(forceShowMenu || !canGoBack) ? <Menu size={24} color="#ffffff" /> : <ChevronLeft size={24} color="#ffffff" />}
         </TouchableOpacity>
         
         <View style={styles.titleSection}>
