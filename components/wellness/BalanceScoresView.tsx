@@ -190,30 +190,38 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   const normalizeScores = useCallback((scores: number[]): number[] => {
     console.log('[BalanceScores] Normalizing scores:', { scores, calculationMode });
 
-    // ALWAYS normalize to 0-100 scale for consistent chart rendering
-    const maxScore = Math.max(...scores, 1);
-
-    if (maxScore === 0) {
-      console.log('[BalanceScores] All scores are zero, returning zeros');
+    // Check if all scores are actually zero
+    const allZero = scores.every(s => s === 0);
+    if (allZero) {
+      console.log('[BalanceScores] All raw scores are zero, returning zeros');
       return scores.map(() => 0);
     }
 
-    // In score mode, if max score is less than 100, normalize it
-    // In count mode, always normalize
+    const maxScore = Math.max(...scores);
+    console.log('[BalanceScores] Max score:', maxScore);
+
+    // In score mode, if scores are already reasonable (0-100), keep them
+    // In count mode, normalize to 0-100 scale
     const normalized = scores.map(score => {
-      if (calculationMode === 'score' && maxScore > 100) {
-        // If scores are already > 100, scale them down
-        return Math.round((score / maxScore) * 100);
-      } else if (calculationMode === 'score' && maxScore <= 100) {
-        // If scores are small (0-100), show them as-is but ensure visibility
-        return score === 0 ? 0 : Math.max(score, 5); // Minimum 5 for visibility
+      if (score === 0) return 0;
+
+      if (calculationMode === 'score') {
+        // For authentic score mode
+        if (maxScore <= 100) {
+          // Scores already in 0-100 range, keep as-is
+          return Math.round(score);
+        } else {
+          // Scale down to 0-100
+          return Math.round((score / maxScore) * 100);
+        }
       } else {
-        // Count mode - normalize to 0-100
+        // For count mode, normalize to 0-100
         return Math.round((score / maxScore) * 100);
       }
     });
 
     console.log('[BalanceScores] Normalized result:', normalized);
+    console.log('[BalanceScores] Any non-zero after normalization:', normalized.some(n => n > 0));
     return normalized;
   }, [calculationMode]);
 
@@ -234,16 +242,25 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
 
       const results = await Promise.all(scorePromises);
       const rawScores = results.map(r => r.rawScore);
-      console.log('[BalanceScores] Raw scores:', rawScores);
+      console.log('[BalanceScores] Raw scores by domain:', results.map((r, i) => ({
+        domain: r.domain,
+        rawScore: r.rawScore
+      })));
 
       const normalizedScores = normalizeScores(rawScores);
-      console.log('[BalanceScores] Normalized scores:', normalizedScores);
+      console.log('[BalanceScores] Normalized scores by domain:', results.map((r, i) => ({
+        domain: r.domain,
+        normalizedScore: normalizedScores[i]
+      })));
 
       const totalRawScore = rawScores.reduce((sum, score) => sum + score, 0);
       const totalNormalizedScore = normalizedScores.reduce((sum, score) => sum + score, 0);
 
       console.log('[BalanceScores] Score totals:', { totalRawScore, totalNormalizedScore });
-      setHasData(totalNormalizedScore > 0);
+      // Use raw scores to determine if we have data, not normalized scores
+      const actuallyHasData = totalRawScore > 0;
+      console.log('[BalanceScores] Setting hasData to:', actuallyHasData);
+      setHasData(actuallyHasData);
 
       const finalScores: DomainScore[] = results.map((r, i) => ({
         domain: r.domain,
@@ -326,7 +343,14 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
             <ActivityIndicator size="large" color="#0078d4" />
             <Text style={styles.loadingText}>Calculating balance scores...</Text>
           </View>
-        ) : domainScores.length === 0 || !hasData ? (
+        ) : domainScores.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No Wellness Domains</Text>
+            <Text style={styles.emptyText}>
+              No wellness domains are configured. Please contact support to set up your wellness domains.
+            </Text>
+          </View>
+        ) : !hasData ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Data Available</Text>
             <Text style={styles.emptyText}>
