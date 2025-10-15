@@ -6,6 +6,10 @@ interface DomainScore {
   domain: string;
   score: number;
   color: string;
+  rawValue?: number;
+  depositCount?: number;
+  depositPoints?: number;
+  withdrawalTotal?: number;
 }
 
 interface BalanceWheelChartProps {

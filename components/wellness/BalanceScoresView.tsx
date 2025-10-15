@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { BalanceWheelChart } from './BalanceWheelChart';
 import { BalanceBarChart } from './BalanceBarChart';
@@ -15,6 +15,10 @@ interface DomainScore {
   domain: string;
   score: number;
   color: string;
+  rawValue: number;
+  depositCount: number;
+  depositPoints: number;
+  withdrawalTotal: number;
 }
 
 interface BalanceScoresViewProps {
@@ -27,12 +31,14 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   const [calculationMode, setCalculationMode] = useState<'count' | 'score'>('count');
   const [domainScores, setDomainScores] = useState<DomainScore[]>([]);
   const [loading, setLoading] = useState(false);
+  const [domainsLoading, setDomainsLoading] = useState(true);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [hasData, setHasData] = useState<boolean>(false);
 
   const fetchDomains = useCallback(async () => {
     try {
       console.log('[BalanceScores] Fetching domains...');
+      setDomainsLoading(true);
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('0008-ap-domains')
@@ -44,6 +50,9 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       setDomains(data || []);
     } catch (error) {
       console.error('[BalanceScores] Error fetching domains:', error);
+      setDomains([]);
+    } finally {
+      setDomainsLoading(false);
     }
   }, []);
 
@@ -65,130 +74,13 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
     return map;
   }, []);
 
-  const calculateDomainScore = useCallback(async (domainId: string, domainName: string): Promise<{ taskCount: number; authenticScore: number }> => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log(`[BalanceScores] No user found for domain ${domainName}`);
-        return { taskCount: 0, authenticScore: 0 };
-      }
-
-      const dateFilter = getDateFilter();
-      console.log(`[BalanceScores] Calculating score for ${domainName}, dateFilter: ${dateFilter || 'all'}`);
-
-      let tasksQuery = supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_authentic_deposit, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .not('completed_at', 'is', null);
-
-      if (dateFilter) {
-        tasksQuery = tasksQuery.gte('completed_at', dateFilter);
-      }
-
-      const { data: tasksData, error: tasksError } = await tasksQuery;
-      if (tasksError) throw tasksError;
-
-      console.log(`[BalanceScores] Found ${tasksData?.length || 0} completed tasks for user`);
-
-      if (!tasksData || tasksData.length === 0) {
-        return { taskCount: 0, authenticScore: 0 };
-      }
-
-      const taskIds = tasksData.map((t: any) => t.id);
-
-      const [
-        rolesRes,
-        domainsRes,
-        goalsRes,
-      ] = await Promise.all([
-        supabase
-          .from('0008-ap-universal-roles-join')
-          .select('parent_id, role_id, role:0008-ap-roles(id,label)')
-          .in('parent_id', taskIds)
-          .eq('parent_type', 'task'),
-        supabase
-          .from('0008-ap-universal-domains-join')
-          .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
-          .in('parent_id', taskIds)
-          .eq('parent_type', 'task'),
-        supabase
-          .from('0008-ap-universal-goals-join')
-          .select(`
-            parent_id,
-            goal_type,
-            twelve_wk_goal_id,
-            custom_goal_id,
-            tw:0008-ap-goals-12wk(id,title,status),
-            cg:0008-ap-goals-custom(id,title,status)
-          `)
-          .in('parent_id', taskIds)
-          .eq('parent_type', 'task'),
-      ]);
-
-      const taskRoles = rolesRes.data ?? [];
-      const taskDomains = domainsRes.data ?? [];
-      const taskGoals = goalsRes.data ?? [];
-
-      const allowedTaskIds = new Set(
-        taskDomains
-          .filter((d: any) => d.domain?.id === domainId || d.domain_id === domainId)
-          .map((d: any) => d.parent_id)
-      );
-
-      console.log(`[BalanceScores] ${domainName}: ${allowedTaskIds.size} tasks linked to this domain`);
-
-      if (allowedTaskIds.size === 0) {
-        return { taskCount: 0, authenticScore: 0 };
-      }
-
-      const rolesByTask = groupByParentId(taskRoles as any);
-      const domainsByTask = groupByParentId(taskDomains as any);
-      const goalsByTask = groupByParentId(taskGoals as any);
-
-      let taskCount = 0;
-      let totalPoints = 0;
-
-      for (const t of tasksData) {
-        if (!allowedTaskIds.has(t.id)) continue;
-
-        taskCount++;
-
-        const roles = (rolesByTask.get(t.id) ?? []).map((r: any) => r.role).filter(Boolean);
-        const domains = (domainsByTask.get(t.id) ?? []).map((d: any) => d.domain).filter(Boolean);
-        const goals = (goalsByTask.get(t.id) ?? []).map((g: any) => {
-          if (g.goal_type === 'twelve_wk_goal' && g.tw) {
-            const goal = g.tw;
-            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-              return null;
-            }
-            return { ...goal, goal_type: '12week' };
-          } else if (g.goal_type === 'custom_goal' && g.cg) {
-            const goal = g.cg;
-            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-              return null;
-            }
-            return { ...goal, goal_type: 'custom' };
-          }
-          return null;
-        }).filter(Boolean);
-
-        const points = calculateTaskPoints(t, roles, domains, goals);
-        totalPoints += points;
-      }
-
-      console.log(`[BalanceScores] ${domainName}: taskCount=${taskCount}, authenticScore=${totalPoints}`);
-      return { taskCount, authenticScore: totalPoints };
-    } catch (error) {
-      console.error(`[BalanceScores] Error calculating domain score for ${domainName}:`, error);
-      return { taskCount: 0, authenticScore: 0 };
-    }
-  }, [getDateFilter, groupByParentId]);
-
   const normalizeScores = useCallback((scores: number[]): number[] => {
     console.log('[BalanceScores] Normalizing scores:', { scores, calculationMode });
+
+    if (scores.length === 0) {
+      console.log('[BalanceScores] No scores provided, returning empty array');
+      return [];
+    }
 
     // Check if all scores are actually zero
     const allZero = scores.every(s => s === 0);
@@ -226,68 +118,267 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   }, [calculationMode]);
 
   const fetchDomainScores = useCallback(async () => {
-    if (domains.length === 0) {
-      console.log('[BalanceScores] No domains to calculate scores for');
-      return;
-    }
-
     console.log(`[BalanceScores] Starting score calculation for ${domains.length} domains`);
     setLoading(true);
     try {
-      const scorePromises = domains.map(async (domain) => {
-        const { taskCount, authenticScore } = await calculateDomainScore(domain.id, domain.name);
-        const rawScore = calculationMode === 'count' ? taskCount : authenticScore;
-        return { domain: domain.name, rawScore, color: getDomainColor(domain.name) };
+      const supabase = getSupabaseClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        console.log('[BalanceScores] No authenticated user found when calculating scores');
+        setDomainScores([]);
+        setHasData(false);
+        return;
+      }
+
+      const dateFilter = getDateFilter();
+      console.log(`[BalanceScores] Fetching completed tasks with date filter: ${dateFilter || 'all'}`);
+
+      let tasksQuery = supabase
+        .from('0008-ap-tasks')
+        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_authentic_deposit, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .not('completed_at', 'is', null);
+
+      if (dateFilter) {
+        tasksQuery = tasksQuery.gte('completed_at', dateFilter);
+      }
+
+      const { data: tasksData, error: tasksError } = await tasksQuery;
+      if (tasksError) throw tasksError;
+
+      const taskIds = (tasksData ?? []).map((task: any) => task.id);
+
+      const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+        taskIds.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : supabase
+              .from('0008-ap-universal-roles-join')
+              .select('parent_id, role_id, role:0008-ap-roles(id,label)')
+              .in('parent_id', taskIds)
+              .eq('parent_type', 'task'),
+        taskIds.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : supabase
+              .from('0008-ap-universal-domains-join')
+              .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
+              .in('parent_id', taskIds)
+              .eq('parent_type', 'task'),
+        taskIds.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : supabase
+              .from('0008-ap-universal-goals-join')
+              .select(`
+                parent_id,
+                goal_type,
+                twelve_wk_goal_id,
+                custom_goal_id,
+                tw:0008-ap-goals-12wk(id,title,status),
+                cg:0008-ap-goals-custom(id,title,status)
+              `)
+              .in('parent_id', taskIds)
+              .eq('parent_type', 'task'),
+      ]);
+
+      if (rolesRes.error) throw rolesRes.error;
+      if (domainsRes.error) throw domainsRes.error;
+      if (goalsRes.error) throw goalsRes.error;
+
+      const rolesByTask = groupByParentId(rolesRes.data as any);
+      const domainsByTask = groupByParentId(domainsRes.data as any);
+      const goalsByTask = groupByParentId(goalsRes.data as any);
+
+      type DomainAccumulator = {
+        depositCount: number;
+        depositPoints: number;
+        withdrawalTotal: number;
+        name: string;
+      };
+
+      const domainAccumulator = new Map<string, DomainAccumulator>();
+      domains.forEach((domain) => {
+        domainAccumulator.set(domain.id, {
+          depositCount: 0,
+          depositPoints: 0,
+          withdrawalTotal: 0,
+          name: domain.name,
+        });
       });
 
-      const results = await Promise.all(scorePromises);
-      const rawScores = results.map(r => r.rawScore);
-      console.log('[BalanceScores] Raw scores by domain:', results.map((r, i) => ({
-        domain: r.domain,
-        rawScore: r.rawScore
+      const ensureAccumulator = (domainId: string, fallbackName?: string) => {
+        if (!domainAccumulator.has(domainId)) {
+          const fallback = domains.find((domain) => domain.id === domainId);
+          domainAccumulator.set(domainId, {
+            depositCount: 0,
+            depositPoints: 0,
+            withdrawalTotal: 0,
+            name: fallback?.name ?? fallbackName ?? 'Unknown Domain',
+          });
+        }
+        return domainAccumulator.get(domainId)!;
+      };
+
+      for (const task of tasksData ?? []) {
+        const taskDomainEntries = domainsByTask.get(task.id) ?? [];
+        if (taskDomainEntries.length === 0) {
+          continue;
+        }
+
+        const taskRoles = (rolesByTask.get(task.id) ?? []).map((r: any) => r.role).filter(Boolean);
+        const taskGoals = (goalsByTask.get(task.id) ?? [])
+          .map((g: any) => {
+            if (g.goal_type === 'twelve_wk_goal' && g.tw) {
+              const goal = g.tw;
+              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                return null;
+              }
+              return { ...goal, goal_type: '12week' };
+            } else if (g.goal_type === 'custom_goal' && g.cg) {
+              const goal = g.cg;
+              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                return null;
+              }
+              return { ...goal, goal_type: 'custom' };
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        const taskDomains = taskDomainEntries
+          .map((d: any) => {
+            if (d.domain) return d.domain;
+            const fallback = domains.find((domain) => domain.id === d.domain_id);
+            if (!fallback) return null;
+            return { id: fallback.id, name: fallback.name };
+          })
+          .filter(Boolean);
+
+        const points = calculateTaskPoints(task, taskRoles, taskDomains as any, taskGoals);
+
+        for (const domainEntry of taskDomainEntries) {
+          const domainId = domainEntry.domain_id ?? domainEntry.domain?.id;
+          if (!domainId) continue;
+
+          const accumulator = ensureAccumulator(domainId, domainEntry.domain?.name);
+          accumulator.depositCount += 1;
+          accumulator.depositPoints += points;
+        }
+      }
+
+      console.log('[BalanceScores] Deposit accumulation per domain:', Array.from(domainAccumulator.entries()).map(([id, stats]) => ({
+        id,
+        ...stats,
       })));
 
-      const normalizedScores = normalizeScores(rawScores);
-      console.log('[BalanceScores] Normalized scores by domain:', results.map((r, i) => ({
-        domain: r.domain,
-        normalizedScore: normalizedScores[i]
+      console.log('[BalanceScores] Fetching withdrawals with date filter:', dateFilter || 'all');
+
+      let withdrawalsQuery = supabase
+        .from('0008-ap-withdrawals')
+        .select('id, amount, withdrawn_at')
+        .eq('user_id', user.id);
+
+      if (dateFilter) {
+        withdrawalsQuery = withdrawalsQuery.gte('withdrawn_at', dateFilter);
+      }
+
+      const { data: withdrawalsData, error: withdrawalsError } = await withdrawalsQuery;
+      if (withdrawalsError) throw withdrawalsError;
+
+      if (withdrawalsData && withdrawalsData.length > 0) {
+        const withdrawalIds = withdrawalsData.map((w: any) => w.id);
+        const amountByWithdrawal = new Map<string, number>(
+          withdrawalsData.map((withdrawal: any) => [withdrawal.id, parseFloat(String(withdrawal.amount ?? 0)) || 0])
+        );
+
+        const { data: withdrawalDomainsData, error: withdrawalDomainsError } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
+          .in('parent_id', withdrawalIds)
+          .eq('parent_type', 'withdrawal');
+
+        if (withdrawalDomainsError) throw withdrawalDomainsError;
+
+        for (const join of withdrawalDomainsData ?? []) {
+          const domainId = (join as any).domain_id ?? (join as any).domain?.id;
+          if (!domainId) continue;
+
+          const accumulator = ensureAccumulator(domainId, (join as any).domain?.name);
+          const amount = amountByWithdrawal.get((join as any).parent_id) ?? 0;
+          accumulator.withdrawalTotal += amount;
+        }
+      }
+
+      console.log('[BalanceScores] Withdrawal accumulation per domain:', Array.from(domainAccumulator.entries()).map(([id, stats]) => ({
+        id,
+        ...stats,
       })));
 
-      const totalRawScore = rawScores.reduce((sum, score) => sum + score, 0);
-      const totalNormalizedScore = normalizedScores.reduce((sum, score) => sum + score, 0);
+      const domainList = Array.from(domainAccumulator.entries()).map(([id, stats]) => ({ id, ...stats }));
 
-      console.log('[BalanceScores] Score totals:', { totalRawScore, totalNormalizedScore });
-      // Use raw scores to determine if we have data, not normalized scores
-      const actuallyHasData = totalRawScore > 0;
-      console.log('[BalanceScores] Setting hasData to:', actuallyHasData);
-      setHasData(actuallyHasData);
+      const rawScores = domainList.map((entry) => {
+        if (calculationMode === 'count') {
+          return entry.depositCount;
+        }
+        const netScore = entry.depositPoints - entry.withdrawalTotal;
+        return netScore;
+      });
 
-      const finalScores: DomainScore[] = results.map((r, i) => ({
-        domain: r.domain,
-        score: normalizedScores[i],
-        color: r.color,
-      }));
+      console.log('[BalanceScores] Raw values prior to normalization:', domainList.map((entry, index) => ({
+        id: entry.id,
+        name: entry.name,
+        rawValue: rawScores[index],
+        deposits: entry.depositPoints,
+        withdrawals: entry.withdrawalTotal,
+        count: entry.depositCount,
+      })));
 
-      console.log('[BalanceScores] Platform:', Platform.OS);
+      const normalizedScores = normalizeScores(rawScores.map((value) => (value > 0 ? value : 0)));
+
+      const hasActivity = domainList.some((entry) =>
+        entry.depositCount > 0 || entry.depositPoints > 0 || entry.withdrawalTotal > 0
+      );
+      console.log('[BalanceScores] Setting hasData to:', hasActivity);
+      setHasData(hasActivity);
+
+      const finalScores: DomainScore[] = domainList.map((entry, index) => {
+        const domainMeta = domains.find((domain) => domain.id === entry.id);
+        const netScore = entry.depositPoints - entry.withdrawalTotal;
+        return {
+          domain: domainMeta?.name ?? entry.name,
+          score: normalizedScores[index] ?? 0,
+          color: getDomainColor(domainMeta?.name ?? entry.name),
+          rawValue: netScore,
+          depositCount: entry.depositCount,
+          depositPoints: entry.depositPoints,
+          withdrawalTotal: entry.withdrawalTotal,
+        };
+      });
+
       console.log('[BalanceScores] Final scores being set:', finalScores);
-      console.log('[BalanceScores] Scores have data:', finalScores.length > 0 && finalScores.some(s => s.score > 0));
       setDomainScores(finalScores);
     } catch (error) {
       console.error('[BalanceScores] Error fetching domain scores:', error);
+      setDomainScores([]);
+      setHasData(false);
     } finally {
       setLoading(false);
     }
-  }, [domains, calculationMode, calculateDomainScore, normalizeScores, getDomainColor]);
+  }, [domains, calculationMode, getDateFilter, groupByParentId, getDomainColor, normalizeScores]);
 
   useEffect(() => {
     fetchDomains();
   }, [fetchDomains]);
 
   useEffect(() => {
-    if (domains.length > 0) {
+    if (!domainsLoading) {
       fetchDomainScores();
     }
-  }, [domains, timeRange, calculationMode, fetchDomainScores]);
+  }, [domains, timeRange, calculationMode, domainsLoading, fetchDomainScores]);
+
+  const isLoading = loading || domainsLoading;
 
   return (
     <View style={styles.container}>
@@ -338,12 +429,12 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {loading ? (
+        {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0078d4" />
             <Text style={styles.loadingText}>Calculating balance scores...</Text>
           </View>
-        ) : domainScores.length === 0 ? (
+        ) : domains.length === 0 && domainScores.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Wellness Domains</Text>
             <Text style={styles.emptyText}>
@@ -371,16 +462,36 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
           </ChartErrorBoundary>
         )}
 
-        {!loading && domainScores.length > 0 && (
+        {!isLoading && domainScores.length > 0 && (
           <View style={styles.legend}>
             <Text style={styles.legendTitle}>Domain Scores</Text>
-            {domainScores.map((domain) => (
-              <View key={domain.domain} style={styles.legendItem}>
-                <View style={[styles.legendColorBox, { backgroundColor: domain.color }]} />
-                <Text style={styles.legendDomain}>{domain.domain}</Text>
-                <Text style={styles.legendScore}>{Math.round(domain.score)}</Text>
-              </View>
-            ))}
+            {domainScores.map((domain) => {
+              const normalizedValue = Math.round(domain.score);
+              const roundToOne = (value: number) => Math.round(value * 10) / 10;
+              const actualValue =
+                calculationMode === 'count'
+                  ? domain.depositCount
+                  : roundToOne(domain.rawValue);
+              return (
+                <View key={domain.domain} style={styles.legendItem}>
+                  <View style={[styles.legendColorBox, { backgroundColor: domain.color }]} />
+                  <View style={styles.legendTextGroup}>
+                    <Text style={styles.legendDomain}>{domain.domain}</Text>
+                    <Text style={styles.legendScore}>{normalizedValue}</Text>
+                  </View>
+                  <View style={styles.legendDetails}>
+                    <Text style={styles.legendActualLabel}>
+                      {calculationMode === 'count' ? 'Deposits' : 'Net Score'}: {actualValue}
+                    </Text>
+                    {calculationMode === 'score' && (
+                      <Text style={styles.legendBreakdown}>
+                        {`${roundToOne(domain.depositPoints)} − ${roundToOne(domain.withdrawalTotal)}`}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -515,7 +626,7 @@ const styles = StyleSheet.create({
   },
   legendItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
@@ -526,6 +637,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 12,
   },
+  legendTextGroup: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   legendDomain: {
     flex: 1,
     fontSize: 14,
@@ -535,5 +653,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
+  },
+  legendDetails: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  legendActualLabel: {
+    fontSize: 12,
+    color: '#374151',
+  },
+  legendBreakdown: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#6b7280',
   },
 });
