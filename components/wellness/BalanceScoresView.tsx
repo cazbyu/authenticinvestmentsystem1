@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { BalanceWheelChart } from './BalanceWheelChart';
 import { BalanceBarChart } from './BalanceBarChart';
@@ -27,12 +27,14 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   const [calculationMode, setCalculationMode] = useState<'count' | 'score'>('count');
   const [domainScores, setDomainScores] = useState<DomainScore[]>([]);
   const [loading, setLoading] = useState(false);
+  const [domainsLoading, setDomainsLoading] = useState(true);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [hasData, setHasData] = useState<boolean>(false);
 
   const fetchDomains = useCallback(async () => {
     try {
       console.log('[BalanceScores] Fetching domains...');
+      setDomainsLoading(true);
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('0008-ap-domains')
@@ -44,6 +46,9 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       setDomains(data || []);
     } catch (error) {
       console.error('[BalanceScores] Error fetching domains:', error);
+      setDomains([]);
+    } finally {
+      setDomainsLoading(false);
     }
   }, []);
 
@@ -64,128 +69,6 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
     });
     return map;
   }, []);
-
-  const calculateDomainScore = useCallback(async (domainId: string, domainName: string): Promise<{ taskCount: number; authenticScore: number }> => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log(`[BalanceScores] No user found for domain ${domainName}`);
-        return { taskCount: 0, authenticScore: 0 };
-      }
-
-      const dateFilter = getDateFilter();
-      console.log(`[BalanceScores] Calculating score for ${domainName}, dateFilter: ${dateFilter || 'all'}`);
-
-      let tasksQuery = supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_authentic_deposit, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .not('completed_at', 'is', null);
-
-      if (dateFilter) {
-        tasksQuery = tasksQuery.gte('completed_at', dateFilter);
-      }
-
-      const { data: tasksData, error: tasksError } = await tasksQuery;
-      if (tasksError) throw tasksError;
-
-      console.log(`[BalanceScores] Found ${tasksData?.length || 0} completed tasks for user`);
-
-      if (!tasksData || tasksData.length === 0) {
-        return { taskCount: 0, authenticScore: 0 };
-      }
-
-      const taskIds = tasksData.map((t: any) => t.id);
-
-      const [
-        rolesRes,
-        domainsRes,
-        goalsRes,
-      ] = await Promise.all([
-        supabase
-          .from('0008-ap-universal-roles-join')
-          .select('parent_id, role_id, role:0008-ap-roles(id,label)')
-          .in('parent_id', taskIds)
-          .eq('parent_type', 'task'),
-        supabase
-          .from('0008-ap-universal-domains-join')
-          .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
-          .in('parent_id', taskIds)
-          .eq('parent_type', 'task'),
-        supabase
-          .from('0008-ap-universal-goals-join')
-          .select(`
-            parent_id,
-            goal_type,
-            twelve_wk_goal_id,
-            custom_goal_id,
-            tw:0008-ap-goals-12wk(id,title,status),
-            cg:0008-ap-goals-custom(id,title,status)
-          `)
-          .in('parent_id', taskIds)
-          .eq('parent_type', 'task'),
-      ]);
-
-      const taskRoles = rolesRes.data ?? [];
-      const taskDomains = domainsRes.data ?? [];
-      const taskGoals = goalsRes.data ?? [];
-
-      const allowedTaskIds = new Set(
-        taskDomains
-          .filter((d: any) => d.domain?.id === domainId || d.domain_id === domainId)
-          .map((d: any) => d.parent_id)
-      );
-
-      console.log(`[BalanceScores] ${domainName}: ${allowedTaskIds.size} tasks linked to this domain`);
-
-      if (allowedTaskIds.size === 0) {
-        return { taskCount: 0, authenticScore: 0 };
-      }
-
-      const rolesByTask = groupByParentId(taskRoles as any);
-      const domainsByTask = groupByParentId(taskDomains as any);
-      const goalsByTask = groupByParentId(taskGoals as any);
-
-      let taskCount = 0;
-      let totalPoints = 0;
-
-      for (const t of tasksData) {
-        if (!allowedTaskIds.has(t.id)) continue;
-
-        taskCount++;
-
-        const roles = (rolesByTask.get(t.id) ?? []).map((r: any) => r.role).filter(Boolean);
-        const domains = (domainsByTask.get(t.id) ?? []).map((d: any) => d.domain).filter(Boolean);
-        const goals = (goalsByTask.get(t.id) ?? []).map((g: any) => {
-          if (g.goal_type === 'twelve_wk_goal' && g.tw) {
-            const goal = g.tw;
-            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-              return null;
-            }
-            return { ...goal, goal_type: '12week' };
-          } else if (g.goal_type === 'custom_goal' && g.cg) {
-            const goal = g.cg;
-            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-              return null;
-            }
-            return { ...goal, goal_type: 'custom' };
-          }
-          return null;
-        }).filter(Boolean);
-
-        const points = calculateTaskPoints(t, roles, domains, goals);
-        totalPoints += points;
-      }
-
-      console.log(`[BalanceScores] ${domainName}: taskCount=${taskCount}, authenticScore=${totalPoints}`);
-      return { taskCount, authenticScore: totalPoints };
-    } catch (error) {
-      console.error(`[BalanceScores] Error calculating domain score for ${domainName}:`, error);
-      return { taskCount: 0, authenticScore: 0 };
-    }
-  }, [getDateFilter, groupByParentId]);
 
   const normalizeScores = useCallback((scores: number[]): number[] => {
     console.log('[BalanceScores] Normalizing scores:', { scores, calculationMode });
@@ -228,56 +111,182 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   const fetchDomainScores = useCallback(async () => {
     if (domains.length === 0) {
       console.log('[BalanceScores] No domains to calculate scores for');
+      setDomainScores([]);
+      setHasData(false);
       return;
     }
 
     console.log(`[BalanceScores] Starting score calculation for ${domains.length} domains`);
     setLoading(true);
     try {
-      const scorePromises = domains.map(async (domain) => {
-        const { taskCount, authenticScore } = await calculateDomainScore(domain.id, domain.name);
-        const rawScore = calculationMode === 'count' ? taskCount : authenticScore;
-        return { domain: domain.name, rawScore, color: getDomainColor(domain.name) };
+      const supabase = getSupabaseClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        console.log('[BalanceScores] No authenticated user found when calculating scores');
+        setDomainScores([]);
+        setHasData(false);
+        return;
+      }
+
+      const dateFilter = getDateFilter();
+      console.log(`[BalanceScores] Fetching completed tasks with date filter: ${dateFilter || 'all'}`);
+
+      let tasksQuery = supabase
+        .from('0008-ap-tasks')
+        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_authentic_deposit, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .not('completed_at', 'is', null);
+
+      if (dateFilter) {
+        tasksQuery = tasksQuery.gte('completed_at', dateFilter);
+      }
+
+      const { data: tasksData, error: tasksError } = await tasksQuery;
+      if (tasksError) throw tasksError;
+
+      if (!tasksData || tasksData.length === 0) {
+        console.log('[BalanceScores] No completed tasks found for selected range');
+        const zeroScores = domains.map(domain => ({
+          domain: domain.name,
+          score: 0,
+          color: getDomainColor(domain.name),
+        }));
+        setDomainScores(zeroScores);
+        setHasData(false);
+        return;
+      }
+
+      const taskIds = tasksData.map((task: any) => task.id);
+
+      const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('parent_id, role_id, role:0008-ap-roles(id,label)')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-goals-join')
+          .select(`
+            parent_id,
+            goal_type,
+            twelve_wk_goal_id,
+            custom_goal_id,
+            tw:0008-ap-goals-12wk(id,title,status),
+            cg:0008-ap-goals-custom(id,title,status)
+          `)
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+      ]);
+
+      if (rolesRes.error) throw rolesRes.error;
+      if (domainsRes.error) throw domainsRes.error;
+      if (goalsRes.error) throw goalsRes.error;
+
+      const rolesByTask = groupByParentId(rolesRes.data as any);
+      const domainsByTask = groupByParentId(domainsRes.data as any);
+      const goalsByTask = groupByParentId(goalsRes.data as any);
+
+      const scoreAccumulator = new Map<string, { taskCount: number; authenticScore: number }>();
+      domains.forEach((domain) => {
+        scoreAccumulator.set(domain.id, { taskCount: 0, authenticScore: 0 });
       });
 
-      const results = await Promise.all(scorePromises);
-      const rawScores = results.map(r => r.rawScore);
-      console.log('[BalanceScores] Raw scores by domain:', results.map((r, i) => ({
-        domain: r.domain,
-        rawScore: r.rawScore
+      for (const task of tasksData) {
+        const taskDomainEntries = domainsByTask.get(task.id) ?? [];
+        if (taskDomainEntries.length === 0) {
+          continue;
+        }
+
+        const taskRoles = (rolesByTask.get(task.id) ?? []).map((r: any) => r.role).filter(Boolean);
+        const taskGoals = (goalsByTask.get(task.id) ?? [])
+          .map((g: any) => {
+            if (g.goal_type === 'twelve_wk_goal' && g.tw) {
+              const goal = g.tw;
+              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                return null;
+              }
+              return { ...goal, goal_type: '12week' };
+            } else if (g.goal_type === 'custom_goal' && g.cg) {
+              const goal = g.cg;
+              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                return null;
+              }
+              return { ...goal, goal_type: 'custom' };
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        const taskDomains = taskDomainEntries
+          .map((d: any) => {
+            if (d.domain) return d.domain;
+            const fallback = domains.find((domain) => domain.id === d.domain_id);
+            if (!fallback) return null;
+            return { id: fallback.id, name: fallback.name };
+          })
+          .filter(Boolean);
+
+        const points = calculateTaskPoints(task, taskRoles, taskDomains as any, taskGoals);
+
+        for (const domainEntry of taskDomainEntries) {
+          const domainId = domainEntry.domain_id ?? domainEntry.domain?.id;
+          if (!domainId) continue;
+
+          const current = scoreAccumulator.get(domainId);
+          if (!current) continue;
+
+          current.taskCount += 1;
+          current.authenticScore += points;
+        }
+      }
+
+      const rawScores = domains.map((domain) => {
+        const domainScores = scoreAccumulator.get(domain.id);
+        if (!domainScores) return 0;
+        return calculationMode === 'count' ? domainScores.taskCount : domainScores.authenticScore;
+      });
+
+      console.log('[BalanceScores] Raw scores by domain:', domains.map((domain, index) => ({
+        domain: domain.name,
+        rawScore: rawScores[index],
       })));
 
       const normalizedScores = normalizeScores(rawScores);
-      console.log('[BalanceScores] Normalized scores by domain:', results.map((r, i) => ({
-        domain: r.domain,
-        normalizedScore: normalizedScores[i]
+
+      console.log('[BalanceScores] Normalized scores by domain:', domains.map((domain, index) => ({
+        domain: domain.name,
+        normalizedScore: normalizedScores[index],
       })));
 
-      const totalRawScore = rawScores.reduce((sum, score) => sum + score, 0);
-      const totalNormalizedScore = normalizedScores.reduce((sum, score) => sum + score, 0);
-
-      console.log('[BalanceScores] Score totals:', { totalRawScore, totalNormalizedScore });
-      // Use raw scores to determine if we have data, not normalized scores
-      const actuallyHasData = totalRawScore > 0;
+      const actuallyHasData = rawScores.some((score) => score > 0);
       console.log('[BalanceScores] Setting hasData to:', actuallyHasData);
       setHasData(actuallyHasData);
 
-      const finalScores: DomainScore[] = results.map((r, i) => ({
-        domain: r.domain,
-        score: normalizedScores[i],
-        color: r.color,
+      const finalScores: DomainScore[] = domains.map((domain, index) => ({
+        domain: domain.name,
+        score: normalizedScores[index],
+        color: getDomainColor(domain.name),
       }));
 
-      console.log('[BalanceScores] Platform:', Platform.OS);
       console.log('[BalanceScores] Final scores being set:', finalScores);
-      console.log('[BalanceScores] Scores have data:', finalScores.length > 0 && finalScores.some(s => s.score > 0));
       setDomainScores(finalScores);
     } catch (error) {
       console.error('[BalanceScores] Error fetching domain scores:', error);
+      setDomainScores([]);
+      setHasData(false);
     } finally {
       setLoading(false);
     }
-  }, [domains, calculationMode, calculateDomainScore, normalizeScores, getDomainColor]);
+  }, [domains, calculationMode, getDateFilter, groupByParentId, getDomainColor, normalizeScores]);
 
   useEffect(() => {
     fetchDomains();
@@ -288,6 +297,8 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       fetchDomainScores();
     }
   }, [domains, timeRange, calculationMode, fetchDomainScores]);
+
+  const isLoading = loading || domainsLoading;
 
   return (
     <View style={styles.container}>
@@ -338,12 +349,12 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {loading ? (
+        {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0078d4" />
             <Text style={styles.loadingText}>Calculating balance scores...</Text>
           </View>
-        ) : domainScores.length === 0 ? (
+        ) : domains.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Wellness Domains</Text>
             <Text style={styles.emptyText}>
@@ -371,7 +382,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
           </ChartErrorBoundary>
         )}
 
-        {!loading && domainScores.length > 0 && (
+        {!isLoading && domainScores.length > 0 && (
           <View style={styles.legend}>
             <Text style={styles.legendTitle}>Domain Scores</Text>
             {domainScores.map((domain) => (
