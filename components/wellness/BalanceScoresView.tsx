@@ -37,7 +37,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       const { data, error } = await supabase
         .from('0008-ap-domains')
         .select('*')
-        .order('sort_order');
+        .order('name');
 
       if (error) throw error;
       console.log('[BalanceScores] Domains fetched:', data?.length || 0);
