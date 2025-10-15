@@ -28,9 +28,11 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   const [domainScores, setDomainScores] = useState<DomainScore[]>([]);
   const [loading, setLoading] = useState(false);
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [hasData, setHasData] = useState<boolean>(false);
 
   const fetchDomains = useCallback(async () => {
     try {
+      console.log('[BalanceScores] Fetching domains...');
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('0008-ap-domains')
@@ -38,9 +40,10 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
         .order('sort_order');
 
       if (error) throw error;
+      console.log('[BalanceScores] Domains fetched:', data?.length || 0);
       setDomains(data || []);
     } catch (error) {
-      console.error('Error fetching domains:', error);
+      console.error('[BalanceScores] Error fetching domains:', error);
     }
   }, []);
 
@@ -52,7 +55,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
     return since.toISOString().split('T')[0];
   }, [timeRange]);
 
-  const groupByParentId = <T extends { parent_id: string }>(rows: T[] | null | undefined) => {
+  const groupByParentId = useCallback(<T extends { parent_id: string }>(rows: T[] | null | undefined) => {
     const map = new Map<string, T[]>();
     (rows ?? []).forEach((r) => {
       const arr = map.get(r.parent_id) ?? [];
@@ -60,15 +63,19 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       map.set(r.parent_id, arr);
     });
     return map;
-  };
+  }, []);
 
-  const calculateDomainScore = useCallback(async (domainId: string): Promise<{ taskCount: number; authenticScore: number }> => {
+  const calculateDomainScore = useCallback(async (domainId: string, domainName: string): Promise<{ taskCount: number; authenticScore: number }> => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { taskCount: 0, authenticScore: 0 };
+      if (!user) {
+        console.log(`[BalanceScores] No user found for domain ${domainName}`);
+        return { taskCount: 0, authenticScore: 0 };
+      }
 
       const dateFilter = getDateFilter();
+      console.log(`[BalanceScores] Calculating score for ${domainName}, dateFilter: ${dateFilter || 'all'}`);
 
       let tasksQuery = supabase
         .from('0008-ap-tasks')
@@ -83,6 +90,8 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
 
       const { data: tasksData, error: tasksError } = await tasksQuery;
       if (tasksError) throw tasksError;
+
+      console.log(`[BalanceScores] Found ${tasksData?.length || 0} completed tasks for user`);
 
       if (!tasksData || tasksData.length === 0) {
         return { taskCount: 0, authenticScore: 0 };
@@ -129,13 +138,15 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
           .map((d: any) => d.parent_id)
       );
 
+      console.log(`[BalanceScores] ${domainName}: ${allowedTaskIds.size} tasks linked to this domain`);
+
       if (allowedTaskIds.size === 0) {
         return { taskCount: 0, authenticScore: 0 };
       }
 
-      const rolesByTask = groupByParentId(taskRoles);
-      const domainsByTask = groupByParentId(taskDomains);
-      const goalsByTask = groupByParentId(taskGoals);
+      const rolesByTask = groupByParentId(taskRoles as any);
+      const domainsByTask = groupByParentId(taskDomains as any);
+      const goalsByTask = groupByParentId(taskGoals as any);
 
       let taskCount = 0;
       let totalPoints = 0;
@@ -168,9 +179,10 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
         totalPoints += points;
       }
 
+      console.log(`[BalanceScores] ${domainName}: taskCount=${taskCount}, authenticScore=${totalPoints}`);
       return { taskCount, authenticScore: totalPoints };
     } catch (error) {
-      console.error(`Error calculating domain score:`, error);
+      console.error(`[BalanceScores] Error calculating domain score for ${domainName}:`, error);
       return { taskCount: 0, authenticScore: 0 };
     }
   }, [getDateFilter, groupByParentId]);
@@ -188,19 +200,29 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   }, [calculationMode]);
 
   const fetchDomainScores = useCallback(async () => {
-    if (domains.length === 0) return;
+    if (domains.length === 0) {
+      console.log('[BalanceScores] No domains to calculate scores for');
+      return;
+    }
 
+    console.log(`[BalanceScores] Starting score calculation for ${domains.length} domains`);
     setLoading(true);
     try {
       const scorePromises = domains.map(async (domain) => {
-        const { taskCount, authenticScore } = await calculateDomainScore(domain.id);
+        const { taskCount, authenticScore } = await calculateDomainScore(domain.id, domain.name);
         const rawScore = calculationMode === 'count' ? taskCount : authenticScore;
         return { domain: domain.name, rawScore, color: getDomainColor(domain.name) };
       });
 
       const results = await Promise.all(scorePromises);
       const rawScores = results.map(r => r.rawScore);
+      console.log('[BalanceScores] Raw scores:', rawScores);
+
+      const totalRawScore = rawScores.reduce((sum, score) => sum + score, 0);
+      setHasData(totalRawScore > 0);
+
       const normalizedScores = normalizeScores(rawScores);
+      console.log('[BalanceScores] Normalized scores:', normalizedScores);
 
       const finalScores: DomainScore[] = results.map((r, i) => ({
         domain: r.domain,
@@ -208,9 +230,10 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
         color: r.color,
       }));
 
+      console.log('[BalanceScores] Final scores being set:', finalScores);
       setDomainScores(finalScores);
     } catch (error) {
-      console.error('Error fetching domain scores:', error);
+      console.error('[BalanceScores] Error fetching domain scores:', error);
     } finally {
       setLoading(false);
     }
@@ -280,11 +303,15 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
             <ActivityIndicator size="large" color="#0078d4" />
             <Text style={styles.loadingText}>Calculating balance scores...</Text>
           </View>
-        ) : domainScores.length === 0 ? (
+        ) : domainScores.length === 0 || !hasData ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Data Available</Text>
             <Text style={styles.emptyText}>
-              Complete tasks in different wellness domains to see your balance scores.
+              {timeRange === 'week'
+                ? 'No completed tasks found in the past week. Try selecting "Month" or "All" to see your balance scores.'
+                : timeRange === 'month'
+                ? 'No completed tasks found in the past month. Try selecting "All" to see your balance scores.'
+                : 'Complete tasks in different wellness domains to see your balance scores.'}
             </Text>
           </View>
         ) : activeChartView === 'wheel' ? (
