@@ -612,6 +612,8 @@ export default function Roles() {
     setPeriodScore(undefined);
     setTasks([]);
     setDepositIdeas([]);
+    // Clear KRs to prevent showing stale data from previous views
+    setKeyRelationships([]);
     setFetchState('idle');
     setLoading(false);
     setKRLoading(false);
@@ -643,7 +645,8 @@ export default function Roles() {
     registerResetHandler('roles', resetToMain);
 
     fetchRoles();
-    fetchAllKeyRelationships();
+    // Only fetch all KRs when on the Key Relationships tab, not on mount
+    // This prevents ALL KRs from being loaded when viewing individual roles
 
     return () => {
       unregisterResetHandler('roles');
@@ -665,6 +668,9 @@ export default function Roles() {
         try {
           fetchInProgressRef.current = true;
           setFetchState('loading-data');
+
+          // Clear KRs first to prevent showing ALL KRs while loading
+          setKeyRelationships([]);
 
           // Fetch in parallel for better performance
           const krPromise = fetchKeyRelationships(selectedRole.id);
@@ -743,6 +749,13 @@ export default function Roles() {
       setPeriodScore(undefined);
     }
   }, [activeView, krJournalView, selectedRole?.id, selectedKR?.id, journalDateRange, calculatePeriodScore]);
+
+  // Fetch all KRs when Key Relationships tab is selected (for the main tab view)
+  useEffect(() => {
+    if (activeMainTab === 'keyrelationships' && !selectedRole && !selectedKR) {
+      fetchAllKeyRelationships();
+    }
+  }, [activeMainTab, selectedRole, selectedKR]);
 
   const handleViewChange = (view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
@@ -932,6 +945,9 @@ export default function Roles() {
     if (fetchAbortController.current) {
       fetchAbortController.current.abort();
     }
+
+    // Clear KRs immediately to prevent showing wrong KRs during transition
+    setKeyRelationships([]);
 
     // Immediately update selected role without blocking on loading states
     setSelectedRole(role);
@@ -1391,7 +1407,7 @@ export default function Roles() {
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={styles.keyRelationshipsList}>
-                  {keyRelationships.map(kr => (
+                  {keyRelationships.filter(kr => kr.role_id === selectedRole.id).map(kr => (
                     <TouchableOpacity
                       key={kr.id}
                       style={styles.keyRelationshipCard}
