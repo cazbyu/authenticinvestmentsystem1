@@ -18,6 +18,7 @@ import { formatLocalDate } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 // --- Main Dashboard Screen Component ---
 export default function Dashboard() {
@@ -267,8 +268,43 @@ export default function Dashboard() {
   useEffect(() => {
     registerResetHandler('dashboard', resetToMain);
     fetchData();
+
+    // Listen for task creation events from other components
+    const handleTaskCreated = () => {
+      console.log('[Dashboard] Received task created event, refreshing...');
+      fetchData();
+    };
+
+    const handleTaskUpdated = () => {
+      console.log('[Dashboard] Received task updated event, refreshing...');
+      fetchData();
+    };
+
+    const handleTaskDeleted = () => {
+      console.log('[Dashboard] Received task deleted event, refreshing...');
+      fetchData();
+    };
+
+    const handleRefreshAll = () => {
+      console.log('[Dashboard] Received refresh all event, refreshing...');
+      fetchData();
+    };
+
+    eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskUpdated);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskDeleted);
+    eventBus.on(EVENTS.REFRESH_ALL_TASKS, handleRefreshAll);
+    eventBus.on(EVENTS.DEPOSIT_IDEA_CREATED, handleRefreshAll);
+    eventBus.on(EVENTS.WITHDRAWAL_CREATED, handleRefreshAll);
+
     return () => {
       unregisterResetHandler('dashboard');
+      eventBus.off(EVENTS.TASK_CREATED, handleTaskCreated);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskUpdated);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskDeleted);
+      eventBus.off(EVENTS.REFRESH_ALL_TASKS, handleRefreshAll);
+      eventBus.off(EVENTS.DEPOSIT_IDEA_CREATED, handleRefreshAll);
+      eventBus.off(EVENTS.WITHDRAWAL_CREATED, handleRefreshAll);
     };
   }, [activeView, sortOption, registerResetHandler, unregisterResetHandler, resetToMain]);
 

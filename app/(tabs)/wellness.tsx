@@ -20,6 +20,7 @@ import { DraggableFab } from '@/components/DraggableFab';
 import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -342,10 +343,26 @@ export default function Wellness() {
   useEffect(() => {
     registerResetHandler('wellness', resetToMain);
     fetchDomains();
+
+    // Listen for task creation events from other components
+    const handleTaskEvent = () => {
+      console.log('[WellnessBank] Received task event, refreshing data...');
+      if (selectedDomain) {
+        fetchDomainTasks(selectedDomain.id, activeView);
+      }
+    };
+
+    eventBus.on(EVENTS.TASK_CREATED, handleTaskEvent);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskEvent);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskEvent);
+
     return () => {
       unregisterResetHandler('wellness');
+      eventBus.off(EVENTS.TASK_CREATED, handleTaskEvent);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskEvent);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
     };
-  }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain]);
+  }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain, selectedDomain, activeView]);
 
   const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
     try {

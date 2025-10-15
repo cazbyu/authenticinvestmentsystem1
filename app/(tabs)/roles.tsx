@@ -22,6 +22,7 @@ import { useGoals } from '@/hooks/useGoals';
 import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -645,8 +646,21 @@ export default function Roles() {
     registerResetHandler('roles', resetToMain);
 
     fetchRoles();
-    // Only fetch all KRs when on the Key Relationships tab, not on mount
-    // This prevents ALL KRs from being loaded when viewing individual roles
+
+    // Listen for task creation events from other components
+    const handleTaskEvent = () => {
+      console.log('[RoleBank] Received task event, refreshing data...');
+      if (selectedRole) {
+        fetchRoleTasks(selectedRole.id, activeView);
+      }
+      if (selectedKR) {
+        fetchKRTasks(selectedKR.id, krView);
+      }
+    };
+
+    eventBus.on(EVENTS.TASK_CREATED, handleTaskEvent);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskEvent);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskEvent);
 
     return () => {
       unregisterResetHandler('roles');
@@ -656,8 +670,11 @@ export default function Roles() {
       if (fetchAbortController.current) {
         fetchAbortController.current.abort();
       }
+      eventBus.off(EVENTS.TASK_CREATED, handleTaskEvent);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskEvent);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
     };
-  }, [registerResetHandler, unregisterResetHandler, resetToMain]);
+  }, [registerResetHandler, unregisterResetHandler, resetToMain, selectedRole, selectedKR, activeView, krView]);
 
   useEffect(() => {
     if (selectedRole && !isLoadingRole && !fetchInProgressRef.current) {

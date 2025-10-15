@@ -19,6 +19,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'depositIdea' | 'withdrawal';
@@ -760,6 +761,19 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       }
 
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
+
+      // Broadcast event to notify other components
+      if (formData.type === 'withdrawal') {
+        eventBus.emit(mode === 'edit' ? EVENTS.WITHDRAWAL_CREATED : EVENTS.WITHDRAWAL_CREATED);
+      } else if (formData.type === 'depositIdea') {
+        eventBus.emit(mode === 'edit' ? EVENTS.DEPOSIT_IDEA_UPDATED : EVENTS.DEPOSIT_IDEA_CREATED);
+      } else {
+        eventBus.emit(mode === 'edit' ? EVENTS.TASK_UPDATED : EVENTS.TASK_CREATED, {
+          taskId: mainRecordId,
+          type: formData.type,
+        });
+      }
+
       onSubmitSuccess();
     } catch (error) {
       console.error('Error saving:', error);
