@@ -13,6 +13,18 @@ interface BalanceBarChartProps {
 }
 
 export function BalanceBarChart({ data }: BalanceBarChartProps) {
+  console.log('[BalanceBarChart.web] Rendering with data:', data);
+
+  // Handle empty or invalid data
+  if (!data || data.length === 0) {
+    console.log('[BalanceBarChart.web] No data provided');
+    return (
+      <View style={styles.container}>
+        <Text style={styles.noDataText}>No data available</Text>
+      </View>
+    );
+  }
+
   const screenWidth = Dimensions.get('window').width;
   const chartWidth = Math.min(screenWidth - 32, 500);
   const chartHeight = 400;
@@ -81,8 +93,20 @@ export function BalanceBarChart({ data }: BalanceBarChartProps) {
         {/* Bars and labels */}
         {data.map((d, i) => {
           const x = padding.left + (i + 0.5) * barSpacing - barWidth / 2;
-          const barHeight = (d.score / maxValue) * plotHeight;
+          // Ensure score is valid and add minimum height for visibility
+          const validScore = isNaN(d.score) ? 0 : d.score;
+          const calculatedHeight = (validScore / maxValue) * plotHeight;
+          // Minimum bar height of 3px for non-zero values for visibility
+          const barHeight = validScore > 0 ? Math.max(calculatedHeight, 3) : 0;
           const y = padding.top + plotHeight - barHeight;
+
+          console.log(`[BalanceBarChart.web] Bar ${i} (${d.domain}):`, {
+            score: d.score,
+            validScore,
+            calculatedHeight,
+            barHeight,
+            y
+          });
 
           return (
             <G key={i}>
@@ -97,17 +121,19 @@ export function BalanceBarChart({ data }: BalanceBarChartProps) {
                 ry={4}
               />
 
-              {/* Score label on top of bar */}
-              <SvgText
-                x={x + barWidth / 2}
-                y={y - 10}
-                fontSize={12}
-                fontWeight="600"
-                fill="#1f2937"
-                textAnchor="middle"
-              >
-                {Math.round(d.score)}
-              </SvgText>
+              {/* Score label on top of bar - only show if bar has height */}
+              {barHeight > 0 && (
+                <SvgText
+                  x={x + barWidth / 2}
+                  y={Math.max(y - 10, padding.top + 10)}
+                  fontSize={12}
+                  fontWeight="600"
+                  fill="#1f2937"
+                  textAnchor="middle"
+                >
+                  {Math.round(validScore)}
+                </SvgText>
+              )}
 
               {/* Domain name label (rotated) */}
               <SvgText
@@ -141,5 +167,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    padding: 40,
   },
 });

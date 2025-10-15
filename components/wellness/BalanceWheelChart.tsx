@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import { VictoryPolarAxis, VictoryArea, VictoryChart } from 'victory-native';
+import { View, Text, StyleSheet } from 'react-native';
 
 interface DomainScore {
   domain: string;
@@ -13,50 +12,26 @@ interface BalanceWheelChartProps {
 }
 
 export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
-  const screenWidth = Dimensions.get('window').width;
-  const chartSize = Math.min(screenWidth - 32, 400);
+  console.log('[BalanceWheelChart.native] Rendering with data:', data);
 
+  // This component is for native platforms and uses a different rendering approach
+  // For web, the .web.tsx version is used automatically
   return (
     <View style={styles.container}>
-      <VictoryChart
-        polar
-        height={chartSize}
-        width={chartSize}
-        padding={{ top: 50, bottom: 50, left: 50, right: 50 }}
-      >
-        <VictoryPolarAxis
-          dependentAxis
-          style={{
-            axis: { stroke: '#e5e7eb', strokeWidth: 1 },
-            grid: { stroke: '#e5e7eb', strokeWidth: 0.5 },
-            tickLabels: { fill: '#6b7280', fontSize: 10 },
-          }}
-          tickValues={[0, 25, 50, 75, 100]}
-          domain={[0, 100]}
-        />
-        <VictoryPolarAxis
-          labelPlacement="perpendicular"
-          style={{
-            axis: { stroke: 'none' },
-            grid: { stroke: '#e5e7eb', strokeWidth: 1 },
-            tickLabels: { fill: '#1f2937', fontSize: 12, fontWeight: '600' },
-          }}
-          tickValues={data.map((_, i) => i)}
-          tickFormat={data.map(d => d.domain)}
-        />
-        <VictoryArea
-          data={data.map((d, i) => ({ x: i, y: d.score }))}
-          style={{
-            data: {
-              fill: '#3b82f6',
-              fillOpacity: 0.4,
-              stroke: '#3b82f6',
-              strokeWidth: 2,
-            },
-          }}
-          interpolation="catmullRom"
-        />
-      </VictoryChart>
+      <Text style={styles.noticeText}>
+        Chart rendering is optimized for web. Please use the web version to view charts.
+      </Text>
+      {data && data.length > 0 && (
+        <View style={styles.dataList}>
+          {data.map((item, index) => (
+            <View key={index} style={styles.dataItem}>
+              <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
+              <Text style={styles.domainText}>{item.domain}</Text>
+              <Text style={styles.scoreText}>{Math.round(item.score)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -73,5 +48,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  noticeText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  dataList: {
+    width: '100%',
+  },
+  dataItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  colorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  domainText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+  },
+  scoreText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
   },
 });

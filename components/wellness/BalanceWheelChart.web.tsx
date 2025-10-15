@@ -13,6 +13,18 @@ interface BalanceWheelChartProps {
 }
 
 export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
+  console.log('[BalanceWheelChart.web] Rendering with data:', data);
+
+  // Handle empty or invalid data
+  if (!data || data.length === 0) {
+    console.log('[BalanceWheelChart.web] No data provided');
+    return (
+      <View style={styles.container}>
+        <Text style={styles.noDataText}>No data available</Text>
+      </View>
+    );
+  }
+
   const screenWidth = Dimensions.get('window').width;
   const chartSize = Math.min(screenWidth - 32, 400);
   const center = chartSize / 2;
@@ -20,10 +32,26 @@ export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
 
   // Calculate polygon points for the radar chart
   const calculatePoint = (score: number, index: number, total: number) => {
+    if (total === 0) {
+      console.warn('[BalanceWheelChart.web] Total is 0, returning center point');
+      return { x: center, y: center };
+    }
+
     const angle = (index * 2 * Math.PI) / total - Math.PI / 2;
-    const radius = (score / 100) * maxRadius;
+    // Ensure score is a valid number, default to 0 if not
+    const validScore = isNaN(score) ? 0 : score;
+    // Add minimum radius for visibility (5% of max) if score > 0
+    const minRadius = validScore > 0 ? maxRadius * 0.05 : 0;
+    const radius = Math.max((validScore / 100) * maxRadius, minRadius);
     const x = center + radius * Math.cos(angle);
     const y = center + radius * Math.sin(angle);
+
+    // Validate coordinates
+    if (isNaN(x) || isNaN(y)) {
+      console.warn('[BalanceWheelChart.web] Invalid coordinates:', { x, y, score, angle });
+      return { x: center, y: center };
+    }
+
     return { x, y };
   };
 
@@ -43,6 +71,14 @@ export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
       return `${point.x},${point.y}`;
     })
     .join(' ');
+
+  console.log('[BalanceWheelChart.web] Polygon points:', polygonPoints);
+
+  // Check if all points are at the center (all zeros)
+  const allZeros = data.every(d => d.score === 0);
+  if (allZeros) {
+    console.log('[BalanceWheelChart.web] All scores are zero');
+  }
 
   // Generate grid circles
   const gridLevels = [25, 50, 75, 100];
@@ -133,5 +169,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    padding: 40,
   },
 });

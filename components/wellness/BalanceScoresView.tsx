@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch, Platform } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { BalanceWheelChart } from './BalanceWheelChart';
 import { BalanceBarChart } from './BalanceBarChart';
@@ -188,15 +188,33 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   }, [getDateFilter, groupByParentId]);
 
   const normalizeScores = useCallback((scores: number[]): number[] => {
-    if (calculationMode === 'score') {
-      return scores;
-    }
+    console.log('[BalanceScores] Normalizing scores:', { scores, calculationMode });
 
+    // ALWAYS normalize to 0-100 scale for consistent chart rendering
     const maxScore = Math.max(...scores, 1);
 
-    if (maxScore === 0) return scores.map(() => 0);
+    if (maxScore === 0) {
+      console.log('[BalanceScores] All scores are zero, returning zeros');
+      return scores.map(() => 0);
+    }
 
-    return scores.map(score => Math.round((score / maxScore) * 100));
+    // In score mode, if max score is less than 100, normalize it
+    // In count mode, always normalize
+    const normalized = scores.map(score => {
+      if (calculationMode === 'score' && maxScore > 100) {
+        // If scores are already > 100, scale them down
+        return Math.round((score / maxScore) * 100);
+      } else if (calculationMode === 'score' && maxScore <= 100) {
+        // If scores are small (0-100), show them as-is but ensure visibility
+        return score === 0 ? 0 : Math.max(score, 5); // Minimum 5 for visibility
+      } else {
+        // Count mode - normalize to 0-100
+        return Math.round((score / maxScore) * 100);
+      }
+    });
+
+    console.log('[BalanceScores] Normalized result:', normalized);
+    return normalized;
   }, [calculationMode]);
 
   const fetchDomainScores = useCallback(async () => {
@@ -218,11 +236,14 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       const rawScores = results.map(r => r.rawScore);
       console.log('[BalanceScores] Raw scores:', rawScores);
 
-      const totalRawScore = rawScores.reduce((sum, score) => sum + score, 0);
-      setHasData(totalRawScore > 0);
-
       const normalizedScores = normalizeScores(rawScores);
       console.log('[BalanceScores] Normalized scores:', normalizedScores);
+
+      const totalRawScore = rawScores.reduce((sum, score) => sum + score, 0);
+      const totalNormalizedScore = normalizedScores.reduce((sum, score) => sum + score, 0);
+
+      console.log('[BalanceScores] Score totals:', { totalRawScore, totalNormalizedScore });
+      setHasData(totalNormalizedScore > 0);
 
       const finalScores: DomainScore[] = results.map((r, i) => ({
         domain: r.domain,
@@ -230,7 +251,9 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
         color: r.color,
       }));
 
+      console.log('[BalanceScores] Platform:', Platform.OS);
       console.log('[BalanceScores] Final scores being set:', finalScores);
+      console.log('[BalanceScores] Scores have data:', finalScores.length > 0 && finalScores.some(s => s.score > 0));
       setDomainScores(finalScores);
     } catch (error) {
       console.error('[BalanceScores] Error fetching domain scores:', error);

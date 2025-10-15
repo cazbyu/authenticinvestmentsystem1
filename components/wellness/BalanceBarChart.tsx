@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import { VictoryBar, VictoryChart, VictoryAxis, VictoryLabel } from 'victory-native';
+import { View, Text, StyleSheet } from 'react-native';
 
 interface DomainScore {
   domain: string;
@@ -13,57 +12,26 @@ interface BalanceBarChartProps {
 }
 
 export function BalanceBarChart({ data }: BalanceBarChartProps) {
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = Math.min(screenWidth - 32, 500);
+  console.log('[BalanceBarChart.native] Rendering with data:', data);
 
+  // This component is for native platforms and uses a different rendering approach
+  // For web, the .web.tsx version is used automatically
   return (
     <View style={styles.container}>
-      <VictoryChart
-        height={400}
-        width={chartWidth}
-        padding={{ top: 30, bottom: 80, left: 50, right: 20 }}
-        domainPadding={{ x: 20 }}
-      >
-        <VictoryAxis
-          style={{
-            axis: { stroke: '#e5e7eb', strokeWidth: 1 },
-            tickLabels: {
-              fill: '#1f2937',
-              fontSize: 10,
-              fontWeight: '600',
-              angle: -45,
-              textAnchor: 'end',
-              verticalAnchor: 'middle',
-            },
-          }}
-          tickFormat={data.map(d => d.domain)}
-        />
-        <VictoryAxis
-          dependentAxis
-          style={{
-            axis: { stroke: '#e5e7eb', strokeWidth: 1 },
-            grid: { stroke: '#e5e7eb', strokeWidth: 0.5 },
-            tickLabels: { fill: '#6b7280', fontSize: 10 },
-          }}
-          domain={[0, 100]}
-          tickValues={[0, 25, 50, 75, 100]}
-        />
-        <VictoryBar
-          data={data.map((d, i) => ({ x: i + 1, y: d.score, fill: d.color }))}
-          style={{
-            data: { fill: ({ datum }) => datum.fill },
-          }}
-          cornerRadius={{ top: 4 }}
-          barWidth={30}
-          labels={({ datum }) => `${Math.round(datum.y)}`}
-          labelComponent={
-            <VictoryLabel
-              dy={-10}
-              style={{ fill: '#1f2937', fontSize: 12, fontWeight: '600' }}
-            />
-          }
-        />
-      </VictoryChart>
+      <Text style={styles.noticeText}>
+        Chart rendering is optimized for web. Please use the web version to view charts.
+      </Text>
+      {data && data.length > 0 && (
+        <View style={styles.dataList}>
+          {data.map((item, index) => (
+            <View key={index} style={styles.dataItem}>
+              <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
+              <Text style={styles.domainText}>{item.domain}</Text>
+              <Text style={styles.scoreText}>{Math.round(item.score)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -80,5 +48,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  noticeText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  dataList: {
+    width: '100%',
+  },
+  dataItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  colorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  domainText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+  },
+  scoreText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
   },
 });
