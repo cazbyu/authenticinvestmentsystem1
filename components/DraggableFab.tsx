@@ -71,21 +71,17 @@ export function DraggableFab({
     })
     .onEnd(() => {
       isPressed.value = false;
-      
-      // Snap to edges for better UX
+
       const currentX = translateX.value;
       const currentY = translateY.value;
 
       const { width, height } = screenDimensions.current;
 
-      // Snap to left or right edge
-      if (currentX < width / 2) {
-        translateX.value = withSpring(20); // Snap to left with padding
-      } else {
-        translateX.value = withSpring(width - size - 20); // Snap to right with padding
-      }
-
-      // Keep Y position but ensure it's within bounds
+      // Keep FAB at current position with smooth animation
+      // Apply boundaries to ensure it stays within screen bounds
+      translateX.value = withSpring(
+        clamp(currentX, 20, width - size - 20)
+      );
       translateY.value = withSpring(
         clamp(currentY, 20, height - size - 100)
       );
