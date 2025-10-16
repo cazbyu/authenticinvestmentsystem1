@@ -21,7 +21,6 @@ import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthen
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { AuthenticUsageDisplay } from '@/components/authentic/AuthenticUsageDisplay';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -720,18 +719,6 @@ export default function Wellness() {
       // Domain view
       return (
         <View style={styles.content}>
-
-          {/* Authentic Usage Display */}
-          {activeView === 'deposits' && currentUserId && (
-            <AuthenticUsageDisplay
-              userId={currentUserId}
-              scope={{
-                type: 'domain',
-                id: selectedDomain.id,
-                name: selectedDomain.name
-              }}
-            />
-          )}
 
           {/* 12-Week Goals Section */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && (

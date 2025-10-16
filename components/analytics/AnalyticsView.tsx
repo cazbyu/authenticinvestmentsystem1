@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, Award } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { fetchAuthenticUsage } from '@/lib/authenticDepositUtils';
+import { fetchAuthenticUsage, fetchScopedAuthenticCount, fetchUserWeekStartDay, calculateWeekBoundaries } from '@/lib/authenticDepositUtils';
 import { eventBus } from '@/lib/eventBus';
 
 interface AnalyticsEntry {
@@ -54,6 +54,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<'4weeks' | '12weeks' | '26weeks'>('12weeks');
   const [filter, setFilter] = useState<'all' | 'deposits' | 'withdrawals'>('all');
+  const [scopedAuthenticCount, setScopedAuthenticCount] = useState<number | null>(null);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const previousScopeRef = React.useRef<string>('');
@@ -458,6 +459,39 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
     }
   };
 
+  const getScopedAuthenticCount = async () => {
+    try {
+      if (!scope.id || scope.type === 'user') {
+        setScopedAuthenticCount(null);
+        return;
+      }
+
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const weekStartDay = await fetchUserWeekStartDay(supabase, user.id);
+      const { weekStart, weekEnd } = calculateWeekBoundaries(weekStartDay);
+
+      const count = await fetchScopedAuthenticCount(
+        supabase,
+        user.id,
+        {
+          type: scope.type as 'role' | 'domain' | 'key_relationship',
+          id: scope.id,
+          name: scope.name
+        },
+        weekStart,
+        weekEnd
+      );
+
+      setScopedAuthenticCount(count);
+    } catch (error) {
+      console.error('Error getting scoped authentic count:', error);
+      setScopedAuthenticCount(null);
+    }
+  };
+
   useEffect(() => {
     // Create a stable scope key for comparison
     const scopeKey = JSON.stringify(scope);
@@ -482,6 +516,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
     // Debounce the fetch to prevent rapid consecutive calls
     fetchTimeoutRef.current = setTimeout(() => {
       fetchAnalyticsData();
+      getScopedAuthenticCount();
     }, 300);
 
     return () => {
@@ -497,6 +532,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
   useEffect(() => {
     const handleTaskEvent = () => {
       fetchAnalyticsData();
+      getScopedAuthenticCount();
     };
 
     eventBus.on('TASK_CREATED', handleTaskEvent);
@@ -745,6 +781,11 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
             <Text style={styles.gaugeText}>
               {metrics.authenticUsageThisWeek} / 14 authentic deposits used
             </Text>
+            {scopedAuthenticCount !== null && scope.name && (
+              <Text style={styles.scopedCountText}>
+                {scopedAuthenticCount} for {scope.name} this week
+              </Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -989,6 +1030,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
+  },
+  scopedCountText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 6,
   },
   loadingContainer: {
     flex: 1,

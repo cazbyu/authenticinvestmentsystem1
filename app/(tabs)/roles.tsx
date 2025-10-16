@@ -23,7 +23,6 @@ import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRo
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { AuthenticUsageDisplay } from '@/components/authentic/AuthenticUsageDisplay';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -1270,18 +1269,6 @@ export default function Roles() {
       return (
         <View style={styles.content}>
 
-          {/* Authentic Usage Display for KR */}
-          {krJournalView === 'deposits' && currentUserId && (
-            <AuthenticUsageDisplay
-              userId={currentUserId}
-              scope={{
-                type: 'key_relationship',
-                id: selectedKR.id,
-                name: selectedKR.name
-              }}
-            />
-          )}
-
           <ScrollView style={styles.taskList}>
             {krJournalView === 'journal' ? (
               krJournalScope && (
@@ -1348,18 +1335,6 @@ export default function Roles() {
       // Role view
       return (
         <View style={styles.content}>
-
-          {/* Authentic Usage Display */}
-          {activeView === 'deposits' && currentUserId && (
-            <AuthenticUsageDisplay
-              userId={currentUserId}
-              scope={{
-                type: 'role',
-                id: selectedRole.id,
-                name: selectedRole.label
-              }}
-            />
-          )}
 
           {/* 12-Week Goals Strip - Only show when data is stable */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && fetchState === 'complete' && (
