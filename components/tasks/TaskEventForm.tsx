@@ -126,7 +126,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     type: 'task',
     title: '',
     dueDate: formatLocalDate(new Date()),
-    dueTime: '',
+    dueTime: getInitialDefaultTime(),
     startDate: formatLocalDate(new Date()),
     endDate: formatLocalDate(new Date()),
     startTime: getInitialDefaultTime(),
