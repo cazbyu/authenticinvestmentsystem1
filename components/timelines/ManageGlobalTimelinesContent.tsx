@@ -29,6 +29,7 @@ interface GlobalCycle {
   status: string;
   cycle_position: 'active' | '2nd_in_line' | '3rd_in_line' | '4th_in_line' | 'archived' | 'future';
   can_activate: boolean;
+  previous_cycle_reflection_start?: string;
 }
 
 interface UserGlobalTimeline {
@@ -189,7 +190,8 @@ export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelines
               reflection_end: cycle.reflection_end,
               status: cycle.status,
               cycle_position: cycle.cycle_position,
-              can_activate: cycle.can_activate
+              can_activate: cycle.can_activate,
+              previous_cycle_reflection_start: cycle.previous_cycle_reflection_start
             } as GlobalCycle
           } as ActiveTimelineWithCycle);
         });
@@ -485,7 +487,7 @@ export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelines
           let lockedMessage = '';
           if (!canActivate && !isActivated) {
             if (cyclePosition === '2nd_in_line') {
-              const reflectionStart = cycle.global_cycle?.reflection_start || cycle.reflection_start;
+              const reflectionStart = cycle.global_cycle?.previous_cycle_reflection_start || cycle.previous_cycle_reflection_start;
               const formattedDate = reflectionStart ? formatDateDisplay(reflectionStart) : '';
               lockedMessage = formattedDate
                 ? `Available starting ${formattedDate} (during current cycle's reflection week)`
