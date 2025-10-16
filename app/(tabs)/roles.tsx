@@ -9,6 +9,7 @@ import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { ManageRolesModal } from '@/components/settings/ManageRolesModal';
+import { ManageRolesContent } from '@/components/settings/ManageRolesContent';
 import { EditRoleModal } from '@/components/settings/EditRoleModal';
 import { EditKRModal } from '@/components/settings/EditKRModal';
 import { JournalView } from '@/components/journal/JournalView';
@@ -60,7 +61,7 @@ export default function Roles() {
   const [krJournalView, setKRJournalView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
 
   // Main tab navigation state
-  const [activeMainTab, setActiveMainTab] = useState<'roles' | 'keyrelationships'>('roles');
+  const [activeMainTab, setActiveMainTab] = useState<'roles' | 'keyrelationships' | 'manageRoles'>('roles');
 
   // Modal states
   const [manageRolesVisible, setManageRolesVisible] = useState(false);
@@ -666,6 +667,17 @@ export default function Roles() {
     fetchInProgressRef.current = false;
   }, []);
 
+  // Navigate to Manage Roles view
+  const showManageRolesView = useCallback(() => {
+    setActiveMainTab('manageRoles');
+  }, []);
+
+  // Return from Manage Roles view
+  const hideManageRolesView = useCallback(() => {
+    setActiveMainTab('roles');
+    fetchRoles(); // Refresh roles after managing them
+  }, []);
+
   useEffect(() => {
     // Register reset handler for this tab
     registerResetHandler('roles', resetToMain);
@@ -1116,6 +1128,29 @@ export default function Roles() {
 
   // Render custom header
   const renderRoleBankHeader = () => {
+    if (activeMainTab === 'manageRoles') {
+      // Manage Roles view header
+      return (
+        <View style={styles.customHeader}>
+          <View style={styles.customHeaderTop}>
+            <TouchableOpacity
+              style={styles.customBackButton}
+              onPress={hideManageRolesView}
+            >
+              <Text style={styles.customBackButtonText}>← Back to Role Bank</Text>
+            </TouchableOpacity>
+            <View style={styles.customHeaderCenter}>
+              <Text style={styles.customHeaderTitle}>Manage Roles</Text>
+            </View>
+            <View style={styles.customScoreContainer}>
+              <Text style={styles.customScoreLabel}>Authentic Score</Text>
+              <Text style={styles.customScoreValue}>{authenticScore}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
     if (selectedKR) {
       // Key Relationship detail header
       return (
@@ -1242,7 +1277,7 @@ export default function Roles() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.customToggleButton]}
-                onPress={() => setManageRolesVisible(true)}
+                onPress={showManageRolesView}
               >
                 <Text style={[styles.customToggleText]}>
                   Manage Roles
@@ -1264,6 +1299,17 @@ export default function Roles() {
   };
 
   const renderContent = () => {
+    if (activeMainTab === 'manageRoles') {
+      // Manage Roles view
+      return (
+        <View style={styles.content}>
+          <ManageRolesContent
+            onUpdate={handleManageRolesUpdate}
+          />
+        </View>
+      );
+    }
+
     if (selectedKR) {
       // Key Relationship view
       return (
