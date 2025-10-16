@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, Award } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
+import { fetchAuthenticUsage } from '@/lib/authenticDepositUtils';
+import { eventBus } from '@/lib/eventBus';
 
 interface AnalyticsEntry {
   id: string;
@@ -298,9 +300,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
       Math.round((authenticDepositsCount / deposits.length) * 100);
 
     // Get current week authentic usage
-    const thisWeekStart = getWeekStart(new Date());
-    const thisWeekKey = thisWeekStart.toISOString().split('T')[0];
-    const authenticUsageThisWeek = await getAuthenticUsageForWeek(thisWeekKey);
+    const authenticUsageThisWeek = await getAuthenticUsageForWeek();
 
     // 4. Quality % (Quadrant weights)
     const quadrantCounts = { q1: 0, q2: 0, q3: 0, q4: 0 };
@@ -444,27 +444,14 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
     return totalAuthenticCounted;
   };
 
-  const getAuthenticUsageForWeek = async (weekKey: string) => {
+  const getAuthenticUsageForWeek = async () => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return 0;
 
-      const weekStart = new Date(weekKey);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-
-      const { data, error } = await supabase
-        .from('0008-ap-tasks')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .eq('is_authentic_deposit', true)
-        .gte('completed_at', weekStart.toISOString())
-        .lt('completed_at', weekEnd.toISOString());
-
-      if (error) throw error;
-      return Math.min(data?.length || 0, 14);
+      const usage = await fetchAuthenticUsage(supabase, user.id);
+      return usage.used;
     } catch (error) {
       console.error('Error getting authentic usage:', error);
       return 0;
@@ -506,6 +493,22 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
       }
     };
   }, [scope, dateRange, filter]);
+
+  useEffect(() => {
+    const handleTaskEvent = () => {
+      fetchAnalyticsData();
+    };
+
+    eventBus.on('TASK_CREATED', handleTaskEvent);
+    eventBus.on('TASK_UPDATED', handleTaskEvent);
+    eventBus.on('TASK_COMPLETED', handleTaskEvent);
+
+    return () => {
+      eventBus.off('TASK_CREATED', handleTaskEvent);
+      eventBus.off('TASK_UPDATED', handleTaskEvent);
+      eventBus.off('TASK_COMPLETED', handleTaskEvent);
+    };
+  }, []);
 
   const getScoreColor = (score: number) => {
     if (score >= 85) return '#16a34a'; // Green for 85% and above

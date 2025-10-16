@@ -23,6 +23,7 @@ import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRo
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { AuthenticUsageDisplay } from '@/components/authentic/AuthenticUsageDisplay';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -81,6 +82,7 @@ export default function Roles() {
   const [isLoadingRole, setIsLoadingRole] = useState(false);
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
   const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const fetchAbortController = useRef<AbortController | null>(null);
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
   const previousRoleIdRef = useRef<string | null>(null);
@@ -669,6 +671,15 @@ export default function Roles() {
     // Register reset handler for this tab
     registerResetHandler('roles', resetToMain);
 
+    const loadUserId = async () => {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    };
+
+    loadUserId();
     fetchRoles();
 
     // Listen for task creation events from other components
@@ -1259,6 +1270,18 @@ export default function Roles() {
       return (
         <View style={styles.content}>
 
+          {/* Authentic Usage Display for KR */}
+          {krJournalView === 'deposits' && currentUserId && (
+            <AuthenticUsageDisplay
+              userId={currentUserId}
+              scope={{
+                type: 'key_relationship',
+                id: selectedKR.id,
+                name: selectedKR.name
+              }}
+            />
+          )}
+
           <ScrollView style={styles.taskList}>
             {krJournalView === 'journal' ? (
               krJournalScope && (
@@ -1325,6 +1348,18 @@ export default function Roles() {
       // Role view
       return (
         <View style={styles.content}>
+
+          {/* Authentic Usage Display */}
+          {activeView === 'deposits' && currentUserId && (
+            <AuthenticUsageDisplay
+              userId={currentUserId}
+              scope={{
+                type: 'role',
+                id: selectedRole.id,
+                name: selectedRole.label
+              }}
+            />
+          )}
 
           {/* 12-Week Goals Strip - Only show when data is stable */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && fetchState === 'complete' && (

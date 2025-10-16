@@ -21,6 +21,7 @@ import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthen
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { AuthenticUsageDisplay } from '@/components/authentic/AuthenticUsageDisplay';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -54,6 +55,7 @@ export default function Wellness() {
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [domainAuthenticScore, setDomainAuthenticScore] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scoreAbortControllerRef = useRef<AbortController | null>(null);
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
@@ -353,6 +355,16 @@ export default function Wellness() {
 
   useEffect(() => {
     registerResetHandler('wellness', resetToMain);
+
+    const loadUserId = async () => {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    };
+
+    loadUserId();
     fetchDomains();
 
     // Listen for task creation events from other components
@@ -708,6 +720,18 @@ export default function Wellness() {
       // Domain view
       return (
         <View style={styles.content}>
+
+          {/* Authentic Usage Display */}
+          {activeView === 'deposits' && currentUserId && (
+            <AuthenticUsageDisplay
+              userId={currentUserId}
+              scope={{
+                type: 'domain',
+                id: selectedDomain.id,
+                name: selectedDomain.name
+              }}
+            />
+          )}
 
           {/* 12-Week Goals Section */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && (
