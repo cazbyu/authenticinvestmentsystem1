@@ -1649,7 +1649,23 @@ export default function Roles() {
       {renderRoleBankHeader()}
       {renderContent()}
 
-      <DraggableFab onPress={() => setTaskFormVisible(true)}>
+      <DraggableFab onPress={() => {
+        if (selectedRole) {
+          setEditingTask({
+            type: 'task',
+            selectedRoleIds: [selectedRole.id],
+          } as any);
+        } else if (selectedKR && selectedRole) {
+          setEditingTask({
+            type: 'task',
+            selectedRoleIds: [selectedRole.id],
+            selectedKeyRelationshipIds: [selectedKR.id],
+          } as any);
+        } else {
+          setEditingTask(null);
+        }
+        setTaskFormVisible(true);
+      }}>
         <Plus size={24} color="#ffffff" />
       </DraggableFab>
 
