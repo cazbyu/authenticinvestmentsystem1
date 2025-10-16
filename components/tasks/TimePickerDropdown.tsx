@@ -34,8 +34,25 @@ export function TimePickerDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownLayout, setDropdownLayout] = useState({ top: 0, left: 0, width: 0 });
   const buttonRef = useRef<View>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const showDuration = referenceTime && startDate && endDate && startDate === endDate;
+
+  useEffect(() => {
+    if (isOpen && scrollViewRef.current && value) {
+      const options = generateTimeOptions();
+      const selectedIndex = options.findIndex(opt => opt.time === value);
+
+      if (selectedIndex !== -1) {
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({
+            y: selectedIndex * 36,
+            animated: false,
+          });
+        }, 100);
+      }
+    }
+  }, [isOpen]);
 
   const generateTimeOptions = (): Array<{ time: string; duration: string }> => {
     const options: Array<{ time: string; duration: string }> = [];
@@ -191,6 +208,7 @@ export function TimePickerDropdown({
             ]}
           >
             <ScrollView
+              ref={scrollViewRef}
               style={styles.scrollView}
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled
