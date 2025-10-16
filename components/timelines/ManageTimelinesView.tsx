@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ArchivedTimelinesView } from '@/components/settings/ArchivedTimelinesView';
 import { ManageCustomTimelinesContent } from './ManageCustomTimelinesContent';
-import { ManageGlobalTimelinesModal } from './ManageGlobalTimelinesModal';
+import { ManageGlobalTimelinesContent } from './ManageGlobalTimelinesContent';
 
 export type ManageTimelinesSubTab = 'custom' | 'global' | 'archive';
 
@@ -12,7 +12,6 @@ interface ManageTimelinesViewProps {
 
 export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<ManageTimelinesSubTab>('global');
-  const [showGlobalModal, setShowGlobalModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleUpdate = () => {
@@ -93,22 +92,7 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
       return <ArchivedTimelinesView onUpdate={handleUpdate} />;
     }
     if (activeSubTab === 'global') {
-      return (
-        <View style={styles.globalContainer}>
-          <View style={styles.globalHeader}>
-            <Text style={styles.globalTitle}>Standardized 12 Week Timelines</Text>
-            <Text style={styles.globalSubtitle}>
-              Manage your global 12-week cycles and timelines
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.openModalButton}
-            onPress={() => setShowGlobalModal(true)}
-          >
-            <Text style={styles.openModalButtonText}>Open Timeline Manager</Text>
-          </TouchableOpacity>
-        </View>
-      );
+      return <ManageGlobalTimelinesContent onUpdate={handleUpdate} />;
     }
     return null;
   };
@@ -119,12 +103,6 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
       <View style={styles.content}>
         {renderContent()}
       </View>
-
-      <ManageGlobalTimelinesModal
-        visible={showGlobalModal}
-        onClose={() => setShowGlobalModal(false)}
-        onUpdate={handleUpdate}
-      />
     </View>
   );
 }
@@ -165,48 +143,5 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  tabContent: {
-    flex: 1,
-  },
-  globalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-    backgroundColor: '#ffffff',
-  },
-  globalHeader: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  globalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  globalSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  openModalButton: {
-    backgroundColor: '#0078d4',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  openModalButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
