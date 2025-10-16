@@ -78,15 +78,16 @@ export default function Dashboard() {
         const weekEndStr = formatLocalDate(weekEnd);
 
         // Fetch parent tasks (standalone tasks only - no Goal Bank actions)
+        // Explicitly include pending status to ensure all non-completed tasks appear
         const { data: tasksData, error: tasksError } = await supabase
           .from('0008-ap-tasks')
           .select('*, user_global_timeline_id, custom_timeline_id')
           .eq('user_id', user.id)
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .neq('status', 'completed')
-          .neq('status', 'cancelled')
-          .in('type', ['task', 'event']);
+          .in('status', ['pending', 'in_progress'])
+          .in('type', ['task', 'event'])
+          .order('created_at', { ascending: false });
 
         if (tasksError) throw tasksError;
 

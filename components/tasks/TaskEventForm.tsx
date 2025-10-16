@@ -114,7 +114,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     dueTime: '',
     startDate: formatLocalDate(new Date()),
     endDate: formatLocalDate(new Date()),
-    startTime: '',
+    startTime: getDefaultStartTime(),
     endTime: '',
     withdrawalDate: formatLocalDate(new Date()),
     amount: '',
@@ -453,13 +453,18 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
   const handleDateSelect = (day: any) => {
     const selectedDate = day.dateString;
-    
+
     switch (calendarMode) {
       case 'due':
         setFormData(prev => ({ ...prev, dueDate: selectedDate }));
         break;
       case 'start':
-        setFormData(prev => ({ ...prev, startDate: selectedDate }));
+        // When Start Date changes for Event type, sync End Date to match
+        setFormData(prev => ({
+          ...prev,
+          startDate: selectedDate,
+          endDate: formData.type === 'event' ? selectedDate : prev.endDate
+        }));
         break;
       case 'end':
         setFormData(prev => ({ ...prev, endDate: selectedDate }));
@@ -468,7 +473,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         setFormData(prev => ({ ...prev, withdrawalDate: selectedDate }));
         break;
     }
-    
+
     setShowCalendar(false);
   };
 
@@ -855,7 +860,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 const updates: any = { type };
                 // Set smart defaults when switching to event type
                 if (type === 'event' && prev.type !== 'event' && mode !== 'edit') {
-                  updates.startTime = getDefaultStartTime();
+                  const defaultStart = getDefaultStartTime();
+                  updates.startTime = defaultStart;
+                  updates.endTime = defaultStart;
+                  updates.endDate = prev.startDate;
                 }
                 return { ...prev, ...updates };
               });
