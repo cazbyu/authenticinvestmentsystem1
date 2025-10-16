@@ -106,6 +106,21 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const { width: screenWidth } = useWindowDimensions();
   const isMobile = screenWidth < 768;
   
+  // Helper function to get next 15-minute interval + 15 min buffer (defined before state)
+  const getInitialDefaultTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 15) * 15;
+    now.setMinutes(roundedMinutes + 15);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    const isPM = hours >= 12;
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
+  };
+
   // Form state
   const [formData, setFormData] = useState<FormData>({
     type: 'task',
@@ -114,7 +129,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     dueTime: '',
     startDate: formatLocalDate(new Date()),
     endDate: formatLocalDate(new Date()),
-    startTime: getDefaultStartTime(),
+    startTime: getInitialDefaultTime(),
     endTime: '',
     withdrawalDate: formatLocalDate(new Date()),
     amount: '',
