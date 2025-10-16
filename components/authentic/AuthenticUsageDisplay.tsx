@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { RefreshCw } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -29,7 +29,7 @@ export function AuthenticUsageDisplay({ userId, scope }: AuthenticUsageDisplayPr
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadUsage = async (isRefresh = false) => {
+  const loadUsage = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
     } else {
@@ -52,11 +52,11 @@ export function AuthenticUsageDisplay({ userId, scope }: AuthenticUsageDisplayPr
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [userId, scope]);
 
   useEffect(() => {
     loadUsage();
-  }, [userId, scope?.id]);
+  }, [loadUsage]);
 
   useEffect(() => {
     const handleTaskEvent = () => {
@@ -75,7 +75,7 @@ export function AuthenticUsageDisplay({ userId, scope }: AuthenticUsageDisplayPr
       eventBus.off('TASK_COMPLETED', handleTaskEvent);
       eventBus.off('TASK_DELETED', handleTaskEvent);
     };
-  }, []);
+  }, [loadUsage]);
 
   const handleRefresh = () => {
     invalidateCache('authentic');
