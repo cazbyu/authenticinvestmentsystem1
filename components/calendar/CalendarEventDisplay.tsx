@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Task } from '@/components/tasks/TaskCard';
+import { formatTimeForDisplay } from '@/lib/dateUtils';
 
 interface CalendarEventDisplayProps {
   task: Task;
@@ -10,12 +11,8 @@ interface CalendarEventDisplayProps {
 
 export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisplayProps) {
   const formatTime = (timeString: string) => {
-    const date = new Date(timeString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit', 
-      hour12: true 
-    });
+    // Use the time-only string formatter from dateUtils
+    return formatTimeForDisplay(timeString);
   };
 
   const getBorderColor = () => {

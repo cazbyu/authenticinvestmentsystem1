@@ -197,11 +197,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
   };
 
-  // Helper function to combine date and time into ISO timestamp
-  const combineDateTime = (dateStr: string, timeStr: string): string | null => {
-    if (!dateStr || !timeStr) return null;
+  // Helper function to convert time input to database format (HH:MM:SS)
+  const formatTimeForDatabase = (timeStr: string): string | null => {
+    if (!timeStr) return null;
     try {
-      // Parse time string like "7:00 pm" or "14:30"
       const timeLower = timeStr.toLowerCase().trim();
       let hours = 0;
       let minutes = 0;
@@ -220,11 +219,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         minutes = m || 0;
       }
 
-      const date = new Date(dateStr);
-      date.setHours(hours, minutes, 0, 0);
-      return date.toISOString();
+      // Return time-only string in HH:MM:SS format
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
     } catch (e) {
-      console.error('Error combining date and time:', e);
+      console.error('Error formatting time:', e);
       return null;
     }
   };
@@ -659,12 +657,12 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           start_date: formData.type === 'event' ? formData.startDate : null,
           end_date: formData.type === 'event' ? formData.endDate : null,
           start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
-            ? combineDateTime(formData.startDate, formData.startTime)
+            ? formatTimeForDatabase(formData.startTime)
             : null,
           end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
-            ? combineDateTime(formData.endDate, formData.endTime)
+            ? formatTimeForDatabase(formData.endTime)
             : (formData.type === 'task' && formData.dueTime && !formData.isAnytime
-              ? combineDateTime(formData.dueDate, formData.dueTime)
+              ? formatTimeForDatabase(formData.dueTime)
               : null),
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,

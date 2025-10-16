@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, InteractionManager } from 'react-native';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { CalendarEventDisplay } from '@/components/calendar/CalendarEventDisplay';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, parseTimeString } from '@/lib/dateUtils';
 
 const MINUTE_HEIGHT = 1.5;
 const HOUR_HEIGHT = 60 * MINUTE_HEIGHT;
@@ -33,8 +33,12 @@ const uniqByIdAndDate = <T extends { id: string; start_date?: string; due_date?:
 };
 
 const getTimeInMinutes = (timeString: string) => {
-  const date = new Date(timeString);
-  return date.getHours() * 60 + date.getMinutes();
+  // Parse time-only string (HH:MM:SS) directly without timezone conversion
+  const parsed = parseTimeString(timeString);
+  if (!parsed) {
+    return 0;
+  }
+  return parsed.hours * 60 + parsed.minutes;
 };
 
 const calculateEventLayout = (events: Task[]) => {

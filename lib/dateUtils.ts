@@ -327,3 +327,103 @@ export function getCurrentWeekNumber(
 
   return weekNumber;
 }
+
+/**
+ * Parses a time string into hours and minutes
+ * Supports formats: "HH:MM:SS", "HH:MM", "H:MM AM/PM", "H:MM am/pm"
+ */
+export function parseTimeString(timeStr: string): { hours: number; minutes: number } | null {
+  if (!timeStr || typeof timeStr !== 'string') {
+    return null;
+  }
+
+  const trimmed = timeStr.trim().toLowerCase();
+
+  // Handle 12-hour format with AM/PM
+  if (trimmed.includes('am') || trimmed.includes('pm')) {
+    const isPM = trimmed.includes('pm');
+    const timeOnly = trimmed.replace(/am|pm/g, '').trim();
+    const [hoursStr, minutesStr] = timeOnly.split(':');
+    let hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10) || 0;
+
+    if (isNaN(hours)) {
+      return null;
+    }
+
+    // Convert to 24-hour format
+    if (isPM && hours !== 12) {
+      hours += 12;
+    } else if (!isPM && hours === 12) {
+      hours = 0;
+    }
+
+    return { hours, minutes };
+  }
+
+  // Handle 24-hour format "HH:MM:SS" or "HH:MM"
+  const parts = trimmed.split(':');
+  if (parts.length >= 2) {
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+
+    if (isNaN(hours) || isNaN(minutes)) {
+      return null;
+    }
+
+    return { hours, minutes };
+  }
+
+  return null;
+}
+
+/**
+ * Formats hours and minutes into a time string for database storage (HH:MM:SS format)
+ */
+export function formatTimeString(hours: number, minutes: number): string {
+  const h = String(hours).padStart(2, '0');
+  const m = String(minutes).padStart(2, '0');
+  return `${h}:${m}:00`;
+}
+
+/**
+ * Formats a time-only string (HH:MM:SS) for display with AM/PM
+ */
+export function formatTimeForDisplay(timeStr: string): string {
+  const parsed = parseTimeString(timeStr);
+  if (!parsed) {
+    return timeStr;
+  }
+
+  const { hours, minutes } = parsed;
+  const isPM = hours >= 12;
+  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  const displayMinutes = String(minutes).padStart(2, '0');
+
+  return `${displayHours}:${displayMinutes} ${isPM ? 'PM' : 'AM'}`;
+}
+
+/**
+ * Combines a date string (YYYY-MM-DD) with a time string (HH:MM:SS) into a local Date object
+ * This function does NOT perform any timezone conversion - it creates a Date in the user's local timezone
+ */
+export function combineLocalDateTime(dateStr: string, timeStr: string): Date | null {
+  if (!dateStr || !timeStr) {
+    return null;
+  }
+
+  const date = parseLocalDate(dateStr);
+  if (isNaN(date.getTime())) {
+    return null;
+  }
+
+  const parsed = parseTimeString(timeStr);
+  if (!parsed) {
+    return null;
+  }
+
+  const { hours, minutes } = parsed;
+  date.setHours(hours, minutes, 0, 0);
+
+  return date;
+}
