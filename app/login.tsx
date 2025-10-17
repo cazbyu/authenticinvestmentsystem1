@@ -33,18 +33,36 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const handleLogin = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (error) {
-      Alert.alert('Login Error', error.message);
-    } else {
-      router.replace('/(tabs)/dashboard');
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password.');
+      return;
     }
-    setLoading(false);
+
+    setLoading(true);
+    console.log('[Login] Attempting sign in for:', email.trim());
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        console.error('[Login] Sign in error:', error);
+        Alert.alert('Login Error', error.message);
+      } else if (data.session) {
+        console.log('[Login] Sign in successful, user ID:', data.user?.id);
+        router.replace('/(tabs)/dashboard');
+      } else {
+        console.warn('[Login] No error but no session created');
+        Alert.alert('Login Error', 'Failed to create session. Please try again.');
+      }
+    } catch (err) {
+      console.error('[Login] Unexpected error:', err);
+      Alert.alert('Login Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignUp = async () => {
@@ -59,6 +77,8 @@ export default function LoginScreen() {
 
     setLoading(true);
 
+    console.log('[SignUp] Attempting sign up for:', email.trim());
+
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
@@ -66,23 +86,38 @@ export default function LoginScreen() {
         data: {
           first_name: firstName.trim(),
           last_name: lastName.trim()
-        }
+        },
+        emailRedirectTo: undefined
       }
     });
 
     if (authError) {
+      console.error('[SignUp] Error:', authError);
       Alert.alert('Sign Up Error', authError.message);
     } else if (authData.user) {
-      Alert.alert(
-        'Success!',
-        'Please check your email to verify your account, then you can sign in.'
-      );
+      console.log('[SignUp] Success! User created:', authData.user.id);
+
+      if (authData.session) {
+        console.log('[SignUp] Auto-signed in with session');
+        Alert.alert(
+          'Success!',
+          'Your account has been created and you are now signed in.',
+          [{ text: 'OK', onPress: () => router.replace('/(tabs)/dashboard') }]
+        );
+      } else {
+        console.log('[SignUp] Email confirmation may be required');
+        Alert.alert(
+          'Success!',
+          'Your account has been created. You can now sign in.',
+          [{ text: 'OK', onPress: () => setIsSignUp(false) }]
+        );
+      }
+
       setEmail('');
       setPassword('');
       setConfirmPassword('');
       setFirstName('');
       setLastName('');
-      setIsSignUp(false);
     }
 
     setLoading(false);
