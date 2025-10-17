@@ -76,6 +76,12 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="goalsReducer"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
