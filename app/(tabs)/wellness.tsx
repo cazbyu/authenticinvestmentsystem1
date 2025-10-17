@@ -20,6 +20,7 @@ import { DraggableFab } from '@/components/DraggableFab';
 import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -34,6 +35,7 @@ export default function Wellness() {
   const navigation = useNavigation<DrawerNavigation>();
   const { authenticScore, refreshScoreForDomain } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
+  const { colors } = useTheme();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -674,7 +676,7 @@ export default function Wellness() {
 
     // Main Wellness Bank header with tabs
     return (
-      <View style={styles.customHeader}>
+      <View style={[styles.customHeader, { backgroundColor: colors.primary }]}>
         <View style={styles.customHeaderTop}>
           <TouchableOpacity
             style={styles.customMenuButton}
@@ -696,7 +698,7 @@ export default function Wellness() {
               style={[styles.customToggleButton, activeMainTab === 'domains' && styles.customActiveToggle]}
               onPress={() => setActiveMainTab('domains')}
             >
-              <Text style={[styles.customToggleText, activeMainTab === 'domains' && styles.customActiveToggleText]}>
+              <Text style={[styles.customToggleText, activeMainTab === 'domains' && [styles.customActiveToggleText, { color: colors.primary }]]}>
                 Domains
               </Text>
             </TouchableOpacity>
@@ -704,7 +706,7 @@ export default function Wellness() {
               style={[styles.customToggleButton, activeMainTab === 'balance' && styles.customActiveToggle]}
               onPress={() => setActiveMainTab('balance')}
             >
-              <Text style={[styles.customToggleText, activeMainTab === 'balance' && styles.customActiveToggleText]}>
+              <Text style={[styles.customToggleText, activeMainTab === 'balance' && [styles.customActiveToggleText, { color: colors.primary }]]}>
                 Balance Scores
               </Text>
             </TouchableOpacity>

@@ -23,6 +23,7 @@ import { useGoals } from '@/hooks/useGoals';
 import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -47,6 +48,7 @@ export default function Roles() {
   const navigation = useNavigation<DrawerNavigation>();
   const { authenticScore, refreshScoreForRole } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
+  const { colors } = useTheme();
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [keyRelationships, setKeyRelationships] = useState<KeyRelationship[]>([]);
@@ -1131,7 +1133,7 @@ export default function Roles() {
     if (activeMainTab === 'manageRoles') {
       // Manage Roles view header
       return (
-        <View style={styles.customHeader}>
+        <View style={[styles.customHeader, { backgroundColor: colors.primary }]}>
           <View style={styles.customHeaderTop}>
             <TouchableOpacity
               style={styles.customBackButton}
@@ -1248,7 +1250,7 @@ export default function Roles() {
 
     // Main Role Bank header with tabs
     return (
-      <View style={styles.customHeader}>
+      <View style={[styles.customHeader, { backgroundColor: colors.primary }]}>
         <View style={styles.customHeaderTop}>
           <TouchableOpacity
             style={styles.customMenuButton}
@@ -1271,7 +1273,7 @@ export default function Roles() {
                 style={[styles.customToggleButton, activeMainTab === 'roles' && styles.customActiveToggle]}
                 onPress={() => setActiveMainTab('roles')}
               >
-                <Text style={[styles.customToggleText, activeMainTab === 'roles' && styles.customActiveToggleText]}>
+                <Text style={[styles.customToggleText, activeMainTab === 'roles' && [styles.customActiveToggleText, { color: colors.primary }]]}>
                   Roles
                 </Text>
               </TouchableOpacity>
@@ -1288,7 +1290,7 @@ export default function Roles() {
               style={[styles.customSingleButton, activeMainTab === 'keyrelationships' && styles.customActiveSingleButton]}
               onPress={() => setActiveMainTab('keyrelationships')}
             >
-              <Text style={[styles.customSingleButtonText, activeMainTab === 'keyrelationships' && styles.customActiveSingleButtonText]}>
+              <Text style={[styles.customSingleButtonText, activeMainTab === 'keyrelationships' && [styles.customActiveSingleButtonText, { color: colors.primary }]]}>
                 Key Relationships
               </Text>
             </TouchableOpacity>
