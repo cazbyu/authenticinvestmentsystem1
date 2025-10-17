@@ -755,21 +755,6 @@ export default function Goals() {
       // Mark timelines as loaded
       timelinesLoadedRef.current = true;
 
-      // Auto-select first timeline if none selected and timelines exist
-      if (timelines.length > 0 && !selectedTimeline) {
-        // Try to restore last selected timeline
-        const lastTimelineId = lastSelectedTimelineIdRef.current;
-        const lastTimeline = lastTimelineId ? timelines.find(t => t.id === lastTimelineId) : null;
-
-        if (lastTimeline) {
-          console.log('[Goals] Restoring last selected timeline:', lastTimeline.title);
-          setSelectedTimeline(lastTimeline);
-        } else {
-          console.log('[Goals] Auto-selecting first active timeline:', timelines[0].title);
-          setSelectedTimeline(timelines[0]);
-        }
-      }
-
     } catch (error) {
       console.error('[Goals] Error fetching timelines:', error);
       Alert.alert('Error', (error as Error).message);
