@@ -296,7 +296,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           const { data: userProfile } = await supabase
             .from('0008-ap-users')
             .select('hide_completed_task_warning')
-            .eq('user_id', user.id)
+            .eq('id', user.id)
             .maybeSingle();
 
           if (!userProfile?.hide_completed_task_warning) {
@@ -560,7 +560,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           await supabase
             .from('0008-ap-users')
             .update({ hide_completed_task_warning: true })
-            .eq('user_id', user.id);
+            .eq('id', user.id);
         }
       } catch (error) {
         console.error('Error updating completed task warning preference:', error);

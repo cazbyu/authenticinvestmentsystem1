@@ -91,7 +91,7 @@ export default function SettingsScreen() {
       const { data, error } = await supabase
         .from('0008-ap-users')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (error && (error as any).code !== 'PGRST116') throw error;
@@ -273,7 +273,7 @@ export default function SettingsScreen() {
 
       const { error, data } = await supabase
         .from('0008-ap-users')
-        .upsert(payload, { onConflict: 'user_id' })
+        .upsert(payload, { onConflict: 'id' })
         .select();
 
       if (error) {

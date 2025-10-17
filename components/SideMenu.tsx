@@ -38,7 +38,7 @@ export function SideMenu() {
         const { data: profile } = await supabase
           .from('0008-ap-users')
           .select('first_name, last_name')
-          .eq('user_id', user.id)
+          .eq('id', user.id)
           .maybeSingle();
 
         if (profile?.first_name || profile?.last_name) {
