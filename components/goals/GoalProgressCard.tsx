@@ -304,13 +304,13 @@ export function GoalProgressCard({
         {shouldRenderWeekActions && week && expanded && (
           <View style={styles.weekActionsSection}>
             <View style={styles.weekActionsHeader}>
-              {onAddAction && (
+              {onAddAction && weekActions.length > 0 && (
                 <TouchableOpacity
                   style={[styles.addActionButton, { borderColor: cardColor }]}
                   onPress={onAddAction}
                 >
-                  <Plus size={12} color={cardColor} />
-                  <Text style={[styles.addActionButtonText, { color: cardColor }]}>Add</Text>
+                  <Plus size={14} color={cardColor} />
+                  <Text style={[styles.addActionButtonText, { color: cardColor }]}>Action</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -319,6 +319,22 @@ export function GoalProgressCard({
               <View style={styles.loadingActions}>
                 <ActivityIndicator size="small" color="#6b7280" />
                 <Text style={styles.loadingActionsText}>Loading actions...</Text>
+              </View>
+            ) : weekActions.length === 0 ? (
+              <View style={styles.emptyActionsContainer}>
+                <Text style={styles.emptyActionsTitle}>No Actions Yet</Text>
+                <Text style={styles.emptyActionsMessage}>
+                  Currently no actions are supporting your goal - create them here
+                </Text>
+                {onAddAction && (
+                  <TouchableOpacity
+                    style={[styles.emptyActionsButton, { backgroundColor: cardColor }]}
+                    onPress={onAddAction}
+                  >
+                    <Plus size={20} color="#ffffff" />
+                    <Text style={styles.emptyActionsButtonText}>Create Action</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View style={styles.actionsList}>
@@ -630,14 +646,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
   },
   addActionButtonText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
   },
   loadingActions: {
@@ -651,15 +667,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
-  emptyActions: {
+  emptyActionsContainer: {
     alignItems: 'center',
-    paddingVertical: 12,
-    gap: 8,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    gap: 12,
   },
-  emptyActionsText: {
-    fontSize: 12,
-    color: '#9ca3af',
-    fontStyle: 'italic',
+  emptyActionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+  },
+  emptyActionsMessage: {
+    fontSize: 13,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyActionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 4,
+  },
+  emptyActionsButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   actionsList: {
     gap: 8,

@@ -477,9 +477,11 @@ export default function Goals() {
   const [timelineWeeks, setTimelineWeeks] = useState<TimelineWeek[]>([]);
   const [timelineDaysLeft, setTimelineDaysLeft] = useState<any>(null);
   const [timelinesWithGoals, setTimelinesWithGoals] = useState<any[]>([]);
-  
+
   // Refs for initialization
   const initializedWeekRef = useRef(false);
+  const lastSelectedTimelineIdRef = useRef<string | null>(null);
+  const timelinesLoadedRef = useRef(false);
   
   // Use the goals hook with timeline scope
   const {
@@ -536,6 +538,8 @@ export default function Goals() {
       return null;
     });
     initializedWeekRef.current = false;
+    timelinesLoadedRef.current = false;
+    // Don't clear lastSelectedTimelineIdRef - we want to keep it for restoration
   }, []);
 
   useEffect(() => {
@@ -558,11 +562,20 @@ export default function Goals() {
     };
   }, [registerResetHandler, unregisterResetHandler, resetToMain]);
 
+  // Parallel fetch all timeline data when timeline is selected
   useEffect(() => {
     if (selectedTimeline) {
-      fetchTimelineGoals(selectedTimeline);
-      fetchTimelineWeeks(selectedTimeline);
-      fetchTimelineDaysLeft(selectedTimeline);
+      // Store the last selected timeline ID
+      lastSelectedTimelineIdRef.current = selectedTimeline.id;
+
+      // Fetch all timeline data in parallel for better performance
+      Promise.all([
+        fetchTimelineGoals(selectedTimeline),
+        fetchTimelineWeeks(selectedTimeline),
+        fetchTimelineDaysLeft(selectedTimeline)
+      ]).catch(error => {
+        console.error('[Goals] Error loading timeline data:', error);
+      });
     }
   }, [selectedTimeline]);
 
@@ -738,6 +751,24 @@ export default function Goals() {
       console.log('[Goals] Fetching goal counts...');
       await fetchTimelinesWithGoalCounts(timelines);
       console.log('[Goals] fetchAllTimelines complete');
+
+      // Mark timelines as loaded
+      timelinesLoadedRef.current = true;
+
+      // Auto-select first timeline if none selected and timelines exist
+      if (timelines.length > 0 && !selectedTimeline) {
+        // Try to restore last selected timeline
+        const lastTimelineId = lastSelectedTimelineIdRef.current;
+        const lastTimeline = lastTimelineId ? timelines.find(t => t.id === lastTimelineId) : null;
+
+        if (lastTimeline) {
+          console.log('[Goals] Restoring last selected timeline:', lastTimeline.title);
+          setSelectedTimeline(lastTimeline);
+        } else {
+          console.log('[Goals] Auto-selecting first active timeline:', timelines[0].title);
+          setSelectedTimeline(timelines[0]);
+        }
+      }
 
     } catch (error) {
       console.error('[Goals] Error fetching timelines:', error);
@@ -974,8 +1005,11 @@ export default function Goals() {
   };
 
   const handleTimelineSelect = (timeline: Timeline) => {
+    console.log('[Goals] Timeline selected:', timeline.title);
     setSelectedTimeline(timeline);
     setCurrentWeekIndex(0);
+    // Store for future restoration
+    lastSelectedTimelineIdRef.current = timeline.id;
   };
 
   const handleBackToTimelines = () => {
@@ -1310,10 +1344,12 @@ export default function Goals() {
   };
 
   const renderMainContent = () => {
+    // Show selected timeline if one is selected
     if (selectedTimeline) {
       return renderSelectedTimeline();
     }
 
+    // Show other tabs
     if (activeTab === 'northstar') {
       return renderNorthStarTab();
     }
@@ -1322,6 +1358,8 @@ export default function Goals() {
       return renderManageTab();
     }
 
+    // For timelines tab, if we have loaded timelines and auto-selected one,
+    // it will be shown above. Otherwise show the timeline list.
     return renderTimelinesTab();
   };
 

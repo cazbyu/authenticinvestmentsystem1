@@ -5,6 +5,7 @@ import { BalanceWheelChart } from './BalanceWheelChart';
 import { BalanceBarChart } from './BalanceBarChart';
 import { ChartErrorBoundary } from './ChartErrorBoundary';
 import { calculateTaskPoints } from '@/lib/taskUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 interface Domain {
   id: string;
@@ -288,6 +289,24 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       fetchDomainScores();
     }
   }, [domains, timeRange, calculationMode, fetchDomainScores]);
+
+  // Listen for task completion events to refresh balance scores
+  useEffect(() => {
+    const handleTaskUpdate = () => {
+      console.log('[BalanceScores] Task completed/updated, refreshing scores...');
+      if (domains.length > 0) {
+        fetchDomainScores();
+      }
+    };
+
+    eventBus.on(EVENTS.TASK_COMPLETED, handleTaskUpdate);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskUpdate);
+
+    return () => {
+      eventBus.off(EVENTS.TASK_COMPLETED, handleTaskUpdate);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskUpdate);
+    };
+  }, [domains, fetchDomainScores]);
 
   return (
     <View style={styles.container}>

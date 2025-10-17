@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { checkOccurrenceExists } from '@/lib/taskUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 interface CompletionResult {
   success: boolean;
@@ -105,6 +106,9 @@ export async function handleActionCompletion(
         domains: !domainsResult.error,
         goals: !goalsResult.error
       });
+
+      // Emit task completed event for balance score updates
+      eventBus.emit(EVENTS.TASK_COMPLETED, { taskId: occ.id, actionId });
     }
 
     if (weeklyTarget && timeline) {
@@ -173,6 +177,9 @@ export async function handleActionUncompletion(
     if (deleteError) {
       throw deleteError;
     }
+
+    // Emit task updated event for balance score updates
+    eventBus.emit(EVENTS.TASK_UPDATED, { actionId });
 
     return { success: true, shouldRemoveFromUI: false };
   } catch (error) {
