@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Target, Calendar, Plus, TrendingUp, Check, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { GoalProgress } from '@/hooks/useGoalProgress';
@@ -43,7 +43,7 @@ interface GoalProgressCardProps {
   onToggleExpanded?: () => void; // New prop for toggling collapse/expand
 }
 
-export function GoalProgressCard({
+export const GoalProgressCard = memo(function GoalProgressCard({
   goal,
   progress,
   expanded = true,
@@ -61,21 +61,21 @@ export function GoalProgressCard({
   onToggleExpanded, // New prop
 }: GoalProgressCardProps) {
   const weekActions = weekActionsProp ?? [];
-  const getProgressColor = (percentage: number) => {
+  const getProgressColor = useCallback((percentage: number) => {
     if (percentage >= 85) return '#16a34a'; // Green for 85% and above
     if (percentage >= 60) return '#eab308';
     return '#dc2626';
-  };
+  }, []);
 
-  const getWeeklyProgressColor = (actual: number, target: number) => {
+  const getWeeklyProgressColor = useCallback((actual: number, target: number) => {
     const percentage = target > 0 ? (actual / target) * 100 : 0;
     return getProgressColor(percentage);
-  };
+  }, [getProgressColor]);
 
-  const formatWeeklyProgress = (actual: number, target: number) => {
+  const formatWeeklyProgress = useCallback((actual: number, target: number) => {
     const percentage = target > 0 ? Math.round((actual / target) * 100) : 0;
     return `${percentage}%`;
-  };
+  }, []);
 
   const formatTodayInfo = () => {
     const today = new Date();
@@ -102,10 +102,9 @@ export function GoalProgressCard({
     }
     return `Week ${selectedWeekNumber || progress.currentWeek}`;
   };
-  const primaryRole = goal.roles?.[0]; // Used for card color
-  const cardColor = primaryRole?.color || '#0078d4';
+  const cardColor = useMemo(() => goal.roles?.[0]?.color || '#0078d4', [goal.roles]);
 
-  const generateWeekDays = (startDateString: string) => {
+  const generateWeekDays = useCallback((startDateString: string) => {
     const days = [];
     const start = parseLocalDate(startDateString); // Use parseLocalDate to avoid timezone shifts
 
@@ -127,9 +126,9 @@ export function GoalProgressCard({
     }
 
     return days;
-  };
+  }, []);
 
-  const calculateWeeklyProgress = () => {
+  const calculateWeeklyProgress = useCallback(() => {
     if (!week || weekActions.length === 0) {
       return { actual: progress.weeklyActual, target: progress.weeklyTarget };
     }
@@ -138,7 +137,7 @@ export function GoalProgressCard({
     const totalTarget = weekActions.reduce((sum, action) => sum + action.weeklyTarget, 0);
     
     return { actual: totalActual, target: totalTarget };
-  };
+  }, [week, weekActions, progress.weeklyActual, progress.weeklyTarget]);
 
   if (compact) {
     return (
@@ -188,7 +187,7 @@ export function GoalProgressCard({
     );
   }
 
-  const weeklyProgress = calculateWeeklyProgress();
+  const weeklyProgress = useMemo(() => calculateWeeklyProgress(), [calculateWeeklyProgress]);
   const hasWeekContext = !!week;
   const hasWeekActionsProvided = weekActionsProp !== undefined;
   const shouldShowWeeklyProgress =
@@ -395,16 +394,13 @@ export function GoalProgressCard({
                              <TouchableOpacity
                                key={day.date}
                                style={[styles.dayDot, hasLog && styles.dayDotCompleted]}
-                               onPress={onToggleCompletion ? async () => {
-                                 console.log('[GoalProgressCard] Day dot clicked:', { actionId: action.id, date: day.date, hasLog });
-                                 try {
-                                   await onToggleCompletion(action.id, day.date, hasLog);
-                                   console.log('[GoalProgressCard] Toggle completed successfully');
-                                 } catch (error) {
+                               onPress={onToggleCompletion ? () => {
+                                 onToggleCompletion(action.id, day.date, hasLog).catch(error => {
                                    console.error('[GoalProgressCard] Error in day dot toggle:', error);
-                                 }
+                                 });
                                } : undefined}
                                activeOpacity={onToggleCompletion ? 0.7 : 1}
+                               disabled={!onToggleCompletion}
                              >
                                {hasLog && <Check size={12} color="#ffffff" />}
                              </TouchableOpacity>
@@ -445,7 +441,7 @@ export function GoalProgressCard({
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
