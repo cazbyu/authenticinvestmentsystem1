@@ -251,24 +251,38 @@ export default function SettingsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
 
-      const payload = {
+      // Build a clean payload with only the fields we want to update
+      const payload: any = {
         user_id: user.id,
-        ...profile,
-        ...updates,
         updated_at: new Date().toISOString(),
-      } as any;
+      };
 
-      const { error } = await supabase
+      // Add fields from current profile state
+      if (profile.first_name !== undefined) payload.first_name = profile.first_name;
+      if (profile.last_name !== undefined) payload.last_name = profile.last_name;
+      if (profile.profile_image !== undefined) payload.profile_image = profile.profile_image;
+      if (profile.theme_color !== undefined) payload.theme_color = profile.theme_color;
+      if (profile.week_start_day !== undefined) payload.week_start_day = profile.week_start_day;
+
+      // Override with any updates
+      Object.keys(updates).forEach(key => {
+        payload[key] = updates[key as keyof typeof profile];
+      });
+
+      console.log('[Settings] Updating profile with payload:', JSON.stringify(payload, null, 2));
+
+      const { error, data } = await supabase
         .from('0008-ap-users')
-        .upsert(payload, { onConflict: 'user_id' });
+        .upsert(payload, { onConflict: 'user_id' })
+        .select();
 
       if (error) {
         console.error('Error updating profile:', error);
         throw error;
       }
 
+      console.log('[Settings] Profile updated successfully. Database response:', data);
       setProfile(prev => ({ ...prev, ...updates }));
-      console.log('[Settings] Profile updated successfully:', updates);
 
       if (updates.profile_image) {
         try {
