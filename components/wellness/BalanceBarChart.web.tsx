@@ -10,9 +10,11 @@ interface DomainScore {
 
 interface BalanceBarChartProps {
   data: DomainScore[];
+  maxScore?: number;
+  unit?: string;
 }
 
-export function BalanceBarChart({ data }: BalanceBarChartProps) {
+export function BalanceBarChart({ data, maxScore = 100, unit = 'tasks' }: BalanceBarChartProps) {
   console.log('[BalanceBarChart.web] Rendering with data:', data);
 
   // Handle empty or invalid data
@@ -36,9 +38,15 @@ export function BalanceBarChart({ data }: BalanceBarChartProps) {
   const barWidth = Math.min(30, plotWidth / (data.length * 2));
   const barSpacing = plotWidth / data.length;
 
-  // Y-axis scale
-  const maxValue = 100;
-  const yTicks = [0, 25, 50, 75, 100];
+  // Y-axis scale based on actual maxScore
+  const maxValue = maxScore;
+  const yTicks = [
+    0,
+    Math.round(maxScore * 0.25),
+    Math.round(maxScore * 0.5),
+    Math.round(maxScore * 0.75),
+    maxScore
+  ];
 
   return (
     <View style={styles.container}>

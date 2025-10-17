@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
-import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
+const TaskDetailModal = lazy(() => import('@/components/tasks/TaskDetailModal').then(m => ({ default: m.TaskDetailModal })));
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
+const HourlyCalendarGrid = lazy(() => import('@/components/calendar/HourlyCalendarGrid').then(m => ({ default: m.HourlyCalendarGrid })));
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { expandEventsWithRecurrence, expandEventsForDate } from '@/lib/recurrenceUtils';
@@ -408,15 +408,17 @@ const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly])
         </View>
 
         <View style={styles.dailyContent}>
-          <HourlyCalendarGrid
-            selectedDate={selectedDate}
-            expandedTasks={expandedTasks}
-            currentTimePosition={currentTimePosition}
-            currentTimeString={currentTimeString}
-            onCompleteTask={handleCompleteTask}
-            onTaskPress={handleTaskPress}
-            viewMode="daily"
-          />
+          <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
+            <HourlyCalendarGrid
+              selectedDate={selectedDate}
+              expandedTasks={expandedTasks}
+              currentTimePosition={currentTimePosition}
+              currentTimeString={currentTimeString}
+              onCompleteTask={handleCompleteTask}
+              onTaskPress={handleTaskPress}
+              viewMode="daily"
+            />
+          </Suspense>
         </View>
       </View>
     );
@@ -510,22 +512,24 @@ const dayEvents = expandedTasks.map(task => ({
           <Text style={styles.selectedDayTitle}>
             {formatDateForDisplay(selectedDate)}
           </Text>
-          <HourlyCalendarGrid
-            selectedDate={selectedDate}
-            expandedTasks={uniqByIdAndDate([
-              ...expandEventsForDate(tasks, selectedDate),
-              ...tasks.filter(t =>
-                (t.type === 'task') &&
-                (t.due_date === selectedDate) &&
-                (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
-              )
-            ])}
-            currentTimePosition={currentTimePosition}
-            currentTimeString={currentTimeString}
-            onCompleteTask={handleCompleteTask}
-            onTaskPress={handleTaskPress}
-            viewMode="weekly"
-          />
+          <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
+            <HourlyCalendarGrid
+              selectedDate={selectedDate}
+              expandedTasks={uniqByIdAndDate([
+                ...expandEventsForDate(tasks, selectedDate),
+                ...tasks.filter(t =>
+                  (t.type === 'task') &&
+                  (t.due_date === selectedDate) &&
+                  (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
+                )
+              ])}
+              currentTimePosition={currentTimePosition}
+              currentTimeString={currentTimeString}
+              onCompleteTask={handleCompleteTask}
+              onTaskPress={handleTaskPress}
+              viewMode="weekly"
+            />
+          </Suspense>
         </View>
       </View>
     );
@@ -569,15 +573,17 @@ const dayEvents = expandedTasks.map(task => ({
           <Text style={styles.selectedDateLabel}>
             {formatDateForDisplay(selectedDate)}
           </Text>
-          <HourlyCalendarGrid
-            selectedDate={selectedDate}
-            expandedTasks={expandEventsForDate(tasks, selectedDate)}
-            currentTimePosition={currentTimePosition}
-            currentTimeString={currentTimeString}
-            onCompleteTask={handleCompleteTask}
-            onTaskPress={handleTaskPress}
-            viewMode="monthly"
-          />
+          <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
+            <HourlyCalendarGrid
+              selectedDate={selectedDate}
+              expandedTasks={expandEventsForDate(tasks, selectedDate)}
+              currentTimePosition={currentTimePosition}
+              currentTimeString={currentTimeString}
+              onCompleteTask={handleCompleteTask}
+              onTaskPress={handleTaskPress}
+              viewMode="monthly"
+            />
+          </Suspense>
         </View>
       </View>
     );
@@ -637,22 +643,26 @@ const dayEvents = expandedTasks.map(task => ({
       )}
 
       {/* Modals */}
-      <TaskDetailModal
-        visible={isDetailModalVisible}
-        task={selectedTask}
-        onClose={() => setIsDetailModalVisible(false)}
-        onUpdate={handleUpdateTask}
-        onDelegate={handleDelegateTask}
-        onCancel={handleCancelTask}
-      />
+      <Suspense fallback={null}>
+        <TaskDetailModal
+          visible={isDetailModalVisible}
+          task={selectedTask}
+          onClose={() => setIsDetailModalVisible(false)}
+          onUpdate={handleUpdateTask}
+          onDelegate={handleDelegateTask}
+          onCancel={handleCancelTask}
+        />
+      </Suspense>
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <TaskEventForm
-          mode={editingTask ? "edit" : "create"}
-          initialData={editingTask || undefined}
-          onSubmitSuccess={handleFormSubmitSuccess}
-          onClose={handleFormClose}
-        />
+        <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
+          <TaskEventForm
+            mode={editingTask ? "edit" : "create"}
+            initialData={editingTask || undefined}
+            onSubmitSuccess={handleFormSubmitSuccess}
+            onClose={handleFormClose}
+          />
+        </Suspense>
       </Modal>
 
       <DraggableFab onPress={() => setIsFormModalVisible(true)}>

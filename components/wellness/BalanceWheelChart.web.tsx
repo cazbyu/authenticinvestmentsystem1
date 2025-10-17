@@ -10,9 +10,11 @@ interface DomainScore {
 
 interface BalanceWheelChartProps {
   data: DomainScore[];
+  maxScore?: number;
+  unit?: string;
 }
 
-export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
+export function BalanceWheelChart({ data, maxScore = 100, unit = 'tasks' }: BalanceWheelChartProps) {
   console.log('[BalanceWheelChart.web] Rendering with data:', data);
 
   // Handle empty or invalid data
@@ -30,7 +32,7 @@ export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
   const center = chartSize / 2;
   const maxRadius = (chartSize / 2) - 60;
 
-  // Calculate polygon points for the radar chart
+  // Calculate polygon points for the radar chart using raw scores
   const calculatePoint = (score: number, index: number, total: number) => {
     if (total === 0) {
       console.warn('[BalanceWheelChart.web] Total is 0, returning center point');
@@ -42,7 +44,9 @@ export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
     const validScore = isNaN(score) ? 0 : score;
     // Add minimum radius for visibility (5% of max) if score > 0
     const minRadius = validScore > 0 ? maxRadius * 0.05 : 0;
-    const radius = Math.max((validScore / 100) * maxRadius, minRadius);
+    // Use maxScore prop for normalization instead of hardcoded 100
+    const normalizedScore = maxScore > 0 ? validScore / maxScore : 0;
+    const radius = Math.max(normalizedScore * maxRadius, minRadius);
     const x = center + radius * Math.cos(angle);
     const y = center + radius * Math.sin(angle);
 
@@ -80,31 +84,48 @@ export function BalanceWheelChart({ data }: BalanceWheelChartProps) {
     console.log('[BalanceWheelChart.web] All scores are zero');
   }
 
-  // Generate grid circles
-  const gridLevels = [25, 50, 75, 100];
+  // Generate grid circles with dynamic labels based on maxScore
+  const gridLevels = [
+    Math.round(maxScore * 0.25),
+    Math.round(maxScore * 0.5),
+    Math.round(maxScore * 0.75),
+    maxScore
+  ];
 
   return (
     <View style={styles.container}>
       <Svg width={chartSize} height={chartSize}>
-        {/* Grid circles */}
-        {gridLevels.map((level) => {
-          const radius = (level / 100) * maxRadius;
+        {/* Grid circles with labels */}
+        {gridLevels.map((level, idx) => {
+          const normalizedLevel = level / maxScore;
+          const radius = normalizedLevel * maxRadius;
           return (
-            <Circle
-              key={level}
-              cx={center}
-              cy={center}
-              r={radius}
-              stroke="#e5e7eb"
-              strokeWidth={1}
-              fill="none"
-            />
+            <G key={level}>
+              <Circle
+                cx={center}
+                cy={center}
+                r={radius}
+                stroke="#e5e7eb"
+                strokeWidth={1}
+                fill="none"
+              />
+              {/* Grid level label */}
+              <SvgText
+                x={center + 5}
+                y={center - radius + 5}
+                fontSize={10}
+                fill="#9ca3af"
+                textAnchor="start"
+              >
+                {level}
+              </SvgText>
+            </G>
           );
         })}
 
         {/* Grid lines from center to each axis */}
         {data.map((_, i) => {
-          const point = calculatePoint(100, i, data.length);
+          const point = calculatePoint(maxScore, i, data.length);
           return (
             <Line
               key={i}

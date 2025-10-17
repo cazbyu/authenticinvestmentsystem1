@@ -17,6 +17,7 @@ interface DomainScore {
   domain: string;
   score: number;
   color: string;
+  rawScore?: number;
 }
 
 interface BalanceScoresViewProps {
@@ -28,6 +29,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'all'>('week');
   const [calculationMode, setCalculationMode] = useState<'count' | 'score'>('count');
   const [domainScores, setDomainScores] = useState<DomainScore[]>([]);
+  const [maxScore, setMaxScore] = useState<number>(100);
   const [loading, setLoading] = useState(false);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [hasData, setHasData] = useState<boolean>(false);
@@ -189,43 +191,10 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
     }
   }, [getDateFilter, groupByParentId]);
 
-  const normalizeScores = useCallback((scores: number[]): number[] => {
-    console.log('[BalanceScores] Normalizing scores:', { scores, calculationMode });
-
-    // Check if all scores are actually zero
-    const allZero = scores.every(s => s === 0);
-    if (allZero) {
-      console.log('[BalanceScores] All raw scores are zero, returning zeros');
-      return scores.map(() => 0);
-    }
-
-    const maxScore = Math.max(...scores);
-    console.log('[BalanceScores] Max score:', maxScore);
-
-    // In score mode, if scores are already reasonable (0-100), keep them
-    // In count mode, normalize to 0-100 scale
-    const normalized = scores.map(score => {
-      if (score === 0) return 0;
-
-      if (calculationMode === 'score') {
-        // For authentic score mode
-        if (maxScore <= 100) {
-          // Scores already in 0-100 range, keep as-is
-          return Math.round(score);
-        } else {
-          // Scale down to 0-100
-          return Math.round((score / maxScore) * 100);
-        }
-      } else {
-        // For count mode, normalize to 0-100
-        return Math.round((score / maxScore) * 100);
-      }
-    });
-
-    console.log('[BalanceScores] Normalized result:', normalized);
-    console.log('[BalanceScores] Any non-zero after normalization:', normalized.some(n => n > 0));
-    return normalized;
-  }, [calculationMode]);
+  const getMaxScore = useCallback((scores: number[]): number => {
+    const max = Math.max(...scores);
+    return max > 0 ? max : 100;
+  }, []);
 
   const fetchDomainScores = useCallback(async () => {
     if (domains.length === 0) {
@@ -249,37 +218,32 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
         rawScore: r.rawScore
       })));
 
-      const normalizedScores = normalizeScores(rawScores);
-      console.log('[BalanceScores] Normalized scores by domain:', results.map((r, i) => ({
-        domain: r.domain,
-        normalizedScore: normalizedScores[i]
-      })));
-
       const totalRawScore = rawScores.reduce((sum, score) => sum + score, 0);
-      const totalNormalizedScore = normalizedScores.reduce((sum, score) => sum + score, 0);
-
-      console.log('[BalanceScores] Score totals:', { totalRawScore, totalNormalizedScore });
-      // Use raw scores to determine if we have data, not normalized scores
       const actuallyHasData = totalRawScore > 0;
       console.log('[BalanceScores] Setting hasData to:', actuallyHasData);
       setHasData(actuallyHasData);
 
+      const maxScore = getMaxScore(rawScores);
+      console.log('[BalanceScores] Max score for scaling:', maxScore);
+
       const finalScores: DomainScore[] = results.map((r, i) => ({
         domain: r.domain,
-        score: normalizedScores[i],
+        score: rawScores[i],
+        rawScore: rawScores[i],
         color: r.color,
       }));
 
       console.log('[BalanceScores] Platform:', Platform.OS);
       console.log('[BalanceScores] Final scores being set:', finalScores);
       console.log('[BalanceScores] Scores have data:', finalScores.length > 0 && finalScores.some(s => s.score > 0));
+      setMaxScore(maxScore);
       setDomainScores(finalScores);
     } catch (error) {
       console.error('[BalanceScores] Error fetching domain scores:', error);
     } finally {
       setLoading(false);
     }
-  }, [domains, calculationMode, calculateDomainScore, normalizeScores, getDomainColor]);
+  }, [domains, calculationMode, calculateDomainScore, getMaxScore, getDomainColor]);
 
   useEffect(() => {
     fetchDomains();
@@ -389,7 +353,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
             </View>
           }>
             <ChartErrorBoundary>
-              <BalanceWheelChart data={domainScores} />
+              <BalanceWheelChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
             </ChartErrorBoundary>
           </Suspense>
         ) : (
@@ -400,7 +364,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
             </View>
           }>
             <ChartErrorBoundary>
-              <BalanceBarChart data={domainScores} />
+              <BalanceBarChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
             </ChartErrorBoundary>
           </Suspense>
         )}
@@ -412,7 +376,9 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
               <View key={domain.domain} style={styles.legendItem}>
                 <View style={[styles.legendColorBox, { backgroundColor: domain.color }]} />
                 <Text style={styles.legendDomain}>{domain.domain}</Text>
-                <Text style={styles.legendScore}>{Math.round(domain.score)}</Text>
+                <Text style={styles.legendScore}>
+                  {Math.round(domain.score)} {calculationMode === 'count' ? 'tasks' : 'pts'}
+                </Text>
               </View>
             ))}
           </View>

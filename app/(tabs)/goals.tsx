@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
-import { CreateGoalModal } from '@/components/goals/CreateGoalModal';
-import { EditGoalModal } from '@/components/goals/EditGoalModal';
-import ActionEffortModal from '@/components/goals/ActionEffortModal';
-import { ManageCustomTimelinesModal } from '@/components/timelines/ManageCustomTimelinesModal';
-import { ManageGlobalTimelinesModal } from '@/components/timelines/ManageGlobalTimelinesModal';
-import { ManageTimelinesView } from '@/components/timelines/ManageTimelinesView';
-import { WithdrawalForm } from '@/components/journal/WithdrawalForm';
+const CreateGoalModal = lazy(() => import('@/components/goals/CreateGoalModal').then(m => ({ default: m.CreateGoalModal })));
+const EditGoalModal = lazy(() => import('@/components/goals/EditGoalModal').then(m => ({ default: m.EditGoalModal })));
+const ActionEffortModal = lazy(() => import('@/components/goals/ActionEffortModal'));
+const ManageCustomTimelinesModal = lazy(() => import('@/components/timelines/ManageCustomTimelinesModal').then(m => ({ default: m.ManageCustomTimelinesModal })));
+const ManageGlobalTimelinesModal = lazy(() => import('@/components/timelines/ManageGlobalTimelinesModal').then(m => ({ default: m.ManageGlobalTimelinesModal })));
+const ManageTimelinesView = lazy(() => import('@/components/timelines/ManageTimelinesView').then(m => ({ default: m.ManageTimelinesView })));
+const WithdrawalForm = lazy(() => import('@/components/journal/WithdrawalForm').then(m => ({ default: m.WithdrawalForm })));
 import { GoalBankTabbedHeader, GoalBankTab } from '@/components/goals/GoalBankTabbedHeader';
 import { NorthStarQuickView } from '@/components/northStar/NorthStarQuickView';
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
@@ -1462,95 +1462,97 @@ export default function Goals() {
       )}
 
       {/* Modals */}
-      <CreateGoalModal
-        visible={createGoalModalVisible}
-        onClose={() => setCreateGoalModalVisible(false)}
-        onSubmitSuccess={() => {
-          setCreateGoalModalVisible(false);
-          fetchTimelineGoals(selectedTimeline!);
-          fetchAllTimelines();
-        }}
-        createTwelveWeekGoal={createTwelveWeekGoal}
-        createCustomGoal={createCustomGoal}
-        selectedTimeline={selectedTimeline}
-        allTimelines={allTimelines}
-      />
+      <Suspense fallback={null}>
+        <CreateGoalModal
+          visible={createGoalModalVisible}
+          onClose={() => setCreateGoalModalVisible(false)}
+          onSubmitSuccess={() => {
+            setCreateGoalModalVisible(false);
+            fetchTimelineGoals(selectedTimeline!);
+            fetchAllTimelines();
+          }}
+          createTwelveWeekGoal={createTwelveWeekGoal}
+          createCustomGoal={createCustomGoal}
+          selectedTimeline={selectedTimeline}
+          allTimelines={allTimelines}
+        />
 
-      <EditGoalModal
-        visible={editGoalModalVisible}
-        onClose={() => setEditGoalModalVisible(false)}
-        onUpdate={() => {
-          setEditGoalModalVisible(false);
-          fetchTimelineGoals(selectedTimeline!);
-          fetchAllTimelines();
-        }}
-        goal={selectedGoal}
-        deleteGoal={deleteGoal}
-      />
+        <EditGoalModal
+          visible={editGoalModalVisible}
+          onClose={() => setEditGoalModalVisible(false)}
+          onUpdate={() => {
+            setEditGoalModalVisible(false);
+            fetchTimelineGoals(selectedTimeline!);
+            fetchAllTimelines();
+          }}
+          goal={selectedGoal}
+          deleteGoal={deleteGoal}
+        />
 
-      <ActionEffortModal
-        visible={actionEffortModalVisible}
-        onClose={async () => { // MODIFIED: The handler is now async.
-          console.log('[Goals] ActionEffortModal onClose - starting refresh');
-          setActionEffortModalVisible(false);
-          setEditingAction(null);
-          setEditingActionGoal(null);
-          setActionModalMode('create');
-          // MODIFIED: This logic now chains the fetches to prevent race conditions.
-          if (selectedTimeline) {
-            console.log('[Goals] Fetching timeline goals for:', selectedTimeline.id);
-            const newGoals = await fetchTimelineGoals(selectedTimeline);
-            console.log('[Goals] Timeline goals fetched, count:', newGoals.length);
-            console.log('[Goals] Fetching week actions for goals:', newGoals.map(g => g.id));
-            await fetchWeekActions(newGoals);
-            await fetchTotalGoalProgress(newGoals);
-            console.log('[Goals] Week actions and total progress fetch completed');
-          }
-        }}
-        goal={actionModalMode === 'create' ? selectedGoalForAction : editingActionGoal}
-        cycleWeeks={timelineWeeks}
-        timeline={selectedTimeline}
-        createTaskWithWeekPlan={createTaskWithWeekPlan}
-        initialData={editingAction}
-        mode={actionModalMode}
-      />
+        <ActionEffortModal
+          visible={actionEffortModalVisible}
+          onClose={async () => { // MODIFIED: The handler is now async.
+            console.log('[Goals] ActionEffortModal onClose - starting refresh');
+            setActionEffortModalVisible(false);
+            setEditingAction(null);
+            setEditingActionGoal(null);
+            setActionModalMode('create');
+            // MODIFIED: This logic now chains the fetches to prevent race conditions.
+            if (selectedTimeline) {
+              console.log('[Goals] Fetching timeline goals for:', selectedTimeline.id);
+              const newGoals = await fetchTimelineGoals(selectedTimeline);
+              console.log('[Goals] Timeline goals fetched, count:', newGoals.length);
+              console.log('[Goals] Fetching week actions for goals:', newGoals.map(g => g.id));
+              await fetchWeekActions(newGoals);
+              await fetchTotalGoalProgress(newGoals);
+              console.log('[Goals] Week actions and total progress fetch completed');
+            }
+          }}
+          goal={actionModalMode === 'create' ? selectedGoalForAction : editingActionGoal}
+          cycleWeeks={timelineWeeks}
+          timeline={selectedTimeline}
+          createTaskWithWeekPlan={createTaskWithWeekPlan}
+          initialData={editingAction}
+          mode={actionModalMode}
+        />
 
-      <ManageCustomTimelinesModal
-        visible={manageCustomTimelinesModalVisible}
-        onClose={() => setManageCustomTimelinesModalVisible(false)}
-        onUpdate={async () => {
-          console.log('[Goals] ManageCustomTimelinesModal onUpdate called');
-          await fetchAllTimelines();
-          if (selectedTimeline) {
-            console.log('[Goals] Refreshing selected timeline goals');
-            await fetchTimelineGoals(selectedTimeline);
-          }
-          console.log('[Goals] Custom timeline update complete');
-        }}
-      />
+        <ManageCustomTimelinesModal
+          visible={manageCustomTimelinesModalVisible}
+          onClose={() => setManageCustomTimelinesModalVisible(false)}
+          onUpdate={async () => {
+            console.log('[Goals] ManageCustomTimelinesModal onUpdate called');
+            await fetchAllTimelines();
+            if (selectedTimeline) {
+              console.log('[Goals] Refreshing selected timeline goals');
+              await fetchTimelineGoals(selectedTimeline);
+            }
+            console.log('[Goals] Custom timeline update complete');
+          }}
+        />
 
-      <ManageGlobalTimelinesModal
-        visible={manageGlobalTimelinesModalVisible}
-        onClose={() => setManageGlobalTimelinesModalVisible(false)}
-        onUpdate={async () => {
-          console.log('[Goals] ManageGlobalTimelinesModal onUpdate called');
-          await fetchAllTimelines();
-          if (selectedTimeline) {
-            console.log('[Goals] Refreshing selected timeline goals');
-            await fetchTimelineGoals(selectedTimeline);
-          }
-          console.log('[Goals] Global timeline update complete');
-        }}
-      />
+        <ManageGlobalTimelinesModal
+          visible={manageGlobalTimelinesModalVisible}
+          onClose={() => setManageGlobalTimelinesModalVisible(false)}
+          onUpdate={async () => {
+            console.log('[Goals] ManageGlobalTimelinesModal onUpdate called');
+            await fetchAllTimelines();
+            if (selectedTimeline) {
+              console.log('[Goals] Refreshing selected timeline goals');
+              await fetchTimelineGoals(selectedTimeline);
+            }
+            console.log('[Goals] Global timeline update complete');
+          }}
+        />
 
-      <WithdrawalForm
-        visible={withdrawalFormVisible}
-        onClose={() => setWithdrawalFormVisible(false)}
-        onSubmitSuccess={() => {
-          setWithdrawalFormVisible(false);
-          refreshScore(true);
-        }}
-      />
+        <WithdrawalForm
+          visible={withdrawalFormVisible}
+          onClose={() => setWithdrawalFormVisible(false)}
+          onSubmitSuccess={() => {
+            setWithdrawalFormVisible(false);
+            refreshScore(true);
+          }}
+        />
+      </Suspense>
 
       {/* Delete Confirmation Modal */}
       <Modal
