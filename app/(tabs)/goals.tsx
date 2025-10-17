@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
@@ -50,6 +50,7 @@ interface TimelineWeek {
   start_date: string;
   end_date: string;
 }
+
 export default function Goals() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { colors } = useTheme();
@@ -70,16 +71,25 @@ export default function Goals() {
   const [loadingNorthStar, setLoadingNorthStar] = useState(false);
   const [northStarEditorVisible, setNorthStarEditorVisible] = useState(false);
   const [northStarInitialSection, setNorthStarInitialSection] = useState<'mission' | 'vision' | 'goals'>('mission');
-  
+
   // Import functions from useGoalProgress hook (but NOT fetchGoalActionsForWeek or completion functions - we handle those locally)
   const {
     toggleTaskDay,
   } = useGoalProgress();
-  
+
   // Local goals state for the selected timeline
   const [timelineGoals, setTimelineGoals] = useState<any[]>([]);
   const [timelineGoalProgress, setTimelineGoalProgress] = useState<Record<string, any>>({});
   const [totalGoalProgress, setTotalGoalProgress] = useState<Record<string, { totalActual: number; totalTarget: number; percentage: number }>>({});
+
+  // Memoize current week computation for better performance
+  const currentWeek = useMemo(() => {
+    if (!selectedTimeline || !timelineWeeks || timelineWeeks.length === 0) return null;
+    return timelineWeeks[currentWeekIndex] || null;
+  }, [selectedTimeline, timelineWeeks, currentWeekIndex]);
+
+  // Memoize goal IDs for efficient comparison
+  const goalIds = useMemo(() => timelineGoals.map(g => g.id), [timelineGoals]);
 
   // MODIFIED: This function now accepts the goals array directly to avoid using stale state.
   const fetchWeekActions = async (goalsToFetch: any[]) => {
@@ -687,7 +697,7 @@ export default function Goals() {
   };
 
 
-  const fetchAllTimelines = async () => {
+  const fetchAllTimelines = useCallback(async () => {
     console.log('[Goals] fetchAllTimelines called');
     setLoadingTimelines(true);
     try {
@@ -825,7 +835,7 @@ export default function Goals() {
       setLoadingTimelines(false);
       Alert.alert('Error', (error as Error).message);
     }
-  };
+  }, []); // Memoized with empty deps - only fetches from server
 
   const fetchTimelinesWithGoalCounts = async (timelines: Timeline[]) => {
     try {

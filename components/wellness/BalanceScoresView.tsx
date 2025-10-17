@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch, Platform } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { BalanceWheelChart } from './BalanceWheelChart';
-import { BalanceBarChart } from './BalanceBarChart';
 import { ChartErrorBoundary } from './ChartErrorBoundary';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+
+const BalanceWheelChart = lazy(() => import('./BalanceWheelChart').then(module => ({ default: module.BalanceWheelChart })));
+const BalanceBarChart = lazy(() => import('./BalanceBarChart').then(module => ({ default: module.BalanceBarChart })));
 
 interface Domain {
   id: string;
@@ -381,13 +382,27 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
             </Text>
           </View>
         ) : activeChartView === 'wheel' ? (
-          <ChartErrorBoundary>
-            <BalanceWheelChart data={domainScores} />
-          </ChartErrorBoundary>
+          <Suspense fallback={
+            <View style={styles.chartLoadingContainer}>
+              <ActivityIndicator size="large" color="#0078d4" />
+              <Text style={styles.chartLoadingText}>Loading chart...</Text>
+            </View>
+          }>
+            <ChartErrorBoundary>
+              <BalanceWheelChart data={domainScores} />
+            </ChartErrorBoundary>
+          </Suspense>
         ) : (
-          <ChartErrorBoundary>
-            <BalanceBarChart data={domainScores} />
-          </ChartErrorBoundary>
+          <Suspense fallback={
+            <View style={styles.chartLoadingContainer}>
+              <ActivityIndicator size="large" color="#0078d4" />
+              <Text style={styles.chartLoadingText}>Loading chart...</Text>
+            </View>
+          }>
+            <ChartErrorBoundary>
+              <BalanceBarChart data={domainScores} />
+            </ChartErrorBoundary>
+          </Suspense>
         )}
 
         {!loading && domainScores.length > 0 && (
@@ -554,5 +569,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
+  },
+  chartLoadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chartLoadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#6b7280',
   },
 });

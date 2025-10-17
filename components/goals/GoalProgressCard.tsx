@@ -1,8 +1,55 @@
-import React, { useMemo, useCallback, memo } from 'react';
+import React, { useMemo, useCallback, memo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Target, Calendar, Plus, TrendingUp, Check, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { GoalProgress } from '@/hooks/useGoalProgress';
 import { parseLocalDate, formatLocalDate } from '@/lib/dateUtils';
+
+// Memoized DayDot component for optimal performance
+const DayDot = memo(function DayDot({
+  date,
+  dayName,
+  hasLog,
+  onToggle,
+  disabled
+}: {
+  date: string;
+  dayName: string;
+  hasLog: boolean;
+  onToggle: (date: string) => void;
+  disabled: boolean;
+}) {
+  const [isToggling, setIsToggling] = useState(false);
+
+  const handlePress = useCallback(async () => {
+    if (disabled || isToggling) return;
+
+    setIsToggling(true);
+    try {
+      await onToggle(date);
+    } finally {
+      // Small delay to prevent rapid successive toggles
+      setTimeout(() => setIsToggling(false), 300);
+    }
+  }, [date, disabled, isToggling, onToggle]);
+
+  return (
+    <View style={styles.dayDotContainer}>
+      <Text style={styles.dayLabelText}>{dayName}</Text>
+      <TouchableOpacity
+        style={[
+          styles.dayDot,
+          hasLog && styles.dayDotCompleted,
+          isToggling && styles.dayDotToggling
+        ]}
+        onPress={handlePress}
+        activeOpacity={disabled ? 1 : 0.7}
+        disabled={disabled || isToggling}
+      >
+        {hasLog && <Check size={12} color="#ffffff" />}
+      </TouchableOpacity>
+    </View>
+  );
+});
 
 interface WeekData {
   weekNumber: number;
@@ -375,37 +422,33 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                         </View>
                       </View>
 
-                      {/* Day labels above circles for this action */}
-                      <View style={styles.dayLabelsRow}>
-                        {weekDays.map(day => (
-                          <Text key={day.date} style={styles.dayLabelText}>
-                            {day.dayName}
-                          </Text>
-                        ))}
-                      </View>
-
-                      <View style={styles.dayDots}>
+                      {/* Day dots with optimized rendering */}
+                      <View style={styles.dayDotsRow}>
                         {weekDays.map(day => {
-                           const hasLog = action.logs.some(
-                             log => log.measured_on === day.date && log.completed
-                           );
+                          const hasLog = action.logs.some(
+                            log => log.measured_on === day.date && log.completed
+                          );
 
-                           return (
-                             <TouchableOpacity
-                               key={day.date}
-                               style={[styles.dayDot, hasLog && styles.dayDotCompleted]}
-                               onPress={onToggleCompletion ? () => {
-                                 onToggleCompletion(action.id, day.date, hasLog).catch(error => {
-                                   console.error('[GoalProgressCard] Error in day dot toggle:', error);
-                                 });
-                               } : undefined}
-                               activeOpacity={onToggleCompletion ? 0.7 : 1}
-                               disabled={!onToggleCompletion}
-                             >
-                               {hasLog && <Check size={12} color="#ffffff" />}
-                             </TouchableOpacity>
-                           );
-                         })}
+                          const handleToggle = useCallback(async (date: string) => {
+                            if (!onToggleCompletion) return;
+                            try {
+                              await onToggleCompletion(action.id, date, hasLog);
+                            } catch (error) {
+                              console.error('[GoalProgressCard] Error in day dot toggle:', error);
+                            }
+                          }, [onToggleCompletion, action.id, hasLog]);
+
+                          return (
+                            <DayDot
+                              key={day.date}
+                              date={day.date}
+                              dayName={day.dayName}
+                              hasLog={hasLog}
+                              onToggle={handleToggle}
+                              disabled={!onToggleCompletion}
+                            />
+                          );
+                        })}
                       </View>
 
                     </View>
@@ -736,37 +779,37 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 4,
   },
-  dayDots: {
+  dayDotsRow: {
     flexDirection: 'row',
-    gap: 10, // Match gap with dayLabelsRow
+    gap: 10,
     justifyContent: 'center',
   },
-  dayLabelsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10, // Slightly increased gap for better spacing
-    marginBottom: 4, // Space between labels and circles
+  dayDotContainer: {
+    alignItems: 'center',
+    gap: 4,
   },
   dayLabelText: {
     fontSize: 10,
     fontWeight: '600',
     color: '#6b7280',
-    width: 22, // Slightly increased width to prevent letter wrapping
     textAlign: 'center',
   },
   dayDot: {
-    width: 22, // Increased to match label width
-    height: 22, // Increased to match label width
-    borderRadius: 11, // Half of width/height for perfect circle
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent', // Empty circle
-    borderWidth: 1, // Outline
-    borderColor: '#6b7280', // Gray outline
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#6b7280',
   },
   dayDotCompleted: {
-    backgroundColor: '#1f2937', // Filled dark circle
-    borderColor: '#1f2937', // Match border color
+    backgroundColor: '#1f2937',
+    borderColor: '#1f2937',
+  },
+  dayDotToggling: {
+    opacity: 0.6,
   },
   dayDotTouchable: {
     width: '100%',
