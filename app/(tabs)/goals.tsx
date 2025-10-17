@@ -477,11 +477,13 @@ export default function Goals() {
   const [timelineWeeks, setTimelineWeeks] = useState<TimelineWeek[]>([]);
   const [timelineDaysLeft, setTimelineDaysLeft] = useState<any>(null);
   const [timelinesWithGoals, setTimelinesWithGoals] = useState<any[]>([]);
+  const [loadingTimelines, setLoadingTimelines] = useState(true);
 
   // Refs for initialization
   const initializedWeekRef = useRef(false);
   const lastSelectedTimelineIdRef = useRef<string | null>(null);
   const timelinesLoadedRef = useRef(false);
+  const timelinesDataCache = useRef<any[]>([]);
   
   // Use the goals hook with timeline scope
   const {
@@ -500,14 +502,13 @@ export default function Goals() {
   } = useGoals();
 
 
-  // Reset to main Goal Bank view when tab is pressed
-  const resetToMain = useCallback(() => {
+  // Soft reset - clears selected timeline but preserves timeline list
+  const softResetToTimelines = useCallback(() => {
     setActiveTab('timelines');
     setSelectedTimeline(null);
     setCurrentWeekIndex(0);
     setTimelineWeeks([]);
     setTimelineGoals([]);
-    setTimelinesWithGoals([]);
     setTimelineGoalProgress({});
     setTotalGoalProgress({});
     setWeekGoalActions({});
@@ -538,20 +539,38 @@ export default function Goals() {
       return null;
     });
     initializedWeekRef.current = false;
-    timelinesLoadedRef.current = false;
-    // Don't clear lastSelectedTimelineIdRef - we want to keep it for restoration
+    // Restore cached timelines if available
+    if (timelinesDataCache.current.length > 0) {
+      setTimelinesWithGoals(timelinesDataCache.current);
+    }
+    // Don't clear timelinesLoadedRef or lastSelectedTimelineIdRef - we want to keep them
   }, []);
+
+  // Full reset - clears everything (used on unmount)
+  const resetToMain = useCallback(() => {
+    softResetToTimelines();
+    setTimelinesWithGoals([]);
+    timelinesLoadedRef.current = false;
+    timelinesDataCache.current = [];
+    lastSelectedTimelineIdRef.current = null;
+  }, [softResetToTimelines]);
 
   useEffect(() => {
     console.log('[Goals] Component mounted, initializing...');
-    registerResetHandler('goals', resetToMain);
-    try {
-      fetchAllTimelines();
-      refreshScore();
-      fetchNorthStarData();
-    } catch (error) {
-      console.error('[Goals] Error in initialization:', error);
-    }
+    // Register soft reset for tab press
+    registerResetHandler('goals', softResetToTimelines);
+
+    const initializeGoals = async () => {
+      try {
+        await fetchAllTimelines();
+        refreshScore();
+        fetchNorthStarData();
+      } catch (error) {
+        console.error('[Goals] Error in initialization:', error);
+      }
+    };
+
+    initializeGoals();
 
     // Cleanup undo timeout on unmount
     return () => {
@@ -559,8 +578,10 @@ export default function Goals() {
       if (undoState?.timeout) {
         clearTimeout(undoState.timeout);
       }
+      // Full reset on unmount
+      resetToMain();
     };
-  }, [registerResetHandler, unregisterResetHandler, resetToMain]);
+  }, [registerResetHandler, unregisterResetHandler, softResetToTimelines, resetToMain]);
 
   // Parallel fetch all timeline data when timeline is selected
   useEffect(() => {
@@ -627,11 +648,13 @@ export default function Goals() {
 
   const fetchAllTimelines = async () => {
     console.log('[Goals] fetchAllTimelines called');
+    setLoadingTimelines(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         console.log('[Goals] No authenticated user found');
+        setLoadingTimelines(false);
         return;
       }
 
@@ -754,9 +777,11 @@ export default function Goals() {
 
       // Mark timelines as loaded
       timelinesLoadedRef.current = true;
+      setLoadingTimelines(false);
 
     } catch (error) {
       console.error('[Goals] Error fetching timelines:', error);
+      setLoadingTimelines(false);
       Alert.alert('Error', (error as Error).message);
     }
   };
@@ -831,6 +856,8 @@ export default function Goals() {
       );
 
       setTimelinesWithGoals(timelinesWithCounts);
+      // Cache the timeline data
+      timelinesDataCache.current = timelinesWithCounts;
     } catch (error) {
       console.error('Error fetching timeline goal counts:', error);
     }
@@ -1113,7 +1140,7 @@ export default function Goals() {
       </View>
 
       <ScrollView style={styles.timelinesList}>
-        {loading ? (
+        {loadingTimelines ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0078d4" />
             <Text style={styles.loadingText}>Loading timelines...</Text>
