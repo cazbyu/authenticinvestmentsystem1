@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
+import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
@@ -27,39 +27,54 @@ import { router } from 'expo-router';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
-
-interface Timeline {
-  id: string;
-  source: 'custom' | 'global';
-  title?: string;
-  start_date: string | null;
-  end_date: string | null;
-  timeline_type?: 'cycle' | 'project' | 'challenge' | 'custom';
-  global_cycle_id?: string | null;
-  global_cycle?: {
-    id?: string | null;
-    title?: string | null;
-    cycle_label?: string | null;
-    start_date?: string | null;
-    end_date?: string | null;
-  } | null;
-}
-
-interface TimelineWeek {
-  week_number: number;
-  start_date: string;
-  end_date: string;
-}
+import { goalsReducer, initialGoalsState, type Timeline, type TimelineWeek } from './goalsReducer';
 
 export default function Goals() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { colors } = useTheme();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
-  const [activeTab, setActiveTab] = useState<GoalBankTab>('timelines');
-  const [selectedTimeline, setSelectedTimeline] = useState<Timeline | null>(null);
-  const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
-  const [weekGoalActions, setWeekGoalActions] = useState<Record<string, any[]>>({});
-  const [loadingWeekActions, setLoadingWeekActions] = useState(false);
+
+  // Use reducer for core business logic state
+  const [state, dispatch] = useReducer(goalsReducer, initialGoalsState);
+  const {
+    activeTab,
+    selectedTimeline,
+    currentWeekIndex,
+    weekGoalActions,
+    loadingWeekActions,
+    allTimelines,
+    timelineWeeks,
+    timelineDaysLeft,
+    timelinesWithGoals,
+    loadingTimelines,
+    timelineGoals,
+    timelineGoalProgress,
+    totalGoalProgress,
+    expandedGoals,
+  } = state;
+
+  // Wrapper functions for dispatch (maintains compatibility with existing code)
+  const setActiveTab = useCallback((tab: typeof activeTab) => dispatch({ type: 'SET_ACTIVE_TAB', payload: tab }), []);
+  const setSelectedTimeline = useCallback((timeline: Timeline | null) => dispatch({ type: 'SET_SELECTED_TIMELINE', payload: timeline }), []);
+  const setCurrentWeekIndex = useCallback((index: number) => dispatch({ type: 'SET_CURRENT_WEEK_INDEX', payload: index }), []);
+  const setWeekGoalActions = useCallback((actions: Record<string, any[]> | ((prev: Record<string, any[]>) => Record<string, any[]>)) => {
+    if (typeof actions === 'function') {
+      dispatch({ type: 'SET_WEEK_GOAL_ACTIONS', payload: actions(weekGoalActions) });
+    } else {
+      dispatch({ type: 'SET_WEEK_GOAL_ACTIONS', payload: actions });
+    }
+  }, [weekGoalActions]);
+  const setLoadingWeekActions = useCallback((loading: boolean) => dispatch({ type: 'SET_LOADING_WEEK_ACTIONS', payload: loading }), []);
+  const setAllTimelines = useCallback((timelines: Timeline[]) => dispatch({ type: 'SET_ALL_TIMELINES', payload: timelines }), []);
+  const setTimelineWeeks = useCallback((weeks: TimelineWeek[]) => dispatch({ type: 'SET_TIMELINE_WEEKS', payload: weeks }), []);
+  const setTimelineDaysLeft = useCallback((days: any) => dispatch({ type: 'SET_TIMELINE_DAYS_LEFT', payload: days }), []);
+  const setTimelinesWithGoals = useCallback((timelines: any[]) => dispatch({ type: 'SET_TIMELINES_WITH_GOALS', payload: timelines }), []);
+  const setLoadingTimelines = useCallback((loading: boolean) => dispatch({ type: 'SET_LOADING_TIMELINES', payload: loading }), []);
+  const setTimelineGoals = useCallback((goals: any[]) => dispatch({ type: 'SET_TIMELINE_GOALS', payload: goals }), []);
+  const setTimelineGoalProgress = useCallback((progress: Record<string, any>) => dispatch({ type: 'SET_TIMELINE_GOAL_PROGRESS', payload: progress }), []);
+  const setTotalGoalProgress = useCallback((progress: Record<string, { totalActual: number; totalTarget: number; percentage: number }>) => dispatch({ type: 'SET_TOTAL_GOAL_PROGRESS', payload: progress }), []);
+  const setExpandedGoals = useCallback((goals: Record<string, boolean>) => dispatch({ type: 'SET_EXPANDED_GOALS', payload: goals }), []);
+  const toggleGoalExpanded = useCallback((goalId: string) => dispatch({ type: 'TOGGLE_GOAL_EXPANDED', payload: goalId }), []);
 
   // Helper function to format dates without timezone shift
   const formatDateDisplay = (dateString: string): string => {
@@ -77,10 +92,7 @@ export default function Goals() {
     toggleTaskDay,
   } = useGoalProgress();
 
-  // Local goals state for the selected timeline
-  const [timelineGoals, setTimelineGoals] = useState<any[]>([]);
-  const [timelineGoalProgress, setTimelineGoalProgress] = useState<Record<string, any>>({});
-  const [totalGoalProgress, setTotalGoalProgress] = useState<Record<string, { totalActual: number; totalTarget: number; percentage: number }>>({});
+  // Goals state now managed by reducer above
 
   // Memoize current week computation for better performance
   const currentWeek = useMemo(() => {
@@ -520,15 +532,7 @@ export default function Goals() {
   const [editingAction, setEditingAction] = useState<any>(null);
   const [editingActionGoal, setEditingActionGoal] = useState<any>(null);
 
-  // Collapse/expand state for goal actions
-  const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>({});
-  
-  // Timeline data
-  const [allTimelines, setAllTimelines] = useState<Timeline[]>([]);
-  const [timelineWeeks, setTimelineWeeks] = useState<TimelineWeek[]>([]);
-  const [timelineDaysLeft, setTimelineDaysLeft] = useState<any>(null);
-  const [timelinesWithGoals, setTimelinesWithGoals] = useState<any[]>([]);
-  const [loadingTimelines, setLoadingTimelines] = useState(true);
+  // Timeline and goals state now managed by reducer above (see line 38)
 
   // Refs for initialization
   const initializedWeekRef = useRef(false);
@@ -1084,12 +1088,7 @@ export default function Goals() {
     setExpandedGoals({});
   };
 
-  const toggleGoalExpanded = (goalId: string) => {
-    setExpandedGoals(prev => ({
-      ...prev,
-      [goalId]: !prev[goalId]
-    }));
-  };
+  // toggleGoalExpanded is now defined above using useCallback and dispatch
 
   const handleEditAction = (action: any, goal: any) => {
     console.log('[handleEditAction] Editing action:', action);
@@ -1325,20 +1324,22 @@ export default function Goals() {
           </View>
         )}
 
-        <ScrollView style={styles.goalsList}>
-          {timelineGoals.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No goals found for this timeline</Text>
-              <TouchableOpacity
-                style={styles.createGoalButton}
-                onPress={() => setCreateGoalModalVisible(true)}
-              >
-                <Plus size={20} color="#ffffff" />
-                <Text style={styles.createGoalButtonText}>Create Goal</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            timelineGoals.map(goal => {
+        {timelineGoals.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No goals found for this timeline</Text>
+            <TouchableOpacity
+              style={styles.createGoalButton}
+              onPress={() => setCreateGoalModalVisible(true)}
+            >
+              <Plus size={20} color="#ffffff" />
+              <Text style={styles.createGoalButtonText}>Create Goal</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={timelineGoals}
+            keyExtractor={(goal) => goal.id}
+            renderItem={({ item: goal }) => {
               const totalProgress = totalGoalProgress[goal.id] || { totalActual: 0, totalTarget: 0, percentage: 0 };
               const progress = timelineGoalProgress[goal.id] || {
                 currentWeek: currentWeek?.week_number || 1,
@@ -1399,9 +1400,20 @@ export default function Goals() {
                   onToggleExpanded={() => toggleGoalExpanded(goal.id)}
                 />
               );
-            })
-          )}
-        </ScrollView>
+            }}
+            style={styles.goalsList}
+            contentContainerStyle={styles.goalsListContent}
+            initialNumToRender={5}
+            maxToRenderPerBatch={3}
+            windowSize={5}
+            removeClippedSubviews={true}
+            getItemLayout={(data, index) => ({
+              length: 300, // Approximate height of GoalProgressCard
+              offset: 300 * index,
+              index,
+            })}
+          />
+        )}
       </View>
     );
   };
@@ -1823,6 +1835,9 @@ const styles = StyleSheet.create({
   },
   goalsList: {
     flex: 1,
+  },
+  goalsListContent: {
+    paddingBottom: 20,
   },
   createGoalButton: {
     flexDirection: 'row',
