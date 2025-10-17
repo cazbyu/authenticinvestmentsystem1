@@ -12,6 +12,7 @@ import { LinkedAccountsManager } from '@/components/settings/LinkedAccountsManag
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
 import { ManageCustomTimelinesModal } from '@/components/timelines/ManageCustomTimelinesModal';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Camera, Upload, User } from 'lucide-react-native';
 
@@ -25,6 +26,7 @@ const redirectUri = AuthSession.makeRedirectUri({
 export default function SettingsScreen() {
   const router = useRouter();
   const { isDarkMode, toggleDarkMode, colors, setThemeColorImmediate } = useTheme();
+  const { authenticScore, refreshScore } = useAuthenticScore();
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -32,7 +34,6 @@ export default function SettingsScreen() {
   const [isRolesModalVisible, setIsRolesModalVisible] = useState(false);
   const [showNorthStarEditor, setShowNorthStarEditor] = useState(false);
   const [showTimelineArchive, setShowTimelineArchive] = useState(false);
-  const [authenticScore, setAuthenticScore] = useState(0);
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -130,35 +131,10 @@ export default function SettingsScreen() {
     }
   };
 
-  const calculateTaskPoints = (task: any, roles: any[] = [], domains: any[] = []) => {
-    let points = 0;
-    if (roles && roles.length > 0) points += roles.length;
-    if (domains && domains.length > 0) points += domains.length;
-    if (task.is_authentic_deposit) points += 2;
-    if (task.is_urgent && task.is_important) points += 1.5;
-    else if (!task.is_urgent && task.is_important) points += 3;
-    else if (task.is_urgent && !task.is_important) points += 1;
-    else points += 0.5;
-    if (task.is_twelve_week_goal) points += 2;
-    return Math.round(points * 10) / 10;
-  };
-
-  const calculateAuthenticScore = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const score = await calculateAuthenticScore(supabase, user.id);
-      setAuthenticScore(score);
-    } catch (error) {
-      console.error('Error calculating authentic score:', error);
-    }
-  };
 
   useEffect(() => {
     fetchProfile();
-    calculateAuthenticScore();
+    refreshScore();
   }, []);
 
   useEffect(() => {

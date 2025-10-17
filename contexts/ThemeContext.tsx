@@ -82,7 +82,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('0008-ap-users')
         .select('theme_color')
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (error) {
@@ -115,7 +115,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       await supabase
         .from('0008-ap-users')
         .update({ theme_color: color, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
+        .eq('user_id', user.id);
     } catch (error) {
       console.error('Error saving theme color to database:', error);
     }

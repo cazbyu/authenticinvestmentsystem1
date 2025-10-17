@@ -19,20 +19,40 @@ export function SideMenu() {
   const router = useRouter();
   const { colors } = useTheme();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchUserEmail();
+    fetchUserData();
   }, []);
 
-  const fetchUserEmail = async () => {
+  const fetchUserData = async () => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email) {
         setUserEmail(user.email);
       }
+
+      // Fetch user profile to get name
+      if (user) {
+        const { data: profile } = await supabase
+          .from('0008-ap-users')
+          .select('first_name, last_name')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (profile?.first_name || profile?.last_name) {
+          const fullName = [profile.first_name, profile.last_name]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+          if (fullName) {
+            setUserName(fullName);
+          }
+        }
+      }
     } catch (error) {
-      console.error('Error fetching user email:', error);
+      console.error('Error fetching user data:', error);
     }
   };
 
@@ -86,10 +106,10 @@ export function SideMenu() {
       </ScrollView>
       
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
-        {userEmail && (
+        {(userName || userEmail) && (
           <View style={styles.userEmailContainer}>
             <Text style={[styles.userEmailText, { color: colors.textSecondary }]} numberOfLines={1}>
-              Signed in as {userEmail}
+              {userName || `Signed in as ${userEmail}`}
             </Text>
           </View>
         )}
