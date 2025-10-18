@@ -314,11 +314,14 @@ export default function WeeklyReflectionView() {
                   <Text style={[styles.highlightText, { color: colors.text }]}>
                     You invested in the following roles this week:
                   </Text>
-                  {aggregationData.roleInvestments.map(role => (
-                    <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
-                      • {role.role_label}
-                    </Text>
-                  ))}
+                  {aggregationData.roleInvestments.map(role => {
+                    const totalDeposits = role.task_count + role.deposit_idea_count;
+                    return (
+                      <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
+                        • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
+                      </Text>
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -341,7 +344,7 @@ export default function WeeklyReflectionView() {
                   </Text>
                   {aggregationData.domainBalance.map(domain => (
                     <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
-                      • {domain.domain_name}
+                      • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
                     </Text>
                   ))}
                 </View>
@@ -640,7 +643,6 @@ const styles = StyleSheet.create({
   },
   roleText: {
     fontSize: 14,
-    fontWeight: '500',
   },
   depositText: {
     fontSize: 13,
