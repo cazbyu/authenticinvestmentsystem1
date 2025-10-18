@@ -429,22 +429,20 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                             log => log.measured_on === day.date && log.completed
                           );
 
-                          const handleToggle = useCallback(async (date: string) => {
-                            if (!onToggleCompletion) return;
-                            try {
-                              await onToggleCompletion(action.id, date, hasLog);
-                            } catch (error) {
-                              console.error('[GoalProgressCard] Error in day dot toggle:', error);
-                            }
-                          }, [onToggleCompletion, action.id, hasLog]);
-
                           return (
                             <DayDot
                               key={day.date}
                               date={day.date}
                               dayName={day.dayName}
                               hasLog={hasLog}
-                              onToggle={handleToggle}
+                              onToggle={async (date: string) => {
+                                if (!onToggleCompletion) return;
+                                try {
+                                  await onToggleCompletion(action.id, date, hasLog);
+                                } catch (error) {
+                                  console.error('[GoalProgressCard] Error in day dot toggle:', error);
+                                }
+                              }}
                               disabled={!onToggleCompletion}
                             />
                           );
