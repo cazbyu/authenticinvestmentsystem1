@@ -13,18 +13,18 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import {
-  getWeekDateRange,
-  fetchWeeklyAggregationData,
+  getDayDateRange,
+  fetchDailyAggregationData,
 } from '@/lib/weeklyReflectionData';
 import RichTextInput from './RichTextInput';
 import RichTextDisplay from './RichTextDisplay';
-import { WeeklyAggregationData, Reflection, Role, Domain, UnifiedGoal } from '@/types/reflections';
-import { ChevronDown, ChevronUp, Save, Target, Users, Activity, AlertCircle, X } from 'lucide-react-native';
+import { DailyAggregationData, Reflection } from '@/types/reflections';
+import { Save, Target, Users, Activity, AlertCircle, X } from 'lucide-react-native';
 
 export default function DailyNotesView() {
   const { colors } = useTheme();
-  const [weekRange, setWeekRange] = useState(getWeekDateRange());
-  const [aggregationData, setAggregationData] = useState<WeeklyAggregationData | null>(null);
+  const [dayRange, setDayRange] = useState(getDayDateRange());
+  const [aggregationData, setAggregationData] = useState<DailyAggregationData | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -34,17 +34,7 @@ export default function DailyNotesView() {
   const [questionProgress, setQuestionProgress] = useState('');
   const [questionWithdrawals, setQuestionWithdrawals] = useState('');
 
-  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
-  const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>([]);
-  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
 
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [goals, setGoals] = useState<UnifiedGoal[]>([]);
-
-  const [rolesExpanded, setRolesExpanded] = useState(false);
-  const [domainsExpanded, setDomainsExpanded] = useState(false);
-  const [goalsExpanded, setGoalsExpanded] = useState(false);
 
   const [previousNotes, setPreviousNotes] = useState<Reflection[]>([]);
   const [selectedNote, setSelectedNote] = useState<Reflection | null>(null);
@@ -62,11 +52,8 @@ export default function DailyNotesView() {
       archiveOldReflections();
 
       await Promise.all([
-        fetchWeeklyData(),
+        fetchDailyData(),
         fetchCurrentReflection(),
-        fetchRoles(),
-        fetchDomains(),
-        fetchGoals(),
         fetchPreviousNotes(),
       ]);
     } catch (error) {
@@ -94,12 +81,14 @@ export default function DailyNotesView() {
     setRefreshing(false);
   };
 
-  const fetchWeeklyData = async () => {
+  const fetchDailyData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const data = await fetchWeeklyAggregationData(user.id, weekRange.start, weekRange.end);
+    const range = getDayDateRange();
+    setDayRange(range);
+    const data = await fetchDailyAggregationData(user.id, range.start, range.end);
     setAggregationData(data);
   };
 
@@ -127,50 +116,6 @@ export default function DailyNotesView() {
     }
   };
 
-  const fetchRoles = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('0008-ap-roles')
-      .select('id, label, color')
-      .eq('user_id', user.id)
-      .order('label');
-
-    if (!error && data) {
-      setRoles(data);
-    }
-  };
-
-  const fetchDomains = async () => {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('0008-ap-domains')
-      .select('id, name, color')
-      .order('name');
-
-    if (!error && data) {
-      setDomains(data);
-    }
-  };
-
-  const fetchGoals = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('v_unified_goals')
-      .select('id, title, goal_type, status')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .order('title');
-
-    if (!error && data) {
-      setGoals(data);
-    }
-  };
 
   const fetchPreviousNotes = async () => {
     const supabase = getSupabaseClient();
@@ -218,8 +163,8 @@ export default function DailyNotesView() {
             question_impact: questionImpact,
             question_progress: questionProgress,
             question_withdrawals: questionWithdrawals,
-            weekly_target_completion: aggregationData?.totalTargetsHit || 0,
-            total_goals_tracked: aggregationData?.totalGoalsTracked || 0,
+            weekly_target_completion: 0,
+            total_goals_tracked: aggregationData?.goalSummaries.length || 0,
           })
           .eq('id', currentReflection.id);
 
@@ -231,15 +176,15 @@ export default function DailyNotesView() {
             user_id: user.id,
             reflection_type: 'daily',
             date: today,
-            week_start_date: weekRange.start,
-            week_end_date: weekRange.end,
+            week_start_date: null,
+            week_end_date: null,
             content: '',
             question_proud: questionProud,
             question_impact: questionImpact,
             question_progress: questionProgress,
             question_withdrawals: questionWithdrawals,
-            weekly_target_completion: aggregationData?.totalTargetsHit || 0,
-            total_goals_tracked: aggregationData?.totalGoalsTracked || 0,
+            weekly_target_completion: 0,
+            total_goals_tracked: aggregationData?.goalSummaries.length || 0,
             authentic_score: 0,
           })
           .select()
@@ -250,66 +195,6 @@ export default function DailyNotesView() {
         setCurrentReflection(data);
       }
 
-      if (reflectionId) {
-        await supabase
-          .from('0008-ap-universal-roles-join')
-          .delete()
-          .eq('parent_id', reflectionId)
-          .eq('parent_type', 'reflection');
-
-        await supabase
-          .from('0008-ap-universal-domains-join')
-          .delete()
-          .eq('parent_id', reflectionId)
-          .eq('parent_type', 'reflection');
-
-        await supabase
-          .from('0008-ap-universal-goals-join')
-          .delete()
-          .eq('parent_id', reflectionId)
-          .eq('parent_type', 'reflection');
-
-        if (selectedRoleIds.length > 0) {
-          const roleInserts = selectedRoleIds.map(roleId => ({
-            parent_id: reflectionId,
-            parent_type: 'reflection',
-            role_id: roleId,
-          }));
-
-          await supabase
-            .from('0008-ap-universal-roles-join')
-            .insert(roleInserts);
-        }
-
-        if (selectedDomainIds.length > 0) {
-          const domainInserts = selectedDomainIds.map(domainId => ({
-            parent_id: reflectionId,
-            parent_type: 'reflection',
-            domain_id: domainId,
-          }));
-
-          await supabase
-            .from('0008-ap-universal-domains-join')
-            .insert(domainInserts);
-        }
-
-        if (selectedGoalIds.length > 0) {
-          const goalInserts = selectedGoalIds.map(goalId => {
-            const goal = goals.find(g => g.id === goalId);
-            return {
-              parent_id: reflectionId,
-              parent_type: 'reflection',
-              twelve_wk_goal_id: goal?.goal_type === '12week' ? goalId : null,
-              custom_goal_id: goal?.goal_type === 'custom' ? goalId : null,
-              goal_type: goal?.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
-            };
-          });
-
-          await supabase
-            .from('0008-ap-universal-goals-join')
-            .insert(goalInserts);
-        }
-      }
 
       Alert.alert('Success', 'Daily reflection saved successfully');
       fetchPreviousNotes();
@@ -321,13 +206,6 @@ export default function DailyNotesView() {
     }
   };
 
-  const toggleSelection = (id: string, selected: string[], setter: (ids: string[]) => void) => {
-    if (selected.includes(id)) {
-      setter(selected.filter(item => item !== id));
-    } else {
-      setter([...selected, id]);
-    }
-  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -348,59 +226,6 @@ export default function DailyNotesView() {
     });
   };
 
-  const renderCheckboxGrid = (
-    title: string,
-    items: any[],
-    selectedIds: string[],
-    onToggle: (id: string) => void,
-    expanded: boolean,
-    setExpanded: (val: boolean) => void,
-    labelKey: string = 'label'
-  ) => (
-    <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <TouchableOpacity
-        style={styles.sectionHeader}
-        onPress={() => setExpanded(!expanded)}
-      >
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-        {expanded ? (
-          <ChevronUp size={20} color={colors.textSecondary} />
-        ) : (
-          <ChevronDown size={20} color={colors.textSecondary} />
-        )}
-      </TouchableOpacity>
-
-      {expanded && (
-        <View style={styles.checkboxGrid}>
-          {items.map(item => {
-            const isSelected = selectedIds.includes(item.id);
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.checkboxItem,
-                  { borderColor: colors.border, backgroundColor: colors.background },
-                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-                ]}
-                onPress={() => onToggle(item.id)}
-              >
-                <Text
-                  style={[
-                    styles.checkboxText,
-                    { color: colors.text },
-                    isSelected && { color: '#ffffff' }
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item[labelKey] || item.name || item.title}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
 
   if (loading) {
     return (
@@ -430,39 +255,21 @@ export default function DailyNotesView() {
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
               </View>
 
-              {aggregationData.totalGoalsTracked === 0 ? (
+              {aggregationData.goalSummaries.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No active goals tracked this week. Add goals in Goal Bank.
+                  You completed no actions towards your goals today.
                 </Text>
               ) : (
-                <>
-                  <Text style={[styles.highlightText, { color: colors.primary }]}>
-                    You hit {aggregationData.totalTargetsHit} of {aggregationData.totalGoalsTracked} weekly targets
+                <View style={styles.goalsList}>
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    Today, you completed {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {aggregationData.goalSummaries.length} {aggregationData.goalSummaries.length === 1 ? 'goal' : 'goals'}.
                   </Text>
-
-                  <View style={styles.goalsList}>
-                    {aggregationData.goalProgress.map(goal => (
-                      <View key={goal.goal_id} style={styles.goalItem}>
-                        <Text style={[styles.goalTitle, { color: colors.text }]}>
-                          {goal.goal_title}
-                        </Text>
-                        <View style={styles.goalProgress}>
-                          <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                            <View
-                              style={[
-                                styles.progressFill,
-                                { backgroundColor: colors.primary, width: `${Math.min(goal.completion_percentage, 100)}%` }
-                              ]}
-                            />
-                          </View>
-                          <Text style={[styles.goalStats, { color: colors.textSecondary }]}>
-                            {goal.actual_completion} / {goal.weekly_target}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </>
+                  {aggregationData.goalSummaries.map(goal => (
+                    <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
+                      For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
+                    </Text>
+                  ))}
+                </View>
               )}
             </View>
 
@@ -474,21 +281,17 @@ export default function DailyNotesView() {
 
               {aggregationData.roleInvestments.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No role investments tracked this week
+                  You invested in no roles today.
                 </Text>
               ) : (
                 <View style={styles.rolesList}>
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    You invested in the following roles today:
+                  </Text>
                   {aggregationData.roleInvestments.map(role => (
-                    <View key={role.role_id} style={styles.roleItem}>
-                      <Text style={[styles.roleText, { color: colors.text }]}>
-                        {role.role_label} with {role.task_count} {role.task_count === 1 ? 'task' : 'tasks'} or events
-                      </Text>
-                      {role.deposit_idea_count > 0 && (
-                        <Text style={[styles.depositText, { color: colors.textSecondary }]}>
-                          You created {role.deposit_idea_count} Deposit {role.deposit_idea_count === 1 ? 'Idea' : 'Ideas'} for this role
-                        </Text>
-                      )}
-                    </View>
+                    <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
+                      • {role.role_label}
+                    </Text>
                   ))}
                 </View>
               )}
@@ -502,16 +305,17 @@ export default function DailyNotesView() {
 
               {aggregationData.domainBalance.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No wellness domain activities tracked this week
+                  You invested in no wellness domains today.
                 </Text>
               ) : (
                 <View style={styles.domainsList}>
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    You have invested in the following domains today:
+                  </Text>
                   {aggregationData.domainBalance.map(domain => (
-                    <View key={domain.domain_id} style={styles.domainItem}>
-                      <Text style={[styles.domainText, { color: colors.text }]}>
-                        {domain.domain_name}: {domain.activity_count} {domain.activity_count === 1 ? 'activity' : 'activities'}
-                      </Text>
-                    </View>
+                    <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
+                      • {domain.domain_name}
+                    </Text>
                   ))}
                 </View>
               )}
@@ -519,26 +323,47 @@ export default function DailyNotesView() {
 
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
               <View style={styles.cardHeader}>
-                <AlertCircle size={24} color={aggregationData.withdrawalAnalysis.length > 0 ? '#f59e0b' : '#10b981'} />
+                <AlertCircle size={24} color={aggregationData.totalWithdrawals > 0 ? '#f59e0b' : '#10b981'} />
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Withdrawals and Lessons</Text>
               </View>
 
-              {aggregationData.withdrawalAnalysis.length === 0 ? (
+              {aggregationData.totalWithdrawals === 0 ? (
                 <Text style={[styles.successText, { color: '#10b981' }]}>
-                  You listed no withdrawals this week
+                  You made no withdrawals today.
                 </Text>
               ) : (
                 <View>
-                  <Text style={[styles.warningText, { color: '#f59e0b' }]}>
-                    You had the most withdrawals in the following role(s):
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    You made {aggregationData.totalWithdrawals} {aggregationData.totalWithdrawals === 1 ? 'withdrawal' : 'withdrawals'} today{aggregationData.withdrawalRoles.length > 0 || aggregationData.withdrawalDomains.length > 0 ? ' in the following:' : '.'}
                   </Text>
-                  <View style={styles.withdrawalsList}>
-                    {aggregationData.withdrawalAnalysis.slice(0, 3).map(withdrawal => (
-                      <Text key={withdrawal.role_id} style={[styles.withdrawalText, { color: colors.text }]}>
-                        • {withdrawal.role_label} ({withdrawal.withdrawal_count} {withdrawal.withdrawal_count === 1 ? 'withdrawal' : 'withdrawals'})
+                  {aggregationData.withdrawalRoles.length > 0 && (
+                    <View>
+                      <Text style={[styles.warningText, { color: '#f59e0b' }]}>
+                        Roles:
                       </Text>
-                    ))}
-                  </View>
+                      <View style={styles.withdrawalsList}>
+                        {aggregationData.withdrawalRoles.map((role, index) => (
+                          <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
+                            • {role.role_label} ({role.count})
+                          </Text>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                  {aggregationData.withdrawalDomains.length > 0 && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={[styles.warningText, { color: '#f59e0b' }]}>
+                        Domains:
+                      </Text>
+                      <View style={styles.withdrawalsList}>
+                        {aggregationData.withdrawalDomains.map((domain, index) => (
+                          <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
+                            • {domain.domain_name} ({domain.count})
+                          </Text>
+                        ))}
+                      </View>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -619,34 +444,6 @@ export default function DailyNotesView() {
           </View>
         </View>
 
-        {renderCheckboxGrid(
-          'Associated Roles',
-          roles,
-          selectedRoleIds,
-          (id) => toggleSelection(id, selectedRoleIds, setSelectedRoleIds),
-          rolesExpanded,
-          setRolesExpanded
-        )}
-
-        {renderCheckboxGrid(
-          'Associated Domains',
-          domains,
-          selectedDomainIds,
-          (id) => toggleSelection(id, selectedDomainIds, setSelectedDomainIds),
-          domainsExpanded,
-          setDomainsExpanded,
-          'name'
-        )}
-
-        {renderCheckboxGrid(
-          'Associated Goals',
-          goals,
-          selectedGoalIds,
-          (id) => toggleSelection(id, selectedGoalIds, setSelectedGoalIds),
-          goalsExpanded,
-          setGoalsExpanded,
-          'title'
-        )}
 
         {previousNotes.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
@@ -805,6 +602,11 @@ const styles = StyleSheet.create({
   goalTitle: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  goalText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
   },
   goalProgress: {
     flexDirection: 'row',

@@ -5,18 +5,18 @@ import {
   WeeklyDomainBalance,
   WeeklyWithdrawalAnalysis,
   WeeklyAggregationData,
+  DailyAggregationData,
+  GoalActionSummary,
 } from '@/types/reflections';
 
 export const getWeekDateRange = (date: Date = new Date()): { start: string; end: string } => {
   const current = new Date(date);
-  const dayOfWeek = current.getDay(); // 0 = Sunday
+  const dayOfWeek = current.getDay();
 
-  // Calculate Sunday (start of week)
   const start = new Date(current);
   start.setDate(current.getDate() - dayOfWeek);
   start.setHours(0, 0, 0, 0);
 
-  // Calculate Saturday (end of week)
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   end.setHours(23, 59, 59, 999);
@@ -24,6 +24,19 @@ export const getWeekDateRange = (date: Date = new Date()): { start: string; end:
   return {
     start: start.toISOString().split('T')[0],
     end: end.toISOString().split('T')[0],
+  };
+};
+
+export const getDayDateRange = (date: Date = new Date()): { start: string; end: string } => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
   };
 };
 
@@ -238,6 +251,52 @@ export const fetchWeeklyWithdrawalAnalysis = async (
   return analysis.sort((a, b) => b.withdrawal_count - a.withdrawal_count);
 };
 
+export const fetchGoalActionsSummary = async (
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<GoalActionSummary[]> => {
+  const supabase = getSupabaseClient();
+
+  const { data: goals, error: goalsError } = await supabase
+    .from('v_unified_goals')
+    .select('id, title, goal_type')
+    .eq('user_id', userId)
+    .eq('status', 'active');
+
+  if (goalsError || !goals) {
+    console.error('Error fetching goals:', goalsError);
+    return [];
+  }
+
+  const summaries: GoalActionSummary[] = [];
+
+  for (const goal of goals) {
+    const { count, error: countError } = await supabase
+      .from('0008-ap-universal-goals-join')
+      .select('*, 0008-ap-tasks!inner(completed_at)', { count: 'exact', head: true })
+      .eq('parent_type', 'task')
+      .gte('0008-ap-tasks.completed_at', startDate)
+      .lte('0008-ap-tasks.completed_at', endDate)
+      .or(`twelve_wk_goal_id.eq.${goal.id},custom_goal_id.eq.${goal.id}`);
+
+    if (countError) {
+      console.error('Error counting tasks:', countError);
+      continue;
+    }
+
+    const actionCount = count || 0;
+
+    summaries.push({
+      goal_id: goal.id,
+      goal_title: goal.title,
+      action_count: actionCount,
+    });
+  }
+
+  return summaries.filter(s => s.action_count > 0);
+};
+
 export const fetchWeeklyAggregationData = async (
   userId: string,
   weekStart: string,
@@ -260,5 +319,83 @@ export const fetchWeeklyAggregationData = async (
     withdrawalAnalysis,
     totalTargetsHit,
     totalGoalsTracked,
+  };
+};
+
+export const fetchDailyAggregationData = async (
+  userId: string,
+  dayStart: string,
+  dayEnd: string
+): Promise<DailyAggregationData> => {
+  const supabase = getSupabaseClient();
+
+  const goalSummaries = await fetchGoalActionsSummary(userId, dayStart, dayEnd);
+  const roleInvestments = await fetchWeeklyRoleInvestments(userId, dayStart, dayEnd);
+  const domainBalance = await fetchWeeklyDomainBalance(userId, dayStart, dayEnd);
+
+  const { data: withdrawals, error: withdrawalsError } = await supabase
+    .from('0008-ap-withdrawals')
+    .select('id, amount, withdrawn_at')
+    .eq('user_id', userId)
+    .gte('withdrawn_at', dayStart)
+    .lte('withdrawn_at', dayEnd);
+
+  let withdrawalRoles: { role_label: string; count: number }[] = [];
+  let withdrawalDomains: { domain_name: string; count: number }[] = [];
+  const totalWithdrawals = withdrawals?.length || 0;
+
+  if (withdrawals && withdrawals.length > 0) {
+    const roleMap = new Map<string, { label: string; count: number }>();
+    const domainMap = new Map<string, { name: string; count: number }>();
+
+    for (const withdrawal of withdrawals) {
+      const [{ data: roleJoins }, { data: domainJoins }] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('role_id, 0008-ap-roles(label)')
+          .eq('parent_type', 'withdrawal')
+          .eq('parent_id', withdrawal.id),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('domain_id, 0008-ap-domains(name)')
+          .eq('parent_type', 'withdrawal')
+          .eq('parent_id', withdrawal.id),
+      ]);
+
+      if (roleJoins) {
+        for (const join of roleJoins) {
+          const roleLabel = (join as any)['0008-ap-roles']?.label || 'Unknown';
+          const existing = roleMap.get(join.role_id) || { label: roleLabel, count: 0 };
+          existing.count += 1;
+          roleMap.set(join.role_id, existing);
+        }
+      }
+
+      if (domainJoins) {
+        for (const join of domainJoins) {
+          const domainName = (join as any)['0008-ap-domains']?.name || 'Unknown';
+          const existing = domainMap.get(join.domain_id) || { name: domainName, count: 0 };
+          existing.count += 1;
+          domainMap.set(join.domain_id, existing);
+        }
+      }
+    }
+
+    withdrawalRoles = Array.from(roleMap.values())
+      .map(r => ({ role_label: r.label, count: r.count }))
+      .sort((a, b) => b.count - a.count);
+
+    withdrawalDomains = Array.from(domainMap.values())
+      .map(d => ({ domain_name: d.name, count: d.count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  return {
+    goalSummaries,
+    roleInvestments,
+    domainBalance,
+    withdrawalRoles,
+    withdrawalDomains,
+    totalWithdrawals,
   };
 };
