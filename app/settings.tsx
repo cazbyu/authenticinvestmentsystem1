@@ -14,6 +14,7 @@ import { ManageCustomTimelinesModal } from '@/components/timelines/ManageCustomT
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { getSupabaseClient } from '@/lib/supabase';
+import { getTimezonesByRegion, getTimezoneDisplayName, detectUserTimezone } from '@/lib/timezoneUtils';
 import { Camera, Upload, User } from 'lucide-react-native';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -39,12 +40,15 @@ export default function SettingsScreen() {
     last_name: '',
     profile_image: '',
     theme_color: '#0078d4',
-    week_start_day: 'sunday'
+    week_start_day: 'sunday',
+    timezone: 'UTC',
+    auto_detect_timezone: true
   });
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showTimezonePicker, setShowTimezonePicker] = useState(false);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -102,7 +106,9 @@ export default function SettingsScreen() {
           last_name: data.last_name || '',
           profile_image: data.profile_image || '',
           theme_color: data.theme_color || '#0078d4',
-          week_start_day: data.week_start_day || 'sunday'
+          week_start_day: data.week_start_day || 'sunday',
+          timezone: data.timezone || 'UTC',
+          auto_detect_timezone: data.settings?.auto_detect_timezone !== false
         });
 
         if (data.profile_image) {
@@ -263,6 +269,14 @@ export default function SettingsScreen() {
       if (profile.profile_image !== undefined) payload.profile_image = profile.profile_image;
       if (profile.theme_color !== undefined) payload.theme_color = profile.theme_color;
       if (profile.week_start_day !== undefined) payload.week_start_day = profile.week_start_day;
+      if (profile.timezone !== undefined) payload.timezone = profile.timezone;
+
+      if (profile.auto_detect_timezone !== undefined) {
+        payload.settings = {
+          ...payload.settings,
+          auto_detect_timezone: profile.auto_detect_timezone
+        };
+      }
 
       // Override with any updates
       Object.keys(updates).forEach(key => {
@@ -544,6 +558,51 @@ export default function SettingsScreen() {
 
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Timezone</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                {getTimezoneDisplayName(profile.timezone)}
+              </Text>
+            </View>
+            <View style={styles.timezoneControls}>
+              <TouchableOpacity
+                style={[styles.timezoneButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={() => setShowTimezonePicker(true)}
+              >
+                <Text style={[styles.timezoneButtonText, { color: colors.primary }]}>
+                  Change
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Auto-detect Timezone</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                Automatically update timezone based on your location
+              </Text>
+            </View>
+            <Switch
+              value={profile.auto_detect_timezone}
+              onValueChange={async (value) => {
+                const updatedProfile = { ...profile, auto_detect_timezone: value };
+                setProfile(updatedProfile);
+                if (value) {
+                  const detectedTimezone = detectUserTimezone();
+                  updatedProfile.timezone = detectedTimezone;
+                  setProfile({ ...updatedProfile, timezone: detectedTimezone });
+                  await updateProfile({ timezone: detectedTimezone, auto_detect_timezone: value });
+                } else {
+                  await updateProfile({ auto_detect_timezone: value });
+                }
+              }}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.surface}
+            />
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: colors.text }]}>Default 12-Week Global Cycle</Text>
               <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
                 Automatically sync with community cycles
@@ -552,8 +611,6 @@ export default function SettingsScreen() {
             <Switch
               value={true}
               onValueChange={() => {
-                // TODO: Implement global cycle toggle
-                // This requires database schema changes for user preferences
                 Alert.alert('Coming Soon', 'Global cycle preferences will be available in a future update');
               }}
               trackColor={{ false: colors.border, true: colors.primary }}
@@ -707,6 +764,48 @@ export default function SettingsScreen() {
           <ArchivedTimelinesView onUpdate={() => {}} />
         </SafeAreaView>
       </Modal>
+
+      <Modal visible={showTimezonePicker} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Select Timezone</Text>
+            <TouchableOpacity onPress={() => setShowTimezonePicker(false)}>
+              <Text style={[styles.closeModalButton, { color: colors.primary }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.timezonePickerScroll}>
+            {Object.entries(getTimezonesByRegion()).map(([region, timezones]) => (
+              <View key={region} style={styles.timezoneRegion}>
+                <Text style={[styles.timezoneRegionTitle, { color: colors.textSecondary }]}>{region}</Text>
+                {timezones.map((tz) => (
+                  <TouchableOpacity
+                    key={tz}
+                    style={[
+                      styles.timezoneOption,
+                      profile.timezone === tz && styles.timezoneOptionSelected,
+                      { borderBottomColor: colors.border }
+                    ]}
+                    onPress={async () => {
+                      const updatedProfile = { ...profile, timezone: tz, auto_detect_timezone: false };
+                      setProfile(updatedProfile);
+                      await updateProfile({ timezone: tz, auto_detect_timezone: false });
+                      setShowTimezonePicker(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.timezoneOptionText,
+                      { color: colors.text },
+                      profile.timezone === tz && { color: colors.primary, fontWeight: '600' }
+                    ]}>
+                      {getTimezoneDisplayName(tz)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -774,4 +873,13 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
   closeModalButton: { fontSize: 16, fontWeight: '600' },
+  timezoneControls: { flexDirection: 'row', gap: 8 },
+  timezoneButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, borderWidth: 1 },
+  timezoneButtonText: { fontSize: 14, fontWeight: '600' },
+  timezonePickerScroll: { flex: 1 },
+  timezoneRegion: { marginBottom: 24, paddingHorizontal: 16 },
+  timezoneRegionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 16 },
+  timezoneOption: { paddingVertical: 12, borderBottomWidth: 1 },
+  timezoneOptionSelected: { backgroundColor: 'rgba(0, 120, 212, 0.1)' },
+  timezoneOptionText: { fontSize: 16 },
 });

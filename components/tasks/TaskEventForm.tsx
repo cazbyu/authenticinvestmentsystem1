@@ -16,7 +16,7 @@ import { Calendar } from 'react-native-calendars';
 import { X, Calendar as CalendarIcon, Repeat } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
 import { eventBus, EVENTS } from '@/lib/eventBus';
@@ -197,7 +197,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
   };
 
-  // Helper function to convert time input to database timestamp format
+  // Helper function to convert time input to database time format (HH:MM:SS)
   const formatTimeForDatabase = (timeStr: string, dateStr: string): string | null => {
     if (!timeStr || !dateStr) return null;
     try {
@@ -219,10 +219,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         minutes = m || 0;
       }
 
-      // Combine date and time into ISO timestamp
-      const dateTime = new Date(dateStr);
-      dateTime.setHours(hours, minutes, 0, 0);
-      return dateTime.toISOString();
+      return formatTimeString(hours, minutes);
     } catch (e) {
       console.error('Error formatting time:', e);
       return null;

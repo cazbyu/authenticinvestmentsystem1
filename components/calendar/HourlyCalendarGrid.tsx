@@ -150,14 +150,26 @@ export function HourlyCalendarGrid({
   }, [selectedDate, viewMode]);
 
   const allDayItems = expandedTasks.filter(task =>
-    !task.start_time || !task.end_time || task.is_all_day
+    task.is_all_day
+  );
+
+  const noTimeItems = expandedTasks.filter(task =>
+    !task.is_all_day && (!task.start_time || !task.end_time)
   );
 
   const timedEvents = expandedTasks.filter(task =>
     task.start_time && task.end_time && !task.is_all_day
   );
 
-  const eventsWithLayout = calculateEventLayout(timedEvents);
+  const noTimeItemsAsMidnight = noTimeItems.map(task => ({
+    ...task,
+    start_time: '00:00:00',
+    end_time: '00:15:00',
+    isNoTimeTask: true,
+  }));
+
+  const allTimedEvents = [...timedEvents, ...noTimeItemsAsMidnight];
+  const eventsWithLayout = calculateEventLayout(allTimedEvents);
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   return (

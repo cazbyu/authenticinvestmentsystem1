@@ -306,31 +306,34 @@ const anytimeMonthly = tasks.filter(t => {
 });
 const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly]);
     
-    // Count events per date for proper dot display
-    const eventCounts: Record<string, { count: number; color: string }> = {};
-    
+    // Group tasks by date and collect dots (one per task)
+    const dotsByDate: Record<string, any[]> = {};
+
     expandedTasks.forEach(task => {
       const taskDate = task.start_date || task.due_date;
       if (taskDate) {
-        if (!eventCounts[taskDate]) {
-          eventCounts[taskDate] = { count: 0, color: task.roleColor };
+        if (!dotsByDate[taskDate]) {
+          dotsByDate[taskDate] = [];
         }
-        eventCounts[taskDate].count++;
+        dotsByDate[taskDate].push({
+          key: `${task.id}-${taskDate}`,
+          color: task.roleColor || '#0078d4',
+        });
       }
     });
-    
-    // Apply marks based on event counts
-    Object.entries(eventCounts).forEach(([date, { count, color }]) => {
+
+    // Apply marks with multiple dots
+    Object.entries(dotsByDate).forEach(([date, dots]) => {
+      const visibleDots = dots.slice(0, 3);
+
       if (marked[date]) {
         marked[date] = {
           ...marked[date],
-          marked: true,
-          dotColor: color,
+          dots: visibleDots,
         };
       } else {
         marked[date] = {
-          marked: true,
-          dotColor: color,
+          dots: visibleDots,
         };
       }
     });

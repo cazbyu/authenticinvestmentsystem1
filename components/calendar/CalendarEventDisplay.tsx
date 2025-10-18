@@ -11,7 +11,6 @@ interface CalendarEventDisplayProps {
 
 export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisplayProps) {
   const formatTime = (timeString: string) => {
-    // Use the time-only string formatter from dateUtils
     return formatTimeForDisplay(timeString);
   };
 
@@ -23,28 +22,36 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
     return "#9ca3af";
   };
 
+  const isNoTimeTask = (task as any).isNoTimeTask;
+
   return (
     <TouchableOpacity
       style={[
         styles.eventContainer,
         { borderLeftColor: getBorderColor() },
+        isNoTimeTask && styles.noTimeTaskContainer,
         style
       ]}
       onPress={() => onPress(task)}
       activeOpacity={0.8}
     >
       <View style={styles.eventContent}>
-        <Text style={styles.eventTitle} numberOfLines={2}>
+        <Text style={[styles.eventTitle, isNoTimeTask && styles.noTimeTaskTitle]} numberOfLines={2}>
           {task.title}
         </Text>
-        {task.start_time && task.end_time && (
+        {!isNoTimeTask && task.start_time && task.end_time && (
           <Text style={styles.eventTime}>
             {formatTime(task.start_time)} - {formatTime(task.end_time)}
           </Text>
         )}
-        {task.start_time && !task.end_time && (
+        {!isNoTimeTask && task.start_time && !task.end_time && (
           <Text style={styles.eventTime}>
             {formatTime(task.start_time)}
+          </Text>
+        )}
+        {isNoTimeTask && (
+          <Text style={styles.noTimeLabel}>
+            No time set
           </Text>
         )}
       </View>
@@ -80,5 +87,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#6b7280',
     fontWeight: '500',
+  },
+  noTimeTaskContainer: {
+    backgroundColor: '#f3f4f6',
+    opacity: 0.9,
+  },
+  noTimeTaskTitle: {
+    fontSize: 11,
+    color: '#4b5563',
+  },
+  noTimeLabel: {
+    fontSize: 9,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
 });
