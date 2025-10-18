@@ -89,10 +89,24 @@ export default function WeeklyReflectionView() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    console.log('[WeeklyReflection] Fetching data for date range:', {
+      start: weekRange.start,
+      end: weekRange.end,
+    });
+
     const [data, summaries] = await Promise.all([
       fetchWeeklyAggregationData(user.id, weekRange.start, weekRange.end),
       fetchGoalActionsSummary(user.id, weekRange.start, weekRange.end),
     ]);
+
+    console.log('[WeeklyReflection] Data fetched:', {
+      goalProgress: data.goalProgress.length,
+      roleInvestments: data.roleInvestments.length,
+      domainBalance: data.domainBalance.length,
+      withdrawalAnalysis: data.withdrawalAnalysis.length,
+      goalSummaries: summaries.length,
+    });
+
     setAggregationData(data);
     setGoalSummaries(summaries);
   };
@@ -102,12 +116,15 @@ export default function WeeklyReflectionView() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Extract date-only part from ISO timestamp for date field comparison
+    const weekStartDate = weekRange.start.split('T')[0];
+
     const { data, error } = await supabase
       .from('0008-ap-reflections')
       .select('*')
       .eq('user_id', user.id)
       .eq('reflection_type', 'weekly')
-      .eq('week_start_date', weekRange.start)
+      .eq('week_start_date', weekStartDate)
       .maybeSingle();
 
     if (!error && data) {
@@ -125,13 +142,16 @@ export default function WeeklyReflectionView() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Extract date-only part from ISO timestamp for date field comparison
+    const weekStartDate = weekRange.start.split('T')[0];
+
     const { data, error } = await supabase
       .from('0008-ap-reflections')
       .select('*')
       .eq('user_id', user.id)
       .eq('reflection_type', 'weekly')
       .eq('archived', false)
-      .neq('week_start_date', weekRange.start)
+      .neq('week_start_date', weekStartDate)
       .order('week_start_date', { ascending: false })
       .limit(12);
 
@@ -171,14 +191,18 @@ export default function WeeklyReflectionView() {
         if (error) throw error;
       } else {
         // Create new reflection
+        // Extract date-only parts for date fields
+        const weekStartDate = weekRange.start.split('T')[0];
+        const weekEndDate = weekRange.end.split('T')[0];
+
         const { data, error } = await supabase
           .from('0008-ap-reflections')
           .insert({
             user_id: user.id,
             reflection_type: 'weekly',
-            date: weekRange.start,
-            week_start_date: weekRange.start,
-            week_end_date: weekRange.end,
+            date: weekStartDate,
+            week_start_date: weekStartDate,
+            week_end_date: weekEndDate,
             content: '',
             question_proud: questionProud,
             question_impact: questionImpact,

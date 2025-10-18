@@ -22,8 +22,8 @@ export const getWeekDateRange = (date: Date = new Date()): { start: string; end:
   end.setHours(23, 59, 59, 999);
 
   return {
-    start: start.toISOString().split('T')[0],
-    end: end.toISOString().split('T')[0],
+    start: start.toISOString(),
+    end: end.toISOString(),
   };
 };
 
@@ -258,6 +258,8 @@ export const fetchGoalActionsSummary = async (
 ): Promise<GoalActionSummary[]> => {
   const supabase = getSupabaseClient();
 
+  console.log('[fetchGoalActionsSummary] Querying with dates:', { startDate, endDate });
+
   const { data: goals, error: goalsError } = await supabase
     .from('v_unified_goals')
     .select('id, title, goal_type')
@@ -268,6 +270,8 @@ export const fetchGoalActionsSummary = async (
     console.error('Error fetching goals:', goalsError);
     return [];
   }
+
+  console.log('[fetchGoalActionsSummary] Found active goals:', goals.length);
 
   const summaries: GoalActionSummary[] = [];
 
@@ -287,6 +291,10 @@ export const fetchGoalActionsSummary = async (
 
     const actionCount = count || 0;
 
+    if (actionCount > 0) {
+      console.log(`[fetchGoalActionsSummary] Goal "${goal.title}": ${actionCount} actions`);
+    }
+
     summaries.push({
       goal_id: goal.id,
       goal_title: goal.title,
@@ -294,7 +302,10 @@ export const fetchGoalActionsSummary = async (
     });
   }
 
-  return summaries.filter(s => s.action_count > 0);
+  const filtered = summaries.filter(s => s.action_count > 0);
+  console.log('[fetchGoalActionsSummary] Returning summaries with actions:', filtered.length);
+
+  return filtered;
 };
 
 export const fetchWeeklyAggregationData = async (
