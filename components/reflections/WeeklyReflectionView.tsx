@@ -20,7 +20,7 @@ import {
 import RichTextInput from './RichTextInput';
 import RichTextDisplay from './RichTextDisplay';
 import { WeeklyAggregationData, Reflection, GoalActionSummary } from '@/types/reflections';
-import { Save, Target, Users, Activity, AlertCircle, X } from 'lucide-react-native';
+import { Save, Target, Users, Activity, CircleAlert as AlertCircle, X } from 'lucide-react-native';
 
 export default function WeeklyReflectionView() {
   const { colors } = useTheme();
