@@ -107,16 +107,16 @@ export default function SettingsScreen() {
 
         if (data.profile_image) {
           try {
-            const { data: signed, error: signError } = await supabase
+            const { data: publicUrlData } = supabase
               .storage
               .from('0008-ap-profile-images')
-              .createSignedUrl(data.profile_image, 60 * 60);
+              .getPublicUrl(data.profile_image);
 
-            if (signError) {
-              console.error('Error creating signed URL:', signError);
-              setProfileImageUrl(null);
+            if (publicUrlData?.publicUrl) {
+              setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
             } else {
-              setProfileImageUrl(signed?.signedUrl ? `${signed.signedUrl}&cb=${Date.now()}` : null);
+              console.error('No public URL returned for profile image');
+              setProfileImageUrl(null);
             }
           } catch (imageError) {
             console.error('Error loading profile image:', imageError);
@@ -226,16 +226,15 @@ export default function SettingsScreen() {
         .upload(fileName, blob, { contentType, upsert: true });
       if (uploadError) throw uploadError;
 
-      const { data: signed, error: signError } = await supabase.storage
+      await updateProfile({ profile_image: fileName, profile_image_source: 'manual' });
+
+      const { data: publicUrlData } = supabase.storage
         .from('0008-ap-profile-images')
-        .createSignedUrl(fileName, 60 * 60);
+        .getPublicUrl(fileName);
 
-      if (signError) {
-        console.error('Error creating signed URL after upload:', signError);
+      if (publicUrlData?.publicUrl) {
+        setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
       }
-
-      await updateProfile({ profile_image: fileName });
-      setProfileImageUrl(signed?.signedUrl ? `${signed.signedUrl}&cb=${Date.now()}` : null);
     } catch (error) {
       console.error('Error uploading image:', error);
       Alert.alert('Error', 'Failed to upload image');
@@ -253,7 +252,7 @@ export default function SettingsScreen() {
 
       // Build a clean payload with only the fields we want to update
       const payload: any = {
-        user_id: user.id,
+        id: user.id,
         updated_at: new Date().toISOString(),
       };
 
@@ -286,15 +285,15 @@ export default function SettingsScreen() {
 
       if (updates.profile_image) {
         try {
-          const { data: signed, error: signError } = await supabase.storage
+          const { data: publicUrlData } = supabase.storage
             .from('0008-ap-profile-images')
-            .createSignedUrl(updates.profile_image, 60 * 60);
+            .getPublicUrl(updates.profile_image);
 
-          if (signError) {
-            console.error('Error creating signed URL in updateProfile:', signError);
-            setProfileImageUrl(null);
+          if (publicUrlData?.publicUrl) {
+            setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
           } else {
-            setProfileImageUrl(signed?.signedUrl ? `${signed.signedUrl}&cb=${Date.now()}` : null);
+            console.error('No public URL returned in updateProfile');
+            setProfileImageUrl(null);
           }
         } catch (imageError) {
           console.error('Error loading updated profile image:', imageError);
