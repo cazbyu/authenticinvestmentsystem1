@@ -458,6 +458,7 @@ const styles = StyleSheet.create({
   },
   roleLabel: {
     fontSize: 16,
+    fontWeight: '400',
     flex: 1,
     color: '#1f2937'
   },

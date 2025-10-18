@@ -144,11 +144,29 @@ export default function Wellness() {
       }
 
       if (view === 'deposits') {
-        // Fetch all tasks/events for this user first
+        // First, get task IDs that are associated with this specific domain
+        const { data: domainJoinData, error: domainJoinError } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id')
+          .eq('parent_type', 'task')
+          .eq('domain_id', domainId);
+
+        if (domainJoinError) throw domainJoinError;
+
+        const domainTaskIds = domainJoinData?.map(dj => dj.parent_id) || [];
+
+        if (domainTaskIds.length === 0) {
+          setTasks([]);
+          setDepositIdeas([]);
+          return;
+        }
+
+        // Now fetch only the tasks that have this domain
         const { data: tasksData, error: tasksError } = await supabase
           .from('0008-ap-tasks')
           .select('*, custom_timeline_id')
           .eq('user_id', user.id)
+          .in('id', domainTaskIds)
           .is('deleted_at', null)
           .is('parent_task_id', null)
           .not('status', 'in', '(completed,cancelled)')
@@ -228,11 +246,7 @@ export default function Wellness() {
           return;
         }
 
-        // Filter tasks that have the selected domain
-        const domainTaskIds = domainsData?.filter(d => d.domain?.id === domainId).map(d => d.parent_id) || [];
-        const filteredTasks = allTasks.filter(task => domainTaskIds.includes(task.id));
-
-        const transformedTasks = filteredTasks.map(task => ({
+        const transformedTasks = allTasks.map(task => ({
           ...task,
           roles: rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
@@ -247,11 +261,29 @@ export default function Wellness() {
         setDepositIdeas([]);
 
       } else {
-        // Fetch all deposit ideas for this user first
+        // First, get deposit idea IDs that are associated with this specific domain
+        const { data: domainJoinData, error: domainJoinError } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id')
+          .eq('parent_type', 'depositIdea')
+          .eq('domain_id', domainId);
+
+        if (domainJoinError) throw domainJoinError;
+
+        const domainDepositIdeaIds = domainJoinData?.map(dj => dj.parent_id) || [];
+
+        if (domainDepositIdeaIds.length === 0) {
+          setDepositIdeas([]);
+          setTasks([]);
+          return;
+        }
+
+        // Now fetch only the deposit ideas that have this domain
         const { data: depositIdeasData, error: depositIdeasError } = await supabase
           .from('0008-ap-deposit-ideas')
           .select('*')
           .eq('user_id', user.id)
+          .in('id', domainDepositIdeaIds)
           .eq('archived', false)
           .is('activated_task_id', null);
 
@@ -299,11 +331,7 @@ export default function Wellness() {
           return;
         }
 
-        // Filter deposit ideas that have the selected domain
-        const domainDepositIdeaIds = domainsData?.filter(d => d.domain?.id === domainId).map(d => d.parent_id) || [];
-        const filteredDepositIdeas = (depositIdeasData || []).filter(di => domainDepositIdeaIds.includes(di.id));
-
-        const transformedDepositIdeas = filteredDepositIdeas.map(di => ({
+        const transformedDepositIdeas = (depositIdeasData || []).map(di => ({
           ...di,
           roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
