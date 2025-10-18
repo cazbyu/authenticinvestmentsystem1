@@ -242,6 +242,104 @@ export const fetchWeeklyAggregationData = async (
 };
 
 /**
+ * Fetch daily goal actions summary using v_daily_goal_actions view
+ */
+export const fetchDailyGoalActionsSummary = async (
+  userId: string,
+  date: string
+): Promise<GoalActionSummary[]> => {
+  const supabase = getSupabaseClient();
+
+  // Extract date-only part for daily view query
+  const activityDate = date.split('T')[0];
+
+  console.log('[fetchDailyGoalActionsSummary] Querying view with date:', activityDate);
+
+  const { data, error } = await supabase
+    .from('v_daily_goal_actions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('completion_date', activityDate)
+    .eq('goal_status', 'active')
+    .gt('action_count', 0);
+
+  if (error) {
+    console.error('Error fetching daily goal actions from view:', error);
+    return [];
+  }
+
+  console.log('[fetchDailyGoalActionsSummary] Found', data?.length || 0, 'goals with actions');
+
+  return (data || []).map(row => ({
+    goal_id: row.goal_id,
+    goal_title: row.goal_title,
+    action_count: row.action_count,
+  }));
+};
+
+/**
+ * Fetch daily role investments using v_daily_role_investments view
+ */
+export const fetchDailyRoleInvestments = async (
+  userId: string,
+  date: string
+): Promise<WeeklyRoleInvestment[]> => {
+  const supabase = getSupabaseClient();
+  const activityDate = date.split('T')[0];
+
+  const { data, error } = await supabase
+    .from('v_daily_role_investments')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('activity_date', activityDate)
+    .gt('total_activities', 0)
+    .order('total_activities', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching daily role investments:', error);
+    return [];
+  }
+
+  return (data || []).map(row => ({
+    role_id: row.role_id,
+    role_label: row.role_label,
+    role_color: row.role_color,
+    task_count: row.task_count,
+    deposit_idea_count: row.deposit_idea_count,
+  }));
+};
+
+/**
+ * Fetch daily domain balance using v_daily_domain_balance view
+ */
+export const fetchDailyDomainBalance = async (
+  userId: string,
+  date: string
+): Promise<WeeklyDomainBalance[]> => {
+  const supabase = getSupabaseClient();
+  const activityDate = date.split('T')[0];
+
+  const { data, error } = await supabase
+    .from('v_daily_domain_balance')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('activity_date', activityDate)
+    .order('activity_count', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching daily domain balance:', error);
+    return [];
+  }
+
+  return (data || []).map(row => ({
+    domain_id: row.domain_id,
+    domain_name: row.domain_name,
+    domain_color: null,
+    activity_count: row.activity_count,
+  }));
+};
+
+/**
  * Fetch daily aggregation data
  */
 export const fetchDailyAggregationData = async (
@@ -251,16 +349,32 @@ export const fetchDailyAggregationData = async (
 ): Promise<DailyAggregationData> => {
   const supabase = getSupabaseClient();
 
-  const goalSummaries = await fetchGoalActionsSummary(userId, dayStart, dayEnd);
-  const roleInvestments = await fetchWeeklyRoleInvestments(userId, dayStart, dayEnd);
-  const domainBalance = await fetchWeeklyDomainBalance(userId, dayStart, dayEnd);
+  console.log('[fetchDailyAggregationData] Fetching data for date:', dayStart.split('T')[0]);
 
+  const goalSummaries = await fetchDailyGoalActionsSummary(userId, dayStart);
+  const roleInvestments = await fetchDailyRoleInvestments(userId, dayStart);
+  const domainBalance = await fetchDailyDomainBalance(userId, dayStart);
+
+  console.log('[fetchDailyAggregationData] Data fetched:', {
+    goalSummaries: goalSummaries.length,
+    roleInvestments: roleInvestments.length,
+    domainBalance: domainBalance.length,
+  });
+
+  // Use date-only comparison for withdrawals
+  const withdrawalDate = dayStart.split('T')[0];
   const { data: withdrawals, error: withdrawalsError } = await supabase
     .from('0008-ap-withdrawals')
     .select('id, amount, withdrawn_at')
     .eq('user_id', userId)
     .gte('withdrawn_at', dayStart)
-    .lte('withdrawn_at', dayEnd);
+    .lt('withdrawn_at', dayEnd);
+
+  if (withdrawalsError) {
+    console.error('Error fetching withdrawals:', withdrawalsError);
+  }
+
+  console.log('[fetchDailyAggregationData] Found', withdrawals?.length || 0, 'withdrawals');
 
   let withdrawalRoles: { role_label: string; count: number }[] = [];
   let withdrawalDomains: { domain_name: string; count: number }[] = [];

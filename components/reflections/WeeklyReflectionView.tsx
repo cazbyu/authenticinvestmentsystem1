@@ -87,11 +87,17 @@ export default function WeeklyReflectionView() {
   const fetchWeeklyData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      console.log('[WeeklyReflection] No user found');
+      return;
+    }
 
     console.log('[WeeklyReflection] Fetching data for date range:', {
       start: weekRange.start,
       end: weekRange.end,
+      startDateOnly: weekRange.start.split('T')[0],
+      endDateOnly: weekRange.end.split('T')[0],
+      userId: user.id,
     });
 
     const [data, summaries] = await Promise.all([
@@ -106,6 +112,10 @@ export default function WeeklyReflectionView() {
       withdrawalAnalysis: data.withdrawalAnalysis.length,
       goalSummaries: summaries.length,
     });
+
+    if (summaries.length === 0 && data.roleInvestments.length === 0) {
+      console.warn('[WeeklyReflection] No data returned - check if tasks are completed within the date range');
+    }
 
     setAggregationData(data);
     setGoalSummaries(summaries);

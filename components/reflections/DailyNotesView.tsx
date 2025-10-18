@@ -84,11 +84,34 @@ export default function DailyNotesView() {
   const fetchDailyData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      console.log('[DailyNotes] No user found');
+      return;
+    }
 
     const range = getDayDateRange();
     setDayRange(range);
+
+    console.log('[DailyNotes] Fetching data for date range:', {
+      start: range.start,
+      end: range.end,
+      dateOnly: range.start.split('T')[0],
+      userId: user.id,
+    });
+
     const data = await fetchDailyAggregationData(user.id, range.start, range.end);
+
+    console.log('[DailyNotes] Data fetched:', {
+      goalSummaries: data.goalSummaries.length,
+      roleInvestments: data.roleInvestments.length,
+      domainBalance: data.domainBalance.length,
+      totalWithdrawals: data.totalWithdrawals,
+    });
+
+    if (data.goalSummaries.length === 0 && data.roleInvestments.length === 0) {
+      console.warn('[DailyNotes] No data returned - check if tasks are completed today');
+    }
+
     setAggregationData(data);
   };
 
