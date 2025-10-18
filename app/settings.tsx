@@ -253,6 +253,7 @@ export default function SettingsScreen() {
       // Build a clean payload with only the fields we want to update
       const payload: any = {
         id: user.id,
+        email: user.email || '',
         updated_at: new Date().toISOString(),
       };
 
@@ -276,11 +277,13 @@ export default function SettingsScreen() {
         .select();
 
       if (error) {
-        console.error('Error updating profile:', error);
+        console.error('[Settings] Error updating profile:', error);
+        console.error('[Settings] Error details:', JSON.stringify(error, null, 2));
+        console.error('[Settings] Failed payload was:', JSON.stringify(payload, null, 2));
         throw error;
       }
 
-      console.log('[Settings] Profile updated successfully. Database response:', data);
+      console.log('[Settings] Profile updated successfully. Database response:', JSON.stringify(data, null, 2));
       setProfile(prev => ({ ...prev, ...updates }));
 
       if (updates.profile_image) {
