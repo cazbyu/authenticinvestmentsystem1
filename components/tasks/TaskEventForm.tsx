@@ -197,9 +197,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
   };
 
-  // Helper function to convert time input to database format (HH:MM:SS)
-  const formatTimeForDatabase = (timeStr: string): string | null => {
-    if (!timeStr) return null;
+  // Helper function to convert time input to database timestamp format
+  const formatTimeForDatabase = (timeStr: string, dateStr: string): string | null => {
+    if (!timeStr || !dateStr) return null;
     try {
       const timeLower = timeStr.toLowerCase().trim();
       let hours = 0;
@@ -219,8 +219,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         minutes = m || 0;
       }
 
-      // Return time-only string in HH:MM:SS format
-      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+      // Combine date and time into ISO timestamp
+      const dateTime = new Date(dateStr);
+      dateTime.setHours(hours, minutes, 0, 0);
+      return dateTime.toISOString();
     } catch (e) {
       console.error('Error formatting time:', e);
       return null;
@@ -657,12 +659,12 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           start_date: formData.type === 'event' ? formData.startDate : null,
           end_date: formData.type === 'event' ? formData.endDate : null,
           start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.startTime)
+            ? formatTimeForDatabase(formData.startTime, formData.startDate)
             : null,
           end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.endTime)
+            ? formatTimeForDatabase(formData.endTime, formData.endDate || formData.startDate)
             : (formData.type === 'task' && formData.dueTime && !formData.isAnytime
-              ? formatTimeForDatabase(formData.dueTime)
+              ? formatTimeForDatabase(formData.dueTime, formData.dueDate)
               : null),
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,
