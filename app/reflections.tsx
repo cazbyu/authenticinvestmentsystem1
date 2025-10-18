@@ -57,11 +57,7 @@ export default function ReflectionsScreen() {
       // Fetch completed tasks for today
       const { data: tasks, error: tasksError } = await supabase
         .from('0008-ap-tasks')
-        .select(`
-          *,
-          universal_roles:0008-ap-universal-roles-join!parent_id(role_id),
-          universal_domains:0008-ap-universal-domains-join!parent_id(domain_id)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .not('completed_at', 'is', null)
         .gte('completed_at', startOfDay.toISOString())
@@ -72,19 +68,16 @@ export default function ReflectionsScreen() {
         return;
       }
 
-      // Calculate score
+      // Calculate score based on completed tasks
       let score = 0;
       if (tasks) {
         tasks.forEach((task: any) => {
           let points = 0;
-          const roles = task.universal_roles || [];
-          const domains = task.universal_domains || [];
 
-          if (roles.length > 0) points += roles.length;
-          if (domains.length > 0) points += domains.length;
-          if (task.is_authentic_deposit) points += 2;
-          if (task.is_urgent && task.is_important) points += 1.5;
-          else if (!task.is_urgent && task.is_important) points += 3;
+          // Base points for task type
+          if (task.is_authentic_deposit) points += 3;
+          else if (!task.is_urgent && task.is_important) points += 2;
+          else if (task.is_urgent && task.is_important) points += 1.5;
           else if (task.is_urgent && !task.is_important) points += 1;
           else points += 0.5;
 
