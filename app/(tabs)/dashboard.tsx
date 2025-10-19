@@ -77,14 +77,12 @@ export default function Dashboard() {
         const weekStartStr = formatLocalDate(weekStart);
         const weekEndStr = formatLocalDate(weekEnd);
 
-        // Fetch parent tasks (standalone tasks only - no Goal Bank actions)
-        // Explicitly include pending status to ensure all non-completed tasks appear
+        // Fetch tasks using the dashboard view for recurring task support
+        // The view automatically handles expanding recurring tasks to show only next occurrence
         const { data: tasksData, error: tasksError } = await supabase
-          .from('0008-ap-tasks')
-          .select('*, user_global_timeline_id, custom_timeline_id')
+          .from('v_dashboard_next_occurrences')
+          .select('*')
           .eq('user_id', user.id)
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
           .in('status', ['pending', 'in_progress'])
           .in('type', ['task', 'event'])
           .order('created_at', { ascending: false });

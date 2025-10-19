@@ -19,6 +19,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
+import RecurrenceSettings from './RecurrenceSettings';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { fetchAuthenticUsage, getWeekResetDay, formatAuthenticUsageText, invalidateCache } from '@/lib/authenticDepositUtils';
 
@@ -90,6 +91,7 @@ interface FormData {
   
   // New fields for recurrence and goals
   recurrenceRule?: string;
+  recurrenceEndDate?: string | null;
   selectedGoal?: UnifiedGoal;
 }
 
@@ -144,6 +146,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     selectedKeyRelationshipIds: [],
     selectedGoalIds: [],
     notes: '',
+    recurrenceEndDate: null,
   });
 
   // Data state
@@ -453,6 +456,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       selectedGoal: firstActiveGoal,
       notes: notesString,
       recurrenceRule: initialData.recurrence_rule || undefined,
+      recurrenceEndDate: initialData.recurrence_end_date || null,
     };
 
     setFormData(newFormData);
@@ -669,6 +673,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           is_authentic_deposit: formData.isAuthenticDeposit,
           is_twelve_week_goal: formData.isGoal,
           recurrence_rule: formData.recurrenceRule || null,
+          recurrence_end_date: formData.recurrenceEndDate || null,
           // Preserve completion status and timestamp when editing
           ...(mode === 'edit' && initialData?.id ? {
             // Explicitly preserve completed status - never change it back to pending
@@ -1236,343 +1241,16 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
-          {/* Inline Recurrence Picker (when Repeat is ON but Goal is OFF) */}
+          {/* Enhanced Recurrence Settings (when Repeat is ON but Goal is OFF) */}
           {formData.hasRepeat && !formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Repeat Frequency</Text>
-              <View style={styles.recurrenceOptions}>
-                {(['daily', 'weekly'] as const).map((freq) => {
-                  const isActive = freq === 'weekly'
-                    ? formData.recurrenceRule?.startsWith('RRULE:FREQ=WEEKLY')
-                    : formData.recurrenceRule === `RRULE:FREQ=${freq.toUpperCase()}`;
-
-                  return (
-                    <TouchableOpacity
-                      key={freq}
-                      style={[
-                        styles.recurrenceOption,
-                        { borderColor: colors.border, backgroundColor: colors.surface },
-                        isActive && { backgroundColor: colors.primary, borderColor: colors.primary }
-                      ]}
-                      onPress={() => setFormData(prev => ({
-                        ...prev,
-                        recurrenceRule: `RRULE:FREQ=${freq.toUpperCase()}`
-                      }))}
-                    >
-                      <Text style={[
-                        styles.recurrenceOptionText,
-                        { color: isActive ? '#ffffff' : colors.text }
-                      ]}>
-                        {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                <TouchableOpacity
-                  style={[
-                    styles.recurrenceOption,
-                    { borderColor: colors.border, backgroundColor: colors.surface },
-                    (formData.recurrenceRule?.includes('CUSTOM') ||
-                     formData.recurrenceRule?.includes('INTERVAL=2') ||
-                     (formData.recurrenceRule?.includes('BYDAY=') && formData.recurrenceRule?.includes('MONTHLY'))) &&
-                    { backgroundColor: colors.primary, borderColor: colors.primary }
-                  ]}
-                  onPress={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      recurrenceRule: 'CUSTOM'
-                    }));
-                    setCustomRecurrenceType('biweekly');
-                  }}
-                >
-                  <Text style={[
-                    styles.recurrenceOptionText,
-                    { color: (formData.recurrenceRule?.includes('CUSTOM') ||
-                             formData.recurrenceRule?.includes('INTERVAL=2') ||
-                             (formData.recurrenceRule?.includes('BYDAY=') && formData.recurrenceRule?.includes('MONTHLY'))) ? '#ffffff' : colors.text }
-                  ]}>
-                    Custom
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Weekly Days Selection */}
-              {formData.recurrenceRule?.startsWith('RRULE:FREQ=WEEKLY') && (
-                <View style={[styles.weeklyDaysContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <View style={styles.weeklyDaysGrid}>
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName, index) => {
-                      const isSelected = selectedWeeklyDays.includes(index);
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          style={[
-                            styles.weeklyDayButton,
-                            { backgroundColor: colors.surface, borderColor: colors.border },
-                            isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            const newDays = isSelected
-                              ? selectedWeeklyDays.filter(d => d !== index)
-                              : [...selectedWeeklyDays, index];
-                            setSelectedWeeklyDays(newDays);
-                            
-                            // Update recurrence rule with selected days
-                            if (newDays.length > 0) {
-                              const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                              const byDays = newDays.map(dayIndex => dayNames[dayIndex]).join(',');
-                              setFormData(prev => ({ 
-                                ...prev, 
-                                recurrenceRule: `RRULE:FREQ=WEEKLY;BYDAY=${byDays}` 
-                              }));
-                            } else {
-                              setFormData(prev => ({ 
-                                ...prev, 
-                                recurrenceRule: 'RRULE:FREQ=WEEKLY' 
-                              }));
-                            }
-                          }}
-                        >
-                          <Text style={[
-                            styles.weeklyDayButtonText,
-                            { color: isSelected ? '#ffffff' : colors.text }
-                          ]}>
-                            {dayName}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* Custom Recurrence Options */}
-              {(formData.recurrenceRule?.includes('CUSTOM') ||
-                formData.recurrenceRule?.includes('INTERVAL=2') ||
-                formData.recurrenceRule?.includes('BYDAY=')) &&
-                !formData.recurrenceRule?.startsWith('RRULE:FREQ=WEEKLY;BYDAY=') &&
-                !formData.recurrenceRule?.startsWith('RRULE:FREQ=DAILY') && (
-                <View style={[styles.customRecurrenceContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.subLabel, { color: colors.text }]}>Custom Frequency</Text>
-                  
-                  {/* Bi-weekly / Monthly selector */}
-                  <View style={[styles.customTypeSelector, { backgroundColor: colors.background }]}>
-                    <TouchableOpacity
-                      style={[
-                        styles.customTypeButton,
-                        customRecurrenceType === 'biweekly' && { backgroundColor: colors.primary }
-                      ]}
-                      onPress={() => setCustomRecurrenceType('biweekly')}
-                    >
-                      <Text style={[
-                        styles.customTypeButtonText,
-                        { color: customRecurrenceType === 'biweekly' ? '#ffffff' : colors.textSecondary }
-                      ]}>
-                        Bi-weekly
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.customTypeButton,
-                        customRecurrenceType === 'monthly' && { backgroundColor: colors.primary }
-                      ]}
-                      onPress={() => setCustomRecurrenceType('monthly')}
-                    >
-                      <Text style={[
-                        styles.customTypeButtonText,
-                        { color: customRecurrenceType === 'monthly' ? '#ffffff' : colors.textSecondary }
-                      ]}>
-                        Monthly
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Bi-weekly options */}
-                  {customRecurrenceType === 'biweekly' && (
-                    <View style={styles.biweeklyOptions}>
-                      <Text style={[styles.subLabel, { color: colors.text }]}>Select Days (every 2 weeks)</Text>
-                      <View style={styles.weeklyDaysGrid}>
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName, index) => {
-                          const isSelected = selectedWeeklyDays.includes(index);
-                          return (
-                            <TouchableOpacity
-                              key={index}
-                              style={[
-                                styles.weeklyDayButton,
-                                { backgroundColor: colors.surface, borderColor: colors.border },
-                                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-                              ]}
-                              onPress={() => {
-                                const newDays = isSelected
-                                  ? selectedWeeklyDays.filter(d => d !== index)
-                                  : [...selectedWeeklyDays, index];
-                                setSelectedWeeklyDays(newDays);
-                                
-                                // Update recurrence rule for bi-weekly
-                                if (newDays.length > 0) {
-                                  const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                                  const byDays = newDays.map(dayIndex => dayNames[dayIndex]).join(',');
-                                  setFormData(prev => ({ 
-                                    ...prev, 
-                                    recurrenceRule: `RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=${byDays}` 
-                                  }));
-                                } else {
-                                  setFormData(prev => ({ 
-                                    ...prev, 
-                                    recurrenceRule: 'RRULE:FREQ=WEEKLY;INTERVAL=2' 
-                                  }));
-                                }
-                              }}
-                            >
-                              <Text style={[
-                                styles.weeklyDayButtonText,
-                                { color: isSelected ? '#ffffff' : colors.text }
-                              ]}>
-                                {dayName}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Monthly options */}
-                  {customRecurrenceType === 'monthly' && (
-                    <View style={styles.monthlyOptions}>
-                      <Text style={[styles.subLabel, { color: colors.text }]}>Monthly Pattern</Text>
-                      
-                      {/* Date vs Weekday selector */}
-                      <View style={[styles.monthlyTypeSelector, { backgroundColor: colors.background }]}>
-                        <TouchableOpacity
-                          style={[
-                            styles.monthlyTypeButton,
-                            monthlyOption === 'date' && { backgroundColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            setMonthlyOption('date');
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              recurrenceRule: 'RRULE:FREQ=MONTHLY' 
-                            }));
-                          }}
-                        >
-                          <Text style={[
-                            styles.monthlyTypeButtonText,
-                            { color: monthlyOption === 'date' ? '#ffffff' : colors.textSecondary }
-                          ]}>
-                            Same Date
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.monthlyTypeButton,
-                            monthlyOption === 'weekday' && { backgroundColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            setMonthlyOption('weekday');
-                            const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                            const byDay = dayNames[monthlyDayOfWeek];
-                            const setPos = monthlyWeekday === 'last' ? '-1' : 
-                                         monthlyWeekday === 'first' ? '1' :
-                                         monthlyWeekday === 'second' ? '2' :
-                                         monthlyWeekday === 'third' ? '3' : '4';
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              recurrenceRule: `RRULE:FREQ=MONTHLY;BYDAY=${setPos}${byDay}` 
-                            }));
-                          }}
-                        >
-                          <Text style={[
-                            styles.monthlyTypeButtonText,
-                            { color: monthlyOption === 'weekday' ? '#ffffff' : colors.textSecondary }
-                          ]}>
-                            Same Weekday
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Weekday-specific options */}
-                      {monthlyOption === 'weekday' && (
-                        <View style={styles.weekdayOptions}>
-                          {/* Week selector */}
-                          <View style={styles.weekSelector}>
-                            <Text style={[styles.subLabel, { color: colors.text }]}>Which Week?</Text>
-                            <View style={styles.weekSelectorGrid}>
-                              {(['first', 'second', 'third', 'fourth', 'last'] as const).map((week) => (
-                                <TouchableOpacity
-                                  key={week}
-                                  style={[
-                                    styles.weekSelectorButton,
-                                    { backgroundColor: colors.surface, borderColor: colors.border },
-                                    monthlyWeekday === week && { backgroundColor: colors.primary, borderColor: colors.primary }
-                                  ]}
-                                  onPress={() => {
-                                    setMonthlyWeekday(week);
-                                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                                    const byDay = dayNames[monthlyDayOfWeek];
-                                    const setPos = week === 'last' ? '-1' : 
-                                                 week === 'first' ? '1' :
-                                                 week === 'second' ? '2' :
-                                                 week === 'third' ? '3' : '4';
-                                    setFormData(prev => ({ 
-                                      ...prev, 
-                                      recurrenceRule: `RRULE:FREQ=MONTHLY;BYDAY=${setPos}${byDay}` 
-                                    }));
-                                  }}
-                                >
-                                  <Text style={[
-                                    styles.weekSelectorButtonText,
-                                    { color: monthlyWeekday === week ? '#ffffff' : colors.text }
-                                  ]}>
-                                    {week.charAt(0).toUpperCase() + week.slice(1)}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          </View>
-
-                          {/* Day of week selector */}
-                          <View style={styles.dayOfWeekSelector}>
-                            <Text style={[styles.subLabel, { color: colors.text }]}>Which Day?</Text>
-                            <View style={styles.weeklyDaysGrid}>
-                              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName, index) => (
-                                <TouchableOpacity
-                                  key={index}
-                                  style={[
-                                    styles.weeklyDayButton,
-                                    { backgroundColor: colors.surface, borderColor: colors.border },
-                                    monthlyDayOfWeek === index && { backgroundColor: colors.primary, borderColor: colors.primary }
-                                  ]}
-                                  onPress={() => {
-                                    setMonthlyDayOfWeek(index);
-                                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                                    const byDay = dayNames[index];
-                                    const setPos = monthlyWeekday === 'last' ? '-1' : 
-                                                 monthlyWeekday === 'first' ? '1' :
-                                                 monthlyWeekday === 'second' ? '2' :
-                                                 monthlyWeekday === 'third' ? '3' : '4';
-                                    setFormData(prev => ({ 
-                                      ...prev, 
-                                      recurrenceRule: `RRULE:FREQ=MONTHLY;BYDAY=${setPos}${byDay}` 
-                                    }));
-                                  }}
-                                >
-                                  <Text style={[
-                                    styles.weeklyDayButtonText,
-                                    { color: monthlyDayOfWeek === index ? '#ffffff' : colors.text }
-                                  ]}>
-                                    {dayName}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-              )}
+            <View style={[styles.recurrenceContainer, { backgroundColor: colors.surface, borderRadius: 12, padding: 16, marginBottom: 16 }]}>
+              <RecurrenceSettings
+                recurrenceRule={formData.recurrenceRule}
+                recurrenceEndDate={formData.recurrenceEndDate}
+                startDate={formData.startDate || formData.dueDate}
+                onChangeRule={(rule) => setFormData(prev => ({ ...prev, recurrenceRule: rule }))}
+                onChangeEndDate={(date) => setFormData(prev => ({ ...prev, recurrenceEndDate: date }))}
+              />
             </View>
           )}
 

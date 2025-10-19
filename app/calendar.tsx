@@ -120,12 +120,11 @@ export default function CalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch tasks and events
+      // Fetch tasks and events using expanded view for recurring task support
       const { data: tasksData, error: tasksError } = await supabase
-        .from('0008-ap-tasks')
-        .select('*, recurrence_rule')
+        .from('v_tasks_with_recurrence_expanded')
+        .select('*')
         .eq('user_id', user.id)
-        .is('deleted_at', null)
         .not('status', 'in', '(completed,cancelled)')
         .in('type', ['task', 'event'])
         .or('due_date.not.is.null,start_date.not.is.null');
