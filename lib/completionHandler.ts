@@ -156,6 +156,109 @@ export async function handleActionCompletion(
   }
 }
 
+export async function handleRecurringTaskCompletion(
+  supabase: SupabaseClient,
+  userId: string,
+  parentTask: any,
+  occurrenceDate: string
+): Promise<CompletionResult> {
+  try {
+    console.log('[handleRecurringTaskCompletion] Starting completion:', {
+      parentTaskId: parentTask.id,
+      occurrenceDate,
+      isVirtualOccurrence: parentTask.is_virtual_occurrence
+    });
+
+    const occurrenceExists = await checkOccurrenceExists(supabase, parentTask.source_task_id || parentTask.id, occurrenceDate);
+
+    if (occurrenceExists) {
+      console.log('[handleRecurringTaskCompletion] Occurrence already exists for date:', occurrenceDate);
+      return { success: true, shouldRemoveFromUI: true };
+    }
+
+    const sourceTaskId = parentTask.source_task_id || parentTask.id;
+
+    const { data: sourceTask, error: sourceError } = await supabase
+      .from('0008-ap-tasks')
+      .select('*')
+      .eq('id', sourceTaskId)
+      .single();
+
+    if (sourceError || !sourceTask) {
+      throw new Error('Source task not found');
+    }
+
+    const occurrencePayload: any = {
+      user_id: userId,
+      title: sourceTask.title,
+      type: sourceTask.type,
+      status: 'completed',
+      due_date: occurrenceDate,
+      start_date: parentTask.start_date,
+      end_date: parentTask.end_date,
+      start_time: sourceTask.start_time,
+      end_time: sourceTask.end_time,
+      completed_at: new Date().toISOString(),
+      parent_task_id: sourceTaskId,
+      is_urgent: sourceTask.is_urgent,
+      is_important: sourceTask.is_important,
+      is_all_day: sourceTask.is_all_day,
+      is_authentic_deposit: sourceTask.is_authentic_deposit,
+      is_twelve_week_goal: sourceTask.is_twelve_week_goal,
+      user_global_timeline_id: sourceTask.user_global_timeline_id,
+      custom_timeline_id: sourceTask.custom_timeline_id,
+    };
+
+    const { data: occ, error: occErr } = await supabase
+      .from('0008-ap-tasks')
+      .insert(occurrencePayload)
+      .select('id')
+      .single();
+
+    if (occErr) {
+      if (occErr.code === '23505') {
+        console.log('[handleRecurringTaskCompletion] Duplicate occurrence prevented');
+        return { success: true, shouldRemoveFromUI: true };
+      }
+      throw occErr;
+    }
+
+    if (occ) {
+      console.log('[handleRecurringTaskCompletion] Copying universal joins for occurrence:', occ.id);
+
+      const [rolesResult, domainsResult, krsResult] = await Promise.all([
+        supabase.rpc('ap_copy_universal_roles_to_task', {
+          from_parent_id: sourceTaskId,
+          to_task_id: occ.id,
+        }),
+        supabase.rpc('ap_copy_universal_domains_to_task', {
+          from_parent_id: sourceTaskId,
+          to_task_id: occ.id,
+        }),
+        supabase.rpc('ap_copy_universal_key_relationships_to_task', {
+          from_parent_id: sourceTaskId,
+          to_task_id: occ.id,
+        }),
+      ]);
+
+      if (rolesResult.error) console.error('[handleRecurringTaskCompletion] Error copying roles:', rolesResult.error);
+      if (domainsResult.error) console.error('[handleRecurringTaskCompletion] Error copying domains:', domainsResult.error);
+      if (krsResult.error) console.error('[handleRecurringTaskCompletion] Error copying key relationships:', krsResult.error);
+
+      eventBus.emit(EVENTS.TASK_COMPLETED, { taskId: occ.id, parentTaskId: sourceTaskId });
+    }
+
+    return { success: true, shouldRemoveFromUI: true };
+  } catch (error) {
+    console.error('[handleRecurringTaskCompletion] Error:', error);
+    return {
+      success: false,
+      shouldRemoveFromUI: false,
+      error: (error as Error).message || 'Failed to complete recurring task'
+    };
+  }
+}
+
 export async function handleActionUncompletion(
   supabase: SupabaseClient,
   actionId: string,

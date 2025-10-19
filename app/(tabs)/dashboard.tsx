@@ -8,6 +8,7 @@ import { Header } from '@/components/Header';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
 import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import RecurringTaskActionModal from '@/components/tasks/RecurringTaskActionModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
@@ -28,6 +29,11 @@ export default function Dashboard() {
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
+  const [recurringActionModal, setRecurringActionModal] = useState<{
+    visible: boolean;
+    task: Task | null;
+    actionType: 'delete' | 'edit';
+  }>({ visible: false, task: null, actionType: 'delete' });
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -332,14 +338,28 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Dashboard only handles standalone tasks now (Goal Bank actions are filtered out)
-      // Update status and mark as completed
-      const { error } = await supabase
-        .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', task.id);
+      // Check if this is a recurring task (either virtual occurrence or has recurrence_rule)
+      if (task.is_virtual_occurrence || task.recurrence_rule) {
+        const { handleRecurringTaskCompletion } = await import('@/lib/completionHandler');
+        const result = await handleRecurringTaskCompletion(
+          supabase,
+          user.id,
+          task,
+          task.occurrence_date || task.due_date
+        );
 
-      if (error) throw error;
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to complete recurring task');
+        }
+      } else {
+        // Regular standalone task - just update status
+        const { error } = await supabase
+          .from('0008-ap-tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', task.id);
+
+        if (error) throw error;
+      }
 
       // Remove from UI after successful database update
       setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
@@ -356,6 +376,12 @@ export default function Dashboard() {
   };
 
   const handleDeleteTask = async (task: Task) => {
+    // Check if this is a recurring task
+    if (task.recurrence_rule || task.is_virtual_occurrence) {
+      setRecurringActionModal({ visible: true, task, actionType: 'delete' });
+      return;
+    }
+
     try {
       // Optimistically remove the task from the list immediately
       setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
@@ -366,6 +392,51 @@ export default function Dashboard() {
       console.error('Error deleting task:', error);
       Alert.alert('Error', (error as Error).message || 'Failed to delete task');
       // Revert optimistic update on error
+      fetchData();
+    }
+  };
+
+  const handleDeleteThisOccurrence = async (task: Task) => {
+    try {
+      const supabase = getSupabaseClient();
+      const sourceTaskId = task.source_task_id || task.id;
+      const occurrenceDate = task.occurrence_date || task.due_date;
+
+      // Add the date to recurrence_exceptions array
+      const { data: sourceTask } = await supabase
+        .from('0008-ap-tasks')
+        .select('recurrence_exceptions')
+        .eq('id', sourceTaskId)
+        .single();
+
+      const currentExceptions = sourceTask?.recurrence_exceptions || [];
+      const updatedExceptions = [...currentExceptions, occurrenceDate];
+
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .update({ recurrence_exceptions: updatedExceptions })
+        .eq('id', sourceTaskId);
+
+      if (error) throw error;
+
+      setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
+      Alert.alert('Success', 'This occurrence has been removed');
+    } catch (error) {
+      console.error('Error deleting occurrence:', error);
+      Alert.alert('Error', (error as Error).message || 'Failed to delete occurrence');
+      fetchData();
+    }
+  };
+
+  const handleDeleteAllOccurrences = async (task: Task) => {
+    try {
+      const sourceTaskId = task.source_task_id || task.id;
+      await deleteTask(sourceTaskId);
+      setTasks(prevTasks => prevTasks.filter(t => (t.source_task_id || t.id) !== sourceTaskId));
+      Alert.alert('Success', 'All occurrences have been deleted');
+    } catch (error) {
+      console.error('Error deleting all occurrences:', error);
+      Alert.alert('Error', (error as Error).message || 'Failed to delete task');
       fetchData();
     }
   };
@@ -522,6 +593,13 @@ export default function Dashboard() {
       status: task.status,
       completed_at: task.completed_at
     });
+
+    // Check if this is a recurring task
+    if (task.recurrence_rule || task.is_virtual_occurrence) {
+      setRecurringActionModal({ visible: true, task, actionType: 'edit' });
+      return;
+    }
+
     setEditingTask(task);
     setIsDetailModalVisible(false);
     setTimeout(() => setIsFormModalVisible(true), 100); // Small delay to ensure modal transition
@@ -680,6 +758,36 @@ export default function Dashboard() {
           </View>
         </View>
       </Modal>
+
+      <RecurringTaskActionModal
+        visible={recurringActionModal.visible}
+        onClose={() => setRecurringActionModal({ visible: false, task: null, actionType: 'delete' })}
+        onThisOccurrence={() => {
+          if (recurringActionModal.task) {
+            if (recurringActionModal.actionType === 'delete') {
+              handleDeleteThisOccurrence(recurringActionModal.task);
+            } else {
+              // Edit this occurrence - open form with task data
+              setEditingTask(recurringActionModal.task);
+              setIsFormModalVisible(true);
+            }
+          }
+        }}
+        onAllOccurrences={() => {
+          if (recurringActionModal.task) {
+            if (recurringActionModal.actionType === 'delete') {
+              handleDeleteAllOccurrences(recurringActionModal.task);
+            } else {
+              // Edit template - open form with source task data
+              const sourceTaskId = recurringActionModal.task.source_task_id || recurringActionModal.task.id;
+              setEditingTask({ ...recurringActionModal.task, id: sourceTaskId });
+              setIsFormModalVisible(true);
+            }
+          }
+        }}
+        actionType={recurringActionModal.actionType}
+        taskTitle={recurringActionModal.task?.title || ''}
+      />
     </SafeAreaView>
   );
 }

@@ -208,12 +208,34 @@ export default function CalendarScreen() {
   const handleCompleteTask = async (taskId: string) => {
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', taskId);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
 
-      if (error) throw error;
+      // Find the task in our current data to check if it's recurring
+      const task = [...tasks, ...events].find(t => t.id === taskId);
+
+      if (task && (task.is_virtual_occurrence || task.recurrence_rule)) {
+        const { handleRecurringTaskCompletion } = await import('@/lib/completionHandler');
+        const result = await handleRecurringTaskCompletion(
+          supabase,
+          user.id,
+          task,
+          task.occurrence_date || task.due_date
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to complete recurring task');
+        }
+      } else {
+        // Regular task - just update status
+        const { error } = await supabase
+          .from('0008-ap-tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', taskId);
+
+        if (error) throw error;
+      }
+
       fetchTasksAndEvents();
       calculateAuthenticScore();
     } catch (error) {
