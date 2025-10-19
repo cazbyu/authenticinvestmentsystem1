@@ -1,18 +1,19 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
-const TaskDetailModal = lazy(() => import('@/components/tasks/TaskDetailModal').then(m => ({ default: m.TaskDetailModal })));
-const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
-const HourlyCalendarGrid = lazy(() => import('@/components/calendar/HourlyCalendarGrid').then(m => ({ default: m.HourlyCalendarGrid })));
+import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
+import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { expandEventsWithRecurrence, expandEventsForDate } from '@/lib/recurrenceUtils';
 import { getVisibleWindow } from '@/lib/recurrenceUtils';
 import { formatLocalDate, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
 import { DraggableFab } from '@/components/DraggableFab';
+import { fetchWeeklyAuthenticCount } from '@/lib/authenticDepositUtils';
 
 // Constants
 const MINUTE_HEIGHT = 1.5;
@@ -64,8 +65,13 @@ export default function CalendarScreen() {
 
   useEffect(() => {
     fetchTasksAndEvents();
+  }, []);
+
+  useEffect(() => {
     calculateAuthenticScore();
-    
+  }, []);
+
+  useEffect(() => {
     // Set up current time tracking
     const updateCurrentTime = () => {
       const now = new Date();
@@ -106,7 +112,7 @@ export default function CalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const score = await calculateAuthenticScore(supabase, user.id);
+      const score = await fetchWeeklyAuthenticCount(supabase, user.id);
       setAuthenticScore(score);
     } catch (error) {
       console.error('Error calculating authentic score:', error);
@@ -120,6 +126,16 @@ export default function CalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Calculate date range: 90 days before today to 365 days after
+      const today = new Date();
+      const startRange = new Date(today);
+      startRange.setDate(startRange.getDate() - 90);
+      const endRange = new Date(today);
+      endRange.setDate(endRange.getDate() + 365);
+
+      const startStr = formatLocalDate(startRange);
+      const endStr = formatLocalDate(endRange);
+
       // Fetch tasks and events using expanded view for recurring task support
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
@@ -127,7 +143,7 @@ export default function CalendarScreen() {
         .eq('user_id', user.id)
         .not('status', 'in', '(completed,cancelled)')
         .in('type', ['task', 'event'])
-        .or('due_date.not.is.null,start_date.not.is.null');
+        .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
 
       if (tasksError) throw tasksError;
 
@@ -305,28 +321,35 @@ export default function CalendarScreen() {
     });
   };
 
-  const getMarkedDates = () => {
+  const getMarkedDates = useMemo(() => {
     const marked: any = {};
-    
+
     // Mark selected date
     marked[selectedDate] = {
       selected: true,
       selectedColor: '#0078d4',
     };
 
+    // Only calculate marks if we're in monthly view
+    if (viewMode !== 'monthly') {
+      return marked;
+    }
+
     // Mark dates with events (including recurring instances)
-    const window = getVisibleWindow('monthly', currentDate);
+    const { start, end } = getVisibleWindow('monthly', currentDate);
+    const startStr = formatLocalDate(start);
+    const endStr = formatLocalDate(end);
+
     const expandedRecurring = expandEventsWithRecurrence(tasks, 'monthly', currentDate);
-const { start, end } = getVisibleWindow('monthly', currentDate);
-const anytimeMonthly = tasks.filter(t => {
-  const d = t.start_date || t.due_date;
-  return (t.type === 'task') &&
-         d &&
-         (d >= start && d <= end) &&
-         (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time));
-});
-const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly]);
-    
+    const anytimeMonthly = tasks.filter(t => {
+      const d = t.start_date || t.due_date;
+      return (t.type === 'task') &&
+             d &&
+             (d >= startStr && d <= endStr) &&
+             (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time));
+    });
+    const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly]);
+
     // Group tasks by date and collect dots (one per task)
     const dotsByDate: Record<string, any[]> = {};
 
@@ -360,7 +383,7 @@ const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly])
     });
 
     return marked;
-  };
+  }, [tasks, selectedDate, currentDate, viewMode]);
 
   const getEventsForDate = (date: string) => {
     // Use the new recurrence expansion for the specific date
@@ -392,9 +415,9 @@ const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly])
   };
 
 
-  const navigateDate = (direction: 'prev' | 'next') => {
+  const navigateDate = useCallback((direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
-    
+
     if (viewMode === 'daily') {
       newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
     } else if (viewMode === 'weekly') {
@@ -402,21 +425,23 @@ const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly])
     } else {
       newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
     }
-    
+
     setCurrentDate(newDate);
     setSelectedDate(formatLocalDate(newDate));
-  };
+  }, [currentDate, viewMode]);
 
 
-  const renderDailyView = () => {
+  const dailyExpandedTasks = useMemo(() => {
     const expandedEvents = expandEventsForDate(tasks, selectedDate);
     const anytimeTasks = tasks.filter(t =>
       (t.type === 'task') &&
       (t.due_date === selectedDate) &&
       (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
     );
-    const expandedTasks = uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
+    return uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
+  }, [tasks, selectedDate]);
 
+  const renderDailyView = () => {
     return (
       <View style={styles.dailyViewContainer}>
         <View style={styles.dailyHeader}>
@@ -432,25 +457,34 @@ const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly])
         </View>
 
         <View style={styles.dailyContent}>
-          <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
-            <HourlyCalendarGrid
-              selectedDate={selectedDate}
-              expandedTasks={expandedTasks}
-              currentTimePosition={currentTimePosition}
-              currentTimeString={currentTimeString}
-              onCompleteTask={handleCompleteTask}
-              onTaskPress={handleTaskPress}
-              viewMode="daily"
-            />
-          </Suspense>
+          <HourlyCalendarGrid
+            selectedDate={selectedDate}
+            expandedTasks={dailyExpandedTasks}
+            currentTimePosition={currentTimePosition}
+            currentTimeString={currentTimeString}
+            onCompleteTask={handleCompleteTask}
+            onTaskPress={handleTaskPress}
+            viewMode="daily"
+          />
         </View>
       </View>
     );
   };
 
-  const renderWeeklyView = () => {
-    const weekDates = getWeekDates(currentDate);
+  const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
 
+  const weeklyExpandedTasks = useMemo(() => {
+    return uniqByIdAndDate([
+      ...expandEventsForDate(tasks, selectedDate),
+      ...tasks.filter(t =>
+        (t.type === 'task') &&
+        (t.due_date === selectedDate) &&
+        (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
+      )
+    ]);
+  }, [tasks, selectedDate]);
+
+  const renderWeeklyView = () => {
     return (
       <View style={styles.weeklyView}>
         <View style={styles.weeklyHeader}>
@@ -470,15 +504,14 @@ const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly])
           {weekDates.map((date, index) => {
             const dateString = formatLocalDate(date);
             const expandedEvents = expandEventsForDate(tasks, dateString);
-const anytimeTasks = tasks.filter(t =>
-  (t.type === 'task') &&
-  (t.due_date === dateString) &&
-  (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
-);
-const expandedTasks = uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
+            const anytimeTasks = tasks.filter(t =>
+              (t.type === 'task') &&
+              (t.due_date === dateString) &&
+              (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
+            );
+            const expandedTasks = uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
 
-const dayEvents = expandedTasks.map(task => ({
-
+            const dayEvents = expandedTasks.map(task => ({
               id: task.id,
               title: task.title,
               date: task.start_date || task.due_date,
@@ -517,11 +550,11 @@ const dayEvents = expandedTasks.map(task => ({
                   </Text>
                   <View style={styles.weekDayEvents}>
                     {uniqByIdAndDate(dayEvents).slice(0, 3).map((event, idx) => (
-  <View
-    key={`${event.id}-${event.date}-${event.type}-${idx}`}
-    style={[styles.weekEventDot, { backgroundColor: event.color }]}
-  />
-))}
+                      <View
+                        key={`${event.id}-${event.date}-${event.type}-${idx}`}
+                        style={[styles.weekEventDot, { backgroundColor: event.color }]}
+                      />
+                    ))}
                     {dayEvents.length > 3 && (
                       <Text style={styles.moreEventsText}>+{dayEvents.length - 3}</Text>
                     )}
@@ -536,28 +569,23 @@ const dayEvents = expandedTasks.map(task => ({
           <Text style={styles.selectedDayTitle}>
             {formatDateForDisplay(selectedDate)}
           </Text>
-          <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
-            <HourlyCalendarGrid
-              selectedDate={selectedDate}
-              expandedTasks={uniqByIdAndDate([
-                ...expandEventsForDate(tasks, selectedDate),
-                ...tasks.filter(t =>
-                  (t.type === 'task') &&
-                  (t.due_date === selectedDate) &&
-                  (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
-                )
-              ])}
-              currentTimePosition={currentTimePosition}
-              currentTimeString={currentTimeString}
-              onCompleteTask={handleCompleteTask}
-              onTaskPress={handleTaskPress}
-              viewMode="weekly"
-            />
-          </Suspense>
+          <HourlyCalendarGrid
+            selectedDate={selectedDate}
+            expandedTasks={weeklyExpandedTasks}
+            currentTimePosition={currentTimePosition}
+            currentTimeString={currentTimeString}
+            onCompleteTask={handleCompleteTask}
+            onTaskPress={handleTaskPress}
+            viewMode="weekly"
+          />
         </View>
       </View>
     );
   };
+
+  const monthlyExpandedTasks = useMemo(() => {
+    return expandEventsForDate(tasks, selectedDate);
+  }, [tasks, selectedDate]);
 
   const renderMonthlyView = () => {
     return (
@@ -568,7 +596,7 @@ const dayEvents = expandedTasks.map(task => ({
             const date = parseLocalDate(day.dateString);
             setSelectedDate(formatLocalDate(date));
           }}
-          markedDates={getMarkedDates()}
+          markedDates={getMarkedDates}
           theme={{
             backgroundColor: '#ffffff',
             calendarBackground: '#ffffff',
@@ -592,22 +620,20 @@ const dayEvents = expandedTasks.map(task => ({
             textDayHeaderFontSize: 13
           }}
         />
-        
+
         <View style={styles.selectedDateContainer}>
           <Text style={styles.selectedDateLabel}>
             {formatDateForDisplay(selectedDate)}
           </Text>
-          <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
-            <HourlyCalendarGrid
-              selectedDate={selectedDate}
-              expandedTasks={expandEventsForDate(tasks, selectedDate)}
-              currentTimePosition={currentTimePosition}
-              currentTimeString={currentTimeString}
-              onCompleteTask={handleCompleteTask}
-              onTaskPress={handleTaskPress}
-              viewMode="monthly"
-            />
-          </Suspense>
+          <HourlyCalendarGrid
+            selectedDate={selectedDate}
+            expandedTasks={monthlyExpandedTasks}
+            currentTimePosition={currentTimePosition}
+            currentTimeString={currentTimeString}
+            onCompleteTask={handleCompleteTask}
+            onTaskPress={handleTaskPress}
+            viewMode="monthly"
+          />
         </View>
       </View>
     );
@@ -667,26 +693,22 @@ const dayEvents = expandedTasks.map(task => ({
       )}
 
       {/* Modals */}
-      <Suspense fallback={null}>
-        <TaskDetailModal
-          visible={isDetailModalVisible}
-          task={selectedTask}
-          onClose={() => setIsDetailModalVisible(false)}
-          onUpdate={handleUpdateTask}
-          onDelegate={handleDelegateTask}
-          onCancel={handleCancelTask}
-        />
-      </Suspense>
+      <TaskDetailModal
+        visible={isDetailModalVisible}
+        task={selectedTask}
+        onClose={() => setIsDetailModalVisible(false)}
+        onUpdate={handleUpdateTask}
+        onDelegate={handleDelegateTask}
+        onCancel={handleCancelTask}
+      />
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <Suspense fallback={<View style={styles.loadingContainer}><Text>Loading...</Text></View>}>
-          <TaskEventForm
-            mode={editingTask ? "edit" : "create"}
-            initialData={editingTask || undefined}
-            onSubmitSuccess={handleFormSubmitSuccess}
-            onClose={handleFormClose}
-          />
-        </Suspense>
+        <TaskEventForm
+          mode={editingTask ? "edit" : "create"}
+          initialData={editingTask || undefined}
+          onSubmitSuccess={handleFormSubmitSuccess}
+          onClose={handleFormClose}
+        />
       </Modal>
 
       <DraggableFab onPress={() => setIsFormModalVisible(true)}>
