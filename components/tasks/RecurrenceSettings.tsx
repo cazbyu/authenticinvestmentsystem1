@@ -182,8 +182,9 @@ export default function RecurrenceSettings({
   };
 
   const handleCountChange = (value: string) => {
-    // If empty, don't update state (keep the previous valid value)
+    // Allow empty value for deletion/editing
     if (value === '') {
+      setCountValue('');
       return;
     }
 
@@ -203,7 +204,7 @@ export default function RecurrenceSettings({
     // Update state with valid value
     setCountValue(String(numValue));
 
-    // Call updateRule immediately - no debounce needed since validation is already done
+    // Call updateRule to update the recurrence
     updateRule({});
   };
 
@@ -358,6 +359,9 @@ export default function RecurrenceSettings({
                 style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
                 value={String(monthlyDate)}
                 onChangeText={(value) => {
+                  if (value === '') {
+                    return;
+                  }
                   const num = parseInt(value, 10);
                   if (!isNaN(num) && num >= 1 && num <= 31) {
                     setMonthlyDate(num);
@@ -437,6 +441,9 @@ export default function RecurrenceSettings({
               style={[styles.intervalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
               value={String(interval)}
               onChangeText={(value) => {
+                if (value === '') {
+                  return;
+                }
                 const num = parseInt(value, 10);
                 if (!isNaN(num) && num >= 1) {
                   setInterval(num);
