@@ -198,13 +198,14 @@ export default function CalendarScreen() {
       // Fetch tasks and events using expanded view for recurring task support
       // Include ALL tasks (even completed recurring ones) so they show on calendar
       // Exclude only cancelled tasks and goal action tasks
+      // Filter by occurrence_date for virtual occurrences, due_date/start_date for regular tasks
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select('*')
         .eq('user_id', user.id)
         .neq('status', 'cancelled')
         .in('type', ['task', 'event'])
-        .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
+        .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
 
       if (tasksError) throw tasksError;
 
@@ -266,10 +267,11 @@ export default function CalendarScreen() {
       setTasks(transformedTasks);
 
       // Convert to calendar events
+      // Use occurrence_date for virtual recurring occurrences, otherwise use start_date or due_date
       const calendarEvents: CalendarEvent[] = transformedTasks.map(task => ({
         id: task.id,
         title: task.title,
-        date: task.start_date || task.due_date!,
+        date: task.occurrence_date || task.start_date || task.due_date!,
         time: task.start_time ? formatTime(task.start_time) : undefined,
         endTime: task.end_time ? formatTime(task.end_time) : undefined,
         type: task.type as 'task' | 'event',
@@ -401,25 +403,34 @@ export default function CalendarScreen() {
     }
 
     // Mark dates with events (including recurring instances)
-    const { start, end } = getVisibleWindow('monthly', currentDate);
-    const startStr = formatLocalDate(start);
-    const endStr = formatLocalDate(end);
+    // Tasks are already expanded by the database view if they have is_virtual_occurrence flag
+    const hasVirtualOccurrences = tasks.some(t => t.is_virtual_occurrence);
 
-    const expandedRecurring = expandEventsWithRecurrence(tasks, 'monthly', currentDate);
-    const anytimeMonthly = tasks.filter(t => {
-      const d = t.start_date || t.due_date;
-      return (t.type === 'task') &&
-             d &&
-             (d >= startStr && d <= endStr) &&
-             (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time));
-    });
-    const expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly]);
+    let expandedTasks: any[];
+    if (hasVirtualOccurrences) {
+      // Use database-expanded tasks directly
+      expandedTasks = tasks;
+    } else {
+      // Legacy path: expand recurrence client-side (for older data)
+      const { start, end } = getVisibleWindow('monthly', currentDate);
+      const startStr = formatLocalDate(start);
+      const endStr = formatLocalDate(end);
+      const expandedRecurring = expandEventsWithRecurrence(tasks, 'monthly', currentDate);
+      const anytimeMonthly = tasks.filter(t => {
+        const d = t.start_date || t.due_date;
+        return (t.type === 'task') &&
+               d &&
+               (d >= startStr && d <= endStr) &&
+               (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time));
+      });
+      expandedTasks = uniqByIdAndDate([...expandedRecurring, ...anytimeMonthly]);
+    }
 
     // Group tasks by date and collect dots (one per task)
     const dotsByDate: Record<string, any[]> = {};
 
     expandedTasks.forEach(task => {
-      const taskDate = task.start_date || task.due_date;
+      const taskDate = task.occurrence_date || task.start_date || task.due_date;
       if (taskDate) {
         if (!dotsByDate[taskDate]) {
           dotsByDate[taskDate] = [];
@@ -449,21 +460,6 @@ export default function CalendarScreen() {
 
     return marked;
   }, [tasks, selectedDate, currentDate, viewMode]);
-
-  const getEventsForDate = (date: string) => {
-    // Use the new recurrence expansion for the specific date
-    const expandedEvents = expandEventsForDate(tasks, date);
-    return expandedEvents.map(task => ({
-      id: task.id,
-      title: task.title,
-      date: task.start_date || task.due_date,
-      time: task.start_time ? formatTime(task.start_time) : undefined,
-      endTime: task.end_time ? formatTime(task.end_time) : undefined,
-      type: task.type as 'task' | 'event',
-      color: task.roleColor,
-      isAllDay: task.is_all_day || task.is_anytime || (!task.start_time && !task.end_time),
-    }));
-  };
 
   const getWeekDates = (date: Date) => {
     const week = [];

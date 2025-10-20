@@ -13,6 +13,12 @@ export interface Task {
   start_time?: string;
   end_time?: string;
   recurrence_rule?: string;
+  recurrence_end_date?: string;
+  recurrence_exceptions?: string[];
+  occurrence_date?: string;
+  is_virtual_occurrence?: boolean;
+  source_task_id?: string;
+  parent_task_id?: string;
   user_global_timeline_id?: string;
   custom_timeline_id?: string;
   is_urgent?: boolean;
@@ -21,6 +27,9 @@ export interface Task {
   type?: string;
   is_authentic_deposit?: boolean;
   is_twelve_week_goal?: boolean;
+  is_all_day?: boolean;
+  is_anytime?: boolean;
+  completed_at?: string;
   roles?: Array<{id: string; label: string}>;
   domains?: Array<{id: string; name: string}>;
   goals?: Array<{id: string; title: string; goal_type?: string}>;
@@ -31,6 +40,7 @@ export interface Task {
   keyRelationships?: Array<{id: string; name: string}>;
   weeklyCompletedCount?: number;
   weeklyTargetCount?: number;
+  roleColor?: string;
 }
 
 // Props for the TaskCard component
