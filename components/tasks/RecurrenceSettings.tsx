@@ -113,10 +113,17 @@ export default function RecurrenceSettings({
     }
 
     if (endType === 'count') {
-      ruleOptions.count = parseInt(countValue, 10);
-      const endDate = calculateEndDateFromCount(new Date(startDate), buildRRule(ruleOptions), parseInt(countValue, 10));
-      if (endDate) {
-        onChangeEndDate(formatLocalDate(endDate));
+      const countNum = parseInt(countValue, 10);
+      if (!isNaN(countNum) && countNum > 0) {
+        ruleOptions.count = countNum;
+        const endDate = calculateEndDateFromCount(new Date(startDate), buildRRule(ruleOptions), countNum);
+        if (endDate) {
+          onChangeEndDate(formatLocalDate(endDate));
+        } else {
+          onChangeEndDate(null);
+        }
+      } else {
+        onChangeEndDate(null);
       }
     } else if (endType === 'until' && untilDate) {
       onChangeEndDate(untilDate);
@@ -185,20 +192,36 @@ export default function RecurrenceSettings({
   };
 
   const handleCountChange = (value: string) => {
-    setCountValue(value);
-
     // Clear any existing timeout
     if (countUpdateTimeoutRef.current) {
       clearTimeout(countUpdateTimeoutRef.current);
     }
 
-    // Debounce the update - only call updateRule after user stops typing for 500ms
-    const numValue = parseInt(value, 10);
-    if (!isNaN(numValue) && numValue > 0) {
-      countUpdateTimeoutRef.current = setTimeout(() => {
-        updateRule({});
-      }, 500);
+    // If empty, don't update state (keep the previous valid value)
+    if (value === '') {
+      return;
     }
+
+    // Parse and validate the input
+    const numValue = parseInt(value, 10);
+
+    // Reject invalid, zero, or negative values
+    if (isNaN(numValue) || numValue < 1) {
+      return;
+    }
+
+    // Cap at reasonable maximum
+    if (numValue > 999) {
+      return;
+    }
+
+    // Update state with valid value
+    setCountValue(String(numValue));
+
+    // Debounce the update - only call updateRule after user stops typing for 500ms
+    countUpdateTimeoutRef.current = setTimeout(() => {
+      updateRule({});
+    }, 500);
   };
 
   const handleUntilDateSelect = (date: string) => {
@@ -524,8 +547,13 @@ export default function RecurrenceSettings({
               onChangeText={handleCountChange}
               keyboardType="number-pad"
               maxLength={3}
+              placeholder="1-999"
+              placeholderTextColor={colors.textSecondary}
             />
           </View>
+          <Text style={[styles.helpText, { color: colors.textSecondary, marginTop: 4 }]}>
+            Enter a number between 1 and 999
+          </Text>
         </View>
       )}
 
@@ -534,7 +562,8 @@ export default function RecurrenceSettings({
           <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Summary:</Text>
           <Text style={[styles.summaryText, { color: colors.text }]}>
             {describeRRule(recurrenceRule)}
-            {recurrenceEndDate && ` until ${new Date(recurrenceEndDate).toLocaleDateString()}`}
+            {endType === 'until' && recurrenceEndDate && ` until ${new Date(recurrenceEndDate).toLocaleDateString()}`}
+            {endType === 'count' && recurrenceEndDate && ` until ${new Date(recurrenceEndDate).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric' })}`}
           </Text>
         </View>
       )}

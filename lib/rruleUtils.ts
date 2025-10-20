@@ -237,23 +237,53 @@ export function calculateEndDateFromCount(
   count: number
 ): Date | null {
   const parsed = parseRRule(rrule);
-  if (!parsed) return null;
+  if (!parsed || count < 1 || isNaN(count)) return null;
 
   let currentDate = new Date(startDate);
-  let occurrenceCount = 1; // Start counting from 1, as startDate is the first occurrence
+  let occurrenceCount = 0;
+  const maxIterations = count * 100; // Safety limit
+  let iterations = 0;
 
-  // If count is 1, the end date is the start date
-  if (count === 1) {
-    return currentDate;
+  // For weekly recurrence with BYDAY, we need to check each day
+  const dayMap: Record<string, number> = {
+    SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6
+  };
+
+  while (occurrenceCount < count && iterations < maxIterations) {
+    iterations++;
+
+    // Check if current date matches the recurrence pattern
+    let isValidOccurrence = false;
+
+    if (parsed.freq === 'WEEKLY' && parsed.byday && parsed.byday.length > 0) {
+      // For weekly with specific days, check if current day matches
+      const currentDay = currentDate.getDay();
+      const targetDays = parsed.byday.map(d => dayMap[d]);
+      isValidOccurrence = targetDays.includes(currentDay);
+    } else {
+      // For other frequencies, every iteration is valid
+      isValidOccurrence = true;
+    }
+
+    if (isValidOccurrence) {
+      occurrenceCount++;
+      if (occurrenceCount === count) {
+        return currentDate;
+      }
+    }
+
+    // Move to next date
+    if (parsed.freq === 'WEEKLY' && parsed.byday && parsed.byday.length > 0) {
+      // For weekly with BYDAY, advance day by day
+      currentDate = new Date(currentDate);
+      currentDate.setDate(currentDate.getDate() + 1);
+    } else {
+      // For other patterns, use getNextDate
+      currentDate = getNextDate(currentDate, parsed);
+    }
   }
 
-  // Advance through remaining occurrences
-  while (occurrenceCount < count) {
-    currentDate = getNextDate(currentDate, parsed);
-    occurrenceCount++;
-  }
-
-  return currentDate;
+  return null;
 }
 
 export function describeRRule(rrule: string): string {
