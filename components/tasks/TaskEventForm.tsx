@@ -19,7 +19,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
-import RecurrenceSettings from './RecurrenceSettings';
+import { RecurrenceDropdown } from './RecurrenceDropdown';
+import { CustomRecurrenceModal } from './CustomRecurrenceModal';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { fetchAuthenticUsage, getWeekResetDay, formatAuthenticUsageText, invalidateCache } from '@/lib/authenticDepositUtils';
 
@@ -165,11 +166,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [calendarMode, setCalendarMode] = useState<'due' | 'start' | 'end' | 'withdrawal'>('due');
 
   // Recurrence state
-  const [selectedWeeklyDays, setSelectedWeeklyDays] = useState<number[]>([]);
-  const [customRecurrenceType, setCustomRecurrenceType] = useState<'biweekly' | 'monthly'>('biweekly');
-  const [monthlyOption, setMonthlyOption] = useState<'date' | 'weekday'>('date');
-  const [monthlyWeekday, setMonthlyWeekday] = useState<'first' | 'second' | 'third' | 'fourth' | 'last'>('first');
-  const [monthlyDayOfWeek, setMonthlyDayOfWeek] = useState<number>(1); // Monday
+  const [showCustomRecurrenceModal, setShowCustomRecurrenceModal] = useState(false);
 
   // Goal Mode (when a goal is selected + goalToggle true)
   const [goalMode, setGoalMode] = useState(false);
@@ -1241,15 +1238,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
-          {/* Enhanced Recurrence Settings (when Repeat is ON but Goal is OFF) */}
+          {/* Google Calendar-style Recurrence Dropdown (when Repeat is ON but Goal is OFF) */}
           {formData.hasRepeat && !formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
-            <View style={[styles.recurrenceContainer, { backgroundColor: colors.surface, borderRadius: 12, padding: 16, marginBottom: 16 }]}>
-              <RecurrenceSettings
-                recurrenceRule={formData.recurrenceRule}
-                recurrenceEndDate={formData.recurrenceEndDate}
-                startDate={formData.startDate || formData.dueDate}
-                onChangeRule={(rule) => setFormData(prev => ({ ...prev, recurrenceRule: rule }))}
-                onChangeEndDate={(date) => setFormData(prev => ({ ...prev, recurrenceEndDate: date }))}
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Recurrence</Text>
+              <RecurrenceDropdown
+                value={formData.recurrenceRule}
+                onChange={(rule) => setFormData(prev => ({ ...prev, recurrenceRule: rule }))}
+                onOpenCustom={() => setShowCustomRecurrenceModal(true)}
+                startDate={formData.type === 'event' ? formData.startDate : formData.dueDate}
               />
             </View>
           )}
@@ -1439,6 +1436,22 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           </View>
         </View>
       </Modal>
+
+      {/* Custom Recurrence Modal */}
+      <CustomRecurrenceModal
+        visible={showCustomRecurrenceModal}
+        onClose={() => setShowCustomRecurrenceModal(false)}
+        onSave={(rule, endDate) => {
+          setFormData(prev => ({
+            ...prev,
+            recurrenceRule: rule,
+            recurrenceEndDate: endDate
+          }));
+        }}
+        startDate={formData.type === 'event' ? formData.startDate : formData.dueDate}
+        initialRule={formData.recurrenceRule}
+        initialEndDate={formData.recurrenceEndDate}
+      />
     </View>
   );
 }

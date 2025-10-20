@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
-import { X, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
+import { X, CreditCard as Edit, UserX, Ban, Repeat } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
+import { describeRRule } from '@/lib/rruleUtils';
 
 interface TaskDetailModalProps {
   visible: boolean;
@@ -55,21 +56,37 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
 
   const formatDateTime = (dateTime, isDateOnly = false) => {
     if (!dateTime) return 'Not set';
-    
+
     if (isDateOnly) {
       // For date-only strings (YYYY-MM-DD), parse as local date to avoid timezone shifts
       const [year, month, day] = dateTime.split('T')[0].split('-').map(Number);
       const localDate = new Date(year, month - 1, day);
-      return localDate.toLocaleDateString('en-US', { 
+      return localDate.toLocaleDateString('en-US', {
         weekday: 'long',
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
       });
     } else {
       // For datetime strings with timezone info, use normal parsing
       return new Date(dateTime).toLocaleString();
     }
+  };
+
+  const formatTime = (timeString) => {
+    if (!timeString) return 'Not set';
+
+    // Handle HH:MM:SS format (time-only from database)
+    const timeParts = timeString.split(':');
+    if (timeParts.length >= 2) {
+      const hours = parseInt(timeParts[0], 10);
+      const minutes = timeParts[1];
+      const isPM = hours >= 12;
+      const displayHours = hours % 12 || 12;
+      return `${displayHours}:${minutes} ${isPM ? 'PM' : 'AM'}`;
+    }
+
+    return timeString;
   };
 
   if (!task) return null;
@@ -92,13 +109,27 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
           {task.start_time && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Start Time:</Text>
-              <Text style={styles.detailValue}>{formatDateTime(task.start_time)}</Text>
+              <Text style={styles.detailValue}>{formatTime(task.start_time)}</Text>
             </View>
           )}
           {task.end_time && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>End Time:</Text>
-              <Text style={styles.detailValue}>{formatDateTime(task.end_time)}</Text>
+              <Text style={styles.detailValue}>{formatTime(task.end_time)}</Text>
+            </View>
+          )}
+          {task.recurrence_rule && (
+            <View style={styles.detailSection}>
+              <View style={styles.recurrenceHeader}>
+                <Repeat size={16} color="#6b7280" />
+                <Text style={styles.detailLabel}>Recurrence:</Text>
+              </View>
+              <Text style={styles.detailValue}>{describeRRule(task.recurrence_rule)}</Text>
+              {task.recurrence_end_date && (
+                <Text style={styles.detailValue}>
+                  Until {formatDateTime(task.recurrence_end_date, true)}
+                </Text>
+              )}
             </View>
           )}
           <View style={styles.detailSection}>
@@ -291,6 +322,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     fontStyle: 'italic',
+  },
+  recurrenceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
   },
   detailActions: { 
     flexDirection: 'row', 
