@@ -646,6 +646,12 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
         }
 
+        // For tasks with a due time, we set both start_time and end_time to the same value
+        // so they display correctly on the calendar (not at midnight)
+        const dueTimeFormatted = formData.type === 'task' && formData.dueTime && !formData.isAnytime
+          ? formatTimeForDatabase(formData.dueTime, formData.dueDate)
+          : null;
+
         const taskPayload = {
           user_id: user.id,
           title: formData.title.trim(),
@@ -655,12 +661,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           end_date: formData.type === 'event' ? formData.endDate : null,
           start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
             ? formatTimeForDatabase(formData.startTime, formData.startDate)
-            : null,
+            : dueTimeFormatted,
           end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
             ? formatTimeForDatabase(formData.endTime, formData.endDate || formData.startDate)
-            : (formData.type === 'task' && formData.dueTime && !formData.isAnytime
-              ? formatTimeForDatabase(formData.dueTime, formData.dueDate)
-              : null),
+            : dueTimeFormatted,
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,
           is_important: formData.isImportant,

@@ -25,6 +25,17 @@ const uniqByIdAndDate = <T extends { id: string; start_date?: string; due_date?:
 
 export function useExpandedTasksForDate(tasks: Task[], date: string) {
   return useMemo(() => {
+    const hasVirtualOccurrences = tasks.some(t => (t as any).is_virtual_occurrence);
+
+    if (hasVirtualOccurrences) {
+      // Tasks are already expanded by the database view
+      return tasks.filter(t => {
+        const taskDate = (t as any).occurrence_date || t.start_date || t.due_date;
+        return taskDate === date;
+      });
+    }
+
+    // Legacy path: expand recurrence client-side
     return expandEventsForDate(tasks, date);
   }, [tasks, date]);
 }
@@ -32,16 +43,29 @@ export function useExpandedTasksForDate(tasks: Task[], date: string) {
 export function useExpandedTasksForWeek(tasks: Task[], weekDates: Date[]) {
   return useMemo(() => {
     const resultByDate: Record<string, Task[]> = {};
+    const hasVirtualOccurrences = tasks.some(t => (t as any).is_virtual_occurrence);
 
     weekDates.forEach(date => {
       const dateString = date.toISOString().split('T')[0];
-      const expandedEvents = expandEventsForDate(tasks, dateString);
+
+      let matchingTasks: Task[];
+      if (hasVirtualOccurrences) {
+        // Tasks are already expanded by the database view
+        matchingTasks = tasks.filter(t => {
+          const taskDate = (t as any).occurrence_date || t.start_date || t.due_date;
+          return taskDate === dateString;
+        });
+      } else {
+        // Legacy path: expand recurrence client-side
+        matchingTasks = expandEventsForDate(tasks, dateString);
+      }
+
       const anytimeTasks = tasks.filter(t =>
         (t.type === 'task') &&
-        (t.due_date === dateString) &&
+        (t.due_date === dateString || (t as any).occurrence_date === dateString) &&
         (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
       );
-      resultByDate[dateString] = uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
+      resultByDate[dateString] = uniqByIdAndDate([...matchingTasks, ...anytimeTasks]);
     });
 
     return resultByDate;
@@ -54,18 +78,33 @@ export function useExpandedTasksWithAnytime(
   includeAnytime: boolean = true
 ) {
   return useMemo(() => {
-    const expandedEvents = expandEventsForDate(tasks, date);
+    // If tasks already contain virtual occurrences from the database view,
+    // don't expand them again - just filter by date
+    const hasVirtualOccurrences = tasks.some(t => (t as any).is_virtual_occurrence);
 
-    if (!includeAnytime) {
-      return expandedEvents;
+    let matchingTasks: Task[];
+    if (hasVirtualOccurrences) {
+      // Tasks are already expanded by the database view, just filter by date
+      matchingTasks = tasks.filter(t => {
+        const taskDate = (t as any).occurrence_date || t.start_date || t.due_date;
+        return taskDate === date;
+      });
+    } else {
+      // Legacy path: expand recurrence client-side
+      matchingTasks = expandEventsForDate(tasks, date);
     }
 
+    if (!includeAnytime) {
+      return matchingTasks;
+    }
+
+    // Add anytime tasks for this specific date
     const anytimeTasks = tasks.filter(t =>
       (t.type === 'task') &&
-      (t.due_date === date) &&
+      (t.due_date === date || (t as any).occurrence_date === date) &&
       (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
     );
 
-    return uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
+    return uniqByIdAndDate([...matchingTasks, ...anytimeTasks]);
   }, [tasks, date, includeAnytime]);
 }
