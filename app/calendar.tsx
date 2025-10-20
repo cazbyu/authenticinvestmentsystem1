@@ -72,6 +72,10 @@ export default function CalendarScreen() {
   }, []);
 
   useEffect(() => {
+    console.log(`[Calendar] viewMode changed to: ${viewMode}`);
+  }, [viewMode]);
+
+  useEffect(() => {
     // Set up current time tracking
     const updateCurrentTime = () => {
       const now = new Date();
@@ -120,6 +124,8 @@ export default function CalendarScreen() {
   };
 
   const fetchTasksAndEvents = async () => {
+    console.log('[Calendar] Starting fetchTasksAndEvents...');
+    const startTime = performance.now();
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
@@ -137,6 +143,7 @@ export default function CalendarScreen() {
       const endStr = formatLocalDate(endRange);
 
       // Fetch tasks and events using expanded view for recurring task support
+      const queryStartTime = performance.now();
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select('*')
@@ -144,6 +151,8 @@ export default function CalendarScreen() {
         .not('status', 'in', '(completed,cancelled)')
         .in('type', ['task', 'event'])
         .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
+      const queryEndTime = performance.now();
+      console.log(`[Calendar] Tasks query completed in ${(queryEndTime - queryStartTime).toFixed(2)}ms, found ${tasksData?.length || 0} tasks`);
 
       if (tasksError) throw tasksError;
 
@@ -157,6 +166,7 @@ export default function CalendarScreen() {
       const taskIds = tasksData.map(t => t.id);
 
       // Fetch comprehensive task data
+      const relationsStartTime = performance.now();
       const [
         { data: rolesData, error: rolesError },
         { data: domainsData, error: domainsError },
@@ -173,6 +183,10 @@ export default function CalendarScreen() {
         supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
       ]);
 
+      const relationsEndTime = performance.now();
+      console.log(`[Calendar] Relations queries completed in ${(relationsEndTime - relationsStartTime).toFixed(2)}ms`);
+      console.log(`[Calendar] Retrieved - Roles: ${rolesData?.length || 0}, Domains: ${domainsData?.length || 0}, Goals: ${goalsData?.length || 0}`);
+
       if (rolesError) throw rolesError;
       if (domainsError) throw domainsError;
       if (goalsError) throw goalsError;
@@ -181,6 +195,7 @@ export default function CalendarScreen() {
       if (keyRelationshipsError) throw keyRelationshipsError;
 
       // Transform tasks with role colors
+      const transformStartTime = performance.now();
       const transformedTasks = tasksData.map(task => {
         const taskRoles = rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [];
         const primaryRole = taskRoles[0];
@@ -198,6 +213,10 @@ export default function CalendarScreen() {
         };
       });
 
+      const transformEndTime = performance.now();
+      console.log(`[Calendar] Task transformation completed in ${(transformEndTime - transformStartTime).toFixed(2)}ms`);
+      console.log(`[Calendar] Total tasks transformed: ${transformedTasks.length}`);
+
       setTasks(transformedTasks);
 
       // Convert to calendar events
@@ -213,10 +232,14 @@ export default function CalendarScreen() {
       }));
 
       setEvents(calendarEvents);
+
+      const endTime = performance.now();
+      console.log(`[Calendar] ===== fetchTasksAndEvents completed in ${(endTime - startTime).toFixed(2)}ms =====`);
     } catch (error) {
       console.error('Error fetching tasks and events:', error);
       Alert.alert('Error', (error as Error).message);
     } finally {
+      console.log('[Calendar] Setting loading to false');
       setLoading(false);
     }
   };
@@ -322,6 +345,7 @@ export default function CalendarScreen() {
   };
 
   const getMarkedDates = useMemo(() => {
+    console.log(`[Calendar] Computing getMarkedDates for viewMode: ${viewMode}, currentDate: ${currentDate.toISOString()}`);
     const marked: any = {};
 
     // Mark selected date
@@ -382,6 +406,8 @@ export default function CalendarScreen() {
       }
     });
 
+    const markedDatesCount = Object.keys(marked).length;
+    console.log(`[Calendar] getMarkedDates computed: ${markedDatesCount} dates marked`);
     return marked;
   }, [tasks, selectedDate, currentDate, viewMode]);
 
@@ -401,6 +427,7 @@ export default function CalendarScreen() {
   };
 
   const getWeekDates = (date: Date) => {
+    console.log(`[Calendar] getWeekDates called for date: ${date.toISOString()}`);
     const week = [];
     const startOfWeek = new Date(date);
     const day = startOfWeek.getDay();
@@ -411,11 +438,13 @@ export default function CalendarScreen() {
       weekDate.setDate(startOfWeek.getDate() + i);
       week.push(weekDate);
     }
+    console.log(`[Calendar] getWeekDates returning week from ${week[0].toISOString()} to ${week[6].toISOString()}`);
     return week;
   };
 
 
   const navigateDate = useCallback((direction: 'prev' | 'next') => {
+    console.log(`[Calendar] navigateDate called - direction: ${direction}, current viewMode: ${viewMode}, current date: ${currentDate.toISOString()}`);
     const newDate = new Date(currentDate);
 
     if (viewMode === 'daily') {
@@ -426,19 +455,23 @@ export default function CalendarScreen() {
       newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
     }
 
+    console.log(`[Calendar] Navigating to new date: ${newDate.toISOString()}`);
     setCurrentDate(newDate);
     setSelectedDate(formatLocalDate(newDate));
   }, [currentDate, viewMode]);
 
 
   const dailyExpandedTasks = useMemo(() => {
+    console.log(`[Calendar] Computing dailyExpandedTasks for date: ${selectedDate}`);
     const expandedEvents = expandEventsForDate(tasks, selectedDate);
     const anytimeTasks = tasks.filter(t =>
       (t.type === 'task') &&
       (t.due_date === selectedDate) &&
       (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
     );
-    return uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
+    const result = uniqByIdAndDate([...expandedEvents, ...anytimeTasks]);
+    console.log(`[Calendar] dailyExpandedTasks computed: ${result.length} tasks (${expandedEvents.length} expanded + ${anytimeTasks.length} anytime)`);
+    return result;
   }, [tasks, selectedDate]);
 
   const renderDailyView = () => {
@@ -474,14 +507,19 @@ export default function CalendarScreen() {
   const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
 
   const weeklyExpandedTasks = useMemo(() => {
-    return uniqByIdAndDate([
-      ...expandEventsForDate(tasks, selectedDate),
-      ...tasks.filter(t =>
-        (t.type === 'task') &&
-        (t.due_date === selectedDate) &&
-        (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
-      )
+    console.log(`[Calendar] Computing weeklyExpandedTasks for date: ${selectedDate}`);
+    const expandedForDate = expandEventsForDate(tasks, selectedDate);
+    const anytimeForDate = tasks.filter(t =>
+      (t.type === 'task') &&
+      (t.due_date === selectedDate) &&
+      (t.is_all_day || t.is_anytime || (!t.start_time && !t.end_time))
+    );
+    const result = uniqByIdAndDate([
+      ...expandedForDate,
+      ...anytimeForDate
     ]);
+    console.log(`[Calendar] weeklyExpandedTasks computed: ${result.length} tasks`);
+    return result;
   }, [tasks, selectedDate]);
 
   const renderWeeklyView = () => {
@@ -584,7 +622,10 @@ export default function CalendarScreen() {
   };
 
   const monthlyExpandedTasks = useMemo(() => {
-    return expandEventsForDate(tasks, selectedDate);
+    console.log(`[Calendar] Computing monthlyExpandedTasks for date: ${selectedDate}`);
+    const result = expandEventsForDate(tasks, selectedDate);
+    console.log(`[Calendar] monthlyExpandedTasks computed: ${result.length} tasks`);
+    return result;
   }, [tasks, selectedDate]);
 
   const renderMonthlyView = () => {
@@ -640,9 +681,12 @@ export default function CalendarScreen() {
   };
 
   const renderContent = () => {
+    console.log(`[Calendar] renderContent called with viewMode: ${viewMode}`);
     if (viewMode === 'weekly') {
+      console.log('[Calendar] Rendering weekly view');
       return renderWeeklyView();
     } else {
+      console.log('[Calendar] Rendering monthly view');
       return renderMonthlyView();
     }
   };
@@ -660,7 +704,10 @@ export default function CalendarScreen() {
               styles.viewToggleButton,
               viewMode === mode && styles.activeViewToggleButton
             ]}
-            onPress={() => setViewMode(mode)}
+            onPress={() => {
+              console.log(`[Calendar] View mode button clicked: ${mode} (current: ${viewMode})`);
+              setViewMode(mode);
+            }}
           >
             <Text style={[
               styles.viewToggleText,

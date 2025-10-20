@@ -84,6 +84,7 @@ export function expandRecurrence(
   if (!event.recurrence_rule) {
     return [];
   }
+  console.log(`[recurrenceUtils] expandRecurrence for event: ${event.title} (${event.id}) from ${startWindow.toISOString()} to ${endWindow.toISOString()}`);
 
   const rule = parseRRule(event.recurrence_rule);
   if (!rule) {
@@ -154,6 +155,7 @@ export function expandRecurrence(
     }
   }
 
+  console.log(`[recurrenceUtils] expandRecurrence generated ${instances.length} instances for event: ${event.title}`);
   return instances;
 }
 
@@ -225,6 +227,7 @@ function toDateString(date: Date): string {
 }
 
 export function getVisibleWindow(viewMode: 'daily' | 'weekly' | 'monthly', currentDate: Date): { start: Date; end: Date } {
+  console.log(`[recurrenceUtils] getVisibleWindow called - viewMode: ${viewMode}, currentDate: ${currentDate.toISOString()}`);
   const start = new Date(currentDate);
   const end = new Date(currentDate);
 
@@ -247,6 +250,7 @@ export function getVisibleWindow(viewMode: 'daily' | 'weekly' | 'monthly', curre
       break;
   }
 
+  console.log(`[recurrenceUtils] getVisibleWindow result - start: ${start.toISOString()}, end: ${end.toISOString()}`);
   return { start, end };
 }
 
@@ -256,20 +260,25 @@ export function expandEventsWithRecurrence(
   currentDate: Date,
   selectedDate?: string
 ): any[] {
+  console.log(`[recurrenceUtils] expandEventsWithRecurrence called - ${events.length} events, viewMode: ${viewMode}`);
   const window = getVisibleWindow(viewMode, currentDate);
   const expandedEvents: any[] = [];
   const processedBaseEvents = new Set<string>();
+  let recurringCount = 0;
+  let nonRecurringCount = 0;
 
   for (const event of events) {
     if (event.recurrence_rule) {
       // Expand recurring event
+      recurringCount++;
       const instances = expandRecurrence(event, window.start, window.end);
       expandedEvents.push(...instances);
-      
+
       // Mark base event as processed to avoid duplication
       processedBaseEvents.add(event.id);
     } else {
       // Non-recurring event - include if it falls within the window
+      nonRecurringCount++;
       const eventDate = new Date(event.start_date || event.due_date);
       if (eventDate >= window.start && eventDate <= window.end) {
         expandedEvents.push(event);
@@ -277,33 +286,42 @@ export function expandEventsWithRecurrence(
     }
   }
 
+  console.log(`[recurrenceUtils] expandEventsWithRecurrence complete - ${expandedEvents.length} total events (${recurringCount} recurring, ${nonRecurringCount} non-recurring)`);
+
   return expandedEvents;
 }
 
 export function expandEventsForDate(events: any[], date: string): any[] {
+  console.log(`[recurrenceUtils] expandEventsForDate called - ${events.length} events for date: ${date}`);
   const targetDate = new Date(date);
   const expandedEvents: any[] = [];
   const processedBaseEvents = new Set<string>();
+  let recurringCount = 0;
+  let nonRecurringCount = 0;
 
   for (const event of events) {
     if (event.recurrence_rule) {
       // Expand recurring event for just this date
+      recurringCount++;
       const dayStart = new Date(targetDate);
       const dayEnd = new Date(targetDate);
       dayEnd.setDate(dayEnd.getDate() + 1);
-      
+
       const instances = expandRecurrence(event, dayStart, dayEnd);
       expandedEvents.push(...instances);
-      
+
       processedBaseEvents.add(event.id);
     } else {
       // Non-recurring event - include if it matches the date
+      nonRecurringCount++;
       const eventDate = event.start_date || event.due_date;
       if (eventDate === date) {
         expandedEvents.push(event);
       }
     }
   }
+
+  console.log(`[recurrenceUtils] expandEventsForDate complete - ${expandedEvents.length} events (${recurringCount} recurring sources, ${nonRecurringCount} non-recurring)`);
 
   return expandedEvents;
 }

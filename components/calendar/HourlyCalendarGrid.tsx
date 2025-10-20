@@ -42,6 +42,7 @@ const getTimeInMinutes = (timeString: string) => {
 };
 
 const calculateEventLayout = (events: Task[]) => {
+  console.log(`[HourlyCalendarGrid] calculateEventLayout called with ${events.length} events`);
   if (events.length === 0) return [];
 
   const sortedEvents = [...events].sort((a, b) => {
@@ -93,6 +94,7 @@ const calculateEventLayout = (events: Task[]) => {
     event.maxColumns = maxOverlaps;
   }
 
+  console.log(`[HourlyCalendarGrid] calculateEventLayout complete - ${eventsWithLayout.length} events positioned`);
   return eventsWithLayout;
 };
 
@@ -105,6 +107,8 @@ export function HourlyCalendarGrid({
   onTaskPress,
   viewMode = 'daily',
 }: HourlyCalendarGridProps) {
+  console.log(`[HourlyCalendarGrid] Component rendering - viewMode: ${viewMode}, selectedDate: ${selectedDate}, expandedTasks: ${expandedTasks.length}`);
+
   const scrollRef = useRef<ScrollView>(null);
   const [viewportH, setViewportH] = useState(0);
   const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
@@ -115,6 +119,7 @@ export function HourlyCalendarGrid({
   const isToday = normalizedDate === today;
 
   useEffect(() => {
+    console.log(`[HourlyCalendarGrid] Scroll effect triggered - hasScrolledToNow: ${hasScrolledToNow}, viewportH: ${viewportH}`);
     if (hasScrolledToNow) return;
     if (!scrollRef.current || viewportH <= 0) return;
 
@@ -135,9 +140,11 @@ export function HourlyCalendarGrid({
       if (targetY > contentH - viewportH) targetY = Math.max(0, contentH - viewportH);
     }
 
+    console.log(`[HourlyCalendarGrid] Scrolling to position: ${targetY}px (isToday: ${isToday})`);
     const cancel = InteractionManager.runAfterInteractions(() => {
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({ y: targetY, animated: false });
+        console.log('[HourlyCalendarGrid] Scroll completed, setting hasScrolledToNow to true');
         setHasScrolledToNow(true);
       });
     });
@@ -146,6 +153,7 @@ export function HourlyCalendarGrid({
   }, [selectedDate, viewportH, hasScrolledToNow, isToday, viewMode]);
 
   useEffect(() => {
+    console.log(`[HourlyCalendarGrid] Date or viewMode changed - selectedDate: ${selectedDate}, viewMode: ${viewMode}, resetting hasScrolledToNow`);
     setHasScrolledToNow(false);
   }, [selectedDate, viewMode]);
 
@@ -161,6 +169,8 @@ export function HourlyCalendarGrid({
     task.start_time && task.end_time && !task.is_all_day
   );
 
+  console.log(`[HourlyCalendarGrid] Task breakdown - All day: ${allDayItems.length}, No time: ${noTimeItems.length}, Timed: ${timedEvents.length}`);
+
   const noTimeItemsAsMidnight = noTimeItems.map(task => ({
     ...task,
     start_time: '00:00:00',
@@ -170,6 +180,7 @@ export function HourlyCalendarGrid({
 
   const allTimedEvents = [...timedEvents, ...noTimeItemsAsMidnight];
   const eventsWithLayout = calculateEventLayout(allTimedEvents);
+  console.log(`[HourlyCalendarGrid] Events with layout calculated: ${eventsWithLayout.length}`);
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   return (
