@@ -15,6 +15,10 @@
 -- Add p_max_past_days parameter to support expanding into the past
 -- ============================================================================
 
+-- Drop the old 5-parameter version first to avoid "function name is not unique" error
+DROP FUNCTION IF EXISTS fn_expand_recurrence_dates(date, text, date, jsonb, integer);
+
+-- Create the new 6-parameter version with past date support
 CREATE OR REPLACE FUNCTION fn_expand_recurrence_dates(
   p_start_date date,
   p_recurrence_rule text,
