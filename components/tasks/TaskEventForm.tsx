@@ -646,24 +646,32 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
         }
 
+        // For recurring tasks/events without a date, default to today
+        const effectiveDueDate = formData.type === 'task'
+          ? (formData.dueDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+          : null;
+        const effectiveStartDate = formData.type === 'event'
+          ? (formData.startDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+          : null;
+
         // For tasks with a due time, we set both start_time and end_time to the same value
         // so they display correctly on the calendar (not at midnight)
         const dueTimeFormatted = formData.type === 'task' && formData.dueTime && !formData.isAnytime
-          ? formatTimeForDatabase(formData.dueTime, formData.dueDate)
+          ? formatTimeForDatabase(formData.dueTime, effectiveDueDate)
           : null;
 
         const taskPayload = {
           user_id: user.id,
           title: formData.title.trim(),
           type: formData.type,
-          due_date: formData.type === 'task' ? formData.dueDate : null,
-          start_date: formData.type === 'event' ? formData.startDate : null,
+          due_date: effectiveDueDate,
+          start_date: effectiveStartDate,
           end_date: formData.type === 'event' ? formData.endDate : null,
           start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.startTime, formData.startDate)
+            ? formatTimeForDatabase(formData.startTime, effectiveStartDate)
             : dueTimeFormatted,
           end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.endTime, formData.endDate || formData.startDate)
+            ? formatTimeForDatabase(formData.endTime, formData.endDate || effectiveStartDate)
             : dueTimeFormatted,
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,
