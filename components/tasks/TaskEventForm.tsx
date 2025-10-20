@@ -83,7 +83,6 @@ interface FormData {
   isImportant: boolean;
   isAuthenticDeposit: boolean;
   isGoal: boolean;
-  hasRepeat: boolean;
   selectedRoleIds: string[];
   selectedDomainIds: string[];
   selectedKeyRelationshipIds: string[];
@@ -141,7 +140,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     isImportant: false,
     isAuthenticDeposit: false,
     isGoal: false,
-    hasRepeat: false,
     selectedRoleIds: [],
     selectedDomainIds: [],
     selectedKeyRelationshipIds: [],
@@ -312,7 +310,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
   // Flip goal mode when a goal is chosen while goal toggle is ON
   useEffect(() => {
-    const enabled = !!formData.isGoal && !!formData.selectedGoal && !!formData.hasRepeat;
+    const enabled = !!formData.isGoal && !!formData.selectedGoal && !!formData.recurrenceRule;
     setGoalMode(enabled);
     if (enabled) {
       // Prefill from goal
@@ -329,7 +327,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       // Scroll to bottom to show goal area controls
       scrollRef.current?.scrollToEnd({ animated: true });
     }
-  }, [formData.isGoal, formData.selectedGoal, formData.hasRepeat]);
+  }, [formData.isGoal, formData.selectedGoal, formData.recurrenceRule]);
 
   const fetchFormData = async () => {
     setLoading(true);
@@ -445,7 +443,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       isImportant: initialData.is_important || false,
       isAuthenticDeposit: initialData.is_authentic_deposit || false,
       isGoal: hasActiveGoals || initialData.is_twelve_week_goal || false,
-      hasRepeat: !!initialData.recurrence_rule,
       selectedRoleIds: initialData.roles?.map((r: any) => r.id) || initialData.selectedRoleIds || [],
       selectedDomainIds: initialData.domains?.map((d: any) => d.id) || initialData.selectedDomainIds || [],
       selectedKeyRelationshipIds: initialData.keyRelationships?.map((kr: any) => kr.id) || initialData.selectedKeyRelationshipIds || [],
@@ -887,7 +884,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               styles.typeButtonText,
               { color: formData.type === type ? '#ffffff' : colors.text }
             ]}>
-              {type === 'depositIdea' ? 'Deposit Idea' : type.charAt(0).toUpperCase() + type.slice(1)}
+              {type === 'depositIdea' ? 'Dep Idea' : type === 'withdrawal' ? 'Withdraw' : type.charAt(0).toUpperCase() + type.slice(1)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1229,17 +1226,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
-          {/* Repeat toggle */}
-          {(formData.type === 'task' || formData.type === 'event') && (
-            <View style={styles.repeatSwitchWrapper}>
-              <View style={styles.repeatSwitchContainer}>
-                {renderSwitchField('Repeat', formData.hasRepeat, (value) => setFormData(prev => ({ ...prev, hasRepeat: value })))}
-              </View>
-            </View>
-          )}
-
-          {/* Google Calendar-style Recurrence Dropdown (when Repeat is ON but Goal is OFF) */}
-          {formData.hasRepeat && !formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
+          {/* Google Calendar-style Recurrence Dropdown (always visible for tasks and events when Goal is OFF) */}
+          {!formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.text }]}>Recurrence</Text>
               <RecurrenceDropdown
