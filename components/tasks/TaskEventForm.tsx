@@ -1252,7 +1252,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           {/* Google Calendar-style Recurrence Dropdown (always visible for tasks and events when Goal is OFF) */}
           {!formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
             <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Recurrence</Text>
               <RecurrenceDropdown
                 value={formData.recurrenceRule}
                 onChange={(rule) => setFormData(prev => ({ ...prev, recurrenceRule: rule }))}
