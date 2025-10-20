@@ -15,6 +15,7 @@ import { formatLocalDate, parseLocalDate, formatTimeForDisplay } from '@/lib/dat
 import { DraggableFab } from '@/components/DraggableFab';
 import { fetchWeeklyAuthenticCount } from '@/lib/authenticDepositUtils';
 import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/useRecurrenceCache';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 // Constants
 const MINUTE_HEIGHT = 1.5;
@@ -91,6 +92,49 @@ export default function CalendarScreen() {
     const timeInterval = setInterval(updateCurrentTime, 60000); // Update every minute
 
     return () => clearInterval(timeInterval);
+  }, []);
+
+  useEffect(() => {
+    // Event bus listeners for task lifecycle events
+    const handleTaskCreated = () => {
+      console.log('[Calendar] Received task created event, refreshing...');
+      fetchTasksAndEvents();
+      calculateAuthenticScore();
+    };
+
+    const handleTaskUpdated = () => {
+      console.log('[Calendar] Received task updated event, refreshing...');
+      fetchTasksAndEvents();
+      calculateAuthenticScore();
+    };
+
+    const handleTaskDeleted = () => {
+      console.log('[Calendar] Received task deleted event, refreshing...');
+      fetchTasksAndEvents();
+      calculateAuthenticScore();
+    };
+
+    const handleRefreshAll = () => {
+      console.log('[Calendar] Received refresh all event, refreshing...');
+      fetchTasksAndEvents();
+      calculateAuthenticScore();
+    };
+
+    eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskUpdated);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskDeleted);
+    eventBus.on(EVENTS.REFRESH_ALL_TASKS, handleRefreshAll);
+    eventBus.on(EVENTS.DEPOSIT_IDEA_CREATED, handleRefreshAll);
+    eventBus.on(EVENTS.WITHDRAWAL_CREATED, handleRefreshAll);
+
+    return () => {
+      eventBus.off(EVENTS.TASK_CREATED, handleTaskCreated);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskUpdated);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskDeleted);
+      eventBus.off(EVENTS.REFRESH_ALL_TASKS, handleRefreshAll);
+      eventBus.off(EVENTS.DEPOSIT_IDEA_CREATED, handleRefreshAll);
+      eventBus.off(EVENTS.WITHDRAWAL_CREATED, handleRefreshAll);
+    };
   }, []);
 
 
