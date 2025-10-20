@@ -1157,6 +1157,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
           {formData.type === 'event' && (
             <View style={styles.field}>
+              {/* First Row: Date and Time Range */}
               <View style={styles.googleStyleDateTimeRow}>
                 {/* Start Date */}
                 <TouchableOpacity
@@ -1204,7 +1205,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     </Text>
                   </TouchableOpacity>
                 )}
+              </View>
 
+              {/* Second Row: All Day and Make Multi-day */}
+              <View style={styles.googleSecondRow}>
                 {/* All day toggle */}
                 <View style={styles.googleAllDayToggle}>
                   <Text style={[styles.googleAllDayLabel, { color: colors.text }]}>All day</Text>
@@ -1215,17 +1219,17 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     thumbColor={colors.surface}
                   />
                 </View>
-              </View>
 
-              {/* Show hidden end date picker for multi-day selection */}
-              {formData.endDate === formData.startDate && (
-                <TouchableOpacity
-                  style={[styles.multiDayButton, { borderColor: colors.border }]}
-                  onPress={() => handleCalendarOpen('end')}
-                >
-                  <Text style={[styles.multiDayButtonText, { color: colors.primary }]}>Make multi-day event</Text>
-                </TouchableOpacity>
-              )}
+                {/* Show multi-day button only for same-day events */}
+                {formData.endDate === formData.startDate && (
+                  <TouchableOpacity
+                    style={styles.multiDayButtonInline}
+                    onPress={() => handleCalendarOpen('end')}
+                  >
+                    <Text style={[styles.multiDayButtonText, { color: colors.primary }]}>Make multi-day event</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
           {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
@@ -1694,7 +1698,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    marginBottom: 12,
   },
   googleDateButton: {
     flexDirection: 'row',
@@ -1714,11 +1719,16 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     paddingHorizontal: 4,
   },
+  googleSecondRow: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
   googleAllDayToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginLeft: 8,
   },
   googleAllDayLabel: {
     fontSize: 14,
@@ -1731,6 +1741,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 6,
     alignSelf: 'flex-start',
+  },
+  multiDayButtonInline: {
+    paddingVertical: 4,
+    paddingHorizontal: 0,
   },
   multiDayButtonText: {
     fontSize: 13,
