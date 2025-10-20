@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, InteractionManager } from 'react-native';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { CalendarEventDisplay } from '@/components/calendar/CalendarEventDisplay';
@@ -42,7 +42,6 @@ const getTimeInMinutes = (timeString: string) => {
 };
 
 const calculateEventLayout = (events: Task[]) => {
-  console.log(`[HourlyCalendarGrid] calculateEventLayout called with ${events.length} events`);
   if (events.length === 0) return [];
 
   const sortedEvents = [...events].sort((a, b) => {
@@ -94,11 +93,10 @@ const calculateEventLayout = (events: Task[]) => {
     event.maxColumns = maxOverlaps;
   }
 
-  console.log(`[HourlyCalendarGrid] calculateEventLayout complete - ${eventsWithLayout.length} events positioned`);
   return eventsWithLayout;
 };
 
-export function HourlyCalendarGrid({
+const HourlyCalendarGridComponent = ({
   selectedDate,
   expandedTasks,
   currentTimePosition,
@@ -106,9 +104,7 @@ export function HourlyCalendarGrid({
   onCompleteTask,
   onTaskPress,
   viewMode = 'daily',
-}: HourlyCalendarGridProps) {
-  console.log(`[HourlyCalendarGrid] Component rendering - viewMode: ${viewMode}, selectedDate: ${selectedDate}, expandedTasks: ${expandedTasks.length}`);
-
+}: HourlyCalendarGridProps) => {
   const scrollRef = useRef<ScrollView>(null);
   const [viewportH, setViewportH] = useState(0);
   const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
@@ -119,7 +115,6 @@ export function HourlyCalendarGrid({
   const isToday = normalizedDate === today;
 
   useEffect(() => {
-    console.log(`[HourlyCalendarGrid] Scroll effect triggered - hasScrolledToNow: ${hasScrolledToNow}, viewportH: ${viewportH}`);
     if (hasScrolledToNow) return;
     if (!scrollRef.current || viewportH <= 0) return;
 
@@ -140,11 +135,9 @@ export function HourlyCalendarGrid({
       if (targetY > contentH - viewportH) targetY = Math.max(0, contentH - viewportH);
     }
 
-    console.log(`[HourlyCalendarGrid] Scrolling to position: ${targetY}px (isToday: ${isToday})`);
     const cancel = InteractionManager.runAfterInteractions(() => {
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({ y: targetY, animated: false });
-        console.log('[HourlyCalendarGrid] Scroll completed, setting hasScrolledToNow to true');
         setHasScrolledToNow(true);
       });
     });
@@ -153,7 +146,6 @@ export function HourlyCalendarGrid({
   }, [selectedDate, viewportH, hasScrolledToNow, isToday, viewMode]);
 
   useEffect(() => {
-    console.log(`[HourlyCalendarGrid] Date or viewMode changed - selectedDate: ${selectedDate}, viewMode: ${viewMode}, resetting hasScrolledToNow`);
     setHasScrolledToNow(false);
   }, [selectedDate, viewMode]);
 
@@ -169,19 +161,27 @@ export function HourlyCalendarGrid({
     task.start_time && task.end_time && !task.is_all_day
   );
 
-  console.log(`[HourlyCalendarGrid] Task breakdown - All day: ${allDayItems.length}, No time: ${noTimeItems.length}, Timed: ${timedEvents.length}`);
+  const noTimeItemsAsMidnight = useMemo(() =>
+    noTimeItems.map(task => ({
+      ...task,
+      start_time: '00:00:00',
+      end_time: '00:15:00',
+      isNoTimeTask: true,
+    })),
+    [noTimeItems]
+  );
 
-  const noTimeItemsAsMidnight = noTimeItems.map(task => ({
-    ...task,
-    start_time: '00:00:00',
-    end_time: '00:15:00',
-    isNoTimeTask: true,
-  }));
+  const allTimedEvents = useMemo(() =>
+    [...timedEvents, ...noTimeItemsAsMidnight],
+    [timedEvents, noTimeItemsAsMidnight]
+  );
 
-  const allTimedEvents = [...timedEvents, ...noTimeItemsAsMidnight];
-  const eventsWithLayout = calculateEventLayout(allTimedEvents);
-  console.log(`[HourlyCalendarGrid] Events with layout calculated: ${eventsWithLayout.length}`);
-  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const eventsWithLayout = useMemo(() =>
+    calculateEventLayout(allTimedEvents),
+    [allTimedEvents]
+  );
+
+  const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
 
   return (
     <View style={styles.container}>
@@ -268,7 +268,16 @@ export function HourlyCalendarGrid({
       </ScrollView>
     </View>
   );
-}
+};
+
+export const HourlyCalendarGrid = memo(HourlyCalendarGridComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.selectedDate === nextProps.selectedDate &&
+    prevProps.expandedTasks === nextProps.expandedTasks &&
+    prevProps.currentTimePosition === nextProps.currentTimePosition &&
+    prevProps.viewMode === nextProps.viewMode
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
