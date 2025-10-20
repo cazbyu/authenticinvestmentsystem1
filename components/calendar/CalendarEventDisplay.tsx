@@ -23,6 +23,9 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
   };
 
   const isNoTimeTask = (task as any).isNoTimeTask;
+  const isTask = task.type === 'task';
+  const isEvent = task.type === 'event';
+  const isCompleted = task.status === 'completed';
 
   return (
     <TouchableOpacity
@@ -30,15 +33,21 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
         styles.eventContainer,
         { borderLeftColor: getBorderColor() },
         isNoTimeTask && styles.noTimeTaskContainer,
+        isTask && styles.taskContainer,
+        isCompleted && styles.completedContainer,
         style
       ]}
       onPress={() => onPress(task)}
       activeOpacity={0.8}
     >
       <View style={styles.eventContent}>
-        <Text style={[styles.eventTitle, isNoTimeTask && styles.noTimeTaskTitle]} numberOfLines={2}>
-          {task.title}
-        </Text>
+        <View style={styles.titleRow}>
+          {isTask && <Text style={styles.typeIndicator}>📋</Text>}
+          {isEvent && <Text style={styles.typeIndicator}>📅</Text>}
+          <Text style={[styles.eventTitle, isNoTimeTask && styles.noTimeTaskTitle, isCompleted && styles.completedTitle]} numberOfLines={2}>
+            {task.title}
+          </Text>
+        </View>
         {!isNoTimeTask && task.start_time && task.end_time && (
           <Text style={styles.eventTime}>
             {formatTime(task.start_time)} – {formatTime(task.end_time)}
@@ -73,8 +82,24 @@ const styles = StyleSheet.create({
     elevation: 2,
     overflow: 'hidden',
   },
+  taskContainer: {
+    borderLeftWidth: 3,
+    borderStyle: 'solid',
+  },
+  completedContainer: {
+    opacity: 0.6,
+    backgroundColor: '#f9fafb',
+  },
   eventContent: {
     flex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  typeIndicator: {
+    fontSize: 10,
   },
   eventTitle: {
     fontSize: 12,
@@ -82,6 +107,11 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     lineHeight: 16,
     marginBottom: 2,
+    flex: 1,
+  },
+  completedTitle: {
+    textDecorationLine: 'line-through',
+    color: '#6b7280',
   },
   eventTime: {
     fontSize: 10,

@@ -153,8 +153,12 @@ const HourlyCalendarGridComponent = ({
     task.is_all_day
   );
 
+  const anytimeItems = expandedTasks.filter(task =>
+    !task.is_all_day && task.is_anytime
+  );
+
   const noTimeItems = expandedTasks.filter(task =>
-    !task.is_all_day && (!task.start_time || !task.end_time)
+    !task.is_all_day && !task.is_anytime && (!task.start_time || !task.end_time)
   );
 
   const timedEvents = expandedTasks.filter(task =>
@@ -190,6 +194,22 @@ const HourlyCalendarGridComponent = ({
           <Text style={styles.allDayLabel}>All Day</Text>
           <View style={styles.allDayEvents}>
             {uniqByIdAndDate(allDayItems).map((task, idx) => (
+              <TaskCard
+                key={`${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`}
+                task={task}
+                onComplete={onCompleteTask}
+                onPress={onTaskPress}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {anytimeItems.length > 0 && (
+        <View style={styles.anytimeSection}>
+          <Text style={styles.anytimeLabel}>Anytime</Text>
+          <View style={styles.anytimeEvents}>
+            {uniqByIdAndDate(anytimeItems).map((task, idx) => (
               <TaskCard
                 key={`${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`}
                 task={task}
@@ -297,6 +317,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   allDayEvents: {
+    gap: 8,
+  },
+  anytimeSection: {
+    backgroundColor: '#fffbeb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+    padding: 12,
+  },
+  anytimeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 8,
+  },
+  anytimeEvents: {
     gap: 8,
   },
   hoursScrollView: {

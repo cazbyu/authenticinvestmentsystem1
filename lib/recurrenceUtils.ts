@@ -91,7 +91,7 @@ export function expandRecurrence(
   }
 
   const instances: EventInstance[] = [];
-  const startDate = new Date(event.start_date);
+  const startDate = new Date(event.start_date || event.due_date);
 
   // If no BYDAY specified for weekly, use the weekday of the source event
   if (rule.freq === 'WEEKLY' && (!rule.byday || rule.byday.length === 0)) {

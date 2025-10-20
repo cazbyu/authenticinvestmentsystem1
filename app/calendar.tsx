@@ -196,12 +196,13 @@ export default function CalendarScreen() {
       const endStr = formatLocalDate(endRange);
 
       // Fetch tasks and events using expanded view for recurring task support
-      // Exclude goal action tasks from calendar view (tasks that are children of goals)
+      // Include ALL tasks (even completed recurring ones) so they show on calendar
+      // Exclude only cancelled tasks and goal action tasks
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select('*')
         .eq('user_id', user.id)
-        .not('status', 'in', '(completed,cancelled)')
+        .neq('status', 'cancelled')
         .in('type', ['task', 'event'])
         .or(`and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
 
