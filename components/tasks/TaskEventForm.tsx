@@ -1157,56 +1157,75 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
           {formData.type === 'event' && (
             <View style={styles.field}>
-              <View style={styles.eventDateTimeRow}>
-                <View style={styles.eventDateField}>
-                  <Text style={[styles.label, { color: colors.text }]}>Start Date</Text>
+              <View style={styles.googleStyleDateTimeRow}>
+                {/* Start Date */}
+                <TouchableOpacity
+                  style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleCalendarOpen('start')}
+                >
+                  <CalendarIcon size={16} color={colors.textSecondary} />
+                  <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
+                    {formatDateForDisplay(formData.startDate)}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Start Time */}
+                <TimePickerDropdown
+                  value={formData.startTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, startTime: time }))}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+
+                {/* Dash Separator */}
+                <Text style={[styles.timeSeparator, { color: colors.text }]}>–</Text>
+
+                {/* End Time */}
+                <TimePickerDropdown
+                  value={formData.endTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, endTime: time }))}
+                  referenceTime={formData.startTime}
+                  startDate={formData.startDate}
+                  endDate={formData.endDate}
+                  minTime={formData.startTime}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+
+                {/* End Date - Only show if different from start date */}
+                {formData.endDate !== formData.startDate && (
                   <TouchableOpacity
-                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleCalendarOpen('start')}
-                  >
-                    <CalendarIcon size={16} color={colors.textSecondary} />
-                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
-                      {formatDateForDisplay(formData.startDate)}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.eventTimeField}>
-                  <Text style={[styles.timeLabel, { color: colors.text }]}>Start Time</Text>
-                  <TimePickerDropdown
-                    value={formData.startTime}
-                    onChange={(time) => setFormData(prev => ({ ...prev, startTime: time }))}
-                    placeholder="Select time"
-                    isDark={isDarkMode}
-                  />
-                </View>
-                <View style={styles.eventDateField}>
-                  <Text style={[styles.label, { color: colors.text }]}>End Date</Text>
-                  <TouchableOpacity
-                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleCalendarOpen('end')}
                   >
                     <CalendarIcon size={16} color={colors.textSecondary} />
-                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                    <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
                       {formatDateForDisplay(formData.endDate)}
                     </Text>
                   </TouchableOpacity>
-                </View>
-                <View style={styles.eventTimeField}>
-                  <Text style={[styles.timeLabel, { color: colors.text }]}>
-                    End Time
-                  </Text>
-                  <TimePickerDropdown
-                    value={formData.endTime}
-                    onChange={(time) => setFormData(prev => ({ ...prev, endTime: time }))}
-                    referenceTime={formData.startTime}
-                    startDate={formData.startDate}
-                    endDate={formData.endDate}
-                    minTime={formData.startTime}
-                    placeholder="Select time"
-                    isDark={isDarkMode}
+                )}
+
+                {/* All day toggle */}
+                <View style={styles.googleAllDayToggle}>
+                  <Text style={[styles.googleAllDayLabel, { color: colors.text }]}>All day</Text>
+                  <Switch
+                    value={formData.isAnytime}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
                   />
                 </View>
               </View>
+
+              {/* Show hidden end date picker for multi-day selection */}
+              {formData.endDate === formData.startDate && (
+                <TouchableOpacity
+                  style={[styles.multiDayButton, { borderColor: colors.border }]}
+                  onPress={() => handleCalendarOpen('end')}
+                >
+                  <Text style={[styles.multiDayButtonText, { color: colors.primary }]}>Make multi-day event</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
           {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
@@ -1670,6 +1689,52 @@ const styles = StyleSheet.create({
   },
   eventTimeField: {
     flex: 1.5,
+  },
+  googleStyleDateTimeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  googleDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  googleDateButtonText: {
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  timeSeparator: {
+    fontSize: 16,
+    fontWeight: '400',
+    paddingHorizontal: 4,
+  },
+  googleAllDayToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  googleAllDayLabel: {
+    fontSize: 14,
+    fontWeight: '400',
+  },
+  multiDayButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  multiDayButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   repeatSwitchWrapper: {
     width: '100%',

@@ -41,7 +41,7 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
         </Text>
         {!isNoTimeTask && task.start_time && task.end_time && (
           <Text style={styles.eventTime}>
-            {formatTime(task.start_time)} - {formatTime(task.end_time)}
+            {formatTime(task.start_time)} – {formatTime(task.end_time)}
           </Text>
         )}
         {!isNoTimeTask && task.start_time && !task.end_time && (
