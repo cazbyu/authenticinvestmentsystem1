@@ -22,9 +22,17 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
 // --- Main Dashboard Screen Component ---
+// This screen has 4 views accessible via tabs in the header:
+// 1. DEPOSITS: Shows pending/in-progress tasks and events (your upcoming actions)
+//              Note: Despite the name "deposits", this shows PENDING TASKS, not completed authentic deposits
+//              Completed authentic deposits are shown in the Journal view
+// 2. IDEAS: Shows deposit ideas that haven't been activated yet
+// 3. JOURNAL: Shows historical data (completed tasks, withdrawals, reflections)
+// 4. ANALYTICS: Shows charts and visualizations of your progress
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
+  // activeView controls which of the 4 tabs is displayed
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
@@ -71,6 +79,10 @@ export default function Dashboard() {
       if (!user) return;
 
       if (activeView === 'deposits') {
+        // DEPOSITS VIEW: Fetch pending/in-progress tasks and events
+        // Note: "deposits" is a misnomer - this actually shows PENDING ACTIONS you need to complete
+        // Completed tasks marked as authentic deposits are shown in the Journal view instead
+
         // Calculate current week boundaries
         const today = new Date();
         const todayStr = formatLocalDate(today);
@@ -84,7 +96,10 @@ export default function Dashboard() {
         const weekEndStr = formatLocalDate(weekEnd);
 
         // Fetch tasks using the dashboard view for recurring task support
-        // The view automatically handles expanding recurring tasks to show only next occurrence
+        // The v_dashboard_next_occurrences view automatically:
+        // - Expands recurring tasks to show only the NEXT pending occurrence
+        // - Includes all non-recurring tasks
+        // - Filters out virtual occurrences that have been completed
         const { data: tasksData, error: tasksError } = await supabase
           .from('v_dashboard_next_occurrences')
           .select('*')
@@ -97,6 +112,7 @@ export default function Dashboard() {
 
         // Filter out Goal Bank actions by checking for week plans
         // Goal Bank actions are identified by having entries in task-week-plan table
+        // Those are managed separately in the Goal Bank tab
         let allTasks: any[] = [];
 
         if (tasksData && tasksData.length > 0) {
