@@ -182,11 +182,6 @@ export default function RecurrenceSettings({
   };
 
   const handleCountChange = (value: string) => {
-    // Clear any existing timeout
-    if (countUpdateTimeoutRef.current) {
-      clearTimeout(countUpdateTimeoutRef.current);
-    }
-
     // If empty, don't update state (keep the previous valid value)
     if (value === '') {
       return;
