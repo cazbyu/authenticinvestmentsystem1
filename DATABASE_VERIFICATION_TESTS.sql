@@ -125,7 +125,7 @@ FROM "0008-ap-domains";
 -- List wellness domains
 SELECT name, description
 FROM "0008-ap-domains"
-ORDER BY sort_order;
+ORDER BY name;
 
 -- Check if global cycles exist
 SELECT
@@ -136,31 +136,35 @@ SELECT
   END as status
 FROM "0008-ap-global-cycles";
 
--- List global cycles
+-- List global cycles (fixed: uses status instead of is_active)
 SELECT
   title,
   start_date,
   end_date,
-  is_active,
+  status,
   CASE
-    WHEN is_active THEN '✓ Active'
-    ELSE 'Inactive'
-  END as status
+    WHEN status = 'active' THEN '✓ Active'
+    WHEN status = 'draft' THEN '○ Draft'
+    WHEN status = 'completed' THEN '⚙ Completed'
+    WHEN status = 'archived' THEN '□ Archived'
+    ELSE 'Unknown'
+  END as display_status
 FROM "0008-ap-global-cycles"
 ORDER BY start_date DESC;
 
 -- ============================================================================
--- SECTION 6: USER DATA CHECK
+-- ============================================================================
+-- SECTION 6: USER DATA CHECK (FIXED)
 -- ============================================================================
 
 -- Check your user profile
 SELECT
-  id,
-  user_id,
+  id as user_id,  -- maps directly to auth.users.id
+  email,
   first_name,
   last_name,
   profile_image,
-  primary_color,
+  theme_color,
   accent_color,
   CASE
     WHEN mission_text IS NOT NULL THEN '✓ Has mission'
@@ -170,9 +174,13 @@ SELECT
     WHEN vision_text IS NOT NULL THEN '✓ Has vision'
     ELSE '○ No vision'
   END as vision_status,
-  created_at
+  created_at,
+  updated_at,
+  access_level,
+  plan_type,
+  onboarded
 FROM "0008-ap-users"
-WHERE user_id = auth.uid();
+WHERE id = auth.uid();
 
 -- Check your roles
 SELECT
@@ -184,15 +192,22 @@ SELECT
 FROM "0008-ap-roles"
 WHERE user_id = auth.uid();
 
--- List your roles
+-- ============================================================================
+-- FIXED SECTION: List your roles
+-- ============================================================================
 SELECT
   label,
-  description,
+  category,
   color,
-  created_at
+  icon,
+  is_active,
+  created_at,
+  source
 FROM "0008-ap-roles"
 WHERE user_id = auth.uid()
-ORDER BY created_at;
+ORDER BY
+  sort_order NULLS LAST,
+  created_at;
 
 -- Check your tasks/events
 SELECT
@@ -360,12 +375,12 @@ SELECT
   occurrence_date,
   EXTRACT(DOW FROM occurrence_date) as day_of_week
 FROM fn_expand_recurrence_dates(
-  CURRENT_DATE,
+  CURRENT_DATE::date,  -- explicit date cast
   'FREQ=DAILY;INTERVAL=1',
   NULL,
   '[]'::jsonb,
-  7,  -- future days
-  0   -- past days
+  7,
+  0
 )
 ORDER BY occurrence_date;
 
@@ -374,12 +389,12 @@ SELECT
   occurrence_date,
   TO_CHAR(occurrence_date, 'Dy') as day_name
 FROM fn_expand_recurrence_dates(
-  CURRENT_DATE,
+  CURRENT_DATE::date,  -- explicit date cast
   'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
   NULL,
   '[]'::jsonb,
-  14,  -- future days
-  0    -- past days
+  14,
+  0
 )
 ORDER BY occurrence_date;
 
@@ -392,12 +407,12 @@ SELECT
     ELSE 'Future'
   END as date_category
 FROM fn_expand_recurrence_dates(
-  CURRENT_DATE - INTERVAL '30 days',
+  (CURRENT_DATE - INTERVAL '30 days')::date,  -- explicit date cast
   'FREQ=DAILY;INTERVAL=1',
   NULL,
   '[]'::jsonb,
-  7,   -- future days
-  30   -- past days (NEW FEATURE!)
+  7,
+  30
 )
 ORDER BY occurrence_date;
 
