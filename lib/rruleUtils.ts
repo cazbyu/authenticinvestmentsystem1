@@ -240,14 +240,17 @@ export function calculateEndDateFromCount(
   if (!parsed) return null;
 
   let currentDate = new Date(startDate);
-  let occurrenceCount = 0;
+  let occurrenceCount = 1; // Start counting from 1, as startDate is the first occurrence
 
+  // If count is 1, the end date is the start date
+  if (count === 1) {
+    return currentDate;
+  }
+
+  // Advance through remaining occurrences
   while (occurrenceCount < count) {
-    occurrenceCount++;
-    if (occurrenceCount === count) {
-      return currentDate;
-    }
     currentDate = getNextDate(currentDate, parsed);
+    occurrenceCount++;
   }
 
   return currentDate;

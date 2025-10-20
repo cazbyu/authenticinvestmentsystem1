@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { buildRRule, parseRRule, calculateEndDateFromCount, describeRRule } from '@/lib/rruleUtils';
@@ -24,6 +24,7 @@ export default function RecurrenceSettings({
   onChangeEndDate,
 }: RecurrenceSettingsProps) {
   const { colors } = useTheme();
+  const countUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [activeTab, setActiveTab] = useState<FreqTab>('WEEKLY');
   const [interval, setInterval] = useState<number>(1);
@@ -71,6 +72,15 @@ export default function RecurrenceSettings({
       }
     }
   }, [recurrenceRule, recurrenceEndDate]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (countUpdateTimeoutRef.current) {
+        clearTimeout(countUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const updateRule = (updates: Partial<{
     freq: FreqTab;
@@ -176,9 +186,18 @@ export default function RecurrenceSettings({
 
   const handleCountChange = (value: string) => {
     setCountValue(value);
+
+    // Clear any existing timeout
+    if (countUpdateTimeoutRef.current) {
+      clearTimeout(countUpdateTimeoutRef.current);
+    }
+
+    // Debounce the update - only call updateRule after user stops typing for 500ms
     const numValue = parseInt(value, 10);
     if (!isNaN(numValue) && numValue > 0) {
-      updateRule({});
+      countUpdateTimeoutRef.current = setTimeout(() => {
+        updateRule({});
+      }, 500);
     }
   };
 
