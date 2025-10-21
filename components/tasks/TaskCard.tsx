@@ -117,7 +117,7 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
   return (
     <TouchableOpacity
       ref={ref}
-      style={[styles.taskCard, { borderLeftColor: getBorderColor() }, isDragging && styles.draggingItem]}
+      style={[styles.taskCard, { borderLeftColor: getBorderColor(), borderColor: getBorderColor() }, isDragging && styles.draggingItem]}
       onPress={handlePress}
       onLongPress={onLongPress}
       delayLongPress={200}
@@ -229,6 +229,7 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
         backgroundColor: '#ffffff',
         borderRadius: 8,
         borderLeftWidth: 4,
+        borderWidth: 2,
         marginBottom: 12,
         padding: 16,
         flexDirection: 'row',

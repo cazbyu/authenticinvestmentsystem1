@@ -640,37 +640,35 @@ export default function CalendarScreen() {
           />
         </View>
 
-        <View style={styles.weeklyContent}>
-          <View style={styles.weekColumnHeaders}>
-            <View style={styles.timeColumnSpacer} />
-            {weekDates.map((date, index) => {
-              const dateStr = formatLocalDate(date);
-              const isToday = dateStr === formatLocalDate(new Date());
-              const dayTasks = filteredTasksByDate[dateStr] || [];
-              const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index];
+        <View style={styles.weekColumnHeaders}>
+          <View style={styles.timeColumnSpacer} />
+          {weekDates.map((date, index) => {
+            const dateStr = formatLocalDate(date);
+            const isToday = dateStr === formatLocalDate(new Date());
+            const dayTasks = filteredTasksByDate[dateStr] || [];
+            const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index];
 
-              return (
-                <View key={index} style={styles.weekColumnHeaderContainer}>
-                  <WeekColumnHeader
-                    dayLabel={dayLabel}
-                    dateNumber={date.getDate()}
-                    isToday={isToday}
-                    tasks={dayTasks}
-                    onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
-                  />
-                </View>
-              );
-            })}
-          </View>
-
-          <WeeklyTimeGrid
-            weekDates={weekDates}
-            tasksByDate={filteredTasksByDate}
-            onCompleteTask={handleCompleteTask}
-            onTaskPress={handleTaskPress}
-            shouldScrollToNow={scrollTrigger}
-          />
+            return (
+              <View key={index} style={styles.weekColumnHeaderContainer}>
+                <WeekColumnHeader
+                  dayLabel={dayLabel}
+                  dateNumber={date.getDate()}
+                  isToday={isToday}
+                  tasks={dayTasks}
+                  onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
+                />
+              </View>
+            );
+          })}
         </View>
+
+        <WeeklyTimeGrid
+          weekDates={weekDates}
+          tasksByDate={filteredTasksByDate}
+          onCompleteTask={handleCompleteTask}
+          onTaskPress={handleTaskPress}
+          shouldScrollToNow={scrollTrigger}
+        />
       </View>
     );
   };
@@ -734,6 +732,10 @@ export default function CalendarScreen() {
           ) : (
             renderDailyView()
           )}
+        </View>
+      ) : viewMode === 'weekly' ? (
+        <View style={styles.weeklyContainer}>
+          {loading ? null : renderContent()}
         </View>
       ) : (
         <ScrollView style={styles.scrollViewBase} contentContainerStyle={styles.content}>
@@ -998,6 +1000,10 @@ const styles = StyleSheet.create({
   },
 
   // Redesigned Weekly View Styles
+  weeklyContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
   weeklyViewRedesigned: {
     flex: 1,
   },
@@ -1065,10 +1071,6 @@ const styles = StyleSheet.create({
   },
   weeklyQuadrant: {
     marginLeft: 12,
-  },
-  weeklyContent: {
-    flex: 1,
-    backgroundColor: '#ffffff',
   },
   weekColumnHeaders: {
     flexDirection: 'row',

@@ -38,6 +38,11 @@ export function QuadrantTasksModal({ visible, quadrant, tasks, onClose }: Quadra
   const info = QUADRANT_INFO[quadrant];
 
   const sortedTasks = [...tasks].sort((a, b) => {
+    const aCompleted = a.status === 'completed' ? 1 : 0;
+    const bCompleted = b.status === 'completed' ? 1 : 0;
+    if (aCompleted !== bCompleted) {
+      return aCompleted - bCompleted;
+    }
     if (a.start_time && b.start_time) {
       return a.start_time.localeCompare(b.start_time);
     }
@@ -75,25 +80,29 @@ export function QuadrantTasksModal({ visible, quadrant, tasks, onClose }: Quadra
               </View>
             ) : (
               sortedTasks.map((task, index) => (
-                <View key={`${task.id}-${index}`} style={styles.modalTaskItem}>
-                  <View style={[styles.taskColorBar, { backgroundColor: task.roleColor || info.color }]} />
+                <View key={`${task.id}-${index}`} style={[styles.modalTaskItem, task.status === 'completed' && styles.completedTaskItem]}>
+                  <View style={[styles.taskColorBar, { backgroundColor: info.color }]} />
                   <View style={styles.taskContent}>
                     {task.start_time && (
-                      <Text style={styles.taskTime}>
+                      <Text style={[styles.taskTime, task.status === 'completed' && styles.completedText]}>
                         {formatTimeForDisplay(task.start_time)}
                         {task.end_time && ` - ${formatTimeForDisplay(task.end_time)}`}
                       </Text>
                     )}
-                    <Text style={styles.taskTitle}>{task.title}</Text>
-                    {task.status === 'completed' && (
-                      <Text style={styles.taskCompleted}>✓ Completed</Text>
-                    )}
-                    {task.is_anytime && (
-                      <Text style={styles.taskAnytime}>Anytime</Text>
-                    )}
-                    {task.is_all_day && (
-                      <Text style={styles.taskAllDay}>All Day</Text>
-                    )}
+                    <Text style={[styles.taskTitle, task.status === 'completed' && styles.completedText]}>{task.title}</Text>
+                    <View style={styles.taskMetadata}>
+                      {task.status === 'completed' ? (
+                        <Text style={styles.taskCompleted}>✓ Completed</Text>
+                      ) : (
+                        <Text style={styles.taskPending}>Pending</Text>
+                      )}
+                      {task.is_anytime && (
+                        <Text style={styles.taskAnytime}> • Anytime</Text>
+                      )}
+                      {task.is_all_day && (
+                        <Text style={styles.taskAllDay}> • All Day</Text>
+                      )}
+                    </View>
                   </View>
                 </View>
               ))
@@ -166,6 +175,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
+  completedTaskItem: {
+    backgroundColor: '#f9fafb',
+  },
   taskColorBar: {
     width: 4,
     borderRadius: 2,
@@ -186,21 +198,32 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 4,
   },
+  completedText: {
+    opacity: 0.6,
+  },
+  taskMetadata: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
   taskCompleted: {
     fontSize: 12,
     color: '#22c55e',
-    marginTop: 4,
+    fontWeight: '500',
+  },
+  taskPending: {
+    fontSize: 12,
+    color: '#6b7280',
     fontWeight: '500',
   },
   taskAnytime: {
     fontSize: 12,
     color: '#f59e0b',
-    fontWeight: '500',
   },
   taskAllDay: {
     fontSize: 12,
     color: '#6b7280',
-    fontWeight: '500',
   },
   emptyState: {
     padding: 40,

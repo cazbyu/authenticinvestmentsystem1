@@ -31,7 +31,7 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
     <TouchableOpacity
       style={[
         styles.eventContainer,
-        { borderLeftColor: getBorderColor() },
+        { borderLeftColor: getBorderColor(), borderColor: getBorderColor() },
         isNoTimeTask && styles.noTimeTaskContainer,
         isTask && styles.taskContainer,
         isCompleted && styles.completedContainer,
@@ -73,6 +73,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 4,
     borderLeftWidth: 4,
+    borderWidth: 2,
     padding: 8,
     marginHorizontal: 4,
     shadowColor: '#000',

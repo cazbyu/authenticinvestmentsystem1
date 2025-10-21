@@ -21,7 +21,11 @@ interface DayTasksModalProps {
 
 const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) => {
   const sortedTasks = [...tasks].sort((a, b) => {
-    // Sort by start_time if available
+    const aCompleted = a.status === 'completed' ? 1 : 0;
+    const bCompleted = b.status === 'completed' ? 1 : 0;
+    if (aCompleted !== bCompleted) {
+      return aCompleted - bCompleted;
+    }
     if (a.start_time && b.start_time) {
       return a.start_time.localeCompare(b.start_time);
     }
@@ -57,23 +61,32 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
           </View>
 
           <ScrollView style={styles.modalTasksList}>
-            {sortedTasks.map((task, index) => (
-              <View key={`${task.id}-${index}`} style={styles.modalTaskItem}>
-                <View style={[styles.taskColorBar, { backgroundColor: task.roleColor || '#0078d4' }]} />
-                <View style={styles.taskContent}>
-                  {task.start_time && (
-                    <Text style={styles.taskTime}>
-                      {formatTimeForDisplay(task.start_time)}
-                      {task.end_time && ` - ${formatTimeForDisplay(task.end_time)}`}
-                    </Text>
-                  )}
-                  <Text style={styles.taskTitle}>{task.title}</Text>
-                  {task.status === 'completed' && (
-                    <Text style={styles.taskCompleted}>✓ Completed</Text>
-                  )}
+            {sortedTasks.map((task, index) => {
+              const priorityColor = task.is_urgent && task.is_important ? '#ef4444' :
+                                   !task.is_urgent && task.is_important ? '#22c55e' :
+                                   task.is_urgent && !task.is_important ? '#f59e0b' : '#9ca3af';
+              return (
+                <View key={`${task.id}-${index}`} style={[styles.modalTaskItem, task.status === 'completed' && styles.completedTaskItem]}>
+                  <View style={[styles.taskColorBar, { backgroundColor: priorityColor }]} />
+                  <View style={styles.taskContent}>
+                    {task.start_time && (
+                      <Text style={[styles.taskTime, task.status === 'completed' && styles.completedText]}>
+                        {formatTimeForDisplay(task.start_time)}
+                        {task.end_time && ` - ${formatTimeForDisplay(task.end_time)}`}
+                      </Text>
+                    )}
+                    <Text style={[styles.taskTitle, task.status === 'completed' && styles.completedText]}>{task.title}</Text>
+                    <View style={styles.taskMetadata}>
+                      {task.status === 'completed' ? (
+                        <Text style={styles.taskCompleted}>✓ Completed</Text>
+                      ) : (
+                        <Text style={styles.taskPending}>Pending</Text>
+                      )}
+                    </View>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
         </View>
       </View>
@@ -340,6 +353,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
+  completedTaskItem: {
+    backgroundColor: '#f9fafb',
+  },
   taskColorBar: {
     width: 4,
     borderRadius: 2,
@@ -358,11 +374,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: '#1f2937',
+    marginBottom: 4,
+  },
+  completedText: {
+    opacity: 0.6,
+  },
+  taskMetadata: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 4,
   },
   taskCompleted: {
     fontSize: 12,
     color: '#22c55e',
-    marginTop: 4,
+    fontWeight: '500',
+  },
+  taskPending: {
+    fontSize: 12,
+    color: '#6b7280',
     fontWeight: '500',
   },
 });
