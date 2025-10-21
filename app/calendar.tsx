@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
+import { PriorityQuadrant } from '@/components/calendar/PriorityQuadrant';
 import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
@@ -48,7 +49,7 @@ interface CalendarEvent {
 
 export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
-  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -498,15 +499,18 @@ export default function CalendarScreen() {
     return (
       <View style={styles.dailyViewContainer}>
         <View style={styles.dailyHeader}>
-          <TouchableOpacity onPress={() => navigateDate('prev')}>
-            <ChevronLeft size={24} color="#0078d4" />
-          </TouchableOpacity>
-          <Text style={styles.dailyTitle}>
-            {formatDateForDisplay(selectedDate)}
-          </Text>
-          <TouchableOpacity onPress={() => navigateDate('next')}>
-            <ChevronRight size={24} color="#0078d4" />
-          </TouchableOpacity>
+          <View style={styles.dailyHeaderLeft}>
+            <TouchableOpacity onPress={() => navigateDate('prev')}>
+              <ChevronLeft size={24} color="#0078d4" />
+            </TouchableOpacity>
+            <Text style={styles.dailyTitle}>
+              {formatDateForDisplay(selectedDate)}
+            </Text>
+            <TouchableOpacity onPress={() => navigateDate('next')}>
+              <ChevronRight size={24} color="#0078d4" />
+            </TouchableOpacity>
+          </View>
+          <PriorityQuadrant tasks={dailyExpandedTasks} size="medium" />
         </View>
 
         <View style={styles.dailyContent}>
@@ -572,30 +576,22 @@ export default function CalendarScreen() {
                 ]}
                 onPress={() => setSelectedDate(dateString)}
               >
-                <View>
+                <View style={styles.weekDayColumn}>
                   <Text style={[
                     styles.weekDayLabel,
                     isSelected && styles.selectedWeekDayLabel
                   ]}>
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][index]}
+                    {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index]}
                   </Text>
-                  <Text style={[
-                    styles.weekDayNumber,
-                    isSelected && styles.selectedWeekDayNumber,
-                    isToday && styles.todayWeekDayNumber
-                  ]}>
-                    {date.getDate()}
-                  </Text>
-                  <View style={styles.weekDayEvents}>
-                    {uniqByIdAndDate(dayEvents).slice(0, 3).map((event, idx) => (
-                      <View
-                        key={`${event.id}-${event.date}-${event.type}-${idx}`}
-                        style={[styles.weekEventDot, { backgroundColor: event.color }]}
-                      />
-                    ))}
-                    {dayEvents.length > 3 && (
-                      <Text style={styles.moreEventsText}>+{dayEvents.length - 3}</Text>
-                    )}
+                  <View style={styles.weekDayHeaderRow}>
+                    <Text style={[
+                      styles.weekDayNumber,
+                      isSelected && styles.selectedWeekDayNumber,
+                      isToday && styles.todayWeekDayNumber
+                    ]}>
+                      {date.getDate()}
+                    </Text>
+                    <PriorityQuadrant tasks={expandedTasks} size="small" />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -685,28 +681,12 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Calendar View" authenticScore={authenticScore} />
-      
-      {/* View Mode Toggle */}
-      <View style={styles.viewToggleContainer}>
-        {(['daily', 'weekly', 'monthly'] as const).map((mode) => (
-          <TouchableOpacity
-            key={mode}
-            style={[
-              styles.viewToggleButton,
-              viewMode === mode && styles.activeViewToggleButton
-            ]}
-            onPress={() => setViewMode(mode)}
-          >
-            <Text style={[
-              styles.viewToggleText,
-              viewMode === mode && styles.activeViewToggleText
-            ]}>
-              {mode.charAt(0).toUpperCase() + mode.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <Header
+        title="Calendar View"
+        authenticScore={authenticScore}
+        activeView={viewMode}
+        onViewChange={(view) => setViewMode(view as 'daily' | 'weekly' | 'monthly')}
+      />
 
       {viewMode === 'daily' ? (
         <View style={styles.dailyViewContainer}>
@@ -849,6 +829,12 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
   },
+  dailyHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
   dailyTitle: {
     fontSize: 18,
     fontWeight: '600',
@@ -962,6 +948,18 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 6,
     marginHorizontal: 2,
+  },
+  weekDayColumn: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  weekDayHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 8,
+    gap: 4,
   },
   selectedWeekDay: {
     backgroundColor: '#0078d4',
