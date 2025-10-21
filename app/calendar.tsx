@@ -556,6 +556,7 @@ export default function CalendarScreen() {
             tasks={dailyExpandedTasks}
             size="medium"
             onPress={(quadrant) => handleQuadrantPress(quadrant, dailyExpandedTasks)}
+            showCompleted={showCompleted}
           />
         </View>
 
@@ -643,6 +644,7 @@ export default function CalendarScreen() {
             size="medium"
             style={styles.weeklyQuadrant}
             onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}
+            showCompleted={showCompleted}
           />
         </View>
 
@@ -668,6 +670,7 @@ export default function CalendarScreen() {
                   isToday={isToday}
                   tasks={dayTasks}
                   onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
+                  showCompleted={showCompleted}
                 />
               </View>
             );
