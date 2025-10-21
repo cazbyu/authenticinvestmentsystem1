@@ -8,6 +8,8 @@ import { PriorityQuadrant } from '@/components/calendar/PriorityQuadrant';
 import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
+import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
+import { WeeklyTimeGrid } from '@/components/calendar/WeeklyTimeGrid';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
@@ -57,6 +59,7 @@ export default function CalendarScreen() {
   const [authenticScore, setAuthenticScore] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
+  const [showCompleted, setShowCompleted] = useState(false);
   
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -532,87 +535,90 @@ export default function CalendarScreen() {
   const weeklyTasksByDate = useExpandedTasksForWeek(tasks, weekDates);
   const weeklyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, true);
 
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDate(formatLocalDate(today));
+  };
+
+  const filteredTasksByDate = useMemo(() => {
+    const filtered: Record<string, Task[]> = {};
+    Object.keys(weeklyTasksByDate).forEach(dateStr => {
+      filtered[dateStr] = weeklyTasksByDate[dateStr].filter(task =>
+        showCompleted ? task.status === 'completed' : task.status !== 'completed'
+      );
+    });
+    return filtered;
+  }, [weeklyTasksByDate, showCompleted]);
+
+  const allWeekTasks = useMemo(() => {
+    return Object.values(filteredTasksByDate).flat();
+  }, [filteredTasksByDate]);
+
   const renderWeeklyView = () => {
     return (
-      <View style={styles.weeklyView}>
-        <View style={styles.weeklyHeader}>
-          <TouchableOpacity onPress={() => navigateDate('prev')}>
-            <ChevronLeft size={24} color="#0078d4" />
+      <View style={styles.weeklyViewRedesigned}>
+        <View style={styles.weeklyHeaderRedesigned}>
+          <TouchableOpacity onPress={goToToday} style={styles.todayButton}>
+            <Text style={styles.todayButtonText}>Today</Text>
           </TouchableOpacity>
-          <Text style={styles.weeklyTitle}>
-            {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {' '}
-            {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </Text>
-          <TouchableOpacity onPress={() => navigateDate('next')}>
-            <ChevronRight size={24} color="#0078d4" />
-          </TouchableOpacity>
+
+          <View style={styles.navigationSection}>
+            <TouchableOpacity onPress={() => navigateDate('prev')}>
+              <ChevronLeft size={20} color="#0078d4" />
+            </TouchableOpacity>
+            <Text style={styles.monthYearText}>
+              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+            <TouchableOpacity onPress={() => navigateDate('next')}>
+              <ChevronRight size={20} color="#0078d4" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.spacer} />
+
+          <View style={styles.toggleContainer}>
+            <Text style={styles.toggleLabel}>Show:</Text>
+            <TouchableOpacity
+              onPress={() => setShowCompleted(!showCompleted)}
+              style={styles.toggleButton}
+            >
+              <Text style={styles.toggleButtonText}>
+                {showCompleted ? 'Completed' : 'Pending'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <PriorityQuadrant tasks={allWeekTasks} size="medium" style={styles.weeklyQuadrant} />
         </View>
 
-        <View style={styles.weekGrid}>
+        <View style={styles.weekColumnHeaders}>
+          <View style={styles.timeColumnSpacer} />
           {weekDates.map((date, index) => {
-            const dateString = formatLocalDate(date);
-            const expandedTasks = weeklyTasksByDate[dateString] || [];
-
-            const dayEvents = expandedTasks.map(task => ({
-              id: task.id,
-              title: task.title,
-              date: task.start_date || task.due_date,
-              time: task.start_time ? formatTime(task.start_time) : undefined,
-              endTime: task.end_time ? formatTime(task.end_time) : undefined,
-              type: task.type as 'task' | 'event',
-              color: task.roleColor,
-              isAllDay: task.is_all_day || task.is_anytime || (!task.start_time && !task.end_time),
-            }));
-            const isToday = dateString === formatLocalDate(new Date());
-            const isSelected = dateString === selectedDate;
+            const dateStr = formatLocalDate(date);
+            const isToday = dateStr === formatLocalDate(new Date());
+            const dayTasks = filteredTasksByDate[dateStr] || [];
+            const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index];
 
             return (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.weekDay,
-                  isSelected && styles.selectedWeekDay,
-                  isToday && styles.todayWeekDay
-                ]}
-                onPress={() => setSelectedDate(dateString)}
-              >
-                <View style={styles.weekDayColumn}>
-                  <Text style={[
-                    styles.weekDayLabel,
-                    isSelected && styles.selectedWeekDayLabel
-                  ]}>
-                    {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index]}
-                  </Text>
-                  <View style={styles.weekDayHeaderRow}>
-                    <Text style={[
-                      styles.weekDayNumber,
-                      isSelected && styles.selectedWeekDayNumber,
-                      isToday && styles.todayWeekDayNumber
-                    ]}>
-                      {date.getDate()}
-                    </Text>
-                    <PriorityQuadrant tasks={expandedTasks} size="small" />
-                  </View>
-                </View>
-              </TouchableOpacity>
+              <View key={index} style={styles.weekColumnHeaderContainer}>
+                <WeekColumnHeader
+                  dayLabel={dayLabel}
+                  dateNumber={date.getDate()}
+                  isToday={isToday}
+                  tasks={dayTasks}
+                />
+              </View>
             );
           })}
         </View>
 
-        <View style={styles.selectedDayDetails}>
-          <Text style={styles.selectedDayTitle}>
-            {formatDateForDisplay(selectedDate)}
-          </Text>
-          <HourlyCalendarGrid
-            selectedDate={selectedDate}
-            expandedTasks={weeklyExpandedTasks}
-            currentTimePosition={currentTimePosition}
-            currentTimeString={currentTimeString}
-            onCompleteTask={handleCompleteTask}
-            onTaskPress={handleTaskPress}
-            viewMode="weekly"
-          />
-        </View>
+        <WeeklyTimeGrid
+          weekDates={weekDates}
+          tasksByDate={filteredTasksByDate}
+          onCompleteTask={handleCompleteTask}
+          onTaskPress={handleTaskPress}
+        />
       </View>
     );
   };
@@ -934,6 +940,91 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#1f2937',
+  },
+
+  // Redesigned Weekly View Styles
+  weeklyViewRedesigned: {
+    flex: 1,
+  },
+  weeklyHeaderRedesigned: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  todayButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+  },
+  todayButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  navigationSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  monthYearText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    minWidth: 160,
+    textAlign: 'center',
+  },
+  spacer: {
+    flex: 1,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  toggleButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#0078d4',
+    borderRadius: 6,
+  },
+  toggleButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  weeklyQuadrant: {
+    marginLeft: 12,
+  },
+  weekColumnHeaders: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 2,
+    borderBottomColor: '#e5e7eb',
+  },
+  timeColumnSpacer: {
+    width: 70,
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  weekColumnHeaderContainer: {
+    flex: 1,
   },
   weekGrid: {
     flexDirection: 'row',
