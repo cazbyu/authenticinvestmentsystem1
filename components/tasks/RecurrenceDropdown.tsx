@@ -32,11 +32,11 @@ export function RecurrenceDropdown({ value, onChange, onOpenCustom, startDate }:
 
     return [
       { label: 'Does not repeat', value: '' },
-      { label: 'Daily', value: 'FREQ=DAILY' },
-      { label: `Weekly on ${dayName}`, value: `FREQ=WEEKLY;BYDAY=${['SU','MO','TU','WE','TH','FR','SA'][dayOfWeek]}` },
-      { label: `Monthly on the ${ordinal} ${dayName}`, value: `FREQ=MONTHLY;BYDAY=${['SU','MO','TU','WE','TH','FR','SA'][dayOfWeek]};BYSETPOS=${weekOfMonth}` },
-      { label: `Annually on ${monthName} ${dayOfMonth}`, value: 'FREQ=YEARLY' },
-      { label: 'Every weekday (Monday to Friday)', value: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' },
+      { label: 'Daily', value: 'RRULE:FREQ=DAILY' },
+      { label: `Weekly on ${dayName}`, value: `RRULE:FREQ=WEEKLY;BYDAY=${['SU','MO','TU','WE','TH','FR','SA'][dayOfWeek]}` },
+      { label: `Monthly on the ${ordinal} ${dayName}`, value: `RRULE:FREQ=MONTHLY;BYDAY=${['SU','MO','TU','WE','TH','FR','SA'][dayOfWeek]};BYSETPOS=${weekOfMonth}` },
+      { label: `Annually on ${monthName} ${dayOfMonth}`, value: 'RRULE:FREQ=YEARLY' },
+      { label: 'Every weekday (Monday to Friday)', value: 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' },
       { label: 'Custom...', value: 'custom' },
     ];
   };
@@ -49,12 +49,12 @@ export function RecurrenceDropdown({ value, onChange, onOpenCustom, startDate }:
     if (match) return match.label;
 
     if (value.includes('FREQ=DAILY')) return 'Daily';
-    if (value.includes('FREQ=WEEKLY')) {
+    if (value.includes('FREQ=WEEKLY') || value.includes('FREQ=WEEK')) {
       if (value.includes('MO,TU,WE,TH,FR')) return 'Every weekday';
       return 'Custom weekly';
     }
-    if (value.includes('FREQ=MONTHLY')) return 'Custom monthly';
-    if (value.includes('FREQ=YEARLY')) return 'Custom yearly';
+    if (value.includes('FREQ=MONTHLY') || value.includes('FREQ=MONTH')) return 'Custom monthly';
+    if (value.includes('FREQ=YEARLY') || value.includes('FREQ=YEAR')) return 'Custom yearly';
 
     return 'Custom';
   };

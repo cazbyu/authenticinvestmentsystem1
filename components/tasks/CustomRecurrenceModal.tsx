@@ -93,7 +93,13 @@ export function CustomRecurrenceModal({
   };
 
   const handleSave = () => {
-    let rule = `FREQ=${frequency.toUpperCase()}`;
+    const freqMap: Record<FrequencyUnit, string> = {
+      day: 'DAILY',
+      week: 'WEEKLY',
+      month: 'MONTHLY',
+      year: 'YEARLY'
+    };
+    let rule = `RRULE:FREQ=${freqMap[frequency]}`;
 
     if (interval > 1) {
       rule += `;INTERVAL=${interval}`;
