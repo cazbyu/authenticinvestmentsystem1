@@ -1266,9 +1266,26 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             <View style={styles.field}>
               <RecurrenceDropdown
                 value={formData.recurrenceRule}
-                onChange={(rule) => setFormData(prev => ({ ...prev, recurrenceRule: rule }))}
+                onChange={(rule) => {
+                  setFormData(prev => {
+                    const updates: any = { recurrenceRule: rule };
+
+                    // When setting a recurrence rule, ensure we have a date set
+                    if (rule && formData.type === 'event' && !prev.startDate) {
+                      updates.startDate = formatLocalDate(new Date());
+                    } else if (rule && formData.type === 'task' && !prev.dueDate) {
+                      updates.dueDate = formatLocalDate(new Date());
+                    }
+
+                    return { ...prev, ...updates };
+                  });
+                }}
                 onOpenCustom={() => setShowCustomRecurrenceModal(true)}
-                startDate={formData.type === 'event' ? formData.startDate : formData.dueDate}
+                startDate={
+                  formData.type === 'event'
+                    ? (formData.startDate || formatLocalDate(new Date()))
+                    : (formData.dueDate || formatLocalDate(new Date()))
+                }
               />
             </View>
           )}
@@ -1464,13 +1481,28 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         visible={showCustomRecurrenceModal}
         onClose={() => setShowCustomRecurrenceModal(false)}
         onSave={(rule, endDate) => {
-          setFormData(prev => ({
-            ...prev,
-            recurrenceRule: rule,
-            recurrenceEndDate: endDate
-          }));
+          setFormData(prev => {
+            // When setting a recurrence rule, ensure we have a date set
+            const updates: any = {
+              recurrenceRule: rule,
+              recurrenceEndDate: endDate
+            };
+
+            // If no date is set, default to today for recurring tasks/events
+            if (formData.type === 'event' && !prev.startDate) {
+              updates.startDate = formatLocalDate(new Date());
+            } else if (formData.type === 'task' && !prev.dueDate) {
+              updates.dueDate = formatLocalDate(new Date());
+            }
+
+            return { ...prev, ...updates };
+          });
         }}
-        startDate={formData.type === 'event' ? formData.startDate : formData.dueDate}
+        startDate={
+          formData.type === 'event'
+            ? (formData.startDate || formatLocalDate(new Date()))
+            : (formData.dueDate || formatLocalDate(new Date()))
+        }
         initialRule={formData.recurrenceRule}
         initialEndDate={formData.recurrenceEndDate}
       />
