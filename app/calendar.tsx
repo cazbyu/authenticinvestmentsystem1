@@ -640,35 +640,37 @@ export default function CalendarScreen() {
           />
         </View>
 
-        <View style={styles.weekColumnHeaders}>
-          <View style={styles.timeColumnSpacer} />
-          {weekDates.map((date, index) => {
-            const dateStr = formatLocalDate(date);
-            const isToday = dateStr === formatLocalDate(new Date());
-            const dayTasks = filteredTasksByDate[dateStr] || [];
-            const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index];
+        <View style={styles.weeklyContent}>
+          <View style={styles.weekColumnHeaders}>
+            <View style={styles.timeColumnSpacer} />
+            {weekDates.map((date, index) => {
+              const dateStr = formatLocalDate(date);
+              const isToday = dateStr === formatLocalDate(new Date());
+              const dayTasks = filteredTasksByDate[dateStr] || [];
+              const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index];
 
-            return (
-              <View key={index} style={styles.weekColumnHeaderContainer}>
-                <WeekColumnHeader
-                  dayLabel={dayLabel}
-                  dateNumber={date.getDate()}
-                  isToday={isToday}
-                  tasks={dayTasks}
-                  onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
-                />
-              </View>
-            );
-          })}
+              return (
+                <View key={index} style={styles.weekColumnHeaderContainer}>
+                  <WeekColumnHeader
+                    dayLabel={dayLabel}
+                    dateNumber={date.getDate()}
+                    isToday={isToday}
+                    tasks={dayTasks}
+                    onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
+                  />
+                </View>
+              );
+            })}
+          </View>
+
+          <WeeklyTimeGrid
+            weekDates={weekDates}
+            tasksByDate={filteredTasksByDate}
+            onCompleteTask={handleCompleteTask}
+            onTaskPress={handleTaskPress}
+            shouldScrollToNow={scrollTrigger}
+          />
         </View>
-
-        <WeeklyTimeGrid
-          weekDates={weekDates}
-          tasksByDate={filteredTasksByDate}
-          onCompleteTask={handleCompleteTask}
-          onTaskPress={handleTaskPress}
-          shouldScrollToNow={scrollTrigger}
-        />
       </View>
     );
   };
@@ -1063,6 +1065,10 @@ const styles = StyleSheet.create({
   },
   weeklyQuadrant: {
     marginLeft: 12,
+  },
+  weeklyContent: {
+    flex: 1,
+    backgroundColor: '#ffffff',
   },
   weekColumnHeaders: {
     flexDirection: 'row',

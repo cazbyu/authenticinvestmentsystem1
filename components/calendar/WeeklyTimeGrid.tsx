@@ -14,7 +14,7 @@ interface WeeklyTimeGridProps {
   tasksByDate: Record<string, Task[]>;
   onCompleteTask: (taskId: string) => void;
   onTaskPress: (task: Task) => void;
-  shouldScrollToNow?: boolean;
+  shouldScrollToNow?: number;
 }
 
 const getTimeInMinutes = (timeString: string) => {
@@ -81,7 +81,7 @@ const WeeklyTimeGridComponent = ({
   tasksByDate,
   onCompleteTask,
   onTaskPress,
-  shouldScrollToNow = false,
+  shouldScrollToNow = 0,
 }: WeeklyTimeGridProps) => {
   const scrollRef = useRef<ScrollView>(null);
   const [columnWidth, setColumnWidth] = useState(0);
