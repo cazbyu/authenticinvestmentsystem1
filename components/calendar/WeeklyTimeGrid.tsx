@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, InteractionManager } from 'react-native';
 import { Task } from '../tasks/TaskCard';
 import { CalendarEventDisplay } from './CalendarEventDisplay';
 import { formatLocalDate, parseTimeString } from '@/lib/dateUtils';
 
-const MINUTE_HEIGHT = 1.5;
+const MINUTE_HEIGHT = 0.75;
 const HOUR_HEIGHT = 60 * MINUTE_HEIGHT;
 const TIME_COLUMN_WIDTH = 70;
 const COLUMN_GUTTER = 4;
@@ -87,6 +87,8 @@ const WeeklyTimeGridComponent = ({
   const [columnWidth, setColumnWidth] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
+  const [viewportH, setViewportH] = useState(0);
+  const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
 
   const screenWidth = Dimensions.get('window').width;
   const availableWidth = screenWidth - TIME_COLUMN_WIDTH - 32;
@@ -116,16 +118,30 @@ const WeeklyTimeGridComponent = ({
   }, []);
 
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (hasScrolledToNow) return;
+    if (!scrollRef.current || viewportH <= 0) return;
 
-    setTimeout(() => {
-      const now = new Date();
-      const minutes = now.getHours() * 60 + now.getMinutes();
-      const currentTimeY = minutes * MINUTE_HEIGHT;
-      const targetY = Math.max(0, currentTimeY - 200);
+    const contentH = 24 * 60 * MINUTE_HEIGHT;
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const currentTimeY = minutes * MINUTE_HEIGHT;
 
-      scrollRef.current?.scrollTo({ y: targetY, animated: false });
-    }, 300);
+    let targetY = currentTimeY - viewportH / 2;
+    if (targetY < 0) targetY = 0;
+    if (targetY > contentH - viewportH) targetY = Math.max(0, contentH - viewportH);
+
+    const cancel = InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: targetY, animated: false });
+        setHasScrolledToNow(true);
+      });
+    });
+
+    return () => cancel && (cancel as any).done === false && (cancel as any).cancel?.();
+  }, [viewportH, hasScrolledToNow]);
+
+  useEffect(() => {
+    setHasScrolledToNow(false);
   }, [shouldScrollToNow]);
 
   const eventsByDateAndColumn = useMemo(() => {
@@ -154,6 +170,7 @@ const WeeklyTimeGridComponent = ({
     <View style={styles.container}>
       <ScrollView
         ref={scrollRef}
+        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
         style={styles.scrollView}
         showsVerticalScrollIndicator
         horizontal={false}

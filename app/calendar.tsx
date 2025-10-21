@@ -11,6 +11,7 @@ import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
 import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
 import { WeeklyTimeGrid } from '@/components/calendar/WeeklyTimeGrid';
 import { MonthlyCalendarGrid } from '@/components/calendar/MonthlyCalendarGrid';
+import { QuadrantTasksModal } from '@/components/calendar/QuadrantTasksModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
@@ -72,6 +73,9 @@ export default function CalendarScreen() {
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isQuadrantModalVisible, setIsQuadrantModalVisible] = useState(false);
+  const [selectedQuadrant, setSelectedQuadrant] = useState<'Q1' | 'Q2' | 'Q3' | 'Q4'>('Q1');
+  const [quadrantTasks, setQuadrantTasks] = useState<Task[]>([]);
   
   // Layout measurements for proper centering
 
@@ -344,6 +348,32 @@ export default function CalendarScreen() {
     setIsDetailModalVisible(true);
   }, []);
 
+  const filterTasksByQuadrant = useCallback((tasks: Task[], quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4') => {
+    return tasks.filter(task => {
+      if (task.status === 'completed') return false;
+
+      switch (quadrant) {
+        case 'Q1':
+          return task.is_urgent && task.is_important;
+        case 'Q2':
+          return !task.is_urgent && task.is_important;
+        case 'Q3':
+          return task.is_urgent && !task.is_important;
+        case 'Q4':
+          return !task.is_urgent && !task.is_important;
+        default:
+          return false;
+      }
+    });
+  }, []);
+
+  const handleQuadrantPress = useCallback((quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4', tasks: Task[]) => {
+    const filtered = filterTasksByQuadrant(tasks, quadrant);
+    setSelectedQuadrant(quadrant);
+    setQuadrantTasks(filtered);
+    setIsQuadrantModalVisible(true);
+  }, [filterTasksByQuadrant]);
+
   const handleUpdateTask = (task: Task) => {
     setEditingTask(task);
     setIsDetailModalVisible(false);
@@ -522,7 +552,11 @@ export default function CalendarScreen() {
               <ChevronRight size={24} color="#0078d4" />
             </TouchableOpacity>
           </View>
-          <PriorityQuadrant tasks={dailyExpandedTasks} size="medium" />
+          <PriorityQuadrant
+            tasks={dailyExpandedTasks}
+            size="medium"
+            onPress={(quadrant) => handleQuadrantPress(quadrant, dailyExpandedTasks)}
+          />
         </View>
 
         <View style={styles.dailyContent}>
@@ -598,7 +632,12 @@ export default function CalendarScreen() {
             </TouchableOpacity>
           </View>
 
-          <PriorityQuadrant tasks={allWeekTasks} size="medium" style={styles.weeklyQuadrant} />
+          <PriorityQuadrant
+            tasks={allWeekTasks}
+            size="medium"
+            style={styles.weeklyQuadrant}
+            onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}
+          />
         </View>
 
         <View style={styles.weekColumnHeaders}>
@@ -616,6 +655,7 @@ export default function CalendarScreen() {
                   dateNumber={date.getDate()}
                   isToday={isToday}
                   tasks={dayTasks}
+                  onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
                 />
               </View>
             );
@@ -721,6 +761,13 @@ export default function CalendarScreen() {
           onClose={handleFormClose}
         />
       </Modal>
+
+      <QuadrantTasksModal
+        visible={isQuadrantModalVisible}
+        quadrant={selectedQuadrant}
+        tasks={quadrantTasks}
+        onClose={() => setIsQuadrantModalVisible(false)}
+      />
 
       <DraggableFab onPress={() => setIsFormModalVisible(true)}>
         <Plus size={24} color="#ffffff" />

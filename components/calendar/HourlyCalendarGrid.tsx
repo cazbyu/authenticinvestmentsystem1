@@ -4,7 +4,7 @@ import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { CalendarEventDisplay } from '@/components/calendar/CalendarEventDisplay';
 import { formatLocalDate, parseTimeString } from '@/lib/dateUtils';
 
-const MINUTE_HEIGHT = 1.5;
+const MINUTE_HEIGHT = 0.75;
 const HOUR_HEIGHT = 60 * MINUTE_HEIGHT;
 const COLUMN_GUTTER = 4;
 

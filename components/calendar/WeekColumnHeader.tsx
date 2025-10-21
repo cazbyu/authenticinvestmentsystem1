@@ -9,6 +9,7 @@ interface WeekColumnHeaderProps {
   isToday: boolean;
   tasks: Task[];
   onPress?: () => void;
+  onQuadrantPress?: (quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4') => void;
 }
 
 export function WeekColumnHeader({
@@ -17,6 +18,7 @@ export function WeekColumnHeader({
   isToday,
   tasks,
   onPress,
+  onQuadrantPress,
 }: WeekColumnHeaderProps) {
   const content = (
     <View style={[styles.container, isToday && styles.todayContainer]}>
@@ -29,7 +31,12 @@ export function WeekColumnHeader({
             {dateNumber}
           </Text>
         </View>
-        <PriorityQuadrant tasks={tasks} size="small" style={styles.quadrant} />
+        <PriorityQuadrant
+          tasks={tasks}
+          size="small"
+          style={styles.quadrant}
+          onPress={onQuadrantPress}
+        />
       </View>
     </View>
   );
