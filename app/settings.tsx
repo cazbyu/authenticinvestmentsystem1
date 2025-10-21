@@ -11,6 +11,7 @@ import { ArchivedTimelinesView } from '@/components/settings/ArchivedTimelinesVi
 import { LinkedAccountsManager } from '@/components/settings/LinkedAccountsManager';
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
 import { ManageCustomTimelinesModal } from '@/components/timelines/ManageCustomTimelinesModal';
+import { CalendarManagementModal } from '@/components/settings/CalendarManagementModal';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -35,6 +36,7 @@ export default function SettingsScreen() {
   const [isRolesModalVisible, setIsRolesModalVisible] = useState(false);
   const [showNorthStarEditor, setShowNorthStarEditor] = useState(false);
   const [showTimelineArchive, setShowTimelineArchive] = useState(false);
+  const [showCalendarManagement, setShowCalendarManagement] = useState(false);
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
@@ -641,6 +643,26 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Calendar Management Section */}
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Calendar Management</Text>
+
+          <TouchableOpacity
+            style={styles.settingButton}
+            onPress={() => setShowCalendarManagement(true)}
+          >
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Holidays & Special Days</Text>
+                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                  Manage which holidays and special days appear on your calendar
+                </Text>
+              </View>
+              <Text style={[styles.settingButtonText, { color: colors.primary }]}>Manage</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Google Calendar Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Google Calendar Integration</Text>
@@ -764,6 +786,11 @@ export default function SettingsScreen() {
           <ArchivedTimelinesView onUpdate={() => {}} />
         </SafeAreaView>
       </Modal>
+
+      <CalendarManagementModal
+        visible={showCalendarManagement}
+        onClose={() => setShowCalendarManagement(false)}
+      />
 
       <Modal visible={showTimezonePicker} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>

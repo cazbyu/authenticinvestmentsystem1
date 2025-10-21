@@ -9,6 +9,7 @@ interface MonthlyCalendarGridProps {
   currentDate: Date;
   tasks: Task[];
   onDayPress: (date: Date) => void;
+  holidays?: Array<{ date: string; name: string; color?: string }>;
 }
 
 interface DayTasksModalProps {
@@ -80,7 +81,7 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
   );
 };
 
-export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress }: MonthlyCalendarGridProps) {
+export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays = [] }: MonthlyCalendarGridProps) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [selectedDayTasks, setSelectedDayTasks] = useState<Task[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -126,6 +127,7 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress }: MonthlyC
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNumber);
     const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
     const dayTasks = tasksByDate[dateString] || [];
+    const dayHoliday = holidays.find(h => h.date === dateString);
 
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
@@ -138,6 +140,9 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress }: MonthlyC
         activeOpacity={0.7}
       >
         <View style={styles.dayCellContent}>
+          {dayHoliday && (
+            <View style={[styles.holidayBar, { backgroundColor: dayHoliday.color || '#ef4444' }]} />
+          )}
           <Text style={[styles.dayNumber, isToday && styles.todayNumber]}>
             {dayNumber}
           </Text>
@@ -237,7 +242,7 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     flex: 1,
-    aspectRatio: 1,
+    height: 90,
     borderRightWidth: 1,
     borderRightColor: '#e5e7eb',
     backgroundColor: '#ffffff',
@@ -245,6 +250,16 @@ const styles = StyleSheet.create({
   dayCellContent: {
     flex: 1,
     padding: 4,
+    position: 'relative',
+  },
+  holidayBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
   },
   dayNumber: {
     fontSize: 14,

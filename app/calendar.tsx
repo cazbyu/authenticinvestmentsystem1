@@ -20,6 +20,7 @@ import { DraggableFab } from '@/components/DraggableFab';
 import { fetchWeeklyAuthenticCount } from '@/lib/authenticDepositUtils';
 import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/useRecurrenceCache';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { getHolidaysForMonth, US_HOLIDAYS } from '@/lib/holidays';
 
 // Constants
 const MINUTE_HEIGHT = 1.5;
@@ -61,7 +62,10 @@ export default function CalendarScreen() {
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
-  
+  const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
+    US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
+  );
+
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
@@ -625,6 +629,12 @@ export default function CalendarScreen() {
   };
 
   const renderMonthlyView = () => {
+    const holidays = getHolidaysForMonth(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      enabledHolidays
+    );
+
     return (
       <View style={styles.monthlyView}>
         <View style={styles.monthlyHeader}>
@@ -642,6 +652,7 @@ export default function CalendarScreen() {
         <MonthlyCalendarGrid
           currentDate={currentDate}
           tasks={tasks}
+          holidays={holidays}
           onDayPress={(date) => {
             setSelectedDate(formatLocalDate(date));
           }}
