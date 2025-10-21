@@ -114,11 +114,11 @@ export function PriorityQuadrant({
       ]}
     >
       <View style={styles.row}>
-        {renderQuadrant('Q1', '#dc2626', 'topLeft')}
-        {renderQuadrant('Q2', '#16a34a', 'topRight')}
+        {renderQuadrant('Q1', '#ef4444', 'topLeft')}
+        {renderQuadrant('Q2', '#22c55e', 'topRight')}
       </View>
       <View style={styles.row}>
-        {renderQuadrant('Q3', '#eab308', 'bottomLeft')}
+        {renderQuadrant('Q3', '#f59e0b', 'bottomLeft')}
         {renderQuadrant('Q4', '#9ca3af', 'bottomRight')}
       </View>
     </View>
@@ -127,9 +127,9 @@ export function PriorityQuadrant({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#1f2937',
     overflow: 'hidden',
     backgroundColor: '#ffffff',
   },
@@ -141,8 +141,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: '#e5e7eb',
+    borderWidth: 1,
+    borderColor: '#1f2937',
   },
   quadrantText: {
     fontWeight: '600',
