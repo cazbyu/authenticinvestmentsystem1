@@ -69,11 +69,7 @@ export function PriorityQuadrant({
           {
             width: quadrantSize,
             height: quadrantSize,
-            backgroundColor: counts[quadrant] > 0 ? color : '#f3f4f6',
-            borderTopLeftRadius: position === 'topLeft' ? 8 : 0,
-            borderTopRightRadius: position === 'topRight' ? 8 : 0,
-            borderBottomLeftRadius: position === 'bottomLeft' ? 8 : 0,
-            borderBottomRightRadius: position === 'bottomRight' ? 8 : 0,
+            backgroundColor: color,
           },
         ]}
       >
@@ -82,8 +78,8 @@ export function PriorityQuadrant({
             styles.quadrantText,
             {
               fontSize: dimensions.text,
-              color: counts[quadrant] > 0 ? '#ffffff' : '#9ca3af',
-              fontWeight: counts[quadrant] > 0 ? '700' : '500',
+              color: '#ffffff',
+              fontWeight: '700',
             },
           ]}
         >
