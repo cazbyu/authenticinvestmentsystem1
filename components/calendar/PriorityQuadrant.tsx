@@ -59,11 +59,16 @@ export function PriorityQuadrant({
     color: string,
     position: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'
   ) => {
+    // Calculate half dimensions for each quadrant (accounting for borders)
+    const quadrantSize = (dimensions.container - 4) / 2; // Subtract border widths and divide by 2
+
     const content = (
       <View
         style={[
           styles.quadrant,
           {
+            width: quadrantSize,
+            height: quadrantSize,
             backgroundColor: counts[quadrant] > 0 ? color : '#f3f4f6',
             borderTopLeftRadius: position === 'topLeft' ? 8 : 0,
             borderTopRightRadius: position === 'topRight' ? 8 : 0,
@@ -134,11 +139,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   row: {
-    flex: 1,
     flexDirection: 'row',
   },
   quadrant: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
