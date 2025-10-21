@@ -578,6 +578,12 @@ export default function CalendarScreen() {
   const weeklyTasksByDate = useExpandedTasksForWeek(tasks, weekDates);
   const weeklyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, true);
 
+  const [screenDimensions, setScreenDimensions] = useState({ width: 0, height: 0 });
+  const TIME_COLUMN_WIDTH = 70;
+  const columnWidth = screenDimensions.width > 0
+    ? (screenDimensions.width - TIME_COLUMN_WIDTH) / 7
+    : 0;
+
   const goToToday = () => {
     const today = new Date();
     setCurrentDate(today);
@@ -640,7 +646,13 @@ export default function CalendarScreen() {
           />
         </View>
 
-        <View style={styles.weekColumnHeaders}>
+        <View
+          style={styles.weekColumnHeaders}
+          onLayout={(e) => setScreenDimensions({
+            width: e.nativeEvent.layout.width,
+            height: e.nativeEvent.layout.height
+          })}
+        >
           <View style={styles.timeColumnSpacer} />
           {weekDates.map((date, index) => {
             const dateStr = formatLocalDate(date);
@@ -649,7 +661,7 @@ export default function CalendarScreen() {
             const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][index];
 
             return (
-              <View key={index} style={styles.weekColumnHeaderContainer}>
+              <View key={index} style={[styles.weekColumnHeaderContainer, columnWidth > 0 && { width: columnWidth }]}>
                 <WeekColumnHeader
                   dayLabel={dayLabel}
                   dateNumber={date.getDate()}
@@ -668,6 +680,7 @@ export default function CalendarScreen() {
           onCompleteTask={handleCompleteTask}
           onTaskPress={handleTaskPress}
           shouldScrollToNow={scrollTrigger}
+          columnWidth={columnWidth}
         />
       </View>
     );
@@ -1085,7 +1098,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
   },
   weekColumnHeaderContainer: {
-    flex: 1,
+    minWidth: 0,
   },
   weekGrid: {
     flexDirection: 'row',

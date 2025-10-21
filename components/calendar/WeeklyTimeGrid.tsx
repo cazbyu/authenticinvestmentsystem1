@@ -15,6 +15,7 @@ interface WeeklyTimeGridProps {
   onCompleteTask: (taskId: string) => void;
   onTaskPress: (task: Task) => void;
   shouldScrollToNow?: number;
+  columnWidth?: number;
 }
 
 const getTimeInMinutes = (timeString: string) => {
@@ -82,17 +83,17 @@ const WeeklyTimeGridComponent = ({
   onCompleteTask,
   onTaskPress,
   shouldScrollToNow = 0,
+  columnWidth: propColumnWidth,
 }: WeeklyTimeGridProps) => {
   const scrollRef = useRef<ScrollView>(null);
-  const [columnWidth, setColumnWidth] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
   const [viewportH, setViewportH] = useState(0);
   const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
 
   const screenWidth = Dimensions.get('window').width;
-  const availableWidth = screenWidth - TIME_COLUMN_WIDTH - 32;
-  const calculatedColumnWidth = availableWidth / 7;
+  const availableWidth = screenWidth - TIME_COLUMN_WIDTH;
+  const calculatedColumnWidth = propColumnWidth || (availableWidth / 7);
 
   const today = formatLocalDate(new Date());
   const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
@@ -198,7 +199,7 @@ const WeeklyTimeGridComponent = ({
                 const eventsForDay = eventsByDateAndColumn[dateStr] || [];
 
                 return (
-                  <View key={dayIndex} style={[styles.dayColumn, { width: calculatedColumnWidth }]}>
+                  <View key={dayIndex} style={[styles.dayColumn, calculatedColumnWidth > 0 && { width: calculatedColumnWidth }]}>
                     <View style={[styles.timeGrid, { height: 24 * HOUR_HEIGHT }]}>
                       {hours.map(hour => (
                         <View key={hour} style={[styles.hourSlot, { height: HOUR_HEIGHT }]}>
