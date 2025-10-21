@@ -9,10 +9,14 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
+type DashboardView = 'deposits' | 'ideas' | 'journal' | 'analytics';
+type CalendarView = 'daily' | 'weekly' | 'monthly';
+type ViewType = DashboardView | CalendarView;
+
 interface HeaderProps {
   title?: string;
-  activeView?: 'deposits' | 'ideas' | 'journal' | 'analytics';
-  onViewChange?: (view: 'deposits' | 'ideas' | 'journal' | 'analytics') => void;
+  activeView?: ViewType;
+  onViewChange?: (view: ViewType) => void;
   onSortPress?: () => void;
   authenticScore?: number;
   onBackPress?: () => void;
@@ -112,41 +116,76 @@ export function Header({
         <View style={styles.bottomSection}>
           {/* Unified tab container */}
           <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              style={[styles.toggleButton, activeView === 'deposits' && styles.activeToggle]}
-              onPress={() => onViewChange && onViewChange('deposits')}
-            >
-              <Text style={[styles.toggleText, activeView === 'deposits' && { color: headerBackgroundColor }]}>
-                Deposits
-              </Text>
-            </TouchableOpacity>
+            {/* Dashboard Views */}
+            {(['deposits', 'ideas', 'journal', 'analytics'] as const).includes(activeView as any) ? (
+              <>
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'deposits' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('deposits')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'deposits' && { color: headerBackgroundColor }]}>
+                    Deposits
+                  </Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.toggleButton, activeView === 'ideas' && styles.activeToggle]}
-              onPress={() => onViewChange && onViewChange('ideas')}
-            >
-              <Text style={[styles.toggleText, activeView === 'ideas' && { color: headerBackgroundColor }]}>
-                Ideas
-              </Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'ideas' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('ideas')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'ideas' && { color: headerBackgroundColor }]}>
+                    Ideas
+                  </Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.toggleButton, activeView === 'journal' && styles.activeToggle]}
-              onPress={() => onViewChange && onViewChange('journal')}
-            >
-              <Text style={[styles.toggleText, activeView === 'journal' && { color: headerBackgroundColor }]}>
-                Journal
-              </Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'journal' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('journal')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'journal' && { color: headerBackgroundColor }]}>
+                    Journal
+                  </Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.toggleButton, activeView === 'analytics' && styles.activeToggle]}
-              onPress={() => onViewChange && onViewChange('analytics')}
-            >
-              <Text style={[styles.toggleText, activeView === 'analytics' && { color: headerBackgroundColor }]}>
-                Analytics
-              </Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'analytics' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('analytics')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'analytics' && { color: headerBackgroundColor }]}>
+                    Analytics
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              /* Calendar Views */
+              <>
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'daily' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('daily')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'daily' && { color: headerBackgroundColor }]}>
+                    Daily
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'weekly' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('weekly')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'weekly' && { color: headerBackgroundColor }]}>
+                    Weekly
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'monthly' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('monthly')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'monthly' && { color: headerBackgroundColor }]}>
+                    Monthly
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
 
