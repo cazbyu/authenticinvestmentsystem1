@@ -59,11 +59,16 @@ export function PriorityQuadrant({
     color: string,
     position: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'
   ) => {
+    // Calculate exact half of container size
+    const quadrantSize = dimensions.container / 2;
+
     const content = (
       <View
         style={[
           styles.quadrant,
           {
+            width: quadrantSize,
+            height: quadrantSize,
             backgroundColor: color,
           },
         ]}
@@ -130,16 +135,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   row: {
-    flex: 1,
     flexDirection: 'row',
   },
   quadrant: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 0.5,
     borderColor: '#1f2937',
-    margin: -0.5,
   },
   quadrantText: {
     fontWeight: '600',
