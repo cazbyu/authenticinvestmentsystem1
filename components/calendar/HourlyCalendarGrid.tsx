@@ -242,9 +242,6 @@ const HourlyCalendarGridComponent = ({
               <View style={styles.hourLine} />
               <View style={[styles.quarterHourLine, { top: HOUR_HEIGHT * 0.25 }]} />
               <View style={[styles.halfHourLine, { top: HOUR_HEIGHT * 0.5 }]} />
-              <Text style={[styles.halfHourLabel, { top: HOUR_HEIGHT * 0.5 }]}>
-                :30
-              </Text>
               <View style={[styles.quarterHourLine, { top: HOUR_HEIGHT * 0.75 }]} />
             </View>
           ))}

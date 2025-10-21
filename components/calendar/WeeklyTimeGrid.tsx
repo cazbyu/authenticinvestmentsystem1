@@ -138,7 +138,7 @@ const WeeklyTimeGridComponent = ({
     });
 
     return () => cancel && (cancel as any).done === false && (cancel as any).cancel?.();
-  }, [viewportH, hasScrolledToNow]);
+  }, [viewportH, hasScrolledToNow, shouldScrollToNow]);
 
   useEffect(() => {
     setHasScrolledToNow(false);

@@ -24,7 +24,7 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { getHolidaysForMonth, US_HOLIDAYS } from '@/lib/holidays';
 
 // Constants
-const MINUTE_HEIGHT = 1.5;
+const MINUTE_HEIGHT = 0.75;
 
 // Ensure no duplicate instances when merging arrays (e.g., expanded events + "Anytime" tasks)
 const uniqByIdAndDate = <T extends { id: string; start_date?: string; due_date?: string; occurrence_date?: string }>(arr: T[]) => {
