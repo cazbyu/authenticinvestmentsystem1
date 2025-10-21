@@ -10,6 +10,7 @@ import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
 import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
 import { WeeklyTimeGrid } from '@/components/calendar/WeeklyTimeGrid';
+import { MonthlyCalendarGrid } from '@/components/calendar/MonthlyCalendarGrid';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
@@ -623,56 +624,28 @@ export default function CalendarScreen() {
     );
   };
 
-  const monthlyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, false);
-
   const renderMonthlyView = () => {
     return (
       <View style={styles.monthlyView}>
-        <Calendar
-          onDayPress={(day) => {
-            // Ensure date is in consistent local format
-            const date = parseLocalDate(day.dateString);
+        <View style={styles.monthlyHeader}>
+          <TouchableOpacity onPress={() => navigateDate('prev')} style={styles.monthNavButton}>
+            <ChevronLeft size={24} color="#0078d4" />
+          </TouchableOpacity>
+          <Text style={styles.monthYearTitle}>
+            {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </Text>
+          <TouchableOpacity onPress={() => navigateDate('next')} style={styles.monthNavButton}>
+            <ChevronRight size={24} color="#0078d4" />
+          </TouchableOpacity>
+        </View>
+
+        <MonthlyCalendarGrid
+          currentDate={currentDate}
+          tasks={tasks}
+          onDayPress={(date) => {
             setSelectedDate(formatLocalDate(date));
           }}
-          markedDates={getMarkedDates}
-          theme={{
-            backgroundColor: '#ffffff',
-            calendarBackground: '#ffffff',
-            textSectionTitleColor: '#b6c1cd',
-            selectedDayBackgroundColor: '#0078d4',
-            selectedDayTextColor: '#ffffff',
-            todayTextColor: '#0078d4',
-            dayTextColor: '#2d4150',
-            textDisabledColor: '#d9e1e8',
-            dotColor: '#00adf5',
-            selectedDotColor: '#ffffff',
-            arrowColor: '#0078d4',
-            disabledArrowColor: '#d9e1e8',
-            monthTextColor: '#0078d4',
-            indicatorColor: '#0078d4',
-            textDayFontWeight: '300',
-            textMonthFontWeight: 'bold',
-            textDayHeaderFontWeight: '300',
-            textDayFontSize: 16,
-            textMonthFontSize: 16,
-            textDayHeaderFontSize: 13
-          }}
         />
-
-        <View style={styles.selectedDateContainer}>
-          <Text style={styles.selectedDateLabel}>
-            {formatDateForDisplay(selectedDate)}
-          </Text>
-          <HourlyCalendarGrid
-            selectedDate={selectedDate}
-            expandedTasks={monthlyExpandedTasks}
-            currentTimePosition={currentTimePosition}
-            currentTimeString={currentTimeString}
-            onCompleteTask={handleCompleteTask}
-            onTaskPress={handleTaskPress}
-            viewMode="monthly"
-          />
-        </View>
       </View>
     );
   };
@@ -795,6 +768,23 @@ const styles = StyleSheet.create({
   monthlyView: {
     flex: 1,
     padding: 16,
+  },
+  monthlyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  monthNavButton: {
+    padding: 8,
+  },
+  monthYearTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1f2937',
+    flex: 1,
+    textAlign: 'center',
   },
   selectedDateContainer: {
     backgroundColor: '#ffffff',
