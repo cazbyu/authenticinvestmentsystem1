@@ -65,6 +65,7 @@ export default function CalendarScreen() {
   const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
   );
+  const [scrollTrigger, setScrollTrigger] = useState(0);
 
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -76,6 +77,9 @@ export default function CalendarScreen() {
 
   useEffect(() => {
     fetchTasksAndEvents();
+    if (viewMode === 'weekly') {
+      setScrollTrigger(prev => prev + 1);
+    }
   }, [viewMode]);
 
   useEffect(() => {
@@ -623,6 +627,7 @@ export default function CalendarScreen() {
           tasksByDate={filteredTasksByDate}
           onCompleteTask={handleCompleteTask}
           onTaskPress={handleTaskPress}
+          shouldScrollToNow={scrollTrigger}
         />
       </View>
     );

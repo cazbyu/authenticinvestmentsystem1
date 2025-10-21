@@ -14,6 +14,7 @@ interface WeeklyTimeGridProps {
   tasksByDate: Record<string, Task[]>;
   onCompleteTask: (taskId: string) => void;
   onTaskPress: (task: Task) => void;
+  shouldScrollToNow?: boolean;
 }
 
 const getTimeInMinutes = (timeString: string) => {
@@ -80,10 +81,10 @@ const WeeklyTimeGridComponent = ({
   tasksByDate,
   onCompleteTask,
   onTaskPress,
+  shouldScrollToNow = false,
 }: WeeklyTimeGridProps) => {
   const scrollRef = useRef<ScrollView>(null);
   const [columnWidth, setColumnWidth] = useState(0);
-  const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
 
@@ -115,7 +116,7 @@ const WeeklyTimeGridComponent = ({
   }, []);
 
   useEffect(() => {
-    if (hasScrolledToNow || !scrollRef.current) return;
+    if (!scrollRef.current) return;
 
     setTimeout(() => {
       const now = new Date();
@@ -124,9 +125,8 @@ const WeeklyTimeGridComponent = ({
       const targetY = Math.max(0, currentTimeY - 200);
 
       scrollRef.current?.scrollTo({ y: targetY, animated: false });
-      setHasScrolledToNow(true);
     }, 300);
-  }, [hasScrolledToNow]);
+  }, [shouldScrollToNow]);
 
   const eventsByDateAndColumn = useMemo(() => {
     const result: Record<string, any[]> = {};

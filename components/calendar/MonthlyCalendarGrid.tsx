@@ -143,9 +143,11 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
           {dayHoliday && (
             <View style={[styles.holidayBar, { backgroundColor: dayHoliday.color || '#ef4444' }]} />
           )}
-          <Text style={[styles.dayNumber, isToday && styles.todayNumber]}>
-            {dayNumber}
-          </Text>
+          <View style={[styles.dayNumberContainer, isToday && styles.todayCircle]}>
+            <Text style={[styles.dayNumber, isToday && styles.todayNumber]}>
+              {dayNumber}
+            </Text>
+          </View>
           {dayTasks.length > 0 && (
             <View style={styles.quadrantContainer}>
               <PriorityQuadrant tasks={dayTasks} size="small" />
@@ -261,14 +263,25 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 2,
     borderTopRightRadius: 2,
   },
+  dayNumberContainer: {
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  todayCircle: {
+    backgroundColor: '#0078d4',
+    borderRadius: 16,
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   dayNumber: {
     fontSize: 14,
     fontWeight: '500',
     color: '#1f2937',
-    marginBottom: 4,
   },
   todayNumber: {
-    color: '#0078d4',
+    color: '#ffffff',
     fontWeight: '700',
   },
   quadrantContainer: {
