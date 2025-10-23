@@ -12,6 +12,7 @@ import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
 import { WeeklyTimeGrid } from '@/components/calendar/WeeklyTimeGrid';
 import { MonthlyCalendarGrid } from '@/components/calendar/MonthlyCalendarGrid';
 import { QuadrantTasksModal } from '@/components/calendar/QuadrantTasksModal';
+import { CollapsibleQuadrantRow } from '@/components/calendar/CollapsibleQuadrantRow';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
@@ -67,6 +68,7 @@ export default function CalendarScreen() {
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
   );
   const [scrollTrigger, setScrollTrigger] = useState(0);
+  const [isQuadrantRowExpanded, setIsQuadrantRowExpanded] = useState(true);
 
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -669,13 +671,22 @@ export default function CalendarScreen() {
                   dateNumber={date.getDate()}
                   isToday={isToday}
                   tasks={dayTasks}
-                  onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
                   showCompleted={showCompleted}
                 />
               </View>
             );
           })}
         </View>
+
+        <CollapsibleQuadrantRow
+          weekDates={weekDates}
+          tasksByDate={filteredTasksByDate}
+          columnWidth={columnWidth}
+          isExpanded={isQuadrantRowExpanded}
+          onToggle={() => setIsQuadrantRowExpanded(!isQuadrantRowExpanded)}
+          onQuadrantPress={handleQuadrantPress}
+          showCompleted={showCompleted}
+        />
 
         <WeeklyTimeGrid
           weekDates={weekDates}

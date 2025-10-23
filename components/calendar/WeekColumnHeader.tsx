@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { PriorityQuadrant } from './PriorityQuadrant';
 import { Task } from '../tasks/TaskCard';
 
 interface WeekColumnHeaderProps {
@@ -27,19 +26,10 @@ export function WeekColumnHeader({
       <Text style={[styles.dayLabel, isToday && styles.todayLabel]}>
         {dayLabel}
       </Text>
-      <View style={styles.dateRow}>
-        <View style={[styles.dateCircle, isToday && styles.todayDateCircle]}>
-          <Text style={[styles.dateNumber, isToday && styles.todayDateNumber]}>
-            {dateNumber}
-          </Text>
-        </View>
-        <PriorityQuadrant
-          tasks={tasks}
-          size="small"
-          style={styles.quadrant}
-          onPress={onQuadrantPress}
-          showCompleted={showCompleted}
-        />
+      <View style={[styles.dateCircle, isToday && styles.todayDateCircle]}>
+        <Text style={[styles.dateNumber, isToday && styles.todayDateNumber]}>
+          {dateNumber}
+        </Text>
       </View>
     </View>
   );
@@ -58,7 +48,8 @@ export function WeekColumnHeader({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    padding: 12,
+    justifyContent: 'center',
+    padding: 16,
     borderRightWidth: 1,
     borderRightColor: '#e5e7eb',
     borderBottomWidth: 1,
@@ -70,24 +61,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f9ff',
   },
   dayLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#6b7280',
     letterSpacing: 1,
     marginBottom: 8,
+    textAlign: 'center',
   },
   todayLabel: {
     color: '#0078d4',
   },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   dateCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -95,14 +82,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0078d4',
   },
   dateNumber: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1f2937',
+    textAlign: 'center',
   },
   todayDateNumber: {
     color: '#ffffff',
-  },
-  quadrant: {
-    marginLeft: 4,
   },
 });
