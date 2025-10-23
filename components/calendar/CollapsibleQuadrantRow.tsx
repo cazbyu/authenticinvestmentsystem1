@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { PriorityQuadrant } from './PriorityQuadrant';
 import { Task } from '../tasks/TaskCard';
@@ -23,6 +23,22 @@ export function CollapsibleQuadrantRow({
   onQuadrantPress,
   showCompleted,
 }: CollapsibleQuadrantRowProps) {
+  const { width: screenWidth } = useWindowDimensions();
+
+  const quadrantSize = useMemo(() => {
+    const availableWidth = columnWidth - 16;
+    const maxSize = 48;
+    const minSize = 32;
+
+    if (screenWidth < 400) {
+      return Math.max(minSize, Math.min(maxSize, availableWidth * 0.7));
+    } else if (screenWidth < 600) {
+      return Math.max(36, Math.min(maxSize, availableWidth * 0.8));
+    } else {
+      return Math.min(maxSize, availableWidth * 0.9);
+    }
+  }, [columnWidth, screenWidth]);
+
   const formatLocalDate = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -65,6 +81,7 @@ export function CollapsibleQuadrantRow({
                 <PriorityQuadrant
                   tasks={dayTasks}
                   size="medium"
+                  customSize={quadrantSize}
                   onPress={
                     onQuadrantPress
                       ? (quadrant) => onQuadrantPress(quadrant, dayTasks)

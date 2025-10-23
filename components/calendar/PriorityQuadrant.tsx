@@ -18,6 +18,7 @@ export interface PriorityQuadrantProps {
   onPress?: (quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4') => void;
   style?: object;
   showCompleted?: boolean;
+  customSize?: number;
 }
 
 export function calculateQuadrantCounts(
@@ -52,15 +53,20 @@ export function PriorityQuadrant({
   size = 'medium',
   onPress,
   style,
-  showCompleted
+  showCompleted,
+  customSize
 }: PriorityQuadrantProps) {
   const counts = calculateQuadrantCounts(tasks, showCompleted);
 
-  const dimensions = {
+  const predefinedDimensions = {
     small: { container: 48, text: 10 },
     medium: { container: 64, text: 13 },
     large: { container: 80, text: 16 },
   }[size];
+
+  const dimensions = customSize
+    ? { container: customSize, text: Math.max(8, Math.floor(customSize / 5)) }
+    : predefinedDimensions;
 
   const renderQuadrant = (
     quadrant: keyof QuadrantCounts,
