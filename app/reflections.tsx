@@ -241,10 +241,9 @@ export default function ReflectionsScreen() {
         onPress={() => setIsJournalFormVisible(true)}
         size={56}
         backgroundColor={colors.primary}
-        iconComponent={
-          <Text style={styles.fabText}>J</Text>
-        }
-      />
+      >
+        <Text style={styles.fabText}>J</Text>
+      </DraggableFab>
 
       <JournalForm
         visible={isJournalFormVisible}

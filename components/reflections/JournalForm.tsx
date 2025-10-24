@@ -396,25 +396,28 @@ export default function JournalForm({
             {roles.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.label}>Roles</Text>
-                <Text style={styles.helperText}>
-                  If this reflection is associated with a role, you can select it
-                </Text>
-                <View style={styles.checkboxGrid}>
+                <View style={styles.checkboxList}>
                   {roles.map((role) => (
                     <TouchableOpacity
                       key={role.id}
-                      style={[
-                        styles.checkbox,
-                        selectedRoleIds.includes(role.id) && styles.checkboxSelected,
-                      ]}
+                      style={styles.checkboxRow}
                       onPress={() => toggleRole(role.id)}
                     >
-                      <Text
+                      <View
                         style={[
-                          styles.checkboxText,
-                          selectedRoleIds.includes(role.id) && styles.checkboxTextSelected,
+                          styles.checkboxSquare,
+                          { borderColor: colors.border },
+                          selectedRoleIds.includes(role.id) && {
+                            backgroundColor: colors.primary,
+                            borderColor: colors.primary,
+                          },
                         ]}
                       >
+                        {selectedRoleIds.includes(role.id) && (
+                          <Text style={styles.checkmark}>✓</Text>
+                        )}
+                      </View>
+                      <Text style={[styles.checkboxLabel, { color: colors.text }]}>
                         {role.label}
                       </Text>
                     </TouchableOpacity>
@@ -427,25 +430,28 @@ export default function JournalForm({
             {domains.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.label}>Domains</Text>
-                <Text style={styles.helperText}>
-                  If this reflection is associated with a domain, you can select it
-                </Text>
-                <View style={styles.checkboxGrid}>
+                <View style={styles.checkboxList}>
                   {domains.map((domain) => (
                     <TouchableOpacity
                       key={domain.id}
-                      style={[
-                        styles.checkbox,
-                        selectedDomainIds.includes(domain.id) && styles.checkboxSelected,
-                      ]}
+                      style={styles.checkboxRow}
                       onPress={() => toggleDomain(domain.id)}
                     >
-                      <Text
+                      <View
                         style={[
-                          styles.checkboxText,
-                          selectedDomainIds.includes(domain.id) && styles.checkboxTextSelected,
+                          styles.checkboxSquare,
+                          { borderColor: colors.border },
+                          selectedDomainIds.includes(domain.id) && {
+                            backgroundColor: colors.primary,
+                            borderColor: colors.primary,
+                          },
                         ]}
                       >
+                        {selectedDomainIds.includes(domain.id) && (
+                          <Text style={styles.checkmark}>✓</Text>
+                        )}
+                      </View>
+                      <Text style={[styles.checkboxLabel, { color: colors.text }]}>
                         {domain.name}
                       </Text>
                     </TouchableOpacity>
@@ -458,23 +464,28 @@ export default function JournalForm({
             {filteredKeyRelationships.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.label}>Key Relationships</Text>
-                <View style={styles.checkboxGrid}>
+                <View style={styles.checkboxList}>
                   {filteredKeyRelationships.map((kr) => (
                     <TouchableOpacity
                       key={kr.id}
-                      style={[
-                        styles.checkbox,
-                        selectedKeyRelationshipIds.includes(kr.id) && styles.checkboxSelected,
-                      ]}
+                      style={styles.checkboxRow}
                       onPress={() => toggleKeyRelationship(kr.id)}
                     >
-                      <Text
+                      <View
                         style={[
-                          styles.checkboxText,
-                          selectedKeyRelationshipIds.includes(kr.id) &&
-                            styles.checkboxTextSelected,
+                          styles.checkboxSquare,
+                          { borderColor: colors.border },
+                          selectedKeyRelationshipIds.includes(kr.id) && {
+                            backgroundColor: colors.primary,
+                            borderColor: colors.primary,
+                          },
                         ]}
                       >
+                        {selectedKeyRelationshipIds.includes(kr.id) && (
+                          <Text style={styles.checkmark}>✓</Text>
+                        )}
+                      </View>
+                      <Text style={[styles.checkboxLabel, { color: colors.text }]}>
                         {kr.name}
                       </Text>
                     </TouchableOpacity>
