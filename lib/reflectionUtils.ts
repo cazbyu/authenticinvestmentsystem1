@@ -327,21 +327,101 @@ export async function saveReflection(
   try {
     const currentDate = formatLocalDate(new Date());
 
-    // Insert reflection
-    const { data: reflection, error: reflectionError } = await supabase
-      .from('0008-ap-reflections')
-      .insert({
-        user_id: userId,
-        content,
-        date: currentDate,
-        reflection_type: reflectionType,
-        follow_up: followUp,
-        follow_up_date: followUpDate || null,
-        reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
-        archived: false,
-      })
-      .select()
-      .single();
+    // For daily reflections, check if one exists for today and update it
+    // For weekly reflections, calculate week_start_date
+    let reflection: any;
+    let reflectionError: any;
+
+    if (reflectionType === 'daily') {
+      // Check if a daily reflection exists for today
+      const { data: existingReflection, error: checkError } = await supabase
+        .from('0008-ap-reflections')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('date', currentDate)
+        .eq('reflection_type', 'daily')
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existingReflection) {
+        // Update existing reflection
+        const { data: updatedReflection, error: updateError } = await supabase
+          .from('0008-ap-reflections')
+          .update({
+            content,
+            follow_up: followUp,
+            follow_up_date: followUpDate || null,
+            reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingReflection.id)
+          .select()
+          .single();
+
+        reflection = updatedReflection;
+        reflectionError = updateError;
+
+        // Delete existing associations before adding new ones
+        if (!updateError && reflection) {
+          await Promise.all([
+            supabase
+              .from('0008-ap-universal-roles-join')
+              .delete()
+              .eq('parent_type', 'reflection')
+              .eq('parent_id', reflection.id),
+            supabase
+              .from('0008-ap-universal-domains-join')
+              .delete()
+              .eq('parent_type', 'reflection')
+              .eq('parent_id', reflection.id),
+            supabase
+              .from('0008-ap-universal-key-relationships-join')
+              .delete()
+              .eq('parent_type', 'reflection')
+              .eq('parent_id', reflection.id),
+          ]);
+        }
+      } else {
+        // Insert new reflection
+        const { data: newReflection, error: insertError } = await supabase
+          .from('0008-ap-reflections')
+          .insert({
+            user_id: userId,
+            content,
+            date: currentDate,
+            reflection_type: reflectionType,
+            follow_up: followUp,
+            follow_up_date: followUpDate || null,
+            reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
+            archived: false,
+          })
+          .select()
+          .single();
+
+        reflection = newReflection;
+        reflectionError = insertError;
+      }
+    } else {
+      // For weekly reflections, use the original insert logic
+      const { data: newReflection, error: insertError } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: userId,
+          content,
+          date: currentDate,
+          reflection_type: reflectionType,
+          follow_up: followUp,
+          follow_up_date: followUpDate || null,
+          reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
+          archived: false,
+        })
+        .select()
+        .single();
+
+      reflection = newReflection;
+      reflectionError = insertError;
+    }
 
     if (reflectionError) throw reflectionError;
     if (!reflection) throw new Error('Failed to create reflection');

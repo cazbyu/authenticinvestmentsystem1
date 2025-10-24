@@ -217,14 +217,14 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
       {(item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0) ? (
         <View style={styles.tagsRow}>
           {item.roles?.slice(0, 2).map((role) => (
-            <View key={role.id} style={[styles.tag, { backgroundColor: colors.background }]}>
+            <View key={`role-${role.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
               <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {role.label}
               </Text>
             </View>
           ))}
           {item.domains?.slice(0, 2).map((domain) => (
-            <View key={domain.id} style={[styles.tag, { backgroundColor: colors.background }]}>
+            <View key={`domain-${domain.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
               <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {domain.name}
               </Text>
