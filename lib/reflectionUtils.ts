@@ -176,7 +176,7 @@ async function fetchReflectionDomains(
   try {
     const { data, error } = await supabase
       .from('0008-ap-universal-domains-join')
-      .select('domain_id, 0008-ap-domains(id, name, color)')
+      .select('domain_id, 0008-ap-domains(id, name)')
       .eq('parent_type', 'reflection')
       .eq('parent_id', reflectionId);
 
