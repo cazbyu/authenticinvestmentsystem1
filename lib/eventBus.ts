@@ -51,4 +51,7 @@ export const EVENTS = {
   DEPOSIT_IDEA_UPDATED: 'depositIdea:updated',
   WITHDRAWAL_CREATED: 'withdrawal:created',
   REFRESH_ALL_TASKS: 'tasks:refreshAll',
+  REFLECTION_CREATED: 'reflection:created',
+  REFLECTION_UPDATED: 'reflection:updated',
+  REFLECTION_DELETED: 'reflection:deleted',
 } as const;

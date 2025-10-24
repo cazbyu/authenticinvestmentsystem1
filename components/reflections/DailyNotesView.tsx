@@ -6,9 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   RefreshControl,
-  Modal,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -16,10 +14,11 @@ import {
   getDayDateRange,
   fetchDailyAggregationData,
 } from '@/lib/weeklyReflectionData';
-import RichTextInput from './RichTextInput';
-import RichTextDisplay from './RichTextDisplay';
-import { DailyAggregationData, Reflection } from '@/types/reflections';
-import { Save, Target, Users, Activity, AlertCircle, X } from 'lucide-react-native';
+import { DailyAggregationData } from '@/types/reflections';
+import { Target, Users, Activity, AlertCircle } from 'lucide-react-native';
+import { fetchReflectionsByDateRange, ReflectionWithRelations } from '@/lib/reflectionUtils';
+import { formatLocalDate } from '@/lib/dateUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 export default function DailyNotesView() {
   const { colors } = useTheme();
@@ -29,32 +28,32 @@ export default function DailyNotesView() {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [questionProud, setQuestionProud] = useState('');
-  const [questionImpact, setQuestionImpact] = useState('');
-  const [questionProgress, setQuestionProgress] = useState('');
-  const [questionWithdrawals, setQuestionWithdrawals] = useState('');
-
-
-
-  const [previousNotes, setPreviousNotes] = useState<Reflection[]>([]);
-  const [selectedNote, setSelectedNote] = useState<Reflection | null>(null);
-  const [isViewModalVisible, setIsViewModalVisible] = useState(false);
-
-  const [currentReflection, setCurrentReflection] = useState<Reflection | null>(null);
+  const [todayReflections, setTodayReflections] = useState<ReflectionWithRelations[]>([]);
 
   useEffect(() => {
     loadData();
+
+    const handleReflectionChange = () => {
+      loadData();
+    };
+
+    eventBus.on(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+
+    return () => {
+      eventBus.off(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+    };
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      archiveOldReflections();
-
       await Promise.all([
         fetchDailyData(),
-        fetchCurrentReflection(),
-        fetchPreviousNotes(),
+        fetchTodayReflections(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -63,17 +62,6 @@ export default function DailyNotesView() {
     }
   };
 
-  const archiveOldReflections = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    try {
-      await supabase.rpc('archive_old_reflections', { p_user_id: user.id });
-    } catch (error) {
-      console.error('Error archiving reflections:', error);
-    }
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -115,128 +103,33 @@ export default function DailyNotesView() {
     setAggregationData(data);
   };
 
-  const fetchCurrentReflection = async () => {
+  const fetchTodayReflections = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const today = new Date().toISOString().split('T')[0];
-
-    const { data, error } = await supabase
-      .from('0008-ap-reflections')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('reflection_type', 'daily')
-      .eq('date', today)
-      .maybeSingle();
-
-    if (!error && data) {
-      setCurrentReflection(data);
-      setQuestionProud(data.question_proud || '');
-      setQuestionImpact(data.question_impact || '');
-      setQuestionProgress(data.question_progress || '');
-      setQuestionWithdrawals(data.question_withdrawals || '');
-    }
+    const today = formatLocalDate(new Date());
+    const reflections = await fetchReflectionsByDateRange(user.id, today, today);
+    setTodayReflections(reflections);
   };
 
 
-  const fetchPreviousNotes = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const { data, error } = await supabase
-      .from('0008-ap-reflections')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('reflection_type', 'daily')
-      .eq('archived', false)
-      .gte('date', sevenDaysAgo.toISOString().split('T')[0])
-      .order('date', { ascending: false })
-      .limit(7);
-
-    if (!error && data) {
-      setPreviousNotes(data);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!questionProud && !questionImpact && !questionProgress && !questionWithdrawals) {
-      Alert.alert('Error', 'Please answer at least one reflective question');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not found');
-
-      const today = new Date().toISOString().split('T')[0];
-      let reflectionId = currentReflection?.id;
-
-      if (currentReflection) {
-        const { error } = await supabase
-          .from('0008-ap-reflections')
-          .update({
-            question_proud: questionProud,
-            question_impact: questionImpact,
-            question_progress: questionProgress,
-            question_withdrawals: questionWithdrawals,
-            weekly_target_completion: 0,
-            total_goals_tracked: aggregationData?.goalSummaries.length || 0,
-          })
-          .eq('id', currentReflection.id);
-
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('0008-ap-reflections')
-          .insert({
-            user_id: user.id,
-            reflection_type: 'daily',
-            date: today,
-            week_start_date: null,
-            week_end_date: null,
-            content: '',
-            question_proud: questionProud,
-            question_impact: questionImpact,
-            question_progress: questionProgress,
-            question_withdrawals: questionWithdrawals,
-            weekly_target_completion: 0,
-            total_goals_tracked: aggregationData?.goalSummaries.length || 0,
-            authentic_score: 0,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        reflectionId = data.id;
-        setCurrentReflection(data);
-      }
-
-
-      Alert.alert('Success', 'Daily reflection saved successfully');
-      fetchPreviousNotes();
-    } catch (error) {
-      console.error('Error saving reflection:', error);
-      Alert.alert('Error', 'Failed to save reflection');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatDateTime = (dateString: string, createdAt: string) => {
+    const date = new Date(createdAt);
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
     });
+  };
+
+  const truncateContent = (content: string, maxLength: number = 80) => {
+    if (content.length <= maxLength) return content;
+    return content.substring(0, maxLength) + '...';
   };
 
   const formatCurrentDate = () => {
@@ -396,108 +289,29 @@ export default function DailyNotesView() {
           </>
         )}
 
-        <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Reflective Questions</Text>
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                { backgroundColor: colors.primary },
-                saving && { backgroundColor: colors.textSecondary }
-              ]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Save size={16} color="#ffffff" />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.questionsContainer}>
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What were you most proud of today?
-              </Text>
-              <RichTextInput
-                value={questionProud}
-                onChangeText={setQuestionProud}
-                placeholder="Reflect on your achievements..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                Which deposits had the biggest impact?
-              </Text>
-              <RichTextInput
-                value={questionImpact}
-                onChangeText={setQuestionImpact}
-                placeholder="Consider your most meaningful activities..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What progress did you make towards your goals?
-              </Text>
-              <RichTextInput
-                value={questionProgress}
-                onChangeText={setQuestionProgress}
-                placeholder="Evaluate your goal progress..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What were my biggest withdrawals and how can I prevent similar withdrawals tomorrow?
-              </Text>
-              <RichTextInput
-                value={questionWithdrawals}
-                onChangeText={setQuestionWithdrawals}
-                placeholder="Learn from challenges..."
-                minHeight={100}
-              />
-            </View>
-          </View>
-        </View>
-
-
-        {previousNotes.length > 0 && (
+        {todayReflections.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Recent Daily Reflections</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Today's Reflections and Notes</Text>
 
             <View style={styles.notesList}>
-              {previousNotes.map(note => (
+              {todayReflections.map(reflection => (
                 <TouchableOpacity
-                  key={note.id}
+                  key={reflection.id}
                   style={[styles.noteCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  onPress={() => {
-                    setSelectedNote(note);
-                    setIsViewModalVisible(true);
-                  }}
                 >
                   <View style={styles.noteHeader}>
                     <Text style={[styles.noteDate, { color: colors.text }]}>
-                      {formatDate(note.date)}
+                      {formatDateTime(reflection.date, reflection.created_at)}
                     </Text>
-                    <Text style={[styles.noteScore, { color: colors.primary }]}>
-                      Score: {note.authentic_score}
-                    </Text>
+                    <View style={[styles.tagBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.tagBadgeText}>Reflection</Text>
+                    </View>
                   </View>
                   <Text
                     style={[styles.notePreview, { color: colors.textSecondary }]}
                     numberOfLines={2}
                   >
-                    {note.question_proud?.substring(0, 80) || 'No content'}...
+                    {truncateContent(reflection.content)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -506,52 +320,6 @@ export default function DailyNotesView() {
         )}
       </View>
 
-      <Modal visible={isViewModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {selectedNote && formatDate(selectedNote.date)}
-            </Text>
-            <TouchableOpacity onPress={() => setIsViewModalVisible(false)}>
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {selectedNote && (
-              <View>
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    What were you most proud of?
-                  </Text>
-                  <RichTextDisplay content={selectedNote.question_proud || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    Which deposits had the biggest impact?
-                  </Text>
-                  <RichTextDisplay content={selectedNote.question_impact || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    What progress did you make?
-                  </Text>
-                  <RichTextDisplay content={selectedNote.question_progress || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    Withdrawals and lessons learned
-                  </Text>
-                  <RichTextDisplay content={selectedNote.question_withdrawals || 'No response'} />
-                </View>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -753,9 +521,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  noteScore: {
-    fontSize: 12,
-    fontWeight: '500',
+  tagBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tagBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   notePreview: {
     fontSize: 13,

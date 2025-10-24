@@ -7,16 +7,34 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import DailyNotesView from '@/components/reflections/DailyNotesView';
 import WeeklyReflectionView from '@/components/reflections/WeeklyReflectionView';
-import { BookOpen, Calendar } from 'lucide-react-native';
+import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
+import JournalForm from '@/components/reflections/JournalForm';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
+import { DraggableFab } from '@/components/DraggableFab';
+import { BookOpen, Calendar, History } from 'lucide-react-native';
+import { ReflectionWithRelations } from '@/lib/reflectionUtils';
 
 const TAB_STORAGE_KEY = '@reflections_active_tab';
 
-type TabType = 'daily' | 'weekly';
+type TabType = 'daily' | 'weekly' | 'reflectionHistory';
+type ActionType = 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'followUp';
+
+interface ActionData {
+  notes: string;
+  selectedRoleIds: string[];
+  selectedDomainIds: string[];
+  selectedKeyRelationshipIds: string[];
+}
 
 export default function ReflectionsScreen() {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('daily');
   const [authenticScore, setAuthenticScore] = useState(0);
+  const [isJournalFormVisible, setIsJournalFormVisible] = useState(false);
+  const [isTaskEventFormVisible, setIsTaskEventFormVisible] = useState(false);
+  const [taskEventFormType, setTaskEventFormType] = useState<'task' | 'event' | 'depositIdea' | 'withdrawal'>('task');
+  const [taskEventFormInitialData, setTaskEventFormInitialData] = useState<any>(null);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
 
   useEffect(() => {
     loadActiveTab();
@@ -26,7 +44,7 @@ export default function ReflectionsScreen() {
   const loadActiveTab = async () => {
     try {
       const savedTab = await AsyncStorage.getItem(TAB_STORAGE_KEY);
-      if (savedTab === 'daily' || savedTab === 'weekly') {
+      if (savedTab === 'daily' || savedTab === 'weekly' || savedTab === 'reflectionHistory') {
         setActiveTab(savedTab);
       }
     } catch (error) {
@@ -49,12 +67,10 @@ export default function ReflectionsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get today's date
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
-      // Fetch completed tasks for today
       const { data: tasks, error: tasksError } = await supabase
         .from('0008-ap-tasks')
         .select('*')
@@ -68,13 +84,11 @@ export default function ReflectionsScreen() {
         return;
       }
 
-      // Calculate score based on completed tasks
       let score = 0;
       if (tasks) {
         tasks.forEach((task: any) => {
           let points = 0;
 
-          // Base points for task type
           if (task.is_authentic_deposit) points += 3;
           else if (!task.is_urgent && task.is_important) points += 2;
           else if (task.is_urgent && task.is_important) points += 1.5;
@@ -85,7 +99,6 @@ export default function ReflectionsScreen() {
         });
       }
 
-      // Fetch withdrawals for today
       const { data: withdrawals } = await supabase
         .from('0008-ap-withdrawals')
         .select('amount')
@@ -104,11 +117,53 @@ export default function ReflectionsScreen() {
     }
   };
 
+  const handleJournalFormAction = (action: ActionType, data: ActionData) => {
+    if (action === 'followUp') {
+      return;
+    }
+
+    const typeMapping: Record<Exclude<ActionType, 'followUp'>, 'task' | 'event' | 'depositIdea' | 'withdrawal'> = {
+      task: 'task',
+      event: 'event',
+      depositIdea: 'depositIdea',
+      withdrawal: 'withdrawal',
+    };
+
+    setTaskEventFormType(typeMapping[action]);
+    setTaskEventFormInitialData({
+      notes: data.notes,
+      selectedRoleIds: data.selectedRoleIds,
+      selectedDomainIds: data.selectedDomainIds,
+      selectedKeyRelationshipIds: data.selectedKeyRelationshipIds,
+    });
+    setIsJournalFormVisible(false);
+    setIsTaskEventFormVisible(true);
+  };
+
+  const handleReflectionPress = (reflection: ReflectionWithRelations) => {
+    setSelectedReflection(reflection);
+    setIsJournalFormVisible(true);
+  };
+
+  const handleJournalFormClose = () => {
+    setIsJournalFormVisible(false);
+    setSelectedReflection(null);
+  };
+
+  const handleTaskEventFormClose = () => {
+    setIsTaskEventFormVisible(false);
+    setTaskEventFormInitialData(null);
+  };
+
+  const handleTaskEventFormSuccess = () => {
+    setIsTaskEventFormVisible(false);
+    setTaskEventFormInitialData(null);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Header title="Reflections" authenticScore={authenticScore} />
 
-      {/* Tab Selector */}
       <View style={[styles.tabSelector, { backgroundColor: colors.surface }]}>
         <TouchableOpacity
           style={[
@@ -127,7 +182,7 @@ export default function ReflectionsScreen() {
               { color: activeTab === 'daily' ? '#ffffff' : colors.textSecondary }
             ]}
           >
-            Daily Reflection
+            Daily
           </Text>
         </TouchableOpacity>
 
@@ -148,15 +203,75 @@ export default function ReflectionsScreen() {
               { color: activeTab === 'weekly' ? '#ffffff' : colors.textSecondary }
             ]}
           >
-            Weekly Reflection
+            Weekly
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'reflectionHistory' && [styles.activeTab, { backgroundColor: colors.primary }]
+          ]}
+          onPress={() => handleTabChange('reflectionHistory')}
+        >
+          <History
+            size={18}
+            color={activeTab === 'reflectionHistory' ? '#ffffff' : colors.textSecondary}
+          />
+          <Text
+            style={[
+              styles.tabText,
+              { color: activeTab === 'reflectionHistory' ? '#ffffff' : colors.textSecondary }
+            ]}
+          >
+            History
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
       <View style={styles.content}>
-        {activeTab === 'daily' ? <DailyNotesView /> : <WeeklyReflectionView />}
+        {activeTab === 'daily' && <DailyNotesView />}
+        {activeTab === 'weekly' && <WeeklyReflectionView />}
+        {activeTab === 'reflectionHistory' && (
+          <ReflectionHistoryView onReflectionPress={handleReflectionPress} />
+        )}
       </View>
+
+      <DraggableFab
+        onPress={() => setIsJournalFormVisible(true)}
+        size={56}
+        backgroundColor={colors.primary}
+        iconComponent={
+          <Text style={styles.fabText}>J</Text>
+        }
+      />
+
+      <JournalForm
+        visible={isJournalFormVisible}
+        mode={selectedReflection ? 'edit' : 'create'}
+        initialData={selectedReflection || undefined}
+        onClose={handleJournalFormClose}
+        onSaveSuccess={() => {
+          handleJournalFormClose();
+          calculateAuthenticScore();
+        }}
+        onActionSelected={handleJournalFormAction}
+      />
+
+      {isTaskEventFormVisible && (
+        <TaskEventForm
+          mode="create"
+          initialData={{
+            type: taskEventFormType,
+            notes: taskEventFormInitialData?.notes || '',
+            selectedRoleIds: taskEventFormInitialData?.selectedRoleIds || [],
+            selectedDomainIds: taskEventFormInitialData?.selectedDomainIds || [],
+            selectedKeyRelationshipIds: taskEventFormInitialData?.selectedKeyRelationshipIds || [],
+          }}
+          onSubmitSuccess={handleTaskEventFormSuccess}
+          onClose={handleTaskEventFormClose}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -183,9 +298,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     borderRadius: 8,
-    gap: 8,
+    gap: 6,
   },
   activeTab: {
     shadowColor: '#000',
@@ -195,10 +310,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   content: {
     flex: 1,
+  },
+  fabText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
   },
 });

@@ -6,9 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   RefreshControl,
-  Modal,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -17,10 +15,11 @@ import {
   fetchWeeklyAggregationData,
   fetchGoalActionsSummary,
 } from '@/lib/weeklyReflectionData';
-import RichTextInput from './RichTextInput';
-import RichTextDisplay from './RichTextDisplay';
-import { WeeklyAggregationData, Reflection, GoalActionSummary } from '@/types/reflections';
-import { Save, Target, Users, Activity, CircleAlert as AlertCircle, X } from 'lucide-react-native';
+import { WeeklyAggregationData, GoalActionSummary } from '@/types/reflections';
+import { Target, Users, Activity, CircleAlert as AlertCircle } from 'lucide-react-native';
+import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRange } from '@/lib/reflectionUtils';
+import { formatLocalDate } from '@/lib/dateUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 export default function WeeklyReflectionView() {
   const { colors } = useTheme();
@@ -30,34 +29,33 @@ export default function WeeklyReflectionView() {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [questionProud, setQuestionProud] = useState('');
-  const [questionImpact, setQuestionImpact] = useState('');
-  const [questionProgress, setQuestionProgress] = useState('');
-  const [questionWithdrawals, setQuestionWithdrawals] = useState('');
-
   const [goalSummaries, setGoalSummaries] = useState<GoalActionSummary[]>([]);
-
-
-  const [previousReflections, setPreviousReflections] = useState<Reflection[]>([]);
-  const [selectedReflection, setSelectedReflection] = useState<Reflection | null>(null);
-  const [isViewModalVisible, setIsViewModalVisible] = useState(false);
-
-  const [currentReflection, setCurrentReflection] = useState<Reflection | null>(null);
+  const [weekReflections, setWeekReflections] = useState<ReflectionWithRelations[]>([]);
 
   useEffect(() => {
     loadData();
+
+    const handleReflectionChange = () => {
+      loadData();
+    };
+
+    eventBus.on(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+
+    return () => {
+      eventBus.off(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+    };
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // Run archiving in background
-      archiveOldReflections();
-
       await Promise.all([
         fetchWeeklyData(),
-        fetchCurrentReflection(),
-        fetchPreviousReflections(),
+        fetchWeekReflections(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -66,17 +64,6 @@ export default function WeeklyReflectionView() {
     }
   };
 
-  const archiveOldReflections = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    try {
-      await supabase.rpc('archive_old_reflections', { p_user_id: user.id });
-    } catch (error) {
-      console.error('Error archiving reflections:', error);
-    }
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -121,125 +108,24 @@ export default function WeeklyReflectionView() {
     setGoalSummaries(summaries);
   };
 
-  const fetchCurrentReflection = async () => {
+  const fetchWeekReflections = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Extract date-only part from ISO timestamp for date field comparison
-    const weekStartDate = weekRange.start.split('T')[0];
-
-    const { data, error } = await supabase
-      .from('0008-ap-reflections')
-      .select('*')
+    const { data: prefsData } = await supabase
+      .from('0008-ap-user-preferences')
+      .select('week_start_day')
       .eq('user_id', user.id)
-      .eq('reflection_type', 'weekly')
-      .eq('week_start_date', weekStartDate)
       .maybeSingle();
 
-    if (!error && data) {
-      setCurrentReflection(data);
-      setQuestionProud(data.question_proud || '');
-      setQuestionImpact(data.question_impact || '');
-      setQuestionProgress(data.question_progress || '');
-      setQuestionWithdrawals(data.question_withdrawals || '');
-    }
+    const weekStartDay = prefsData?.week_start_day || 'sunday';
+    const { weekStart, weekEnd } = calculateWeekRange(new Date(), weekStartDay);
+
+    const reflections = await fetchReflectionsByDateRange(user.id, weekStart, weekEnd);
+    setWeekReflections(reflections);
   };
 
-
-  const fetchPreviousReflections = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Extract date-only part from ISO timestamp for date field comparison
-    const weekStartDate = weekRange.start.split('T')[0];
-
-    const { data, error } = await supabase
-      .from('0008-ap-reflections')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('reflection_type', 'weekly')
-      .eq('archived', false)
-      .neq('week_start_date', weekStartDate)
-      .order('week_start_date', { ascending: false })
-      .limit(12);
-
-    if (!error && data) {
-      setPreviousReflections(data);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!questionProud && !questionImpact && !questionProgress && !questionWithdrawals) {
-      Alert.alert('Error', 'Please answer at least one reflective question');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not found');
-
-      let reflectionId = currentReflection?.id;
-
-      if (currentReflection) {
-        // Update existing reflection
-        const { error } = await supabase
-          .from('0008-ap-reflections')
-          .update({
-            question_proud: questionProud,
-            question_impact: questionImpact,
-            question_progress: questionProgress,
-            question_withdrawals: questionWithdrawals,
-            weekly_target_completion: 0,
-            total_goals_tracked: goalSummaries.length,
-          })
-          .eq('id', currentReflection.id);
-
-        if (error) throw error;
-      } else {
-        // Create new reflection
-        // Extract date-only parts for date fields
-        const weekStartDate = weekRange.start.split('T')[0];
-        const weekEndDate = weekRange.end.split('T')[0];
-
-        const { data, error } = await supabase
-          .from('0008-ap-reflections')
-          .insert({
-            user_id: user.id,
-            reflection_type: 'weekly',
-            date: weekStartDate,
-            week_start_date: weekStartDate,
-            week_end_date: weekEndDate,
-            content: '',
-            question_proud: questionProud,
-            question_impact: questionImpact,
-            question_progress: questionProgress,
-            question_withdrawals: questionWithdrawals,
-            weekly_target_completion: 0,
-            total_goals_tracked: goalSummaries.length,
-            authentic_score: 0,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        reflectionId = data.id;
-        setCurrentReflection(data);
-      }
-
-
-      Alert.alert('Success', 'Weekly reflection saved successfully');
-      fetchPreviousReflections();
-    } catch (error) {
-      console.error('Error saving reflection:', error);
-      Alert.alert('Error', 'Failed to save reflection');
-    } finally {
-      setSaving(false);
-    }
-  };
 
 
   const formatWeekRange = () => {
@@ -247,6 +133,23 @@ export default function WeeklyReflectionView() {
     const end = new Date(weekRange.end);
 
     return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  };
+
+  const formatDateTime = (dateString: string, createdAt: string) => {
+    const date = new Date(createdAt);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  const truncateContent = (content: string, maxLength: number = 80) => {
+    if (content.length <= maxLength) return content;
+    return content.substring(0, maxLength) + '...';
   };
 
 
@@ -380,103 +283,27 @@ export default function WeeklyReflectionView() {
           </>
         )}
 
-        {/* Reflective Questions */}
-        <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Reflective Questions</Text>
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                { backgroundColor: colors.primary },
-                saving && { backgroundColor: colors.textSecondary }
-              ]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Save size={16} color="#ffffff" />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.questionsContainer}>
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What were you most proud of this week?
-              </Text>
-              <RichTextInput
-                value={questionProud}
-                onChangeText={setQuestionProud}
-                placeholder="Reflect on your achievements..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                Which deposits had the biggest impact?
-              </Text>
-              <RichTextInput
-                value={questionImpact}
-                onChangeText={setQuestionImpact}
-                placeholder="Consider your most meaningful activities..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What progress did you make towards your goals?
-              </Text>
-              <RichTextInput
-                value={questionProgress}
-                onChangeText={setQuestionProgress}
-                placeholder="Evaluate your goal progress..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What were my biggest withdrawals and how can I prevent similar withdrawals next week?
-              </Text>
-              <RichTextInput
-                value={questionWithdrawals}
-                onChangeText={setQuestionWithdrawals}
-                placeholder="Learn from challenges..."
-                minHeight={100}
-              />
-            </View>
-          </View>
-        </View>
-
-
-        {/* Previous Reflections */}
-        {previousReflections.length > 0 && (
+        {/* Week Reflections */}
+        {weekReflections.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Previous Weekly Reflections</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>This Week's Reflections and Notes</Text>
 
             <View style={styles.previousList}>
-              {previousReflections.map(reflection => (
+              {weekReflections.map(reflection => (
                 <TouchableOpacity
                   key={reflection.id}
                   style={[styles.previousCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  onPress={() => {
-                    setSelectedReflection(reflection);
-                    setIsViewModalVisible(true);
-                  }}
                 >
-                  <Text style={[styles.previousWeek, { color: colors.text }]}>
-                    {new Date(reflection.week_start_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} -{' '}
-                    {new Date(reflection.week_end_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </Text>
+                  <View style={styles.reflectionHeader}>
+                    <Text style={[styles.previousWeek, { color: colors.text }]}>
+                      {formatDateTime(reflection.date, reflection.created_at)}
+                    </Text>
+                    <View style={[styles.tagBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.tagBadgeText}>Reflection</Text>
+                    </View>
+                  </View>
                   <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {reflection.question_proud?.substring(0, 80)}...
+                    {truncateContent(reflection.content)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -485,55 +312,6 @@ export default function WeeklyReflectionView() {
         )}
       </View>
 
-      {/* View Reflection Modal */}
-      <Modal visible={isViewModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {selectedReflection &&
-                `${new Date(selectedReflection.week_start_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(selectedReflection.week_end_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-              }
-            </Text>
-            <TouchableOpacity onPress={() => setIsViewModalVisible(false)}>
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {selectedReflection && (
-              <View>
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    What were you most proud of?
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_proud || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    Which deposits had the biggest impact?
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_impact || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    What progress did you make?
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_progress || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    Withdrawals and lessons learned
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_withdrawals || 'No response'} />
-                </View>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -733,6 +511,22 @@ const styles = StyleSheet.create({
   previousPreview: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  reflectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tagBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tagBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   modalContainer: {
     flex: 1,
