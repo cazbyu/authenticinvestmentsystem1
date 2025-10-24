@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Calendar, MessageCircle, Settings, LogOut, BookOpen, Bell, Lightbulb } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 const menuItems = [
   { id: 'calendar', title: 'Calendar View', icon: Calendar, route: '/calendar' },
@@ -20,9 +21,25 @@ export function SideMenu() {
   const { colors } = useTheme();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [followUpCount, setFollowUpCount] = useState(0);
 
   useEffect(() => {
     fetchUserData();
+    fetchFollowUpCount();
+
+    const handleReflectionChange = () => {
+      fetchFollowUpCount();
+    };
+
+    eventBus.on(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+
+    return () => {
+      eventBus.off(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+    };
   }, []);
 
   const fetchUserData = async () => {
@@ -53,6 +70,28 @@ export function SideMenu() {
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
+    }
+  };
+
+  const fetchFollowUpCount = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('archived', false)
+        .eq('follow_up', true)
+        .not('follow_up_date', 'is', null);
+
+      if (!error && data !== null) {
+        setFollowUpCount(data.length || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching follow-up count:', error);
     }
   };
 
@@ -88,13 +127,22 @@ export function SideMenu() {
       <ScrollView style={[styles.menuContainer, { backgroundColor: colors.background }]}>
         {menuItems.map((item) => {
           const IconComponent = item.icon;
+          const showBadge = item.id === 'followup' && followUpCount > 0;
+
           return (
             <TouchableOpacity
               key={item.id}
               style={[styles.menuItem, { borderBottomColor: colors.border }]}
               onPress={() => handleMenuPress(item.route)}
             >
-              <IconComponent size={24} color={colors.primary} />
+              <View style={styles.menuItemIcon}>
+                <IconComponent size={24} color={colors.primary} />
+                {showBadge && (
+                  <View style={[styles.badge, { backgroundColor: colors.error }]}>
+                    <Text style={styles.badgeText}>{followUpCount}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.menuItemText, { color: colors.text }]}>{item.title}</Text>
             </TouchableOpacity>
           );
@@ -157,10 +205,29 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
+  menuItemIcon: {
+    position: 'relative',
+  },
   menuItemText: {
     marginLeft: 16,
     fontSize: 16,
     fontWeight: '500',
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   footer: {
     padding: 20,
