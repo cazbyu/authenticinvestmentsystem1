@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Header } from '@/components/Header';
@@ -11,7 +11,6 @@ import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryVie
 import JournalForm from '@/components/reflections/JournalForm';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { DraggableFab } from '@/components/DraggableFab';
-import { BookOpen, Calendar, History } from 'lucide-react-native';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
 
 const TAB_STORAGE_KEY = '@reflections_active_tab';
@@ -162,72 +161,12 @@ export default function ReflectionsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Header title="Reflections" authenticScore={authenticScore} />
-
-      <View style={[styles.tabSelector, { backgroundColor: colors.surface }]}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'daily' && [styles.activeTab, { backgroundColor: colors.primary }]
-          ]}
-          onPress={() => handleTabChange('daily')}
-        >
-          <BookOpen
-            size={18}
-            color={activeTab === 'daily' ? '#ffffff' : colors.textSecondary}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'daily' ? '#ffffff' : colors.textSecondary }
-            ]}
-          >
-            Daily
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'weekly' && [styles.activeTab, { backgroundColor: colors.primary }]
-          ]}
-          onPress={() => handleTabChange('weekly')}
-        >
-          <Calendar
-            size={18}
-            color={activeTab === 'weekly' ? '#ffffff' : colors.textSecondary}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'weekly' ? '#ffffff' : colors.textSecondary }
-            ]}
-          >
-            Weekly
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'reflectionHistory' && [styles.activeTab, { backgroundColor: colors.primary }]
-          ]}
-          onPress={() => handleTabChange('reflectionHistory')}
-        >
-          <History
-            size={18}
-            color={activeTab === 'reflectionHistory' ? '#ffffff' : colors.textSecondary}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'reflectionHistory' ? '#ffffff' : colors.textSecondary }
-            ]}
-          >
-            History
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <Header
+        title="Reflections"
+        authenticScore={authenticScore}
+        activeView={activeTab}
+        onViewChange={(view) => handleTabChange(view as TabType)}
+      />
 
       <View style={styles.content}>
         {activeTab === 'daily' && <DailyNotesView />}
@@ -278,39 +217,6 @@ export default function ReflectionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  tabSelector: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginVertical: 12,
-    borderRadius: 10,
-    padding: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    gap: 6,
-  },
-  activeTab: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   content: {
     flex: 1,

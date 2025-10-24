@@ -11,8 +11,10 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { X, Paperclip, Calendar as CalendarIcon, Bold, Italic, AlignCenter, List, ListOrdered } from 'lucide-react-native';
+import { X, Paperclip, Calendar as CalendarIcon, Bold, Italic, AlignCenter, List, ListOrdered, File, Image as ImageIcon } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate } from '@/lib/dateUtils';
@@ -86,6 +88,7 @@ export default function JournalForm({
   const [showFollowUpCalendar, setShowFollowUpCalendar] = useState(false);
   const [followUpDate, setFollowUpDate] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
+  const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
   const [textFormat, setTextFormat] = useState({
     bold: false,
     italic: false,
@@ -135,6 +138,60 @@ export default function JournalForm({
     setSelectedDomainIds([]);
     setSelectedKeyRelationshipIds([]);
     setFollowUpDate(null);
+    setAttachedFiles([]);
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newFiles = result.assets.map(asset => ({
+          uri: asset.uri,
+          name: asset.fileName || 'image.jpg',
+          type: asset.type || 'image/jpeg',
+          size: asset.fileSize,
+        }));
+        setAttachedFiles([...attachedFiles, ...newFiles]);
+        setShowAttachmentPicker(false);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newFiles = result.assets.map(asset => ({
+          uri: asset.uri,
+          name: asset.name,
+          type: asset.mimeType || 'application/octet-stream',
+          size: asset.size,
+        }));
+        setAttachedFiles([...attachedFiles, ...newFiles]);
+        setShowAttachmentPicker(false);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    const newFiles = attachedFiles.filter((_, i) => i !== index);
+    setAttachedFiles(newFiles);
   };
 
   const fetchData = async () => {
@@ -423,7 +480,7 @@ export default function JournalForm({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.toolbarButton}
-                  onPress={() => Alert.alert('Attach File', 'File attachment feature')}
+                  onPress={() => setShowAttachmentPicker(true)}
                 >
                   <Paperclip size={20} color={colors.text} />
                 </TouchableOpacity>
@@ -444,6 +501,30 @@ export default function JournalForm({
                 numberOfLines={6}
                 textAlignVertical="top"
               />
+
+              {/* Attached Files Display */}
+              {attachedFiles.length > 0 && (
+                <View style={styles.attachmentsContainer}>
+                  <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
+                    Attachments ({attachedFiles.length})
+                  </Text>
+                  {attachedFiles.map((file, index) => (
+                    <View key={index} style={[styles.attachmentItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      {file.type?.startsWith('image/') ? (
+                        <ImageIcon size={16} color={colors.primary} />
+                      ) : (
+                        <File size={16} color={colors.primary} />
+                      )}
+                      <Text style={[styles.attachmentName, { color: colors.text }]} numberOfLines={1}>
+                        {file.name}
+                      </Text>
+                      <TouchableOpacity onPress={() => handleRemoveAttachment(index)}>
+                        <X size={16} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
 
             {/* Helper Text */}
@@ -570,36 +651,36 @@ export default function JournalForm({
                 <Text style={styles.helperText}>
                   Do you want to take any of the following actions on this reflection?
                 </Text>
-                <View style={styles.actionLinksContainer}>
+                <View style={styles.actionButtonsContainer}>
                   <TouchableOpacity
-                    style={styles.actionLink}
+                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleActionButton('task')}
                   >
-                    <Text style={styles.actionLinkText}>Create a Task</Text>
+                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Task</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionLink}
+                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleActionButton('event')}
                   >
-                    <Text style={styles.actionLinkText}>Create an Event</Text>
+                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create an Event</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionLink}
+                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleActionButton('depositIdea')}
                   >
-                    <Text style={styles.actionLinkText}>Create a Deposit Idea</Text>
+                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Deposit Idea</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionLink}
+                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleActionButton('withdrawal')}
                   >
-                    <Text style={styles.actionLinkText}>Create a Withdrawal</Text>
+                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Withdrawal</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionLink}
+                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleActionButton('followUp')}
                   >
-                    <Text style={styles.actionLinkText}>Follow Up</Text>
+                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Follow Up</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -654,6 +735,43 @@ export default function JournalForm({
                   arrowColor: colors.primary,
                 }}
               />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Attachment Picker Modal */}
+        <Modal
+          visible={showAttachmentPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAttachmentPicker(false)}
+        >
+          <View style={styles.calendarModalOverlay}>
+            <View style={styles.attachmentPickerContent}>
+              <View style={styles.calendarModalHeader}>
+                <Text style={styles.calendarModalTitle}>Add Attachment</Text>
+                <TouchableOpacity onPress={() => setShowAttachmentPicker(false)}>
+                  <X size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={[styles.attachmentOption, { borderColor: colors.border }]}
+                onPress={handlePickImage}
+              >
+                <ImageIcon size={24} color={colors.primary} />
+                <Text style={[styles.attachmentOptionText, { color: colors.text }]}>
+                  Choose Image
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.attachmentOption, { borderColor: colors.border }]}
+                onPress={handlePickDocument}
+              >
+                <File size={24} color={colors.primary} />
+                <Text style={[styles.attachmentOptionText, { color: colors.text }]}>
+                  Choose Document
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
@@ -868,18 +986,63 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     toolbarButtonActive: {
       backgroundColor: colors.primaryLight || `${colors.primary}20`,
     },
-    actionLinksContainer: {
+    actionButtonsContainer: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 16,
+      gap: 12,
     },
-    actionLink: {
-      paddingVertical: 4,
-      paddingHorizontal: 8,
+    actionButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      borderWidth: 1,
+      minWidth: 64,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    actionLinkText: {
+    actionButtonText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    attachmentsContainer: {
+      marginTop: 12,
+      gap: 8,
+    },
+    attachmentsLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    attachmentItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 8,
+      borderRadius: 6,
+      borderWidth: 1,
+      gap: 8,
+    },
+    attachmentName: {
+      flex: 1,
+      fontSize: 14,
+    },
+    attachmentPickerContent: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      width: '90%',
+      maxWidth: 400,
+    },
+    attachmentOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderRadius: 8,
+      borderWidth: 1,
+      marginVertical: 8,
+      gap: 12,
+    },
+    attachmentOptionText: {
       fontSize: 16,
-      color: colors.primary,
-      textDecorationLine: 'underline',
+      fontWeight: '500',
     },
   });

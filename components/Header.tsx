@@ -11,7 +11,8 @@ type DrawerNavigation = DrawerNavigationProp<any>;
 
 type DashboardView = 'deposits' | 'ideas' | 'journal' | 'analytics';
 type CalendarView = 'daily' | 'weekly' | 'monthly';
-type ViewType = DashboardView | CalendarView;
+type ReflectionView = 'daily' | 'weekly' | 'reflectionHistory';
+type ViewType = DashboardView | CalendarView | ReflectionView;
 
 interface HeaderProps {
   title?: string;
@@ -152,6 +153,36 @@ export function Header({
                 >
                   <Text style={[styles.toggleText, activeView === 'analytics' && { color: headerBackgroundColor }]}>
                     Analytics
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (['daily', 'weekly', 'reflectionHistory'] as const).includes(activeView as any) ? (
+              /* Reflection Views */
+              <>
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'daily' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('daily')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'daily' && { color: headerBackgroundColor }]}>
+                    Daily
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'weekly' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('weekly')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'weekly' && { color: headerBackgroundColor }]}>
+                    Weekly
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toggleButton, activeView === 'reflectionHistory' && styles.activeToggle]}
+                  onPress={() => onViewChange && onViewChange('reflectionHistory')}
+                >
+                  <Text style={[styles.toggleText, activeView === 'reflectionHistory' && { color: headerBackgroundColor }]}>
+                    History
                   </Text>
                 </TouchableOpacity>
               </>
