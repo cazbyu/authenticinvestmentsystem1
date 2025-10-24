@@ -231,7 +231,7 @@ export async function uploadReflectionImage(
     const filePath = `${userId}/${reflectionId}/${fileName}`;
 
     const { data, error } = await supabase.storage
-      .from('0008-ap-reflection_images')
+      .from('0008-reflection-images')
       .upload(filePath, file);
 
     if (error) throw error;
@@ -249,7 +249,7 @@ export async function uploadReflectionImage(
 export async function deleteReflectionImage(imagePath: string): Promise<boolean> {
   try {
     const { error } = await supabase.storage
-      .from('0008-ap-reflection_images')
+      .from('0008-reflection-images')
       .remove([imagePath]);
 
     if (error) throw error;
