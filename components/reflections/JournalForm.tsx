@@ -745,4 +745,34 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
       fontWeight: '600',
       color: colors.text,
     },
+    checkboxList: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    checkboxRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      width: '48%',
+      marginBottom: 8,
+    },
+    checkboxSquare: {
+      width: 20,
+      height: 20,
+      borderWidth: 2,
+      borderRadius: 4,
+      marginRight: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+    },
+    checkmark: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: 'bold',
+    },
+    checkboxLabel: {
+      fontSize: 14,
+      flex: 1,
+    },
   });
