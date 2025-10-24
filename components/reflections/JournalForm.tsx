@@ -11,7 +11,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { X, Paperclip, Calendar as CalendarIcon } from 'lucide-react-native';
+import { X, Paperclip, Calendar as CalendarIcon, Bold, Italic, AlignCenter, List, ListOrdered } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -85,6 +85,14 @@ export default function JournalForm({
 
   const [showFollowUpCalendar, setShowFollowUpCalendar] = useState(false);
   const [followUpDate, setFollowUpDate] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
+  const [textFormat, setTextFormat] = useState({
+    bold: false,
+    italic: false,
+    center: false,
+    bullet: false,
+    number: false,
+  });
 
   useEffect(() => {
     if (visible) {
@@ -380,8 +388,54 @@ export default function JournalForm({
             {/* Reflection Content */}
             <View style={styles.section}>
               <Text style={styles.label}>Reflection</Text>
+
+              {/* Rich Text Toolbar */}
+              <View style={styles.toolbarContainer}>
+                <TouchableOpacity
+                  style={[styles.toolbarButton, textFormat.bold && styles.toolbarButtonActive]}
+                  onPress={() => setTextFormat({ ...textFormat, bold: !textFormat.bold })}
+                >
+                  <Bold size={20} color={textFormat.bold ? colors.primary : colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toolbarButton, textFormat.italic && styles.toolbarButtonActive]}
+                  onPress={() => setTextFormat({ ...textFormat, italic: !textFormat.italic })}
+                >
+                  <Italic size={20} color={textFormat.italic ? colors.primary : colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toolbarButton, textFormat.center && styles.toolbarButtonActive]}
+                  onPress={() => setTextFormat({ ...textFormat, center: !textFormat.center })}
+                >
+                  <AlignCenter size={20} color={textFormat.center ? colors.primary : colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toolbarButton, textFormat.bullet && styles.toolbarButtonActive]}
+                  onPress={() => setTextFormat({ ...textFormat, bullet: !textFormat.bullet })}
+                >
+                  <List size={20} color={textFormat.bullet ? colors.primary : colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toolbarButton, textFormat.number && styles.toolbarButtonActive]}
+                  onPress={() => setTextFormat({ ...textFormat, number: !textFormat.number })}
+                >
+                  <ListOrdered size={20} color={textFormat.number ? colors.primary : colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.toolbarButton}
+                  onPress={() => Alert.alert('Attach File', 'File attachment feature')}
+                >
+                  <Paperclip size={20} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
               <TextInput
-                style={styles.textArea}
+                style={[
+                  styles.textArea,
+                  textFormat.bold && { fontWeight: 'bold' },
+                  textFormat.italic && { fontStyle: 'italic' },
+                  textFormat.center && { textAlign: 'center' },
+                ]}
                 placeholder="Write your reflection..."
                 placeholderTextColor={colors.textSecondary}
                 value={content}
@@ -392,36 +446,47 @@ export default function JournalForm({
               />
             </View>
 
+            {/* Helper Text */}
+            {(roles.length > 0 || domains.length > 0 || filteredKeyRelationships.length > 0) && (
+              <View style={styles.section}>
+                <Text style={[styles.helperText, { fontStyle: 'italic' }]}>
+                  Is this reflection associated with any of the following roles or domains? If so, check those that are applicable.
+                </Text>
+              </View>
+            )}
+
             {/* Roles */}
             {roles.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.label}>Roles</Text>
-                <View style={styles.checkboxList}>
-                  {roles.map((role) => (
-                    <TouchableOpacity
-                      key={role.id}
-                      style={styles.checkboxRow}
-                      onPress={() => toggleRole(role.id)}
-                    >
-                      <View
-                        style={[
-                          styles.checkboxSquare,
-                          { borderColor: colors.border },
-                          selectedRoleIds.includes(role.id) && {
-                            backgroundColor: colors.primary,
-                            borderColor: colors.primary,
-                          },
-                        ]}
+                <View style={styles.checkboxContainer}>
+                  <Text style={styles.label}>Roles</Text>
+                  <View style={styles.checkboxList}>
+                    {roles.map((role) => (
+                      <TouchableOpacity
+                        key={role.id}
+                        style={styles.checkboxRow}
+                        onPress={() => toggleRole(role.id)}
                       >
-                        {selectedRoleIds.includes(role.id) && (
-                          <Text style={styles.checkmark}>✓</Text>
-                        )}
-                      </View>
-                      <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                        {role.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <View
+                          style={[
+                            styles.checkboxSquare,
+                            { borderColor: colors.border },
+                            selectedRoleIds.includes(role.id) && {
+                              backgroundColor: colors.primary,
+                              borderColor: colors.primary,
+                            },
+                          ]}
+                        >
+                          {selectedRoleIds.includes(role.id) && (
+                            <Text style={styles.checkmark}>✓</Text>
+                          )}
+                        </View>
+                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                          {role.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
             )}
@@ -429,33 +494,35 @@ export default function JournalForm({
             {/* Domains */}
             {domains.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.label}>Domains</Text>
-                <View style={styles.checkboxList}>
-                  {domains.map((domain) => (
-                    <TouchableOpacity
-                      key={domain.id}
-                      style={styles.checkboxRow}
-                      onPress={() => toggleDomain(domain.id)}
-                    >
-                      <View
-                        style={[
-                          styles.checkboxSquare,
-                          { borderColor: colors.border },
-                          selectedDomainIds.includes(domain.id) && {
-                            backgroundColor: colors.primary,
-                            borderColor: colors.primary,
-                          },
-                        ]}
+                <View style={styles.checkboxContainer}>
+                  <Text style={styles.label}>Domains</Text>
+                  <View style={styles.checkboxList}>
+                    {domains.map((domain) => (
+                      <TouchableOpacity
+                        key={domain.id}
+                        style={styles.checkboxRow}
+                        onPress={() => toggleDomain(domain.id)}
                       >
-                        {selectedDomainIds.includes(domain.id) && (
-                          <Text style={styles.checkmark}>✓</Text>
-                        )}
-                      </View>
-                      <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                        {domain.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <View
+                          style={[
+                            styles.checkboxSquare,
+                            { borderColor: colors.border },
+                            selectedDomainIds.includes(domain.id) && {
+                              backgroundColor: colors.primary,
+                              borderColor: colors.primary,
+                            },
+                          ]}
+                        >
+                          {selectedDomainIds.includes(domain.id) && (
+                            <Text style={styles.checkmark}>✓</Text>
+                          )}
+                        </View>
+                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                          {domain.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
             )}
@@ -463,33 +530,35 @@ export default function JournalForm({
             {/* Key Relationships */}
             {filteredKeyRelationships.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.label}>Key Relationships</Text>
-                <View style={styles.checkboxList}>
-                  {filteredKeyRelationships.map((kr) => (
-                    <TouchableOpacity
-                      key={kr.id}
-                      style={styles.checkboxRow}
-                      onPress={() => toggleKeyRelationship(kr.id)}
-                    >
-                      <View
-                        style={[
-                          styles.checkboxSquare,
-                          { borderColor: colors.border },
-                          selectedKeyRelationshipIds.includes(kr.id) && {
-                            backgroundColor: colors.primary,
-                            borderColor: colors.primary,
-                          },
-                        ]}
+                <View style={styles.checkboxContainer}>
+                  <Text style={styles.label}>Key Relationships</Text>
+                  <View style={styles.checkboxList}>
+                    {filteredKeyRelationships.map((kr) => (
+                      <TouchableOpacity
+                        key={kr.id}
+                        style={styles.checkboxRow}
+                        onPress={() => toggleKeyRelationship(kr.id)}
                       >
-                        {selectedKeyRelationshipIds.includes(kr.id) && (
-                          <Text style={styles.checkmark}>✓</Text>
-                        )}
-                      </View>
-                      <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                        {kr.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <View
+                          style={[
+                            styles.checkboxSquare,
+                            { borderColor: colors.border },
+                            selectedKeyRelationshipIds.includes(kr.id) && {
+                              backgroundColor: colors.primary,
+                              borderColor: colors.primary,
+                            },
+                          ]}
+                        >
+                          {selectedKeyRelationshipIds.includes(kr.id) && (
+                            <Text style={styles.checkmark}>✓</Text>
+                          )}
+                        </View>
+                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                          {kr.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               </View>
             )}
@@ -501,36 +570,36 @@ export default function JournalForm({
                 <Text style={styles.helperText}>
                   Do you want to take any of the following actions on this reflection?
                 </Text>
-                <View style={styles.actionButtonsContainer}>
+                <View style={styles.actionLinksContainer}>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={styles.actionLink}
                     onPress={() => handleActionButton('task')}
                   >
-                    <Text style={styles.actionButtonText}>Create a Task</Text>
+                    <Text style={styles.actionLinkText}>Create a Task</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={styles.actionLink}
                     onPress={() => handleActionButton('event')}
                   >
-                    <Text style={styles.actionButtonText}>Create an Event</Text>
+                    <Text style={styles.actionLinkText}>Create an Event</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={styles.actionLink}
                     onPress={() => handleActionButton('depositIdea')}
                   >
-                    <Text style={styles.actionButtonText}>Create a Deposit Idea</Text>
+                    <Text style={styles.actionLinkText}>Create a Deposit Idea</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={styles.actionLink}
                     onPress={() => handleActionButton('withdrawal')}
                   >
-                    <Text style={styles.actionButtonText}>Create a Withdrawal</Text>
+                    <Text style={styles.actionLinkText}>Create a Withdrawal</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={styles.actionLink}
                     onPress={() => handleActionButton('followUp')}
                   >
-                    <Text style={styles.actionButtonText}>Follow Up</Text>
+                    <Text style={styles.actionLinkText}>Follow Up</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -774,5 +843,43 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     checkboxLabel: {
       fontSize: 14,
       flex: 1,
+    },
+    checkboxContainer: {
+      backgroundColor: '#ffffff',
+      borderRadius: 8,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    toolbarContainer: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 8,
+      marginBottom: 8,
+      gap: 8,
+    },
+    toolbarButton: {
+      padding: 8,
+      borderRadius: 4,
+    },
+    toolbarButtonActive: {
+      backgroundColor: colors.primaryLight || `${colors.primary}20`,
+    },
+    actionLinksContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 16,
+    },
+    actionLink: {
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+    },
+    actionLinkText: {
+      fontSize: 16,
+      color: colors.primary,
+      textDecorationLine: 'underline',
     },
   });
