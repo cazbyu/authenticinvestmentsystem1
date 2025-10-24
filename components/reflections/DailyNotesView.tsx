@@ -20,7 +20,11 @@ import { fetchReflectionsByDateRange, ReflectionWithRelations } from '@/lib/refl
 import { formatLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
-export default function DailyNotesView() {
+interface DailyNotesViewProps {
+  onReflectionPress?: (reflection: ReflectionWithRelations) => void;
+}
+
+export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProps) {
   const { colors } = useTheme();
   const [dayRange, setDayRange] = useState(getDayDateRange());
   const [aggregationData, setAggregationData] = useState<DailyAggregationData | null>(null);
@@ -291,13 +295,16 @@ export default function DailyNotesView() {
 
         {todayReflections.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Today's Reflections and Notes</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              Today's Reflections and Notes ({todayReflections.length})
+            </Text>
 
             <View style={styles.notesList}>
               {todayReflections.map(reflection => (
                 <TouchableOpacity
                   key={reflection.id}
                   style={[styles.noteCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => onReflectionPress?.(reflection)}
                 >
                   <View style={styles.noteHeader}>
                     <Text style={[styles.noteDate, { color: colors.text }]}>
@@ -313,6 +320,25 @@ export default function DailyNotesView() {
                   >
                     {truncateContent(reflection.content)}
                   </Text>
+                  {(reflection.roles && reflection.roles.length > 0) ||
+                   (reflection.domains && reflection.domains.length > 0) ? (
+                    <View style={styles.tagsRow}>
+                      {reflection.roles?.slice(0, 3).map((role) => (
+                        <View key={`role-${role.id}`} style={[styles.tagChip, { backgroundColor: colors.primaryLight || `${colors.primary}20` }]}>
+                          <Text style={[styles.tagChipText, { color: colors.primary }]} numberOfLines={1}>
+                            {role.label}
+                          </Text>
+                        </View>
+                      ))}
+                      {reflection.domains?.slice(0, 2).map((domain) => (
+                        <View key={`domain-${domain.id}`} style={[styles.tagChip, { backgroundColor: colors.primaryLight || `${colors.primary}20` }]}>
+                          <Text style={[styles.tagChipText, { color: colors.primary }]} numberOfLines={1}>
+                            {domain.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
               ))}
             </View>
@@ -534,6 +560,21 @@ const styles = StyleSheet.create({
   notePreview: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  tagChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tagChipText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   modalContainer: {
     flex: 1,

@@ -120,7 +120,7 @@ export default function JournalForm({
     }
   }, [selectedRoleIds, keyRelationships]);
 
-  const populateFormWithInitialData = () => {
+  const populateFormWithInitialData = async () => {
     if (!initialData) return;
 
     setContent(initialData.content || '');
@@ -130,6 +130,37 @@ export default function JournalForm({
       initialData.keyRelationships?.map((kr) => kr.id) || []
     );
     setFollowUpDate(initialData.follow_up_date || null);
+
+    // Load existing attachments
+    if (initialData.id) {
+      await loadExistingAttachments(initialData.id);
+    }
+  };
+
+  const loadExistingAttachments = async (reflectionId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('0008-ap-reflection-attachments')
+        .select('*')
+        .eq('reflection_id', reflectionId);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const attachments = data.map((att: any) => ({
+          id: att.id,
+          uri: att.file_path,
+          name: att.file_name,
+          type: att.file_type,
+          size: att.file_size,
+          isExisting: true,
+        }));
+        setAttachedFiles(attachments);
+      }
+    } catch (error) {
+      console.error('Error loading attachments:', error);
+    }
   };
 
   const resetForm = () => {
@@ -187,13 +218,37 @@ export default function JournalForm({
       });
 
       if (!result.canceled && result.assets) {
-        const newFiles = result.assets.map(asset => ({
-          uri: asset.uri,
-          name: asset.fileName || 'image.jpg',
-          type: asset.type || 'image/jpeg',
-          size: asset.fileSize,
-        }));
-        setAttachedFiles([...attachedFiles, ...newFiles]);
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.fileSize || 0;
+          const fileName = asset.fileName || 'image.jpg';
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.type || 'image/jpeg',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 5 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+
         setShowAttachmentPicker(false);
       }
     } catch (error) {
@@ -211,13 +266,37 @@ export default function JournalForm({
       });
 
       if (!result.canceled && result.assets) {
-        const newFiles = result.assets.map(asset => ({
-          uri: asset.uri,
-          name: asset.name,
-          type: asset.mimeType || 'application/octet-stream',
-          size: asset.size,
-        }));
-        setAttachedFiles([...attachedFiles, ...newFiles]);
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.size || 0;
+          const fileName = asset.name;
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.mimeType || 'application/octet-stream',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 5 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+
         setShowAttachmentPicker(false);
       }
     } catch (error) {
@@ -226,7 +305,33 @@ export default function JournalForm({
     }
   };
 
-  const handleRemoveAttachment = (index: number) => {
+  const handleRemoveAttachment = async (index: number) => {
+    const fileToRemove = attachedFiles[index];
+
+    // If it's an existing attachment from the database, delete it
+    if (fileToRemove.isExisting && fileToRemove.id) {
+      try {
+        const supabase = getSupabaseClient();
+
+        // Delete from storage
+        if (fileToRemove.uri) {
+          await supabase.storage
+            .from('0008-ap-reflection-attachments')
+            .remove([fileToRemove.uri]);
+        }
+
+        // Delete from database
+        await supabase
+          .from('0008-ap-reflection-attachments')
+          .delete()
+          .eq('id', fileToRemove.id);
+      } catch (error) {
+        console.error('Error deleting attachment:', error);
+        Alert.alert('Error', 'Failed to delete attachment');
+        return;
+      }
+    }
+
     const newFiles = attachedFiles.filter((_, i) => i !== index);
     setAttachedFiles(newFiles);
   };
@@ -317,9 +422,10 @@ export default function JournalForm({
         reflectionId = newReflectionId;
       }
 
-      // Upload attachments if any
-      if (attachedFiles.length > 0) {
-        const uploadPromises = attachedFiles.map(async (file) => {
+      // Upload only new attachments (not existing ones)
+      const newAttachments = attachedFiles.filter(file => !file.isExisting);
+      if (newAttachments.length > 0) {
+        const uploadPromises = newAttachments.map(async (file) => {
           const filePath = await uploadFileToStorage(file, user.id);
           if (filePath) {
             // Save attachment metadata to database
@@ -577,9 +683,16 @@ export default function JournalForm({
                       ) : (
                         <File size={16} color={colors.primary} />
                       )}
-                      <Text style={[styles.attachmentName, { color: colors.text }]} numberOfLines={1}>
-                        {file.name}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.attachmentName, { color: colors.text }]} numberOfLines={1}>
+                          {file.name}
+                        </Text>
+                        {file.size && (
+                          <Text style={[styles.attachmentSize, { color: colors.textSecondary }]}>
+                            {(file.size / (1024 * 1024)).toFixed(2)} MB
+                          </Text>
+                        )}
+                      </View>
                       <TouchableOpacity onPress={() => handleRemoveAttachment(index)}>
                         <X size={16} color={colors.error} />
                       </TouchableOpacity>
@@ -1084,8 +1197,11 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
       gap: 8,
     },
     attachmentName: {
-      flex: 1,
       fontSize: 14,
+    },
+    attachmentSize: {
+      fontSize: 11,
+      marginTop: 2,
     },
     attachmentPickerContent: {
       backgroundColor: colors.surface,

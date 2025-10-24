@@ -169,7 +169,7 @@ export default function ReflectionsScreen() {
       />
 
       <View style={styles.content}>
-        {activeTab === 'daily' && <DailyNotesView />}
+        {activeTab === 'daily' && <DailyNotesView onReflectionPress={handleReflectionPress} />}
         {activeTab === 'weekly' && <WeeklyReflectionView />}
         {activeTab === 'reflectionHistory' && (
           <ReflectionHistoryView onReflectionPress={handleReflectionPress} />
