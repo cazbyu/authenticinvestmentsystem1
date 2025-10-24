@@ -141,6 +141,43 @@ export default function JournalForm({
     setAttachedFiles([]);
   };
 
+  const uploadFileToStorage = async (file: any, userId: string): Promise<string | null> => {
+    try {
+      const supabase = getSupabaseClient();
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      // Read file as blob for web, or use URI for native
+      let fileData: any;
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      } else {
+        // For native, we need to read the file
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      }
+
+      const { data, error } = await supabase.storage
+        .from('0008-ap-reflection-attachments')
+        .upload(filePath, fileData, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error('Upload error:', error);
+        return null;
+      }
+
+      return filePath;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    }
+  };
+
   const handlePickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -244,6 +281,8 @@ export default function JournalForm({
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      let reflectionId: string;
+
       if (mode === 'edit' && initialData) {
         const success = await updateReflection(
           initialData.id,
@@ -256,16 +295,12 @@ export default function JournalForm({
           followUpDate || undefined
         );
 
-        if (success) {
-          Alert.alert('Success', 'Reflection updated successfully');
-          eventBus.emit(EVENTS.REFLECTION_UPDATED);
-          onSaveSuccess?.();
-          onClose();
-        } else {
+        if (!success) {
           throw new Error('Failed to update reflection');
         }
+        reflectionId = initialData.id;
       } else {
-        const reflectionId = await saveReflection(
+        const newReflectionId = await saveReflection(
           user.id,
           content,
           selectedRoleIds,
@@ -276,15 +311,42 @@ export default function JournalForm({
           followUpDate || undefined
         );
 
-        if (reflectionId) {
-          Alert.alert('Success', 'Reflection saved successfully');
-          eventBus.emit(EVENTS.REFLECTION_CREATED);
-          onSaveSuccess?.();
-          onClose();
-        } else {
+        if (!newReflectionId) {
           throw new Error('Failed to save reflection');
         }
+        reflectionId = newReflectionId;
       }
+
+      // Upload attachments if any
+      if (attachedFiles.length > 0) {
+        const uploadPromises = attachedFiles.map(async (file) => {
+          const filePath = await uploadFileToStorage(file, user.id);
+          if (filePath) {
+            // Save attachment metadata to database
+            const { error } = await supabase
+              .from('0008-ap-reflection-attachments')
+              .insert({
+                reflection_id: reflectionId,
+                user_id: user.id,
+                file_name: file.name,
+                file_path: filePath,
+                file_type: file.type,
+                file_size: file.size,
+              });
+
+            if (error) {
+              console.error('Error saving attachment metadata:', error);
+            }
+          }
+        });
+
+        await Promise.all(uploadPromises);
+      }
+
+      Alert.alert('Success', mode === 'edit' ? 'Reflection updated successfully' : 'Reflection saved successfully');
+      eventBus.emit(mode === 'edit' ? EVENTS.REFLECTION_UPDATED : EVENTS.REFLECTION_CREATED);
+      onSaveSuccess?.();
+      onClose();
     } catch (error) {
       console.error('Error saving reflection:', error);
       Alert.alert('Error', 'Failed to save reflection. Please try again.');
