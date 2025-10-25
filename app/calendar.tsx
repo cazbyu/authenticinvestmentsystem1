@@ -190,11 +190,11 @@ export default function CalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Calculate intelligent date range based on view mode
-      // Daily: today +/- 7 days, Weekly: current week +/- 2 weeks, Monthly: current month +/- 1 month
-      const today = new Date();
-      const startRange = new Date(today);
-      const endRange = new Date(today);
+      // Center the fetch window on the calendar's currentDate (so navigation shows correct weeks)
+      // Daily: center +/- 7 days, Weekly: center week +/- 2 weeks, Monthly: center month +/- 1 month
+       const center = currentDate || new Date();
+       const startRange = new Date(center);
+       const endRange = new Date(center);
 
       switch (viewMode) {
         case 'daily':
