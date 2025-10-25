@@ -59,7 +59,7 @@ export default function CalendarScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Removed loading state - cache provides instant UI
   const [authenticScore, setAuthenticScore] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
@@ -319,7 +319,8 @@ export default function CalendarScreen() {
     latestFetchId.current += 1;
     const fetchId = latestFetchId.current;
 
-    setLoading(true);
+    // Don't show loading state - cache provides instant UI
+    // setLoading(true) removed to eliminate loading flicker
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -480,10 +481,10 @@ export default function CalendarScreen() {
       setEvents(calendarEvents);
     } catch (error) {
       console.error('Error fetching tasks and events:', error);
+      // Only show alert for errors, don't show loading state
       Alert.alert('Error', (error as Error).message);
-    } finally {
-      setLoading(false);
     }
+    // No finally block - no loading state to clear
   };
 
   const handleCompleteTask = useCallback(async (taskId: string) => {
@@ -937,25 +938,15 @@ export default function CalendarScreen() {
 
       {viewMode === 'daily' ? (
         <View style={styles.dailyViewContainer}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading calendar...</Text>
-            </View>
-          ) : (
-            renderDailyView()
-          )}
+          {renderDailyView()}
         </View>
       ) : viewMode === 'weekly' ? (
         <View style={styles.weeklyContainer}>
-          {loading ? null : renderContent()}
+          {renderContent()}
         </View>
       ) : (
         <ScrollView style={styles.scrollViewBase} contentContainerStyle={styles.content}>
-          {loading ? (
-            null
-          ) : (
-            renderContent()
-          )}
+          {renderContent()}
         </ScrollView>
       )}
 
