@@ -1,9 +1,11 @@
 import { Tabs } from 'expo-router';
 import { ChartBar as BarChart3, Heart, Target, User } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTabReset } from '@/contexts/TabResetContext';
 
 export default function TabLayout() {
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
+  const { resetTab } = useTabReset();
 
   return (
     <Tabs
@@ -23,11 +25,20 @@ export default function TabLayout() {
           fontSize: 12,
           fontWeight: '500',
         },
-        tabBarItemStyle: {
-          backgroundColor: 'transparent',
+      }}
+      screenListeners={{
+        tabPress: (e) => {
+          // Extract the tab name from the event target
+          // The target format is typically "dashboard-tab-0", "roles-tab-0", etc.
+          const tabName = e.target?.split('-')[0];
+
+          console.log('[TabLayout] Tab pressed:', tabName, 'Full target:', e.target);
+
+          // Call the reset handler for the pressed tab
+          if (tabName) {
+            resetTab(tabName);
+          }
         },
-        tabBarPressColor: 'transparent',
-        tabBarPressOpacity: 1,
       }}>
       <Tabs.Screen
         name="dashboard"

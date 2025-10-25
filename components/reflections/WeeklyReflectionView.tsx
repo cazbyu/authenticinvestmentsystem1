@@ -6,20 +6,20 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   RefreshControl,
-  Modal,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import {
   getWeekDateRange,
   fetchWeeklyAggregationData,
+  fetchGoalActionsSummary,
 } from '@/lib/weeklyReflectionData';
-import RichTextInput from './RichTextInput';
-import RichTextDisplay from './RichTextDisplay';
-import { WeeklyAggregationData, Reflection, Role, Domain, UnifiedGoal } from '@/types/reflections';
-import { ChevronDown, ChevronUp, Save, Target, Users, Activity, AlertCircle, X } from 'lucide-react-native';
+import { WeeklyAggregationData, GoalActionSummary } from '@/types/reflections';
+import { Target, Users, Activity, CircleAlert as AlertCircle } from 'lucide-react-native';
+import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRange } from '@/lib/reflectionUtils';
+import { formatLocalDate } from '@/lib/dateUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 export default function WeeklyReflectionView() {
   const { colors } = useTheme();
@@ -29,46 +29,33 @@ export default function WeeklyReflectionView() {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [questionProud, setQuestionProud] = useState('');
-  const [questionImpact, setQuestionImpact] = useState('');
-  const [questionProgress, setQuestionProgress] = useState('');
-  const [questionWithdrawals, setQuestionWithdrawals] = useState('');
-
-  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
-  const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>([]);
-  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
-
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [goals, setGoals] = useState<UnifiedGoal[]>([]);
-
-  const [rolesExpanded, setRolesExpanded] = useState(false);
-  const [domainsExpanded, setDomainsExpanded] = useState(false);
-  const [goalsExpanded, setGoalsExpanded] = useState(false);
-
-  const [previousReflections, setPreviousReflections] = useState<Reflection[]>([]);
-  const [selectedReflection, setSelectedReflection] = useState<Reflection | null>(null);
-  const [isViewModalVisible, setIsViewModalVisible] = useState(false);
-
-  const [currentReflection, setCurrentReflection] = useState<Reflection | null>(null);
+  const [goalSummaries, setGoalSummaries] = useState<GoalActionSummary[]>([]);
+  const [weekReflections, setWeekReflections] = useState<ReflectionWithRelations[]>([]);
 
   useEffect(() => {
     loadData();
+
+    const handleReflectionChange = () => {
+      loadData();
+    };
+
+    eventBus.on(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+    eventBus.on(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+
+    return () => {
+      eventBus.off(EVENTS.REFLECTION_CREATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
+      eventBus.off(EVENTS.REFLECTION_DELETED, handleReflectionChange);
+    };
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // Run archiving in background
-      archiveOldReflections();
-
       await Promise.all([
         fetchWeeklyData(),
-        fetchCurrentReflection(),
-        fetchRoles(),
-        fetchDomains(),
-        fetchGoals(),
-        fetchPreviousReflections(),
+        fetchWeekReflections(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -77,17 +64,6 @@ export default function WeeklyReflectionView() {
     }
   };
 
-  const archiveOldReflections = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    try {
-      await supabase.rpc('archive_old_reflections', { p_user_id: user.id });
-    } catch (error) {
-      console.error('Error archiving reflections:', error);
-    }
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -98,237 +74,59 @@ export default function WeeklyReflectionView() {
   const fetchWeeklyData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const data = await fetchWeeklyAggregationData(user.id, weekRange.start, weekRange.end);
-    setAggregationData(data);
-  };
-
-  const fetchCurrentReflection = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('0008-ap-reflections')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('reflection_type', 'weekly')
-      .eq('week_start_date', weekRange.start)
-      .maybeSingle();
-
-    if (!error && data) {
-      setCurrentReflection(data);
-      setQuestionProud(data.question_proud || '');
-      setQuestionImpact(data.question_impact || '');
-      setQuestionProgress(data.question_progress || '');
-      setQuestionWithdrawals(data.question_withdrawals || '');
-    }
-  };
-
-  const fetchRoles = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('0008-ap-roles')
-      .select('id, label, color')
-      .eq('user_id', user.id)
-      .order('label');
-
-    if (!error && data) {
-      setRoles(data);
-    }
-  };
-
-  const fetchDomains = async () => {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('0008-ap-domains')
-      .select('id, name, color')
-      .order('name');
-
-    if (!error && data) {
-      setDomains(data);
-    }
-  };
-
-  const fetchGoals = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('v_unified_goals')
-      .select('id, title, goal_type, status')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .order('title');
-
-    if (!error && data) {
-      setGoals(data);
-    }
-  };
-
-  const fetchPreviousReflections = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('0008-ap-reflections')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('reflection_type', 'weekly')
-      .eq('archived', false)
-      .neq('week_start_date', weekRange.start)
-      .order('week_start_date', { ascending: false })
-      .limit(12);
-
-    if (!error && data) {
-      setPreviousReflections(data);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!questionProud && !questionImpact && !questionProgress && !questionWithdrawals) {
-      Alert.alert('Error', 'Please answer at least one reflective question');
+    if (!user) {
+      console.log('[WeeklyReflection] No user found');
       return;
     }
 
-    setSaving(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not found');
+    console.log('[WeeklyReflection] Fetching data for date range:', {
+      start: weekRange.start,
+      end: weekRange.end,
+      startDateOnly: weekRange.start.split('T')[0],
+      endDateOnly: weekRange.end.split('T')[0],
+      userId: user.id,
+    });
 
-      let reflectionId = currentReflection?.id;
+    const [data, summaries] = await Promise.all([
+      fetchWeeklyAggregationData(user.id, weekRange.start, weekRange.end),
+      fetchGoalActionsSummary(user.id, weekRange.start, weekRange.end),
+    ]);
 
-      if (currentReflection) {
-        // Update existing reflection
-        const { error } = await supabase
-          .from('0008-ap-reflections')
-          .update({
-            question_proud: questionProud,
-            question_impact: questionImpact,
-            question_progress: questionProgress,
-            question_withdrawals: questionWithdrawals,
-            weekly_target_completion: aggregationData?.totalTargetsHit || 0,
-            total_goals_tracked: aggregationData?.totalGoalsTracked || 0,
-          })
-          .eq('id', currentReflection.id);
+    console.log('[WeeklyReflection] Data fetched:', {
+      goalProgress: data.goalProgress.length,
+      roleInvestments: data.roleInvestments.length,
+      domainBalance: data.domainBalance.length,
+      withdrawalAnalysis: data.withdrawalAnalysis.length,
+      goalSummaries: summaries.length,
+    });
 
-        if (error) throw error;
-      } else {
-        // Create new reflection
-        const { data, error } = await supabase
-          .from('0008-ap-reflections')
-          .insert({
-            user_id: user.id,
-            reflection_type: 'weekly',
-            date: weekRange.start,
-            week_start_date: weekRange.start,
-            week_end_date: weekRange.end,
-            content: '', // Not used for weekly
-            question_proud: questionProud,
-            question_impact: questionImpact,
-            question_progress: questionProgress,
-            question_withdrawals: questionWithdrawals,
-            weekly_target_completion: aggregationData?.totalTargetsHit || 0,
-            total_goals_tracked: aggregationData?.totalGoalsTracked || 0,
-            authentic_score: 0,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        reflectionId = data.id;
-        setCurrentReflection(data);
-      }
-
-      // Delete existing associations and re-insert
-      if (reflectionId) {
-        await supabase
-          .from('0008-ap-universal-roles-join')
-          .delete()
-          .eq('parent_id', reflectionId)
-          .eq('parent_type', 'reflection');
-
-        await supabase
-          .from('0008-ap-universal-domains-join')
-          .delete()
-          .eq('parent_id', reflectionId)
-          .eq('parent_type', 'reflection');
-
-        await supabase
-          .from('0008-ap-universal-goals-join')
-          .delete()
-          .eq('parent_id', reflectionId)
-          .eq('parent_type', 'reflection');
-
-        // Insert role associations
-        if (selectedRoleIds.length > 0) {
-          const roleInserts = selectedRoleIds.map(roleId => ({
-            parent_id: reflectionId,
-            parent_type: 'reflection',
-            role_id: roleId,
-          }));
-
-          await supabase
-            .from('0008-ap-universal-roles-join')
-            .insert(roleInserts);
-        }
-
-        // Insert domain associations
-        if (selectedDomainIds.length > 0) {
-          const domainInserts = selectedDomainIds.map(domainId => ({
-            parent_id: reflectionId,
-            parent_type: 'reflection',
-            domain_id: domainId,
-          }));
-
-          await supabase
-            .from('0008-ap-universal-domains-join')
-            .insert(domainInserts);
-        }
-
-        // Insert goal associations
-        if (selectedGoalIds.length > 0) {
-          const goalInserts = selectedGoalIds.map(goalId => {
-            const goal = goals.find(g => g.id === goalId);
-            return {
-              parent_id: reflectionId,
-              parent_type: 'reflection',
-              twelve_wk_goal_id: goal?.goal_type === '12week' ? goalId : null,
-              custom_goal_id: goal?.goal_type === 'custom' ? goalId : null,
-              goal_type: goal?.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
-            };
-          });
-
-          await supabase
-            .from('0008-ap-universal-goals-join')
-            .insert(goalInserts);
-        }
-      }
-
-      Alert.alert('Success', 'Weekly reflection saved successfully');
-      fetchPreviousReflections();
-    } catch (error) {
-      console.error('Error saving reflection:', error);
-      Alert.alert('Error', 'Failed to save reflection');
-    } finally {
-      setSaving(false);
+    if (summaries.length === 0 && data.roleInvestments.length === 0) {
+      console.warn('[WeeklyReflection] No data returned - check if tasks are completed within the date range');
     }
+
+    setAggregationData(data);
+    setGoalSummaries(summaries);
   };
 
-  const toggleSelection = (id: string, selected: string[], setter: (ids: string[]) => void) => {
-    if (selected.includes(id)) {
-      setter(selected.filter(item => item !== id));
-    } else {
-      setter([...selected, id]);
-    }
+  const fetchWeekReflections = async () => {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: prefsData } = await supabase
+      .from('0008-ap-user-preferences')
+      .select('week_start_day')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    const weekStartDay = prefsData?.week_start_day || 'sunday';
+    const { weekStart, weekEnd } = calculateWeekRange(new Date(), weekStartDay);
+
+    const reflections = await fetchReflectionsByDateRange(user.id, weekStart, weekEnd);
+    setWeekReflections(reflections);
   };
+
+
 
   const formatWeekRange = () => {
     const start = new Date(weekRange.start);
@@ -337,59 +135,23 @@ export default function WeeklyReflectionView() {
     return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
   };
 
-  const renderCheckboxGrid = (
-    title: string,
-    items: any[],
-    selectedIds: string[],
-    onToggle: (id: string) => void,
-    expanded: boolean,
-    setExpanded: (val: boolean) => void,
-    labelKey: string = 'label'
-  ) => (
-    <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <TouchableOpacity
-        style={styles.sectionHeader}
-        onPress={() => setExpanded(!expanded)}
-      >
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-        {expanded ? (
-          <ChevronUp size={20} color={colors.textSecondary} />
-        ) : (
-          <ChevronDown size={20} color={colors.textSecondary} />
-        )}
-      </TouchableOpacity>
+  const formatDateTime = (dateString: string, createdAt: string) => {
+    const date = new Date(createdAt);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
 
-      {expanded && (
-        <View style={styles.checkboxGrid}>
-          {items.map(item => {
-            const isSelected = selectedIds.includes(item.id);
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.checkboxItem,
-                  { borderColor: colors.border, backgroundColor: colors.background },
-                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-                ]}
-                onPress={() => onToggle(item.id)}
-              >
-                <Text
-                  style={[
-                    styles.checkboxText,
-                    { color: colors.text },
-                    isSelected && { color: '#ffffff' }
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item[labelKey] || item.name || item.title}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
+  const truncateContent = (content: string, maxLength: number = 80) => {
+    if (content.length <= maxLength) return content;
+    return content.substring(0, maxLength) + '...';
+  };
+
 
   if (loading) {
     return (
@@ -421,39 +183,21 @@ export default function WeeklyReflectionView() {
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
               </View>
 
-              {aggregationData.totalGoalsTracked === 0 ? (
+              {goalSummaries.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No active goals tracked this week. Add goals in Goal Bank.
+                  You completed no actions towards your goals this week.
                 </Text>
               ) : (
-                <>
-                  <Text style={[styles.highlightText, { color: colors.primary }]}>
-                    You hit {aggregationData.totalTargetsHit} of {aggregationData.totalGoalsTracked} weekly targets
+                <View style={styles.goalsList}>
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    This week, you completed {goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {goalSummaries.length} {goalSummaries.length === 1 ? 'goal' : 'goals'}.
                   </Text>
-
-                  <View style={styles.goalsList}>
-                    {aggregationData.goalProgress.map(goal => (
-                      <View key={goal.goal_id} style={styles.goalItem}>
-                        <Text style={[styles.goalTitle, { color: colors.text }]}>
-                          {goal.goal_title}
-                        </Text>
-                        <View style={styles.goalProgress}>
-                          <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                            <View
-                              style={[
-                                styles.progressFill,
-                                { backgroundColor: colors.primary, width: `${Math.min(goal.completion_percentage, 100)}%` }
-                              ]}
-                            />
-                          </View>
-                          <Text style={[styles.goalStats, { color: colors.textSecondary }]}>
-                            {goal.actual_completion} / {goal.weekly_target}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </>
+                  {goalSummaries.map(goal => (
+                    <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
+                      For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
+                    </Text>
+                  ))}
+                </View>
               )}
             </View>
 
@@ -466,22 +210,21 @@ export default function WeeklyReflectionView() {
 
               {aggregationData.roleInvestments.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No role investments tracked this week
+                  You invested in no roles this week.
                 </Text>
               ) : (
                 <View style={styles.rolesList}>
-                  {aggregationData.roleInvestments.map(role => (
-                    <View key={role.role_id} style={styles.roleItem}>
-                      <Text style={[styles.roleText, { color: colors.text }]}>
-                        {role.role_label} with {role.task_count} {role.task_count === 1 ? 'task' : 'tasks'} or events
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    You invested in the following roles this week:
+                  </Text>
+                  {aggregationData.roleInvestments.map(role => {
+                    const totalDeposits = role.task_count + role.deposit_idea_count;
+                    return (
+                      <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
+                        • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
                       </Text>
-                      {role.deposit_idea_count > 0 && (
-                        <Text style={[styles.depositText, { color: colors.textSecondary }]}>
-                          You created {role.deposit_idea_count} Deposit {role.deposit_idea_count === 1 ? 'Idea' : 'Ideas'} for this role
-                        </Text>
-                      )}
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -495,16 +238,17 @@ export default function WeeklyReflectionView() {
 
               {aggregationData.domainBalance.length === 0 ? (
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No wellness domain activities tracked this week
+                  You invested in no wellness domains this week.
                 </Text>
               ) : (
                 <View style={styles.domainsList}>
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    You have invested in the following domains this week:
+                  </Text>
                   {aggregationData.domainBalance.map(domain => (
-                    <View key={domain.domain_id} style={styles.domainItem}>
-                      <Text style={[styles.domainText, { color: colors.text }]}>
-                        {domain.domain_name}: {domain.activity_count} {domain.activity_count === 1 ? 'activity' : 'activities'}
-                      </Text>
-                    </View>
+                    <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
+                      • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
+                    </Text>
                   ))}
                 </View>
               )}
@@ -519,17 +263,17 @@ export default function WeeklyReflectionView() {
 
               {aggregationData.withdrawalAnalysis.length === 0 ? (
                 <Text style={[styles.successText, { color: '#10b981' }]}>
-                  You listed no withdrawals this week
+                  You made no withdrawals this week.
                 </Text>
               ) : (
                 <View>
-                  <Text style={[styles.warningText, { color: '#f59e0b' }]}>
-                    You had the most withdrawals in the following role(s):
+                  <Text style={[styles.highlightText, { color: colors.text }]}>
+                    You made {aggregationData.withdrawalAnalysis.reduce((sum, w) => sum + w.withdrawal_count, 0)} {aggregationData.withdrawalAnalysis.reduce((sum, w) => sum + w.withdrawal_count, 0) === 1 ? 'withdrawal' : 'withdrawals'} this week in the following roles:
                   </Text>
                   <View style={styles.withdrawalsList}>
-                    {aggregationData.withdrawalAnalysis.slice(0, 3).map(withdrawal => (
+                    {aggregationData.withdrawalAnalysis.map(withdrawal => (
                       <Text key={withdrawal.role_id} style={[styles.withdrawalText, { color: colors.text }]}>
-                        • {withdrawal.role_label} ({withdrawal.withdrawal_count} {withdrawal.withdrawal_count === 1 ? 'withdrawal' : 'withdrawals'})
+                        • {withdrawal.role_label} ({withdrawal.withdrawal_count})
                       </Text>
                     ))}
                   </View>
@@ -539,132 +283,27 @@ export default function WeeklyReflectionView() {
           </>
         )}
 
-        {/* Reflective Questions */}
-        <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Reflective Questions</Text>
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                { backgroundColor: colors.primary },
-                saving && { backgroundColor: colors.textSecondary }
-              ]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Save size={16} color="#ffffff" />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.questionsContainer}>
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What were you most proud of this week?
-              </Text>
-              <RichTextInput
-                value={questionProud}
-                onChangeText={setQuestionProud}
-                placeholder="Reflect on your achievements..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                Which deposits had the biggest impact?
-              </Text>
-              <RichTextInput
-                value={questionImpact}
-                onChangeText={setQuestionImpact}
-                placeholder="Consider your most meaningful activities..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What progress did you make towards your goals?
-              </Text>
-              <RichTextInput
-                value={questionProgress}
-                onChangeText={setQuestionProgress}
-                placeholder="Evaluate your goal progress..."
-                minHeight={100}
-              />
-            </View>
-
-            <View style={styles.questionField}>
-              <Text style={[styles.questionLabel, { color: colors.text }]}>
-                What were my biggest withdrawals and how can I prevent similar withdrawals next week?
-              </Text>
-              <RichTextInput
-                value={questionWithdrawals}
-                onChangeText={setQuestionWithdrawals}
-                placeholder="Learn from challenges..."
-                minHeight={100}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Associations */}
-        {renderCheckboxGrid(
-          'Associated Roles',
-          roles,
-          selectedRoleIds,
-          (id) => toggleSelection(id, selectedRoleIds, setSelectedRoleIds),
-          rolesExpanded,
-          setRolesExpanded
-        )}
-
-        {renderCheckboxGrid(
-          'Associated Domains',
-          domains,
-          selectedDomainIds,
-          (id) => toggleSelection(id, selectedDomainIds, setSelectedDomainIds),
-          domainsExpanded,
-          setDomainsExpanded,
-          'name'
-        )}
-
-        {renderCheckboxGrid(
-          'Associated Goals',
-          goals,
-          selectedGoalIds,
-          (id) => toggleSelection(id, selectedGoalIds, setSelectedGoalIds),
-          goalsExpanded,
-          setGoalsExpanded,
-          'title'
-        )}
-
-        {/* Previous Reflections */}
-        {previousReflections.length > 0 && (
+        {/* Week Reflections */}
+        {weekReflections.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Previous Weekly Reflections</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>This Week's Reflections and Notes</Text>
 
             <View style={styles.previousList}>
-              {previousReflections.map(reflection => (
+              {weekReflections.map(reflection => (
                 <TouchableOpacity
                   key={reflection.id}
                   style={[styles.previousCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  onPress={() => {
-                    setSelectedReflection(reflection);
-                    setIsViewModalVisible(true);
-                  }}
                 >
-                  <Text style={[styles.previousWeek, { color: colors.text }]}>
-                    {new Date(reflection.week_start_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} -{' '}
-                    {new Date(reflection.week_end_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </Text>
+                  <View style={styles.reflectionHeader}>
+                    <Text style={[styles.previousWeek, { color: colors.text }]}>
+                      {formatDateTime(reflection.date, reflection.created_at)}
+                    </Text>
+                    <View style={[styles.tagBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.tagBadgeText}>Reflection</Text>
+                    </View>
+                  </View>
                   <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {reflection.question_proud?.substring(0, 80)}...
+                    {truncateContent(reflection.content)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -673,55 +312,6 @@ export default function WeeklyReflectionView() {
         )}
       </View>
 
-      {/* View Reflection Modal */}
-      <Modal visible={isViewModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.modalHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {selectedReflection &&
-                `${new Date(selectedReflection.week_start_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(selectedReflection.week_end_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-              }
-            </Text>
-            <TouchableOpacity onPress={() => setIsViewModalVisible(false)}>
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {selectedReflection && (
-              <View>
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    What were you most proud of?
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_proud || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    Which deposits had the biggest impact?
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_impact || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    What progress did you make?
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_progress || 'No response'} />
-                </View>
-
-                <View style={styles.modalSection}>
-                  <Text style={[styles.modalSectionTitle, { color: colors.text }]}>
-                    Withdrawals and lessons learned
-                  </Text>
-                  <RichTextDisplay content={selectedReflection.question_withdrawals || 'No response'} />
-                </View>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -799,6 +389,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  goalText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
   goalProgress: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -826,7 +421,6 @@ const styles = StyleSheet.create({
   },
   roleText: {
     fontSize: 14,
-    fontWeight: '500',
   },
   depositText: {
     fontSize: 13,
@@ -917,6 +511,22 @@ const styles = StyleSheet.create({
   previousPreview: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  reflectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tagBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  tagBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   modalContainer: {
     flex: 1,

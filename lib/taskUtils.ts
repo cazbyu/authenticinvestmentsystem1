@@ -1,9 +1,30 @@
 // lib/taskUtils.ts
 import { SupabaseClient } from '@supabase/supabase-js';
 
-//
-// Calculate points for a single task
-//
+/**
+ * CRITICAL: This is the CENTRALIZED point calculation function.
+ * ALL components MUST use this function to calculate task points.
+ *
+ * Scoring Rules (as of the current implementation):
+ * 1. Roles: +1 point if ANY role is assigned (binary, not per role)
+ * 2. Domains: +1 point if ANY domain is assigned (binary, not per domain)
+ * 3. Authentic Deposit: +2 points if flagged as authentic deposit
+ * 4. Priority:
+ *    - Urgent + Important: +1.5 points
+ *    - Important only: +3 points
+ *    - Urgent only: +1 point
+ *    - Neither: +0.5 points
+ * 5. Active Goals: +2 points if linked to ANY active goal (12-week or custom)
+ *
+ * IMPORTANT: Do NOT create duplicate calculation logic elsewhere.
+ * If you need to calculate points, import and use this function.
+ *
+ * @param task - The task object
+ * @param roles - Array of role objects assigned to the task
+ * @param domains - Array of domain objects assigned to the task
+ * @param goals - Array of goal objects linked to the task
+ * @returns The calculated point value (rounded to 1 decimal place)
+ */
 export function calculateTaskPoints(
   task: any,
   roles: any[] = [],
@@ -12,9 +33,9 @@ export function calculateTaskPoints(
 ): number {
   let points = 0;
 
-  // Role + Domain points
-  if (roles.length > 0) points += roles.length;
-  if (domains.length > 0) points += domains.length;
+  // Role + Domain points (binary scoring: 1 point if any exist)
+  if (roles.length > 0) points += 1;
+  if (domains.length > 0) points += 1;
 
   // Authentic deposit bonus
   if (task.is_authentic_deposit) points += 2;

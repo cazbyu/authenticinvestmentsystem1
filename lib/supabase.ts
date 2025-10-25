@@ -8,13 +8,16 @@ if (Platform.OS !== 'web') {
   require('react-native-url-polyfill/auto');
 }
 
-// Get environment variables
-const supabaseUrl = (Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim();
-const supabaseAnonKey = (Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+// Get environment variables - prioritize process.env for web builds
+const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL || '').trim();
+const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+
+console.log('[Supabase Init] URL:', supabaseUrl ? 'Found' : 'Missing');
+console.log('[Supabase Init] Key:', supabaseAnonKey ? 'Found' : 'Missing');
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables. Please check your .env file.');
-  console.error('Required variables: EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY');
+  console.error('[Supabase Init] Missing environment variables');
+  console.error('Required: EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY');
 }
 
 // Validate URL format

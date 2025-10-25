@@ -10,13 +10,19 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { X, Calendar as CalendarIcon, Repeat } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
+import { TimePickerDropdown } from './TimePickerDropdown';
+import { RecurrenceDropdown } from './RecurrenceDropdown';
+import { CustomRecurrenceModal } from './CustomRecurrenceModal';
+import { eventBus, EVENTS } from '@/lib/eventBus';
+import { fetchAuthenticUsage, getWeekResetDay, formatAuthenticUsageText, invalidateCache } from '@/lib/authenticDepositUtils';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'depositIdea' | 'withdrawal';
@@ -65,6 +71,7 @@ interface FormData {
   type: SchedulingType;
   title: string;
   dueDate: string;
+  dueTime: string;
   startDate: string;
   endDate: string;
   startTime: string;
@@ -76,7 +83,6 @@ interface FormData {
   isImportant: boolean;
   isAuthenticDeposit: boolean;
   isGoal: boolean;
-  hasRepeat: boolean;
   selectedRoleIds: string[];
   selectedDomainIds: string[];
   selectedKeyRelationshipIds: string[];
@@ -85,6 +91,7 @@ interface FormData {
   
   // New fields for recurrence and goals
   recurrenceRule?: string;
+  recurrenceEndDate?: string | null;
   selectedGoal?: UnifiedGoal;
 }
 
@@ -96,17 +103,35 @@ interface TaskEventFormProps {
 }
 
 export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose }: TaskEventFormProps) {
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const { width: screenWidth } = useWindowDimensions();
+  const isMobile = screenWidth < 768;
   
+  // Helper function to get next 15-minute interval + 15 min buffer (defined before state)
+  const getInitialDefaultTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 15) * 15;
+    now.setMinutes(roundedMinutes + 15);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    const isPM = hours >= 12;
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
+  };
+
   // Form state
   const [formData, setFormData] = useState<FormData>({
     type: 'task',
     title: '',
     dueDate: formatLocalDate(new Date()),
+    dueTime: getInitialDefaultTime(),
     startDate: formatLocalDate(new Date()),
     endDate: formatLocalDate(new Date()),
-    startTime: '',
+    startTime: getInitialDefaultTime(),
     endTime: '',
     withdrawalDate: formatLocalDate(new Date()),
     amount: '',
@@ -115,12 +140,12 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     isImportant: false,
     isAuthenticDeposit: false,
     isGoal: false,
-    hasRepeat: false,
     selectedRoleIds: [],
     selectedDomainIds: [],
     selectedKeyRelationshipIds: [],
     selectedGoalIds: [],
     notes: '',
+    recurrenceEndDate: null,
   });
 
   // Data state
@@ -139,26 +164,153 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [calendarMode, setCalendarMode] = useState<'due' | 'start' | 'end' | 'withdrawal'>('due');
 
   // Recurrence state
-  const [selectedWeeklyDays, setSelectedWeeklyDays] = useState<number[]>([]);
-  const [customRecurrenceType, setCustomRecurrenceType] = useState<'biweekly' | 'monthly'>('biweekly');
-  const [monthlyOption, setMonthlyOption] = useState<'date' | 'weekday'>('date');
-  const [monthlyWeekday, setMonthlyWeekday] = useState<'first' | 'second' | 'third' | 'fourth' | 'last'>('first');
-  const [monthlyDayOfWeek, setMonthlyDayOfWeek] = useState<number>(1); // Monday
+  const [showCustomRecurrenceModal, setShowCustomRecurrenceModal] = useState(false);
 
   // Goal Mode (when a goal is selected + goalToggle true)
   const [goalMode, setGoalMode] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
+
+  // Completed task warning state
+  const [showCompletedWarning, setShowCompletedWarning] = useState(false);
+  const [dontShowWarningAgain, setDontShowWarningAgain] = useState(false);
+  const [isEditingCompletedTask, setIsEditingCompletedTask] = useState(false);
+
+  // Authentic deposit tracking state
+  const [authenticUsage, setAuthenticUsage] = useState<{ used: number; remaining: number } | null>(null);
+  const [isCheckingAuthenticLimit, setIsCheckingAuthenticLimit] = useState(false);
+  const [weekStartDay, setWeekStartDay] = useState<'sunday' | 'monday'>('sunday');
+
+  // Helper function to get next 15-minute interval + 15 min buffer
+  const getDefaultStartTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 15) * 15;
+    now.setMinutes(roundedMinutes + 15);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    const isPM = hours >= 12;
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
+  };
+
+  // Helper function to convert time input to database time format (HH:MM:SS)
+  const formatTimeForDatabase = (timeStr: string, dateStr: string): string | null => {
+    if (!timeStr || !dateStr) return null;
+    try {
+      const timeLower = timeStr.toLowerCase().trim();
+      let hours = 0;
+      let minutes = 0;
+
+      if (timeLower.includes('am') || timeLower.includes('pm')) {
+        // 12-hour format
+        const isPM = timeLower.includes('pm');
+        const timeOnly = timeLower.replace(/am|pm/g, '').trim();
+        const [h, m] = timeOnly.split(':').map(s => parseInt(s.trim(), 10));
+        hours = h === 12 ? (isPM ? 12 : 0) : (isPM ? h + 12 : h);
+        minutes = m || 0;
+      } else {
+        // 24-hour format
+        const [h, m] = timeStr.split(':').map(s => parseInt(s.trim(), 10));
+        hours = h || 0;
+        minutes = m || 0;
+      }
+
+      return formatTimeString(hours, minutes);
+    } catch (e) {
+      console.error('Error formatting time:', e);
+      return null;
+    }
+  };
+
+  // Helper function to calculate duration between two times
+  const calculateDuration = (startTime: string, endTime: string): string => {
+    if (!startTime || !endTime) return '';
+    try {
+      const start = new Date(`2000-01-01 ${startTime}`);
+      const end = new Date(`2000-01-01 ${endTime}`);
+      const diffMs = end.getTime() - start.getTime();
+      if (diffMs <= 0) return '';
+
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (hours === 0) {
+        return `(${minutes} m)`;
+      } else if (minutes === 0) {
+        return `(${hours} h)`;
+      } else {
+        return `(${hours} h ${minutes} m)`;
+      }
+    } catch (e) {
+      return '';
+    }
+  };
 
   useEffect(() => {
     fetchFormData();
     if (initialData) {
       loadInitialData();
     }
+    loadAuthenticUsage();
+  }, [mode, initialData]);
+
+  const loadAuthenticUsage = async () => {
+    if (mode === 'edit' && initialData?.is_authentic_deposit) {
+      return;
+    }
+
+    if (formData.type !== 'task') {
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const usage = await fetchAuthenticUsage(supabase, user.id);
+      setAuthenticUsage({ used: usage.used, remaining: usage.remaining });
+      setWeekStartDay(await supabase.rpc('fn_get_user_week_start_day', { p_user_id: user.id }) || 'sunday');
+    } catch (error) {
+      console.error('Error loading authentic usage:', error);
+    }
+  };
+
+  // Check if editing a completed task and show warning
+  useEffect(() => {
+    const checkCompletedTaskWarning = async () => {
+      if (mode === 'edit' && initialData?.status === 'completed' && (initialData.type === 'task' || initialData.type === 'event')) {
+        setIsEditingCompletedTask(true);
+
+        // Check user preference
+        try {
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data: userProfile } = await supabase
+            .from('0008-ap-users')
+            .select('hide_completed_task_warning')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (!userProfile?.hide_completed_task_warning) {
+            setShowCompletedWarning(true);
+          }
+        } catch (error) {
+          console.error('Error checking completed task warning preference:', error);
+        }
+      }
+    };
+
+    checkCompletedTaskWarning();
   }, [mode, initialData]);
 
   // Flip goal mode when a goal is chosen while goal toggle is ON
   useEffect(() => {
-    const enabled = !!formData.isGoal && !!formData.selectedGoal && !!formData.hasRepeat;
+    const enabled = !!formData.isGoal && !!formData.selectedGoal && !!formData.recurrenceRule;
     setGoalMode(enabled);
     if (enabled) {
       // Prefill from goal
@@ -175,7 +327,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       // Scroll to bottom to show goal area controls
       scrollRef.current?.scrollToEnd({ animated: true });
     }
-  }, [formData.isGoal, formData.selectedGoal, formData.hasRepeat]);
+  }, [formData.isGoal, formData.selectedGoal, formData.recurrenceRule]);
 
   const fetchFormData = async () => {
     setLoading(true);
@@ -265,29 +417,40 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
     setExistingNotes(notesArray);
 
+    // Check if there are active goals associated with this task
+    const hasActiveGoals = initialData.goals && Array.isArray(initialData.goals) && initialData.goals.length > 0;
+    let firstActiveGoal = null;
+
+    if (hasActiveGoals) {
+      // Find the first active goal to set as selectedGoal
+      firstActiveGoal = initialData.goals[0];
+    }
+
     // Build formData, handling both edit mode (with id) and create mode (pre-fill only)
     const newFormData: FormData = {
       type: initialData.type || 'task',
       title: initialData.title || '',
       dueDate: initialData.due_date || formatLocalDate(new Date()),
+      dueTime: (initialData.type === 'task' ? initialData.end_time : '') || '',
       startDate: initialData.start_date || formatLocalDate(new Date()),
       endDate: initialData.end_date || formatLocalDate(new Date()),
       startTime: initialData.start_time || '',
       endTime: initialData.end_time || '',
       withdrawalDate: initialData.withdrawn_at || formatLocalDate(new Date()),
       amount: initialData.amount?.toString() || '',
-      isAnytime: initialData.is_anytime || false,
+      isAnytime: initialData.is_all_day || false,
       isUrgent: initialData.is_urgent || false,
       isImportant: initialData.is_important || false,
       isAuthenticDeposit: initialData.is_authentic_deposit || false,
-      isGoal: initialData.is_twelve_week_goal || false,
-      hasRepeat: !!initialData.recurrence_rule,
+      isGoal: hasActiveGoals || initialData.is_twelve_week_goal || false,
       selectedRoleIds: initialData.roles?.map((r: any) => r.id) || initialData.selectedRoleIds || [],
       selectedDomainIds: initialData.domains?.map((d: any) => d.id) || initialData.selectedDomainIds || [],
       selectedKeyRelationshipIds: initialData.keyRelationships?.map((kr: any) => kr.id) || initialData.selectedKeyRelationshipIds || [],
       selectedGoalIds: initialData.goals?.map((g: any) => g.id) || initialData.selectedGoalIds || [],
+      selectedGoal: firstActiveGoal,
       notes: notesString,
       recurrenceRule: initialData.recurrence_rule || undefined,
+      recurrenceEndDate: initialData.recurrence_end_date || null,
     };
 
     setFormData(newFormData);
@@ -300,13 +463,18 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
   const handleDateSelect = (day: any) => {
     const selectedDate = day.dateString;
-    
+
     switch (calendarMode) {
       case 'due':
         setFormData(prev => ({ ...prev, dueDate: selectedDate }));
         break;
       case 'start':
-        setFormData(prev => ({ ...prev, startDate: selectedDate }));
+        // When Start Date changes for Event type, sync End Date to match
+        setFormData(prev => ({
+          ...prev,
+          startDate: selectedDate,
+          endDate: formData.type === 'event' ? selectedDate : prev.endDate
+        }));
         break;
       case 'end':
         setFormData(prev => ({ ...prev, endDate: selectedDate }));
@@ -315,7 +483,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         setFormData(prev => ({ ...prev, withdrawalDate: selectedDate }));
         break;
     }
-    
+
     setShowCalendar(false);
   };
 
@@ -378,6 +546,24 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     start.setMinutes(roundUp, 0, 0);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     return { start, end };
+  };
+
+  const handleDismissCompletedWarning = async () => {
+    if (dontShowWarningAgain) {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase
+            .from('0008-ap-users')
+            .update({ hide_completed_task_warning: true })
+            .eq('id', user.id);
+        }
+      } catch (error) {
+        console.error('Error updating completed task warning preference:', error);
+      }
+    }
+    setShowCompletedWarning(false);
   };
 
   const handleSubmit = async () => {
@@ -455,29 +641,75 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         mainRecordId = mainRecord.id;
       } else {
         // Task or Event
+        // Log to verify status preservation
+        if (mode === 'edit' && initialData?.id) {
+          console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
+        }
+
+        // For recurring tasks/events without a date, default to today
+        const effectiveDueDate = formData.type === 'task'
+          ? (formData.dueDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+          : null;
+        const effectiveStartDate = formData.type === 'event'
+          ? (formData.startDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+          : null;
+
+        // For tasks with a due time, we set both start_time and end_time to the same value
+        // so they display correctly on the calendar (not at midnight)
+        const dueTimeFormatted = formData.type === 'task' && formData.dueTime && !formData.isAnytime
+          ? formatTimeForDatabase(formData.dueTime, effectiveDueDate)
+          : null;
+
         const taskPayload = {
           user_id: user.id,
           title: formData.title.trim(),
           type: formData.type,
-          due_date: formData.type === 'task' ? formData.dueDate : null,
-          start_date: formData.type === 'event' ? formData.startDate : null,
+          due_date: effectiveDueDate,
+          start_date: effectiveStartDate,
           end_date: formData.type === 'event' ? formData.endDate : null,
-          start_time: formData.startTime || null,
-          end_time: formData.endTime || null,
+          start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
+            ? formatTimeForDatabase(formData.startTime, effectiveStartDate)
+            : dueTimeFormatted,
+          end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
+            ? formatTimeForDatabase(formData.endTime, formData.endDate || effectiveStartDate)
+            : dueTimeFormatted,
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,
           is_important: formData.isImportant,
           is_authentic_deposit: formData.isAuthenticDeposit,
           is_twelve_week_goal: formData.isGoal,
           recurrence_rule: formData.recurrenceRule || null,
-          status: 'pending',
-          ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
+          recurrence_end_date: formData.recurrenceEndDate || null,
+          // Preserve completion status and timestamp when editing
+          ...(mode === 'edit' && initialData?.id ? {
+            // Explicitly preserve completed status - never change it back to pending
+            status: initialData.status === 'completed' ? 'completed' : (initialData.status || 'pending'),
+            completed_at: initialData.completed_at || null,
+            updated_at: new Date().toISOString()
+          } : {
+            status: 'pending'
+          })
         };
+
+        // Sanitize: Convert any empty strings to null for timestamp fields
+        const sanitizeTimestamps = (payload: any) => {
+          const timestampFields = ['start_time', 'end_time', 'completed_at'];
+          timestampFields.forEach(field => {
+            if (payload[field] === '') {
+              console.warn(`[TaskEventForm] Converting empty string to null for field: ${field}`);
+              payload[field] = null;
+            }
+          });
+          return payload;
+        };
+
+        const sanitizedPayload = sanitizeTimestamps(taskPayload);
+        console.log('[TaskEventForm] Complete task payload:', JSON.stringify(sanitizedPayload, null, 2));
 
         if (mode === 'edit' && initialData?.id) {
           const { data, error } = await supabase
             .from('0008-ap-tasks')
-            .update(taskPayload)
+            .update(sanitizedPayload)
             .eq('id', initialData.id)
             .select()
             .single();
@@ -486,7 +718,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         } else {
           const { data, error } = await supabase
             .from('0008-ap-tasks')
-            .insert(taskPayload)
+            .insert(sanitizedPayload)
             .select()
             .single();
           if (error) throw error;
@@ -586,10 +818,45 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       }
 
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
+
+      // Invalidate authentic deposit cache if this is an authentic deposit task
+      if (formData.isAuthenticDeposit && formData.type === 'task') {
+        invalidateCache('authentic');
+      }
+
+      // Broadcast event to notify other components
+      if (formData.type === 'withdrawal') {
+        eventBus.emit(mode === 'edit' ? EVENTS.WITHDRAWAL_CREATED : EVENTS.WITHDRAWAL_CREATED);
+      } else if (formData.type === 'depositIdea') {
+        eventBus.emit(mode === 'edit' ? EVENTS.DEPOSIT_IDEA_UPDATED : EVENTS.DEPOSIT_IDEA_CREATED);
+      } else {
+        eventBus.emit(mode === 'edit' ? EVENTS.TASK_UPDATED : EVENTS.TASK_CREATED, {
+          taskId: mainRecordId,
+          type: formData.type,
+        });
+      }
+
       onSubmitSuccess();
     } catch (error) {
       console.error('Error saving:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to save');
+      const errorObj = error as any;
+      const errorMessage = errorObj?.message || 'Failed to save';
+      const errorCode = errorObj?.code || '';
+      const errorDetails = errorObj?.details || '';
+      const errorHint = errorObj?.hint || '';
+
+      console.error('Full error details:', {
+        message: errorMessage,
+        code: errorCode,
+        details: errorDetails,
+        hint: errorHint,
+        payload: errorObj
+      });
+
+      Alert.alert(
+        'Error',
+        `${errorMessage}${errorCode ? `\n\nCode: ${errorCode}` : ''}${errorDetails ? `\n\nDetails: ${errorDetails}` : ''}`
+      );
     } finally {
       setSaving(false);
     }
@@ -611,13 +878,25 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               { borderColor: colors.border },
               formData.type === type && { backgroundColor: colors.primary }
             ]}
-            onPress={() => setFormData(prev => ({ ...prev, type }))}
+            onPress={() => {
+              setFormData(prev => {
+                const updates: any = { type };
+                // Set smart defaults when switching to event type
+                if (type === 'event' && prev.type !== 'event' && mode !== 'edit') {
+                  const defaultStart = getDefaultStartTime();
+                  updates.startTime = defaultStart;
+                  updates.endTime = defaultStart;
+                  updates.endDate = prev.startDate;
+                }
+                return { ...prev, ...updates };
+              });
+            }}
           >
             <Text style={[
               styles.typeButtonText,
               { color: formData.type === type ? '#ffffff' : colors.text }
             ]}>
-              {type === 'depositIdea' ? 'Deposit Idea' : type.charAt(0).toUpperCase() + type.slice(1)}
+              {type === 'depositIdea' ? 'Dep Idea' : type === 'withdrawal' ? 'Withdraw' : type.charAt(0).toUpperCase() + type.slice(1)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -657,9 +936,33 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     </View>
   );
 
+  const handleAuthenticDepositToggle = async (value: boolean) => {
+    if (!value) {
+      setFormData(prev => ({ ...prev, isAuthenticDeposit: false }));
+      return;
+    }
+
+    if (mode === 'edit' && initialData?.is_authentic_deposit) {
+      setFormData(prev => ({ ...prev, isAuthenticDeposit: true }));
+      return;
+    }
+
+    if (!authenticUsage || authenticUsage.remaining <= 0) {
+      const resetDay = getWeekResetDay(weekStartDay);
+      Alert.alert(
+        'Weekly Limit Reached',
+        `You've used all 14 authentic deposits this week. Your limit resets on ${resetDay} night.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setFormData(prev => ({ ...prev, isAuthenticDeposit: true }));
+  };
+
   const renderSwitchField = (label: string, value: boolean, onChange: (value: boolean) => void) => (
     <View style={styles.switchField}>
-      <Text style={[styles.switchLabel, { color: colors.text }]}>{label}</Text>
+      <Text style={[styles.switchLabel, { color: colors.text }]} numberOfLines={1}>{label}</Text>
       <Switch
         value={value}
         onValueChange={onChange}
@@ -677,27 +980,29 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   ) => (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>{title}</Text>
-      <View style={styles.checkboxGrid}>
-        {items.map(item => {
-          const isSelected = selectedIds.includes(item.id);
-          const displayName = item.label || item.name || '';
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.checkboxItem}
-              onPress={() => onToggle(item.id)}
-            >
-              <View style={[
-                styles.checkbox,
-                { borderColor: colors.border },
-                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-              ]}>
-                {isSelected && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <Text style={[styles.checkboxLabel, { color: colors.text }]}>{displayName}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={[styles.checkboxContainer, { borderColor: colors.border }]}>
+        <View style={[styles.checkboxGrid, { backgroundColor: colors.surface }]}>
+          {items.map(item => {
+            const isSelected = selectedIds.includes(item.id);
+            const displayName = item.label || item.name || '';
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.checkboxItem, isMobile && styles.checkboxItemMobile]}
+                onPress={() => onToggle(item.id)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  { borderColor: colors.border },
+                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}>
+                  {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={[styles.checkboxLabel, { color: colors.text }]} numberOfLines={2}>{displayName}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -724,9 +1029,16 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         <TouchableOpacity onPress={onClose}>
           <X size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          {initialData?.id ? 'Edit' : 'New'} {formData.type === 'depositIdea' ? 'Item' : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)}
-        </Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {initialData?.id ? 'Edit' : 'New'} {formData.type === 'depositIdea' ? 'Item' : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)}
+          </Text>
+          {isEditingCompletedTask && (
+            <View style={[styles.completedBadge, { backgroundColor: '#16a34a' }]}>
+              <Text style={styles.completedBadgeText}>✓ Completed</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity
           style={[
             styles.saveButton,
@@ -764,14 +1076,25 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           {/* Switches Row - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
             <>
-              <View style={styles.switchesRow}>
-                {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
-                {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                  {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
+                  {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+                </View>
               </View>
 
-              <View style={styles.switchesRow}>
-                {renderSwitchField('Authentic Deposit', formData.isAuthenticDeposit, (value) => setFormData(prev => ({ ...prev, isAuthenticDeposit: value })))}
-                {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                  <View style={styles.switchFieldContainer}>
+                    {renderSwitchField('Authentic Deposit', formData.isAuthenticDeposit, handleAuthenticDepositToggle)}
+                    {authenticUsage && formData.type === 'task' && (
+                      <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                        {authenticUsage.used} of 14 used this week
+                      </Text>
+                    )}
+                  </View>
+                  {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                </View>
               </View>
             </>
           )}
@@ -811,25 +1134,117 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Date Fields */}
-          {formData.type === 'task' && renderDateField('Due Date', formData.dueDate, 'due')}
+          {formData.type === 'task' && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Due Date & Time</Text>
+              <View style={styles.dateTimeRow}>
+                <View style={styles.dateFieldWrapper}>
+                  <TouchableOpacity
+                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('due')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.dueDate)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <TimePickerDropdown
+                  value={formData.dueTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, dueTime: time }))}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+                <View style={styles.anytimeToggleInline}>
+                  <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
+                  <Switch
+                    value={formData.isAnytime}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
           {formData.type === 'event' && (
-            <View style={styles.dateRow}>
-              {renderDateField('Start Date', formData.startDate, 'start')}
-              {renderDateField('End Date', formData.endDate, 'end')}
+            <View style={styles.field}>
+              {/* First Row: Date and Time Range */}
+              <View style={styles.googleStyleDateTimeRow}>
+                {/* Start Date */}
+                <TouchableOpacity
+                  style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleCalendarOpen('start')}
+                >
+                  <CalendarIcon size={16} color={colors.textSecondary} />
+                  <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
+                    {formatDateForDisplay(formData.startDate)}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Start Time */}
+                <TimePickerDropdown
+                  value={formData.startTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, startTime: time }))}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+
+                {/* Dash Separator */}
+                <Text style={[styles.timeSeparator, { color: colors.text }]}>–</Text>
+
+                {/* End Time */}
+                <TimePickerDropdown
+                  value={formData.endTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, endTime: time }))}
+                  referenceTime={formData.startTime}
+                  startDate={formData.startDate}
+                  endDate={formData.endDate}
+                  minTime={formData.startTime}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+
+                {/* End Date - Only show if different from start date */}
+                {formData.endDate !== formData.startDate && (
+                  <TouchableOpacity
+                    style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('end')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.endDate)}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Second Row: All Day and Make Multi-day */}
+              <View style={styles.googleSecondRow}>
+                {/* All day toggle */}
+                <View style={styles.googleAllDayToggle}>
+                  <Text style={[styles.googleAllDayLabel, { color: colors.text }]}>All day</Text>
+                  <Switch
+                    value={formData.isAnytime}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+
+                {/* Show multi-day button only for same-day events */}
+                {formData.endDate === formData.startDate && (
+                  <TouchableOpacity
+                    style={styles.multiDayButtonInline}
+                    onPress={() => handleCalendarOpen('end')}
+                  >
+                    <Text style={[styles.multiDayButtonText, { color: colors.primary }]}>Make multi-day event</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
           {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
-
-          {/* Time Fields for Events */}
-          {formData.type === 'event' && (
-            <View style={styles.timeRow}>
-              {renderTimeField('Start Time', formData.startTime, (value) => setFormData(prev => ({ ...prev, startTime: value })))}
-              {renderTimeField('End Time', formData.endTime, (value) => setFormData(prev => ({ ...prev, endTime: value })))}
-            </View>
-          )}
-
-          {/* Anytime toggle for tasks */}
-          {formData.type === 'task' && renderSwitchField('Anytime', formData.isAnytime, (value) => setFormData(prev => ({ ...prev, isAnytime: value })))}
 
           {/* Amount field for withdrawals */}
           {formData.type === 'withdrawal' && (
@@ -846,330 +1261,32 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
-          {/* Repeat toggle */}
-          {(formData.type === 'task' || formData.type === 'event') && 
-            renderSwitchField('Repeat', formData.hasRepeat, (value) => setFormData(prev => ({ ...prev, hasRepeat: value })))
-          }
-
-          {/* Inline Recurrence Picker (when Repeat is ON but Goal is OFF) */}
-          {formData.hasRepeat && !formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
+          {/* Google Calendar-style Recurrence Dropdown (always visible for tasks and events when Goal is OFF) */}
+          {!formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
             <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Repeat Frequency</Text>
-              <View style={styles.recurrenceOptions}>
-                {(['daily', 'weekly'] as const).map((freq) => (
-                  <TouchableOpacity
-                    key={freq}
-                    style={[
-                      styles.recurrenceOption,
-                      { borderColor: colors.border, backgroundColor: colors.surface },
-                      formData.recurrenceRule === `RRULE:FREQ=${freq.toUpperCase()}` && { backgroundColor: colors.primary, borderColor: colors.primary }
-                    ]}
-                    onPress={() => setFormData(prev => ({ 
-                      ...prev, 
-                      recurrenceRule: `RRULE:FREQ=${freq.toUpperCase()}` 
-                    }))}
-                  >
-                    <Text style={[
-                      styles.recurrenceOptionText,
-                      { color: formData.recurrenceRule === `RRULE:FREQ=${freq.toUpperCase()}` ? '#ffffff' : colors.text }
-                    ]}>
-                      {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  style={[
-                    styles.recurrenceOption,
-                    { borderColor: colors.border, backgroundColor: colors.surface },
-                    formData.recurrenceRule?.includes('CUSTOM') && { backgroundColor: colors.primary, borderColor: colors.primary }
-                  ]}
-                  onPress={() => setFormData(prev => ({ 
-                    ...prev, 
-                    recurrenceRule: 'CUSTOM' 
-                  }))}
-                >
-                  <Text style={[
-                    styles.recurrenceOptionText,
-                    { color: formData.recurrenceRule?.includes('CUSTOM') ? '#ffffff' : colors.text }
-                  ]}>
-                    Custom
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <RecurrenceDropdown
+                value={formData.recurrenceRule}
+                onChange={(rule) => {
+                  setFormData(prev => {
+                    const updates: any = { recurrenceRule: rule };
 
-              {/* Weekly Days Selection */}
-              {formData.recurrenceRule?.startsWith('RRULE:FREQ=WEEKLY') && (
-                <View style={[styles.weeklyDaysContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <View style={styles.weeklyDaysGrid}>
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName, index) => {
-                      const isSelected = selectedWeeklyDays.includes(index);
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          style={[
-                            styles.weeklyDayButton,
-                            { backgroundColor: colors.surface, borderColor: colors.border },
-                            isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            const newDays = isSelected
-                              ? selectedWeeklyDays.filter(d => d !== index)
-                              : [...selectedWeeklyDays, index];
-                            setSelectedWeeklyDays(newDays);
-                            
-                            // Update recurrence rule with selected days
-                            if (newDays.length > 0) {
-                              const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                              const byDays = newDays.map(dayIndex => dayNames[dayIndex]).join(',');
-                              setFormData(prev => ({ 
-                                ...prev, 
-                                recurrenceRule: `RRULE:FREQ=WEEKLY;BYDAY=${byDays}` 
-                              }));
-                            } else {
-                              setFormData(prev => ({ 
-                                ...prev, 
-                                recurrenceRule: 'RRULE:FREQ=WEEKLY' 
-                              }));
-                            }
-                          }}
-                        >
-                          <Text style={[
-                            styles.weeklyDayButtonText,
-                            { color: isSelected ? '#ffffff' : colors.text }
-                          ]}>
-                            {dayName}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
+                    // When setting a recurrence rule, ensure we have a date set
+                    if (rule && formData.type === 'event' && !prev.startDate) {
+                      updates.startDate = formatLocalDate(new Date());
+                    } else if (rule && formData.type === 'task' && !prev.dueDate) {
+                      updates.dueDate = formatLocalDate(new Date());
+                    }
 
-              {/* Custom Recurrence Options */}
-              {formData.recurrenceRule?.includes('CUSTOM') && (
-                <View style={[styles.customRecurrenceContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.subLabel, { color: colors.text }]}>Custom Frequency</Text>
-                  
-                  {/* Bi-weekly / Monthly selector */}
-                  <View style={[styles.customTypeSelector, { backgroundColor: colors.background }]}>
-                    <TouchableOpacity
-                      style={[
-                        styles.customTypeButton,
-                        customRecurrenceType === 'biweekly' && { backgroundColor: colors.primary }
-                      ]}
-                      onPress={() => setCustomRecurrenceType('biweekly')}
-                    >
-                      <Text style={[
-                        styles.customTypeButtonText,
-                        { color: customRecurrenceType === 'biweekly' ? '#ffffff' : colors.textSecondary }
-                      ]}>
-                        Bi-weekly
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.customTypeButton,
-                        customRecurrenceType === 'monthly' && { backgroundColor: colors.primary }
-                      ]}
-                      onPress={() => setCustomRecurrenceType('monthly')}
-                    >
-                      <Text style={[
-                        styles.customTypeButtonText,
-                        { color: customRecurrenceType === 'monthly' ? '#ffffff' : colors.textSecondary }
-                      ]}>
-                        Monthly
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Bi-weekly options */}
-                  {customRecurrenceType === 'biweekly' && (
-                    <View style={styles.biweeklyOptions}>
-                      <Text style={[styles.subLabel, { color: colors.text }]}>Select Days (every 2 weeks)</Text>
-                      <View style={styles.weeklyDaysGrid}>
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName, index) => {
-                          const isSelected = selectedWeeklyDays.includes(index);
-                          return (
-                            <TouchableOpacity
-                              key={index}
-                              style={[
-                                styles.weeklyDayButton,
-                                { backgroundColor: colors.surface, borderColor: colors.border },
-                                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-                              ]}
-                              onPress={() => {
-                                const newDays = isSelected
-                                  ? selectedWeeklyDays.filter(d => d !== index)
-                                  : [...selectedWeeklyDays, index];
-                                setSelectedWeeklyDays(newDays);
-                                
-                                // Update recurrence rule for bi-weekly
-                                if (newDays.length > 0) {
-                                  const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                                  const byDays = newDays.map(dayIndex => dayNames[dayIndex]).join(',');
-                                  setFormData(prev => ({ 
-                                    ...prev, 
-                                    recurrenceRule: `RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=${byDays}` 
-                                  }));
-                                } else {
-                                  setFormData(prev => ({ 
-                                    ...prev, 
-                                    recurrenceRule: 'RRULE:FREQ=WEEKLY;INTERVAL=2' 
-                                  }));
-                                }
-                              }}
-                            >
-                              <Text style={[
-                                styles.weeklyDayButtonText,
-                                { color: isSelected ? '#ffffff' : colors.text }
-                              ]}>
-                                {dayName}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Monthly options */}
-                  {customRecurrenceType === 'monthly' && (
-                    <View style={styles.monthlyOptions}>
-                      <Text style={[styles.subLabel, { color: colors.text }]}>Monthly Pattern</Text>
-                      
-                      {/* Date vs Weekday selector */}
-                      <View style={[styles.monthlyTypeSelector, { backgroundColor: colors.background }]}>
-                        <TouchableOpacity
-                          style={[
-                            styles.monthlyTypeButton,
-                            monthlyOption === 'date' && { backgroundColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            setMonthlyOption('date');
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              recurrenceRule: 'RRULE:FREQ=MONTHLY' 
-                            }));
-                          }}
-                        >
-                          <Text style={[
-                            styles.monthlyTypeButtonText,
-                            { color: monthlyOption === 'date' ? '#ffffff' : colors.textSecondary }
-                          ]}>
-                            Same Date
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.monthlyTypeButton,
-                            monthlyOption === 'weekday' && { backgroundColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            setMonthlyOption('weekday');
-                            const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                            const byDay = dayNames[monthlyDayOfWeek];
-                            const setPos = monthlyWeekday === 'last' ? '-1' : 
-                                         monthlyWeekday === 'first' ? '1' :
-                                         monthlyWeekday === 'second' ? '2' :
-                                         monthlyWeekday === 'third' ? '3' : '4';
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              recurrenceRule: `RRULE:FREQ=MONTHLY;BYDAY=${setPos}${byDay}` 
-                            }));
-                          }}
-                        >
-                          <Text style={[
-                            styles.monthlyTypeButtonText,
-                            { color: monthlyOption === 'weekday' ? '#ffffff' : colors.textSecondary }
-                          ]}>
-                            Same Weekday
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Weekday-specific options */}
-                      {monthlyOption === 'weekday' && (
-                        <View style={styles.weekdayOptions}>
-                          {/* Week selector */}
-                          <View style={styles.weekSelector}>
-                            <Text style={[styles.subLabel, { color: colors.text }]}>Which Week?</Text>
-                            <View style={styles.weekSelectorGrid}>
-                              {(['first', 'second', 'third', 'fourth', 'last'] as const).map((week) => (
-                                <TouchableOpacity
-                                  key={week}
-                                  style={[
-                                    styles.weekSelectorButton,
-                                    { backgroundColor: colors.surface, borderColor: colors.border },
-                                    monthlyWeekday === week && { backgroundColor: colors.primary, borderColor: colors.primary }
-                                  ]}
-                                  onPress={() => {
-                                    setMonthlyWeekday(week);
-                                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                                    const byDay = dayNames[monthlyDayOfWeek];
-                                    const setPos = week === 'last' ? '-1' : 
-                                                 week === 'first' ? '1' :
-                                                 week === 'second' ? '2' :
-                                                 week === 'third' ? '3' : '4';
-                                    setFormData(prev => ({ 
-                                      ...prev, 
-                                      recurrenceRule: `RRULE:FREQ=MONTHLY;BYDAY=${setPos}${byDay}` 
-                                    }));
-                                  }}
-                                >
-                                  <Text style={[
-                                    styles.weekSelectorButtonText,
-                                    { color: monthlyWeekday === week ? '#ffffff' : colors.text }
-                                  ]}>
-                                    {week.charAt(0).toUpperCase() + week.slice(1)}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          </View>
-
-                          {/* Day of week selector */}
-                          <View style={styles.dayOfWeekSelector}>
-                            <Text style={[styles.subLabel, { color: colors.text }]}>Which Day?</Text>
-                            <View style={styles.weeklyDaysGrid}>
-                              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dayName, index) => (
-                                <TouchableOpacity
-                                  key={index}
-                                  style={[
-                                    styles.weeklyDayButton,
-                                    { backgroundColor: colors.surface, borderColor: colors.border },
-                                    monthlyDayOfWeek === index && { backgroundColor: colors.primary, borderColor: colors.primary }
-                                  ]}
-                                  onPress={() => {
-                                    setMonthlyDayOfWeek(index);
-                                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                                    const byDay = dayNames[index];
-                                    const setPos = monthlyWeekday === 'last' ? '-1' : 
-                                                 monthlyWeekday === 'first' ? '1' :
-                                                 monthlyWeekday === 'second' ? '2' :
-                                                 monthlyWeekday === 'third' ? '3' : '4';
-                                    setFormData(prev => ({ 
-                                      ...prev, 
-                                      recurrenceRule: `RRULE:FREQ=MONTHLY;BYDAY=${setPos}${byDay}` 
-                                    }));
-                                  }}
-                                >
-                                  <Text style={[
-                                    styles.weeklyDayButtonText,
-                                    { color: monthlyDayOfWeek === index ? '#ffffff' : colors.text }
-                                  ]}>
-                                    {dayName}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-              )}
+                    return { ...prev, ...updates };
+                  });
+                }}
+                onOpenCustom={() => setShowCustomRecurrenceModal(true)}
+                startDate={
+                  formData.type === 'event'
+                    ? (formData.startDate || formatLocalDate(new Date()))
+                    : (formData.dueDate || formatLocalDate(new Date()))
+                }
+              />
             </View>
           )}
 
@@ -1312,6 +1429,83 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           mode="create"
         />
       )}
+
+      {/* Completed Task Warning Modal */}
+      <Modal visible={showCompletedWarning} transparent animationType="fade">
+        <View style={styles.warningOverlay}>
+          <View style={[styles.warningContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.warningHeader}>
+              <Text style={[styles.warningTitle, { color: colors.text }]}>
+                Editing Completed Task
+              </Text>
+            </View>
+            <View style={styles.warningBody}>
+              <Text style={[styles.warningText, { color: colors.text }]}>
+                You are updating a completed task. Your changes will be saved and the task will remain in your Journal with the updated information and recalculated points.
+              </Text>
+              <View style={styles.warningCheckboxRow}>
+                <TouchableOpacity
+                  style={styles.checkboxContainer}
+                  onPress={() => setDontShowWarningAgain(!dontShowWarningAgain)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.checkbox,
+                    { borderColor: colors.border },
+                    dontShowWarningAgain && { backgroundColor: colors.primary, borderColor: colors.primary }
+                  ]}>
+                    {dontShowWarningAgain && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </View>
+                  <Text style={[styles.checkboxLabel, { color: colors.textSecondary }]}>
+                    Don't show this warning again
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.warningFooter}>
+              <TouchableOpacity
+                style={[styles.warningButton, { backgroundColor: colors.primary }]}
+                onPress={handleDismissCompletedWarning}
+              >
+                <Text style={styles.warningButtonText}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Recurrence Modal */}
+      <CustomRecurrenceModal
+        visible={showCustomRecurrenceModal}
+        onClose={() => setShowCustomRecurrenceModal(false)}
+        onSave={(rule, endDate) => {
+          setFormData(prev => {
+            // When setting a recurrence rule, ensure we have a date set
+            const updates: any = {
+              recurrenceRule: rule,
+              recurrenceEndDate: endDate
+            };
+
+            // If no date is set, default to today for recurring tasks/events
+            if (formData.type === 'event' && !prev.startDate) {
+              updates.startDate = formatLocalDate(new Date());
+            } else if (formData.type === 'task' && !prev.dueDate) {
+              updates.dueDate = formatLocalDate(new Date());
+            }
+
+            return { ...prev, ...updates };
+          });
+        }}
+        startDate={
+          formData.type === 'event'
+            ? (formData.startDate || formatLocalDate(new Date()))
+            : (formData.dueDate || formatLocalDate(new Date()))
+        }
+        initialRule={formData.recurrenceRule}
+        initialEndDate={formData.recurrenceEndDate}
+      />
     </View>
   );
 }
@@ -1328,8 +1522,24 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
   headerTitle: {
     fontSize: 18,
+    fontWeight: '600',
+  },
+  completedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  completedBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
     fontWeight: '600',
   },
   saveButton: {
@@ -1347,6 +1557,7 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: 16,
+    backgroundColor: '#f8f9fa',
   },
   field: {
     marginBottom: 24,
@@ -1354,7 +1565,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   subLabel: {
     fontSize: 14,
@@ -1391,25 +1602,96 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  switchesRowWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  switchesRowWrapperMobile: {
+    paddingHorizontal: 8,
+  },
   switchesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    width: '60%',
+    maxWidth: 600,
+    gap: 24,
+  },
+  switchesRowMobile: {
+    width: '100%',
+    gap: 12,
+  },
+  switchFieldContainer: {
+    flex: 1,
   },
   switchField: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     flex: 1,
-    marginHorizontal: 4,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 8,
+  },
+  helperText: {
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 12,
+    fontStyle: 'italic',
   },
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
+    flex: 1,
+    marginRight: 8,
   },
   dateRow: {
     flexDirection: 'row',
     gap: 12,
+    alignItems: 'flex-start',
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  dateButtonHalf: {
+    flex: 1,
+  },
+  dateFieldWrapper: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: '35%',
+  },
+  timeInputInline: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    textAlign: 'center',
+    width: 100,
+  },
+  anytimeToggleInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 12,
+  },
+  anytimeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  checkboxContainer: {
+    width: '100%',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   dateButton: {
     flexDirection: 'row',
@@ -1444,23 +1726,104 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
+  eventDateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-end',
+  },
+  eventDateField: {
+    flex: 2.5,
+  },
+  eventTimeField: {
+    flex: 1.5,
+  },
+  googleStyleDateTimeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    marginBottom: 12,
+  },
+  googleDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  googleDateButtonText: {
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  timeSeparator: {
+    fontSize: 16,
+    fontWeight: '400',
+    paddingHorizontal: 4,
+  },
+  googleSecondRow: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  googleAllDayToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  googleAllDayLabel: {
+    fontSize: 14,
+    fontWeight: '400',
+  },
+  multiDayButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  multiDayButtonInline: {
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+  },
+  multiDayButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  repeatSwitchWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+  repeatSwitchContainer: {
+    width: '20%',
+    minWidth: 180,
+  },
   checkboxGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 16,
+    padding: 4,
   },
   checkboxItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '48%',
-    marginBottom: 8,
+    width: '46%',
+    marginBottom: 12,
+    gap: 12,
+  },
+  checkboxItemMobile: {
+    width: '100%',
   },
   checkbox: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
     borderWidth: 1,
     borderRadius: 3,
-    marginRight: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1657,5 +2020,81 @@ const styles = StyleSheet.create({
   existingNoteDate: {
     fontSize: 12,
     fontStyle: 'italic',
+  },
+  warningOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  warningContainer: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  warningHeader: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  warningTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  warningBody: {
+    padding: 20,
+  },
+  warningText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  warningCheckboxRow: {
+    alignItems: 'center',
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmark: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  checkboxLabel: {
+    fontSize: 14,
+  },
+  warningFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  warningButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  warningButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
@@ -8,6 +8,7 @@ import { Header } from '@/components/Header';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
 import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import RecurringTaskActionModal from '@/components/tasks/RecurringTaskActionModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
@@ -16,30 +17,61 @@ import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { DraggableFab } from '@/components/DraggableFab';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
-import { handleActionCompletion } from '@/lib/completionHandler';
-import { getWeeklyCompletionCount, syncCompletionAcrossViews, completionEvents, CompletionEvent } from '@/lib/completionSync';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useTabReset } from '@/contexts/TabResetContext';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 // --- Main Dashboard Screen Component ---
+// This screen has 4 views accessible via tabs in the header:
+// 1. DEPOSITS: Shows pending/in-progress tasks and events (your upcoming actions)
+//              Note: Despite the name "deposits", this shows PENDING TASKS, not completed authentic deposits
+//              Completed authentic deposits are shown in the Journal view
+// 2. IDEAS: Shows deposit ideas that haven't been activated yet
+// 3. JOURNAL: Shows historical data (completed tasks, withdrawals, reflections)
+// 4. ANALYTICS: Shows charts and visualizations of your progress
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
+  // activeView controls which of the 4 tabs is displayed
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
+  const [recurringActionModal, setRecurringActionModal] = useState<{
+    visible: boolean;
+    task: Task | null;
+    actionType: 'delete' | 'edit';
+  }>({ visible: false, task: null, actionType: 'delete' });
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [journalRefreshKey, setJournalRefreshKey] = useState(0);
 
   // Import functions from useGoalProgress hook
   const {
     deleteTask,
   } = useGoalProgress();
   
+
+  // Reset to main Actions & Ideas view when tab is pressed
+  const resetToMain = useCallback(() => {
+    setActiveView('deposits');
+    setSortOption('due_date');
+    setIsSortModalVisible(false);
+    setIsFormModalVisible(false);
+    setIsDetailModalVisible(false);
+    setSelectedTask(null);
+    setEditingTask(null);
+    setSelectedDepositIdea(null);
+    setTasks([]);
+    setDepositIdeas([]);
+  }, []);
+
   const fetchData = async () => {
+    console.log('[Dashboard] fetchData called, activeView:', activeView);
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
@@ -47,6 +79,10 @@ export default function Dashboard() {
       if (!user) return;
 
       if (activeView === 'deposits') {
+        // DEPOSITS VIEW: Fetch pending/in-progress tasks and events
+        // Note: "deposits" is a misnomer - this actually shows PENDING ACTIONS you need to complete
+        // Completed tasks marked as authentic deposits are shown in the Journal view instead
+
         // Calculate current week boundaries
         const today = new Date();
         const todayStr = formatLocalDate(today);
@@ -59,192 +95,86 @@ export default function Dashboard() {
         const weekStartStr = formatLocalDate(weekStart);
         const weekEndStr = formatLocalDate(weekEnd);
 
-        // Fetch parent tasks (both standalone and timeline-based actions)
+        // Fetch tasks using the dashboard view for recurring task support
+        // The v_dashboard_next_occurrences view automatically:
+        // - Expands recurring tasks to show only the NEXT pending occurrence
+        // - Includes all non-recurring tasks
+        // - Filters out virtual occurrences that have been completed
         const { data: tasksData, error: tasksError } = await supabase
-          .from('0008-ap-tasks')
-          .select('*, user_global_timeline_id, custom_timeline_id')
+          .from('v_dashboard_next_occurrences')
+          .select('*')
           .eq('user_id', user.id)
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .neq('status', 'completed')
-          .neq('status', 'cancelled')
-          .in('type', ['task', 'event']);
+          .in('status', ['pending', 'in_progress'])
+          .in('type', ['task', 'event'])
+          .order('created_at', { ascending: false });
 
         if (tasksError) throw tasksError;
-        if (!tasksData || tasksData.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
-        }
 
-        // Separate standalone tasks from timeline-based actions
-        const standaloneTasks = tasksData.filter(task =>
-          !task.user_global_timeline_id && !task.custom_timeline_id
-        );
+        // Filter out Goal Bank actions by checking for week plans
+        // Goal Bank actions are identified by having entries in task-week-plan table
+        // Those are managed separately in the Goal Bank tab
+        let allTasks: any[] = [];
 
-        const timelineBasedTasks = tasksData.filter(task =>
-          task.user_global_timeline_id || task.custom_timeline_id
-        );
-
-        // For timeline-based tasks, check if they have week plans for current week
-        let tasksWithCurrentWeek: any[] = [];
-        if (timelineBasedTasks.length > 0) {
-          const timelineTaskIds = timelineBasedTasks.map(t => t.id);
-
-          // Get unique timeline IDs
-          const globalTimelineIds = [...new Set(timelineBasedTasks.map(t => t.user_global_timeline_id).filter(Boolean))];
-          const customTimelineIds = [...new Set(timelineBasedTasks.map(t => t.custom_timeline_id).filter(Boolean))];
-
-          // Fetch timeline start dates
-          const timelineStartDates = new Map();
-
-          if (globalTimelineIds.length > 0) {
-            const { data: globalTimelines } = await supabase
-              .from('0008-ap-user-global-timelines')
-              .select('id, start_date')
-              .in('id', globalTimelineIds);
-
-            globalTimelines?.forEach(tl => {
-              timelineStartDates.set(tl.id, tl.start_date);
-            });
-          }
-
-          if (customTimelineIds.length > 0) {
-            const { data: customTimelines } = await supabase
-              .from('0008-ap-user-custom-timelines')
-              .select('id, start_date')
-              .in('id', customTimelineIds);
-
-            customTimelines?.forEach(tl => {
-              timelineStartDates.set(tl.id, tl.start_date);
-            });
-          }
-
-          // Fetch week plans
+        if (tasksData && tasksData.length > 0) {
+          const taskIds = tasksData.map(t => t.id);
           const { data: weekPlans, error: weekPlansError } = await supabase
             .from('0008-ap-task-week-plan')
-            .select('task_id, week_number, target_days, user_global_timeline_id, user_custom_timeline_id')
-            .in('task_id', timelineTaskIds)
+            .select('task_id')
+            .in('task_id', taskIds)
             .is('deleted_at', null);
 
           if (weekPlansError) throw weekPlansError;
 
-          // Calculate current week number for each task
-          const { getCurrentWeekNumber } = await import('@/lib/dateUtils');
+          // Create a Set of task IDs that have week plans (Goal Bank actions)
+          const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
 
-          tasksWithCurrentWeek = timelineBasedTasks.map(task => {
-            const timelineId = task.user_global_timeline_id || task.custom_timeline_id;
-            const startDate = timelineStartDates.get(timelineId);
-
-            if (!startDate) {
-              console.warn('[Dashboard] No start date found for timeline:', timelineId);
-              return null;
-            }
-
-            const currentWeekNum = getCurrentWeekNumber(startDate);
-
-            if (!currentWeekNum) {
-              console.warn('[Dashboard] Task is outside timeline range:', task.id);
-              return null;
-            }
-
-            // Find the week plan for the current week
-            const currentWeekPlan = weekPlans?.find(
-              wp => wp.task_id === task.id && wp.week_number === currentWeekNum
-            );
-
-            if (!currentWeekPlan) {
-              return null; // Task not scheduled for current week
-            }
-
-            return {
-              ...task,
-              currentWeekNumber: currentWeekNum,
-              currentWeekPlan,
-              weekPlans: weekPlans?.filter(wp => wp.task_id === task.id) || []
-            };
-          }).filter(Boolean);
+          // Only include standalone tasks (tasks WITHOUT week plans)
+          allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
         }
 
-        // Combine standalone and timeline-based tasks
-        const allTasks = [...standaloneTasks, ...tasksWithCurrentWeek];
+        // Fetch join data only if we have tasks
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let goalsData: any[] = [];
+        let notesData: any[] = [];
+        let delegatesData: any[] = [];
+        let keyRelationshipsData: any[] = [];
 
-        if (allTasks.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
+        if (allTasks.length > 0) {
+          const taskIdsForJoins = allTasks.map(t => t.id);
+
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: goalsDataResult, error: goalsError },
+            { data: notesDataResult, error: notesError },
+            { data: delegatesDataResult, error: delegatesError },
+            { data: keyRelationshipsDataResult, error: keyRelationshipsError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title, status), custom_goal:0008-ap-goals-custom(id, title, status)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (goalsError) throw goalsError;
+          if (notesError) throw notesError;
+          if (delegatesError) throw delegatesError;
+          if (keyRelationshipsError) throw keyRelationshipsError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          goalsData = goalsDataResult || [];
+          notesData = notesDataResult || [];
+          delegatesData = delegatesDataResult || [];
+          keyRelationshipsData = keyRelationshipsDataResult || [];
         }
 
-        // Fetch completion counts for timeline-based actions this week using shared function
-        const timelineTaskIdsWithWeek = tasksWithCurrentWeek.map(t => t.id);
-        let completionCounts = new Map();
-
-        if (timelineTaskIdsWithWeek.length > 0) {
-          for (const taskId of timelineTaskIdsWithWeek) {
-            try {
-              const countResult = await getWeeklyCompletionCount(
-                supabase,
-                taskId,
-                weekStartStr,
-                weekEndStr
-              );
-              completionCounts.set(taskId, countResult.completedCount);
-            } catch (error) {
-              console.error('[Dashboard] Error fetching completion count for task:', taskId, error);
-              completionCounts.set(taskId, 0);
-            }
-          }
-        }
-
-        // Filter out timeline-based actions that have reached weekly target
-        const currentTasks = allTasks.filter(task => {
-          if (!task.currentWeekPlan) return true; // Keep standalone tasks
-
-          const completedCount = completionCounts.get(task.id) || 0;
-          const targetDays = task.currentWeekPlan.target_days;
-
-          // Only show if not yet complete for the week
-          return completedCount < targetDays;
-        }).map(task => ({
-          ...task,
-          weeklyCompletedCount: completionCounts.get(task.id) || 0,
-          weeklyTargetCount: task.currentWeekPlan?.target_days || 0,
-        }));
-
-        if (currentTasks.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
-        }
-        const taskIds = currentTasks.map(t => t.id);
-
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: goalsData, error: goalsError },
-          { data: notesData, error: notesError },
-          { data: delegatesData, error: delegatesError },
-          { data: keyRelationshipsData, error: keyRelationshipsError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title, status), custom_goal:0008-ap-goals-custom(id, title, status)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
-        ]);
-
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (goalsError) throw goalsError;
-        if (notesError) throw notesError;
-        if (delegatesError) throw delegatesError;
-        if (keyRelationshipsError) throw keyRelationshipsError;
-
-        const transformedTasks = currentTasks.map(task => {
+        const transformedTasks = allTasks.map(task => {
           // Derive timeline information for recurring tasks
           const timeline_id = task.custom_timeline_id || task.user_global_timeline_id || null;
           const timeline_source = task.user_global_timeline_id ? 'global' : 'custom';
@@ -301,6 +231,7 @@ export default function Dashboard() {
         else if (sortOption === 'goals') sortedTasks.sort((a, b) => (b.goals?.length || 0) - (a.goals?.length || 0));
         else if (sortOption === 'delegated') sortedTasks.sort((a, b) => (b.has_delegates ? 1 : 0) - (a.has_delegates ? 1 : 0));
 
+        console.log('[Dashboard] Setting tasks:', sortedTasks.length, 'tasks found');
         setTasks(sortedTasks);
         setDepositIdeas([]);
 
@@ -314,33 +245,40 @@ export default function Dashboard() {
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
-        if (!depositIdeasData || depositIdeasData.length === 0) {
-          setDepositIdeas([]);
-          setTasks([]);
-          setLoading(false);
-          return;
+
+        // Fetch join data only if we have deposit ideas
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let krData: any[] = [];
+        let notesData: any[] = [];
+
+        if (depositIdeasData && depositIdeasData.length > 0) {
+          const depositIdeaIds = depositIdeasData.map(di => di.id);
+
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: krDataResult, error: krError },
+            { data: notesDataResult, error: notesError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (krError) throw krError;
+          if (notesError) throw notesError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          krData = krDataResult || [];
+          notesData = notesDataResult || [];
         }
 
-        const depositIdeaIds = depositIdeasData.map(di => di.id);
-
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: krData, error: krError },
-          { data: notesData, error: notesError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
-        ]);
-
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (krError) throw krError;
-        if (notesError) throw notesError;
-
-        const transformedDepositIdeas = depositIdeasData.map(di => ({
+        const transformedDepositIdeas = (depositIdeasData || []).map(di => ({
           ...di,
           roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
@@ -349,6 +287,7 @@ export default function Dashboard() {
           has_attachments: false,
         }));
 
+        console.log('[Dashboard] Setting deposit ideas:', transformedDepositIdeas.length, 'ideas found');
         setDepositIdeas(transformedDepositIdeas);
         setTasks([]);
       }
@@ -366,49 +305,47 @@ export default function Dashboard() {
 
 
   useEffect(() => {
+    registerResetHandler('dashboard', resetToMain);
     fetchData();
-  }, [activeView, sortOption]);
 
-  useEffect(() => {
-    console.log('[Dashboard] Setting up completion event listener');
-    const unsubscribe = completionEvents.subscribeToAll((event: CompletionEvent) => {
-      console.log('[Dashboard] Received completion event:', event.type, event.taskId);
+    // Listen for task creation events from other components
+    const handleTaskCreated = () => {
+      console.log('[Dashboard] Received task created event, refreshing...');
+      fetchData();
+    };
 
-      if (activeView === 'deposits' && event.type === 'week_progress_updated' && event.completionCount) {
-        const { taskId, completionCount } = event;
+    const handleTaskUpdated = () => {
+      console.log('[Dashboard] Received task updated event, refreshing...');
+      fetchData();
+    };
 
-        setTasks(prevTasks => {
-          const taskIndex = prevTasks.findIndex(t => t.id === taskId);
+    const handleTaskDeleted = () => {
+      console.log('[Dashboard] Received task deleted event, refreshing...');
+      fetchData();
+    };
 
-          if (taskIndex !== -1) {
-            const updatedTasks = [...prevTasks];
-            updatedTasks[taskIndex] = {
-              ...updatedTasks[taskIndex],
-              weeklyCompletedCount: completionCount.completedCount,
-              weeklyTargetCount: completionCount.targetCount
-            };
+    const handleRefreshAll = () => {
+      console.log('[Dashboard] Received refresh all event, refreshing...');
+      fetchData();
+    };
 
-            if (completionCount.isComplete) {
-              return updatedTasks.filter(t => t.id !== taskId);
-            }
-
-            return updatedTasks;
-          } else if (!completionCount.isComplete && event.completionCount.completedCount < event.completionCount.targetCount) {
-            fetchData();
-          }
-
-          return prevTasks;
-        });
-
-        refreshScore(true);
-      }
-    });
+    eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskUpdated);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskDeleted);
+    eventBus.on(EVENTS.REFRESH_ALL_TASKS, handleRefreshAll);
+    eventBus.on(EVENTS.DEPOSIT_IDEA_CREATED, handleRefreshAll);
+    eventBus.on(EVENTS.WITHDRAWAL_CREATED, handleRefreshAll);
 
     return () => {
-      console.log('[Dashboard] Cleaning up completion event listener');
-      unsubscribe();
+      unregisterResetHandler('dashboard');
+      eventBus.off(EVENTS.TASK_CREATED, handleTaskCreated);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskUpdated);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskDeleted);
+      eventBus.off(EVENTS.REFRESH_ALL_TASKS, handleRefreshAll);
+      eventBus.off(EVENTS.DEPOSIT_IDEA_CREATED, handleRefreshAll);
+      eventBus.off(EVENTS.WITHDRAWAL_CREATED, handleRefreshAll);
     };
-  }, [activeView, refreshScore]);
+  }, [activeView, sortOption, registerResetHandler, unregisterResetHandler, resetToMain]);
 
   const handleCompleteTask = async (task: Task) => {
     try {
@@ -417,107 +354,31 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      if (task.recurrence_rule && (task.user_global_timeline_id || task.custom_timeline_id)) {
-        const today = new Date();
-        const dayOfWeek = today.getDay();
-        const mondayOffset = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() + mondayOffset);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        const weekStartStr = formatLocalDate(weekStart);
-        const weekEndStr = formatLocalDate(weekEnd);
-
-        const { getWeekCompletionStatus } = await import('@/lib/taskUtils');
-        const completedDates = await getWeekCompletionStatus(supabase, task.id, weekStartStr, weekEndStr);
-
-        const { getMostRecentIncompleteDate } = await import('@/lib/dateUtils');
-        const dateToComplete = getMostRecentIncompleteDate(completedDates, weekStartStr, weekEndStr);
-
-        if (!dateToComplete) {
-          console.log('[Dashboard] All dates in current week are already complete');
-          setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
-          Alert.alert('Complete', 'All available completions for this week are done!');
-          return;
-        }
-
-        const timeline = task.custom_timeline_id
-          ? { id: task.custom_timeline_id, source: 'custom' as const }
-          : task.user_global_timeline_id
-            ? { id: task.user_global_timeline_id, source: 'global' as const }
-            : null;
-
-        if (!timeline) {
-          throw new Error('No timeline found for recurring task');
-        }
-
-        const result = await handleActionCompletion(
+      // Check if this is a recurring task (either virtual occurrence or has recurrence_rule)
+      if (task.is_virtual_occurrence || task.recurrence_rule) {
+        const { handleRecurringTaskCompletion } = await import('@/lib/completionHandler');
+        const result = await handleRecurringTaskCompletion(
           supabase,
           user.id,
-          task.id,
-          dateToComplete,
-          timeline,
-          task.weeklyTargetCount
+          task,
+          task.occurrence_date || task.due_date
         );
 
         if (!result.success) {
-          throw new Error(result.error || 'Failed to complete action');
-        }
-
-        console.log('[Dashboard] Action completed, recalculating count');
-        const countResult = await getWeeklyCompletionCount(
-          supabase,
-          task.id,
-          weekStartStr,
-          weekEndStr
-        );
-
-        const goalId = task.goals && task.goals.length > 0 ? task.goals[0].id : undefined;
-
-        setTasks(prevTasks => {
-          const updatedTasks = prevTasks.map(t => {
-            if (t.id === task.id) {
-              return {
-                ...t,
-                weeklyCompletedCount: countResult.completedCount,
-                weeklyTargetCount: task.weeklyTargetCount || 0
-              };
-            }
-            return t;
-          });
-
-          if (result.shouldRemoveFromUI || countResult.completedCount >= (task.weeklyTargetCount || 0)) {
-            return updatedTasks.filter(t => t.id !== task.id);
-          }
-
-          return updatedTasks;
-        });
-
-        if (timeline && goalId) {
-          const currentWeekNumber = Math.ceil((today.getTime() - new Date(weekStartStr).getTime()) / (7 * 24 * 60 * 60 * 1000));
-          await syncCompletionAcrossViews(
-            supabase,
-            task.id,
-            goalId,
-            currentWeekNumber,
-            weekStartStr,
-            weekEndStr,
-            timeline,
-            true
-          );
+          throw new Error(result.error || 'Failed to complete recurring task');
         }
       } else {
-        // For standalone tasks, update status first, then remove from UI
+        // Regular standalone task - just update status
         const { error } = await supabase
           .from('0008-ap-tasks')
           .update({ status: 'completed', completed_at: new Date().toISOString() })
           .eq('id', task.id);
 
         if (error) throw error;
-
-        // Only remove from UI after successful database update
-        setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
       }
+
+      // Remove from UI after successful database update
+      setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
 
       console.log('[Dashboard] Waiting for database commits, then refreshing score');
       // Small delay to ensure all database writes (including RPC joins) complete
@@ -531,6 +392,12 @@ export default function Dashboard() {
   };
 
   const handleDeleteTask = async (task: Task) => {
+    // Check if this is a recurring task
+    if (task.recurrence_rule || task.is_virtual_occurrence) {
+      setRecurringActionModal({ visible: true, task, actionType: 'delete' });
+      return;
+    }
+
     try {
       // Optimistically remove the task from the list immediately
       setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
@@ -541,6 +408,51 @@ export default function Dashboard() {
       console.error('Error deleting task:', error);
       Alert.alert('Error', (error as Error).message || 'Failed to delete task');
       // Revert optimistic update on error
+      fetchData();
+    }
+  };
+
+  const handleDeleteThisOccurrence = async (task: Task) => {
+    try {
+      const supabase = getSupabaseClient();
+      const sourceTaskId = task.source_task_id || task.id;
+      const occurrenceDate = task.occurrence_date || task.due_date;
+
+      // Add the date to recurrence_exceptions array
+      const { data: sourceTask } = await supabase
+        .from('0008-ap-tasks')
+        .select('recurrence_exceptions')
+        .eq('id', sourceTaskId)
+        .single();
+
+      const currentExceptions = sourceTask?.recurrence_exceptions || [];
+      const updatedExceptions = [...currentExceptions, occurrenceDate];
+
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .update({ recurrence_exceptions: updatedExceptions })
+        .eq('id', sourceTaskId);
+
+      if (error) throw error;
+
+      setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
+      Alert.alert('Success', 'This occurrence has been removed');
+    } catch (error) {
+      console.error('Error deleting occurrence:', error);
+      Alert.alert('Error', (error as Error).message || 'Failed to delete occurrence');
+      fetchData();
+    }
+  };
+
+  const handleDeleteAllOccurrences = async (task: Task) => {
+    try {
+      const sourceTaskId = task.source_task_id || task.id;
+      await deleteTask(sourceTaskId);
+      setTasks(prevTasks => prevTasks.filter(t => (t.source_task_id || t.id) !== sourceTaskId));
+      Alert.alert('Success', 'All occurrences have been deleted');
+    } catch (error) {
+      console.error('Error deleting all occurrences:', error);
+      Alert.alert('Error', (error as Error).message || 'Failed to delete task');
       fetchData();
     }
   };
@@ -557,11 +469,11 @@ export default function Dashboard() {
     }
   };
 
-  const handleTaskDoublePress = (task: Task) => { setSelectedTask(task); setIsDetailModalVisible(true); };
+  const handleTaskPress = (task: Task) => { setSelectedTask(task); setIsDetailModalVisible(true); };
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
   const [isDepositIdeaDetailVisible, setIsDepositIdeaDetailVisible] = useState(false);
 
-  const handleDepositIdeaDoublePress = (depositIdea: any) => { 
+  const handleDepositIdeaPress = (depositIdea: any) => {
     setSelectedDepositIdea(depositIdea);
     setIsDepositIdeaDetailVisible(true);
   };
@@ -691,15 +603,32 @@ export default function Dashboard() {
     }
   };
   const handleUpdateTask = (task: Task) => {
+    console.log('[Dashboard] Opening task for edit:', {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      completed_at: task.completed_at
+    });
+
+    // Check if this is a recurring task
+    if (task.recurrence_rule || task.is_virtual_occurrence) {
+      setRecurringActionModal({ visible: true, task, actionType: 'edit' });
+      return;
+    }
+
     setEditingTask(task);
     setIsDetailModalVisible(false);
     setTimeout(() => setIsFormModalVisible(true), 100); // Small delay to ensure modal transition
   };
   const handleDelegateTask = (task: Task) => { Alert.alert('Delegate', 'Delegation functionality coming soon!'); setIsDetailModalVisible(false); };
-  const handleFormSubmitSuccess = () => {
+  const handleFormSubmitSuccess = async () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
     fetchData();
+    // Trigger Journal refresh if we're on Journal view
+    setJournalRefreshKey(prev => prev + 1);
+    // Refresh the authentic score
+    await refreshScore(true);
   };
 
   const handleFormClose = () => {
@@ -709,6 +638,12 @@ export default function Dashboard() {
 
   const handleJournalEntryPress = (entry: any) => {
     if (entry.source_type === 'task') {
+      console.log('[Dashboard] Journal entry pressed - Task data:', {
+        id: entry.source_data.id,
+        title: entry.source_data.title,
+        status: entry.source_data.status,
+        completed_at: entry.source_data.completed_at
+      });
       setSelectedTask(entry.source_data);
       setIsDetailModalVisible(true);
     } else if (entry.source_type === 'withdrawal') {
@@ -735,13 +670,14 @@ export default function Dashboard() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header activeView={activeView} onViewChange={setActiveView} onSortPress={() => setIsSortModalVisible(true)} authenticScore={authenticScore} />
+      <Header title="Authentic Investments" activeView={activeView} onViewChange={setActiveView} onSortPress={() => setIsSortModalVisible(true)} authenticScore={authenticScore} forceShowMenu={true} />
       <View style={styles.content}>
         
         {activeView === 'journal' ? (
           <JournalView
             scope={{ type: 'user' }}
             onEntryPress={handleJournalEntryPress}
+            refreshKey={journalRefreshKey}
           />
         ) : activeView === 'analytics' ? (
           <AnalyticsView
@@ -755,13 +691,13 @@ export default function Dashboard() {
               <FlatList
                 data={tasks}
                 renderItem={({ item }) => (
-                  <TaskCard 
-                    task={item} 
-                    onComplete={handleCompleteTask} 
-                    onDelete={handleDeleteTask} 
-                    onLongPress={() => {}} 
-                    onDoublePress={handleTaskDoublePress} 
-                    isDragging={false} 
+                  <TaskCard
+                    task={item}
+                    onComplete={handleCompleteTask}
+                    onDelete={handleDeleteTask}
+                    onLongPress={() => {}}
+                    onPress={handleTaskPress}
+                    isDragging={false}
                   />
                 )}
                 keyExtractor={(item) => item.id}
@@ -773,13 +709,13 @@ export default function Dashboard() {
               <DraggableFlatList 
                 data={tasks} 
                 renderItem={({ item, drag, isActive }) => (
-                  <TaskCard 
-                    task={item} 
-                    onComplete={handleCompleteTask} 
-                    onDelete={handleDeleteTask} 
-                    onLongPress={drag} 
-                    onDoublePress={handleTaskDoublePress} 
-                    isDragging={isActive} 
+                  <TaskCard
+                    task={item}
+                    onComplete={handleCompleteTask}
+                    onDelete={handleDeleteTask}
+                    onLongPress={drag}
+                    onPress={handleTaskPress}
+                    isDragging={isActive}
                   />
                 )}
                 keyExtractor={(item) => item.id} 
@@ -798,12 +734,12 @@ export default function Dashboard() {
             >
               <View style={styles.taskList}>
                 {depositIdeas.map(depositIdea => 
-                  <DepositIdeaCard 
-                    key={depositIdea.id} 
-                    depositIdea={depositIdea} 
+                  <DepositIdeaCard
+                    key={depositIdea.id}
+                    depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
-                    onDoublePress={handleDepositIdeaDoublePress} 
+                    onPress={handleDepositIdeaPress}
                   />
                 )}
               </View>
@@ -838,6 +774,36 @@ export default function Dashboard() {
           </View>
         </View>
       </Modal>
+
+      <RecurringTaskActionModal
+        visible={recurringActionModal.visible}
+        onClose={() => setRecurringActionModal({ visible: false, task: null, actionType: 'delete' })}
+        onThisOccurrence={() => {
+          if (recurringActionModal.task) {
+            if (recurringActionModal.actionType === 'delete') {
+              handleDeleteThisOccurrence(recurringActionModal.task);
+            } else {
+              // Edit this occurrence - open form with task data
+              setEditingTask(recurringActionModal.task);
+              setIsFormModalVisible(true);
+            }
+          }
+        }}
+        onAllOccurrences={() => {
+          if (recurringActionModal.task) {
+            if (recurringActionModal.actionType === 'delete') {
+              handleDeleteAllOccurrences(recurringActionModal.task);
+            } else {
+              // Edit template - open form with source task data
+              const sourceTaskId = recurringActionModal.task.source_task_id || recurringActionModal.task.id;
+              setEditingTask({ ...recurringActionModal.task, id: sourceTaskId });
+              setIsFormModalVisible(true);
+            }
+          }
+        }}
+        actionType={recurringActionModal.actionType}
+        taskTitle={recurringActionModal.task?.title || ''}
+      />
     </SafeAreaView>
   );
 }

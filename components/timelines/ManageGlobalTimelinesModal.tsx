@@ -12,17 +12,24 @@ import {
 import { X, TriangleAlert as AlertTriangle, Calendar, TrendingUp, ChevronRight, Archive, Trash2 } from 'lucide-react-native';
 import { InfoTooltip } from '@/components/InfoTooltip';
 import { getSupabaseClient } from '@/lib/supabase';
-import { formatDateRange } from '@/lib/dateUtils';
+import { formatDateRange, parseLocalDate } from '@/lib/dateUtils';
+
+// Helper function to format dates without timezone shift
+const formatDateDisplay = (dateString: string): string => {
+  const date = parseLocalDate(dateString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 interface GlobalCycle {
   id: string;
   title?: string;
-  cycle_label?: string;
   start_date: string;
   end_date: string;
+  reflection_start: string;
   reflection_end: string;
-  is_active: boolean;
-  status?: string;
+  status: string;
+  cycle_position: 'active' | '2nd_in_line' | '3rd_in_line' | '4th_in_line' | 'archived' | 'future';
+  can_activate: boolean;
 }
 
 interface UserGlobalTimeline {
@@ -76,23 +83,39 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
   useEffect(() => {
     if (visible) {
+      console.log('[ManageGlobalTimelinesModal] Modal became visible, fetching data...');
       fetchData();
+    } else {
+      console.log('[ManageGlobalTimelinesModal] Modal hidden');
     }
   }, [visible]);
 
+  // Refetch available cycles whenever active timelines change
+  useEffect(() => {
+    if (visible && activeTimelines.length >= 0) {
+      console.log('[ManageGlobalTimelinesModal] Active timelines changed, refetching available cycles...');
+      fetchAvailableCycles();
+    }
+  }, [activeTimelines.length, visible]);
+
   const fetchData = async () => {
+    console.log('[ManageGlobalTimelinesModal] fetchData called');
     setLoading(true);
     try {
-      await Promise.all([
-        fetchActiveTimeline(),
-        fetchAvailableCycles()
-      ]);
+      // Fetch active timelines first, then available cycles
+      // This ensures availableCycles can properly check against activeTimelines
+      await fetchActiveTimeline();
+      await fetchAvailableCycles();
+      console.log('[ManageGlobalTimelinesModal] fetchData completed successfully');
+    } catch (error) {
+      console.error('[ManageGlobalTimelinesModal] Error in fetchData:', error);
+      // Don't show alert here, individual functions already handle errors
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchActiveTimeline = async () => {
+  const fetchActiveTimeline = async (retryCount = 0) => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -117,11 +140,10 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
           global_cycle:0008-ap-global-cycles!inner(
             id,
             title,
-            cycle_label,
             start_date,
             end_date,
+            reflection_start,
             reflection_end,
-            is_active,
             status
           ),
           goals:0008-ap-goals-12wk(id, status)
@@ -136,11 +158,26 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
         timelines: data?.map(t => ({ id: t.id, cycle_id: t.global_cycle_id, title: t.global_cycle?.title }))
       });
 
-      if (error) throw error;
-      setActiveTimelines(data || []);
+      if (error) {
+        // Retry once if it's a network error
+        if (retryCount < 1 && (error.message?.includes('network') || error.message?.includes('timeout'))) {
+          console.log('[ManageGlobalTimelinesModal] Network error, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return fetchActiveTimeline(retryCount + 1);
+        }
+        throw error;
+      }
+
+      // Ensure data is an array even if null/undefined
+      const timelinesData = Array.isArray(data) ? data : [];
+      setActiveTimelines(timelinesData);
+
+      console.log('[ManageGlobalTimelinesModal] Set activeTimelines state with', timelinesData.length, 'timelines');
     } catch (error) {
       console.error('[ManageGlobalTimelinesModal] Error fetching active timelines:', error);
-      Alert.alert('Error', (error as Error).message);
+      if (retryCount === 0) {
+        Alert.alert('Error Loading Timelines', 'Failed to load active timelines. Please try again.');
+      }
     }
   };
 
@@ -148,70 +185,81 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('[ManageGlobalTimelinesModal] No user found when fetching available cycles');
+        return;
+      }
 
-      const today = new Date().toISOString().split('T')[0];
+      console.log('[ManageGlobalTimelinesModal] Fetching available cycles from v_global_cycles...');
 
+      // Query the new v_global_cycles view
       const { data: cycleData, error } = await supabase
-        .from('0008-ap-global-cycles')
-        .select('id, title, cycle_label, start_date, end_date, reflection_end, is_active, status')
-        .eq('status', 'active')
-        .gte('reflection_end', today)
+        .from('v_global_cycles')
+        .select('*')
+        .in('cycle_position', ['active', '2nd_in_line', '3rd_in_line', '4th_in_line'])
         .order('start_date', { ascending: true });
+
+      console.log('[ManageGlobalTimelinesModal] Available cycles query result:', {
+        count: cycleData?.length || 0,
+        error: error,
+        cycles: cycleData?.map(c => ({
+          id: c.global_cycle_id,
+          title: c.title,
+          position: c.cycle_position,
+          can_activate: c.can_activate
+        }))
+      });
 
       if (error) throw error;
 
-      const currentDate = new Date().toISOString().split('T')[0];
       const availableCyclesWithStatus: ActiveTimelineWithCycle[] = [];
 
       if (cycleData) {
         const activatedCycleIds = activeTimelines.map(t => t.global_cycle_id);
+        console.log('[ManageGlobalTimelinesModal] Activated cycle IDs:', activatedCycleIds);
 
-        const currentCycle = cycleData.find(cycle =>
-          cycle.start_date <= currentDate && currentDate <= cycle.end_date
-        );
+        cycleData.forEach(cycle => {
+          const isAlreadyActivated = activatedCycleIds.includes(cycle.global_cycle_id);
+          const isCurrent = cycle.cycle_position === 'active';
 
-        if (currentCycle) {
-          availableCyclesWithStatus.push({
-            ...currentCycle,
-            isAlreadyActivated: activatedCycleIds.includes(currentCycle.id),
-            isCurrent: true,
-            id: currentCycle.id,
-            user_id: user.id,
-            global_cycle_id: currentCycle.id,
-            status: 'active',
-            week_start_day: 'sunday',
-            activated_at: '',
-            created_at: '',
-            updated_at: '',
-            global_cycle: currentCycle
-          } as ActiveTimelineWithCycle);
-        }
+          console.log('[ManageGlobalTimelinesModal] Processing cycle:', {
+            id: cycle.global_cycle_id,
+            title: cycle.title,
+            isAlreadyActivated,
+            isCurrent,
+            can_activate: cycle.can_activate
+          });
 
-        const futureCycles = cycleData.filter(cycle => cycle.start_date > currentDate);
-        const nextTwoUpcoming = futureCycles.slice(0, 2);
-
-        nextTwoUpcoming.forEach(cycle => {
           availableCyclesWithStatus.push({
             ...cycle,
-            isAlreadyActivated: activatedCycleIds.includes(cycle.id),
-            isCurrent: false,
-            id: cycle.id,
+            id: cycle.global_cycle_id,
+            isAlreadyActivated,
+            isCurrent,
             user_id: user.id,
-            global_cycle_id: cycle.id,
-            status: 'active',
+            global_cycle_id: cycle.global_cycle_id,
             week_start_day: 'sunday',
             activated_at: '',
-            created_at: '',
+            created_at: cycle.created_at,
             updated_at: '',
-            global_cycle: cycle
+            global_cycle: {
+              id: cycle.global_cycle_id,
+              title: cycle.title,
+              start_date: cycle.start_date,
+              end_date: cycle.end_date,
+              reflection_start: cycle.reflection_start,
+              reflection_end: cycle.reflection_end,
+              status: cycle.status,
+              cycle_position: cycle.cycle_position,
+              can_activate: cycle.can_activate
+            } as GlobalCycle
           } as ActiveTimelineWithCycle);
         });
       }
 
+      console.log('[ManageGlobalTimelinesModal] Set availableCycles with', availableCyclesWithStatus.length, 'cycles');
       setAvailableCycles(availableCyclesWithStatus);
     } catch (error) {
-      console.error('Error fetching available cycles:', error);
+      console.error('[ManageGlobalTimelinesModal] Error fetching available cycles:', error);
       Alert.alert('Error', (error as Error).message);
     }
   };
@@ -507,6 +555,17 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
       if (error) {
         console.error('[ManageGlobalTimelinesModal] RPC Error:', error);
+
+        // Handle "already activated" error gracefully
+        if (error.message?.includes('already activated') || error.code === 'P0001') {
+          console.log('[ManageGlobalTimelinesModal] Timeline already activated, refreshing data...');
+          // Silently refresh the data to show the already-activated timeline
+          await fetchData();
+          onUpdate?.();
+          Alert.alert('Already Active', 'This timeline is already activated and appears in your Active Timelines.');
+          return;
+        }
+
         throw error;
       }
 
@@ -533,7 +592,10 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
   };
 
   const renderAvailableCycles = () => {
-    if (availableCycles.length === 0) {
+    // Filter out already-activated cycles from the display
+    const unactivatedCycles = availableCycles.filter(cycle => !cycle.isAlreadyActivated);
+
+    if (unactivatedCycles.length === 0) {
       return (
         <View style={styles.emptySection}>
           <TrendingUp size={48} color="#6b7280" />
@@ -547,16 +609,35 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
     return (
       <View style={styles.availableCyclesList}>
-        {availableCycles.map(cycle => {
-          const displayTitle = cycle.global_cycle?.title || cycle.global_cycle?.cycle_label || cycle.title || cycle.cycle_label || 'Global 12-Week Cycle';
+        {unactivatedCycles.map(cycle => {
+          const displayTitle = cycle.global_cycle?.title || cycle.title || 'Global 12-Week Cycle';
           const isActivated = cycle.isAlreadyActivated === true;
           const isCurrent = cycle.isCurrent === true;
+          const canActivate = cycle.global_cycle?.can_activate || cycle.can_activate || false;
+          const cyclePosition = cycle.global_cycle?.cycle_position || cycle.cycle_position;
+
+          // Get position badge text
+          let positionBadgeText = '';
+          if (cyclePosition === '2nd_in_line') positionBadgeText = 'Next';
+          else if (cyclePosition === '3rd_in_line') positionBadgeText = '3rd';
+          else if (cyclePosition === '4th_in_line') positionBadgeText = '4th';
+
+          // Get locked message for cycles that can't be activated
+          let lockedMessage = '';
+          if (!canActivate && !isActivated) {
+            if (cyclePosition === '2nd_in_line') {
+              const reflectionStart = cycle.global_cycle?.reflection_start || cycle.reflection_start;
+              const formattedDate = reflectionStart ? formatDateDisplay(reflectionStart) : '';
+              lockedMessage = formattedDate
+                ? `Available starting ${formattedDate} (during current cycle's reflection week)`
+                : 'This cycle will become available during the current cycle\'s reflection week';
+            } else if (cyclePosition === '3rd_in_line' || cyclePosition === '4th_in_line') {
+              lockedMessage = 'This cycle will become available when it moves to next in line';
+            }
+          }
 
           return (
-            <View key={cycle.global_cycle_id || cycle.id} style={[
-              styles.availableCycleCard,
-              isActivated && styles.activatedCycleCard
-            ]}>
+            <View key={cycle.global_cycle_id || cycle.id} style={styles.availableCycleCard}>
               <View style={styles.cycleCardHeader}>
                 <View style={styles.titleRow}>
                   <Text style={styles.cycleTitle}>{displayTitle}</Text>
@@ -565,12 +646,12 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
                       <Text style={styles.currentBadgeText}>Current</Text>
                     </View>
                   )}
+                  {!isCurrent && positionBadgeText && (
+                    <View style={styles.positionBadge}>
+                      <Text style={styles.positionBadgeText}>{positionBadgeText}</Text>
+                    </View>
+                  )}
                 </View>
-                {isActivated && (
-                  <View style={styles.activatedBadge}>
-                    <Text style={styles.activatedBadgeText}>Activated</Text>
-                  </View>
-                )}
                 <Text style={styles.cycleDates}>
                   {formatDateRange(
                     cycle.global_cycle?.start_date || cycle.start_date,
@@ -579,23 +660,28 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
                 </Text>
               </View>
 
-              {!isActivated ? (
-                <TouchableOpacity
-                  style={styles.activateButton}
-                  onPress={() => handleActivateButtonPress(cycle.global_cycle || cycle)}
-                  disabled={activating}
-                >
-                  {activating ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Text style={styles.activateButtonText}>Activate</Text>
-                  )}
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.alreadyActivatedMessage}>
-                  <Text style={styles.alreadyActivatedText}>
-                    This cycle is already activated and appears in your Active Timelines above
+              <TouchableOpacity
+                style={[
+                  styles.activateButton,
+                  !canActivate && styles.activateButtonDisabled
+                ]}
+                onPress={() => handleActivateButtonPress(cycle.global_cycle || cycle)}
+                disabled={activating || !canActivate}
+              >
+                {activating ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={[
+                    styles.activateButtonText,
+                    !canActivate && styles.activateButtonTextDisabled
+                  ]}>
+                    {canActivate ? 'Activate' : 'Locked'}
                   </Text>
+                )}
+              </TouchableOpacity>
+              {lockedMessage && (
+                <View style={styles.lockedMessage}>
+                  <Text style={styles.lockedMessageText}>{lockedMessage}</Text>
                 </View>
               )}
             </View>
@@ -640,7 +726,7 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
 
             <View style={styles.section}>
               <View style={styles.sectionTitleContainer}>
-                <Text style={styles.sectionTitle}>Available Timelines</Text>
+                <Text style={styles.sectionTitle}>Upcoming 12 Week Timelines</Text>
                 <InfoTooltip
                   content="To activate a timeline, select your preferred week start day (Sunday or Monday) by tapping one of the buttons below each timeline. You can have multiple active timelines running simultaneously."
                   iconSize={18}
@@ -649,7 +735,7 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
                 />
               </View>
               <Text style={styles.sectionSubtitle}>
-                Current and upcoming standardized 12-week cycles available for activation
+                Current and upcoming standardized 12-week cycles. Only the current cycle and the next cycle (during reflection week) can be activated.
               </Text>
               {renderAvailableCycles()}
             </View>
@@ -1117,6 +1203,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
   },
+  positionBadge: {
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  positionBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   cycleDates: {
     fontSize: 14,
     color: '#0078d4',
@@ -1131,10 +1228,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
   },
+  activateButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.6,
+  },
   activateButtonText: {
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  activateButtonTextDisabled: {
+    color: '#e5e7eb',
+  },
+  lockedMessage: {
+    backgroundColor: '#fef3c7',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    marginTop: 8,
+  },
+  lockedMessageText: {
+    color: '#92400e',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   warningOverlay: {
     flex: 1,

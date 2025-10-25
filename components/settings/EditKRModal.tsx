@@ -284,10 +284,11 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
 
         <ScrollView style={styles.content}>
           <View style={styles.form}>
-            {/* Role Context */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Role</Text>
-              <Text style={styles.roleContext}>{roleName || 'Unknown Role'}</Text>
+            {/* Role Context - Immutable */}
+            <View style={styles.roleContextBanner}>
+              <Text style={styles.roleContextLabel}>Role:</Text>
+              <Text style={styles.roleContextValue}>{roleName || 'Unknown Role'}</Text>
+              <Text style={styles.roleContextNote}>Key relationships are permanently linked to their role</Text>
             </View>
 
             {/* Image Section */}
@@ -431,8 +432,30 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 8,
   },
-  roleContext: {
-    fontSize: 16,
+  roleContextBanner: {
+    backgroundColor: '#f0f9ff',
+    borderLeftWidth: 4,
+    borderLeftColor: '#0078d4',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 24,
+  },
+  roleContextLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  roleContextValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0078d4',
+    marginBottom: 6,
+  },
+  roleContextNote: {
+    fontSize: 12,
     color: '#6b7280',
     fontStyle: 'italic',
   },

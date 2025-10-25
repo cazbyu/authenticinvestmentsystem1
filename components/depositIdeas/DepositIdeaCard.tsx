@@ -25,14 +25,14 @@ interface DepositIdeaCardProps {
   onUpdate: (depositIdea: DepositIdea) => void;
   onActivate: (depositIdea: DepositIdea) => void;
   onCancel: (depositIdea: DepositIdea) => void;
+  onPress?: (depositIdea: DepositIdea) => void;
   isDragging?: boolean;
 }
 
 // --- DepositIdeaCard Component ---
 // Renders a single deposit idea item in the list
 export const DepositIdeaCard = React.forwardRef<View, DepositIdeaCardProps>(
-  ({ depositIdea, onUpdate, onCancel, onDoublePress, isDragging }, ref) => {
-    const [lastTap, setLastTap] = useState(0);
+  ({ depositIdea, onUpdate, onCancel, onPress, isDragging }, ref) => {
 
     // Formats the created date string
     const formatCreatedDate = (date?: string) => {
@@ -41,16 +41,9 @@ export const DepositIdeaCard = React.forwardRef<View, DepositIdeaCardProps>(
       return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     };
 
-    // Handles single and double tap gestures
+    // Handles press gesture
     const handlePress = () => {
-      const now = Date.now();
-      const DOUBLE_PRESS_DELAY = 400;
-      if (lastTap && (now - lastTap) < DOUBLE_PRESS_DELAY) {
-        setLastTap(0); // Reset to prevent triple-tap issues
-        onDoublePress?.(depositIdea);
-      } else {
-        setLastTap(now);
-      }
+      onPress?.(depositIdea);
     };
 
     return (

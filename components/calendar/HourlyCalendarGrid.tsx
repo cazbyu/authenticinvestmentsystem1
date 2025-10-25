@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, InteractionManager } from 'react-native';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { CalendarEventDisplay } from '@/components/calendar/CalendarEventDisplay';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, parseTimeString } from '@/lib/dateUtils';
 
-const MINUTE_HEIGHT = 1.5;
+const MINUTE_HEIGHT = 0.75;
 const HOUR_HEIGHT = 60 * MINUTE_HEIGHT;
 const COLUMN_GUTTER = 4;
 
@@ -14,7 +14,7 @@ interface HourlyCalendarGridProps {
   currentTimePosition: number;
   currentTimeString: string;
   onCompleteTask: (taskId: string) => void;
-  onTaskDoublePress: (task: Task) => void;
+  onTaskPress: (task: Task) => void;
   viewMode?: 'daily' | 'weekly' | 'monthly';
 }
 
@@ -33,8 +33,12 @@ const uniqByIdAndDate = <T extends { id: string; start_date?: string; due_date?:
 };
 
 const getTimeInMinutes = (timeString: string) => {
-  const date = new Date(timeString);
-  return date.getHours() * 60 + date.getMinutes();
+  // Parse time-only string (HH:MM:SS) directly without timezone conversion
+  const parsed = parseTimeString(timeString);
+  if (!parsed) {
+    return 0;
+  }
+  return parsed.hours * 60 + parsed.minutes;
 };
 
 const calculateEventLayout = (events: Task[]) => {
@@ -92,15 +96,15 @@ const calculateEventLayout = (events: Task[]) => {
   return eventsWithLayout;
 };
 
-export function HourlyCalendarGrid({
+const HourlyCalendarGridComponent = ({
   selectedDate,
   expandedTasks,
   currentTimePosition,
   currentTimeString,
   onCompleteTask,
-  onTaskDoublePress,
+  onTaskPress,
   viewMode = 'daily',
-}: HourlyCalendarGridProps) {
+}: HourlyCalendarGridProps) => {
   const scrollRef = useRef<ScrollView>(null);
   const [viewportH, setViewportH] = useState(0);
   const [hasScrolledToNow, setHasScrolledToNow] = useState(false);
@@ -146,15 +150,42 @@ export function HourlyCalendarGrid({
   }, [selectedDate, viewMode]);
 
   const allDayItems = expandedTasks.filter(task =>
-    !task.start_time || !task.end_time || task.is_all_day
+    task.is_all_day
+  );
+
+  const anytimeItems = expandedTasks.filter(task =>
+    !task.is_all_day && task.is_anytime
+  );
+
+  const noTimeItems = expandedTasks.filter(task =>
+    !task.is_all_day && !task.is_anytime && (!task.start_time || !task.end_time)
   );
 
   const timedEvents = expandedTasks.filter(task =>
     task.start_time && task.end_time && !task.is_all_day
   );
 
-  const eventsWithLayout = calculateEventLayout(timedEvents);
-  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const noTimeItemsAsMidnight = useMemo(() =>
+    noTimeItems.map(task => ({
+      ...task,
+      start_time: '00:00:00',
+      end_time: '00:15:00',
+      isNoTimeTask: true,
+    })),
+    [noTimeItems]
+  );
+
+  const allTimedEvents = useMemo(() =>
+    [...timedEvents, ...noTimeItemsAsMidnight],
+    [timedEvents, noTimeItemsAsMidnight]
+  );
+
+  const eventsWithLayout = useMemo(() =>
+    calculateEventLayout(allTimedEvents),
+    [allTimedEvents]
+  );
+
+  const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
 
   return (
     <View style={styles.container}>
@@ -167,7 +198,23 @@ export function HourlyCalendarGrid({
                 key={`${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`}
                 task={task}
                 onComplete={onCompleteTask}
-                onDoublePress={onTaskDoublePress}
+                onPress={onTaskPress}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {anytimeItems.length > 0 && (
+        <View style={styles.anytimeSection}>
+          <Text style={styles.anytimeLabel}>Anytime</Text>
+          <View style={styles.anytimeEvents}>
+            {uniqByIdAndDate(anytimeItems).map((task, idx) => (
+              <TaskCard
+                key={`${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`}
+                task={task}
+                onComplete={onCompleteTask}
+                onPress={onTaskPress}
               />
             ))}
           </View>
@@ -195,9 +242,6 @@ export function HourlyCalendarGrid({
               <View style={styles.hourLine} />
               <View style={[styles.quarterHourLine, { top: HOUR_HEIGHT * 0.25 }]} />
               <View style={[styles.halfHourLine, { top: HOUR_HEIGHT * 0.5 }]} />
-              <Text style={[styles.halfHourLabel, { top: HOUR_HEIGHT * 0.5 }]}>
-                :30
-              </Text>
               <View style={[styles.quarterHourLine, { top: HOUR_HEIGHT * 0.75 }]} />
             </View>
           ))}
@@ -213,7 +257,7 @@ export function HourlyCalendarGrid({
               <CalendarEventDisplay
                 key={`${event.id}-${event.start_time || ''}-${event.end_time || ''}-${selectedDate}-${event.type}-${idx}`}
                 task={event}
-                onDoublePress={onTaskDoublePress}
+                onPress={onTaskPress}
                 style={{
                   position: 'absolute',
                   top,
@@ -241,7 +285,16 @@ export function HourlyCalendarGrid({
       </ScrollView>
     </View>
   );
-}
+};
+
+export const HourlyCalendarGrid = memo(HourlyCalendarGridComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.selectedDate === nextProps.selectedDate &&
+    prevProps.expandedTasks === nextProps.expandedTasks &&
+    prevProps.currentTimePosition === nextProps.currentTimePosition &&
+    prevProps.viewMode === nextProps.viewMode
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -261,6 +314,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   allDayEvents: {
+    gap: 8,
+  },
+  anytimeSection: {
+    backgroundColor: '#fffbeb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+    padding: 12,
+  },
+  anytimeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 8,
+  },
+  anytimeEvents: {
     gap: 8,
   },
   hoursScrollView: {
@@ -303,23 +371,23 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     height: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#d1d5db',
   },
   quarterHourLine: {
     position: 'absolute',
     left: 70,
     right: 0,
     height: 1,
-    backgroundColor: '#e5e7eb',
-    opacity: 0.8,
+    backgroundColor: '#f3f4f6',
+    opacity: 0.5,
   },
   halfHourLine: {
     position: 'absolute',
     left: 70,
     right: 0,
     height: 1,
-    backgroundColor: '#d1d5db',
-    opacity: 0.9,
+    backgroundColor: '#e5e7eb',
+    opacity: 0.7,
   },
   currentTimeLine: {
     position: 'absolute',

@@ -1,0 +1,70 @@
+-- ============================================================
+-- MIGRATION: Clean up schema & create dynamic global cycles view
+-- ============================================================
+
+-- 1. Drop dependent triggers to safely remove is_active
+DROP TRIGGER IF EXISTS trg_auto_set_is_active ON "0008-ap-global-cycles" CASCADE;
+DROP TRIGGER IF EXISTS trg_log_is_active_flip ON "0008-ap-global-cycles" CASCADE;
+
+-- 2. Remove is_active column
+ALTER TABLE "0008-ap-global-cycles" DROP COLUMN IF EXISTS is_active;
+
+-- 3. Add week_start_day column to users
+ALTER TABLE "0008-ap-users"
+ADD COLUMN IF NOT EXISTS week_start_day TEXT NOT NULL DEFAULT 'monday',
+ADD CONSTRAINT chk_week_start_day CHECK (week_start_day IN ('sunday', 'monday'));
+
+-- 4. Drop old view if it exists
+DROP VIEW IF EXISTS v_global_cycles CASCADE;
+
+-- 5. Create updated dynamic view
+CREATE OR REPLACE VIEW v_global_cycles AS
+WITH ordered_cycles AS (
+  SELECT
+    oc.id AS global_cycle_id,
+    oc.title,
+    oc.start_date,
+    oc.end_date,
+    oc.reflection_start,
+    oc.reflection_end,
+    ROW_NUMBER() OVER (ORDER BY oc.start_date) AS row_num
+  FROM "0008-ap-global-cycles" AS oc
+),
+current_cycle AS (
+  SELECT row_num
+  FROM ordered_cycles
+  WHERE CURRENT_DATE BETWEEN start_date AND reflection_end
+  LIMIT 1
+)
+SELECT
+  oc.global_cycle_id,
+  oc.title,
+  oc.start_date,
+  oc.end_date,
+  oc.reflection_start,
+  oc.reflection_end,
+
+  CASE
+    WHEN CURRENT_DATE BETWEEN oc.start_date AND oc.reflection_end THEN 'active'
+    WHEN oc.row_num < (SELECT row_num FROM current_cycle) THEN 'archived'
+    WHEN oc.row_num = (SELECT row_num FROM current_cycle) + 1 THEN '2nd_in_line'
+    WHEN oc.row_num = (SELECT row_num FROM current_cycle) + 2 THEN '3rd_in_line'
+    WHEN oc.row_num = (SELECT row_num FROM current_cycle) + 3 THEN '4th_in_line'
+    ELSE 'future'
+  END AS cycle_position,
+
+  CASE
+    WHEN CURRENT_DATE BETWEEN oc.start_date AND oc.reflection_end THEN TRUE
+    WHEN CURRENT_DATE BETWEEN
+         LAG(oc.reflection_start) OVER (ORDER BY oc.start_date)
+         AND LAG(oc.reflection_end) OVER (ORDER BY oc.start_date)
+    THEN TRUE
+    ELSE FALSE
+  END AS can_activate
+
+FROM ordered_cycles AS oc
+ORDER BY oc.start_date;
+
+-- ============================================================
+-- END MIGRATION
+-- ============================================================

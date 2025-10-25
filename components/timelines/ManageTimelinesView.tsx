@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ArchivedTimelinesView } from '@/components/settings/ArchivedTimelinesView';
-import { ManageCustomTimelinesModal } from './ManageCustomTimelinesModal';
-import { ManageGlobalTimelinesModal } from './ManageGlobalTimelinesModal';
+import { ManageCustomTimelinesContent } from './ManageCustomTimelinesContent';
+import { ManageGlobalTimelinesContent } from './ManageGlobalTimelinesContent';
 
 export type ManageTimelinesSubTab = 'custom' | 'global' | 'archive';
 
@@ -11,11 +11,12 @@ interface ManageTimelinesViewProps {
 }
 
 export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<ManageTimelinesSubTab>('custom');
-  const [showCustomModal, setShowCustomModal] = useState(false);
-  const [showGlobalModal, setShowGlobalModal] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<ManageTimelinesSubTab>('global');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleUpdate = () => {
+    console.log('[ManageTimelinesView] handleUpdate called, triggering parent update');
+    setRefreshTrigger(prev => prev + 1);
     onUpdate?.();
   };
 
@@ -26,11 +27,7 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
           styles.subTab,
           activeSubTab === 'custom' && styles.activeSubTab,
         ]}
-        onPress={() => {
-          setActiveSubTab('custom');
-          setShowCustomModal(true);
-          setShowGlobalModal(false);
-        }}
+        onPress={() => setActiveSubTab('custom')}
         accessibilityLabel="Manage Custom Timelines"
         accessibilityRole="tab"
         accessibilityState={{ selected: activeSubTab === 'custom' }}
@@ -41,7 +38,7 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
             activeSubTab === 'custom' && styles.activeSubTabText,
           ]}
         >
-          Manage Custom
+          Custom Timelines
         </Text>
       </TouchableOpacity>
 
@@ -50,11 +47,7 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
           styles.subTab,
           activeSubTab === 'global' && styles.activeSubTab,
         ]}
-        onPress={() => {
-          setActiveSubTab('global');
-          setShowGlobalModal(true);
-          setShowCustomModal(false);
-        }}
+        onPress={() => setActiveSubTab('global')}
         accessibilityLabel="Manage Standardized 12 Week Timelines"
         accessibilityRole="tab"
         accessibilityState={{ selected: activeSubTab === 'global' }}
@@ -74,11 +67,7 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
           styles.subTab,
           activeSubTab === 'archive' && styles.activeSubTab,
         ]}
-        onPress={() => {
-          setActiveSubTab('archive');
-          setShowCustomModal(false);
-          setShowGlobalModal(false);
-        }}
+        onPress={() => setActiveSubTab('archive')}
         accessibilityLabel="View Timeline Archive"
         accessibilityRole="tab"
         accessibilityState={{ selected: activeSubTab === 'archive' }}
@@ -89,15 +78,21 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
             activeSubTab === 'archive' && styles.activeSubTabText,
           ]}
         >
-          Timeline Archive
+          Archive
         </Text>
       </TouchableOpacity>
     </View>
   );
 
   const renderContent = () => {
+    if (activeSubTab === 'custom') {
+      return <ManageCustomTimelinesContent onUpdate={handleUpdate} />;
+    }
     if (activeSubTab === 'archive') {
       return <ArchivedTimelinesView onUpdate={handleUpdate} />;
+    }
+    if (activeSubTab === 'global') {
+      return <ManageGlobalTimelinesContent onUpdate={handleUpdate} />;
     }
     return null;
   };
@@ -108,18 +103,6 @@ export function ManageTimelinesView({ onUpdate }: ManageTimelinesViewProps) {
       <View style={styles.content}>
         {renderContent()}
       </View>
-
-      <ManageCustomTimelinesModal
-        visible={showCustomModal}
-        onClose={() => setShowCustomModal(false)}
-        onUpdate={handleUpdate}
-      />
-
-      <ManageGlobalTimelinesModal
-        visible={showGlobalModal}
-        onClose={() => setShowGlobalModal(false)}
-        onUpdate={handleUpdate}
-      />
     </View>
   );
 }
@@ -159,9 +142,6 @@ const styles = StyleSheet.create({
     color: '#0078d4',
   },
   content: {
-    flex: 1,
-  },
-  tabContent: {
     flex: 1,
   },
 });

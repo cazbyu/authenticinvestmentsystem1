@@ -1,8 +1,55 @@
-import React from 'react';
+import React, { useMemo, useCallback, memo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Target, Calendar, Plus, TrendingUp, Check, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { GoalProgress } from '@/hooks/useGoalProgress';
 import { parseLocalDate, formatLocalDate } from '@/lib/dateUtils';
+
+// Memoized DayDot component for optimal performance
+const DayDot = memo(function DayDot({
+  date,
+  dayName,
+  hasLog,
+  onToggle,
+  disabled
+}: {
+  date: string;
+  dayName: string;
+  hasLog: boolean;
+  onToggle: (date: string) => void;
+  disabled: boolean;
+}) {
+  const [isToggling, setIsToggling] = useState(false);
+
+  const handlePress = useCallback(async () => {
+    if (disabled || isToggling) return;
+
+    setIsToggling(true);
+    try {
+      await onToggle(date);
+    } finally {
+      // Small delay to prevent rapid successive toggles
+      setTimeout(() => setIsToggling(false), 300);
+    }
+  }, [date, disabled, isToggling, onToggle]);
+
+  return (
+    <View style={styles.dayDotContainer}>
+      <Text style={styles.dayLabelText}>{dayName}</Text>
+      <TouchableOpacity
+        style={[
+          styles.dayDot,
+          hasLog && styles.dayDotCompleted,
+          isToggling && styles.dayDotToggling
+        ]}
+        onPress={handlePress}
+        activeOpacity={disabled ? 1 : 0.7}
+        disabled={disabled || isToggling}
+      >
+        {hasLog && <Check size={12} color="#ffffff" />}
+      </TouchableOpacity>
+    </View>
+  );
+});
 
 interface WeekData {
   weekNumber: number;
@@ -43,7 +90,7 @@ interface GoalProgressCardProps {
   onToggleExpanded?: () => void; // New prop for toggling collapse/expand
 }
 
-export function GoalProgressCard({
+export const GoalProgressCard = memo(function GoalProgressCard({
   goal,
   progress,
   expanded = true,
@@ -61,21 +108,21 @@ export function GoalProgressCard({
   onToggleExpanded, // New prop
 }: GoalProgressCardProps) {
   const weekActions = weekActionsProp ?? [];
-  const getProgressColor = (percentage: number) => {
+  const getProgressColor = useCallback((percentage: number) => {
     if (percentage >= 85) return '#16a34a'; // Green for 85% and above
     if (percentage >= 60) return '#eab308';
     return '#dc2626';
-  };
+  }, []);
 
-  const getWeeklyProgressColor = (actual: number, target: number) => {
+  const getWeeklyProgressColor = useCallback((actual: number, target: number) => {
     const percentage = target > 0 ? (actual / target) * 100 : 0;
     return getProgressColor(percentage);
-  };
+  }, [getProgressColor]);
 
-  const formatWeeklyProgress = (actual: number, target: number) => {
+  const formatWeeklyProgress = useCallback((actual: number, target: number) => {
     const percentage = target > 0 ? Math.round((actual / target) * 100) : 0;
     return `${percentage}%`;
-  };
+  }, []);
 
   const formatTodayInfo = () => {
     const today = new Date();
@@ -102,10 +149,9 @@ export function GoalProgressCard({
     }
     return `Week ${selectedWeekNumber || progress.currentWeek}`;
   };
-  const primaryRole = goal.roles?.[0]; // Used for card color
-  const cardColor = primaryRole?.color || '#0078d4';
+  const cardColor = useMemo(() => goal.roles?.[0]?.color || '#0078d4', [goal.roles]);
 
-  const generateWeekDays = (startDateString: string) => {
+  const generateWeekDays = useCallback((startDateString: string) => {
     const days = [];
     const start = parseLocalDate(startDateString); // Use parseLocalDate to avoid timezone shifts
 
@@ -127,9 +173,9 @@ export function GoalProgressCard({
     }
 
     return days;
-  };
+  }, []);
 
-  const calculateWeeklyProgress = () => {
+  const calculateWeeklyProgress = useCallback(() => {
     if (!week || weekActions.length === 0) {
       return { actual: progress.weeklyActual, target: progress.weeklyTarget };
     }
@@ -138,7 +184,7 @@ export function GoalProgressCard({
     const totalTarget = weekActions.reduce((sum, action) => sum + action.weeklyTarget, 0);
     
     return { actual: totalActual, target: totalTarget };
-  };
+  }, [week, weekActions, progress.weeklyActual, progress.weeklyTarget]);
 
   if (compact) {
     return (
@@ -188,7 +234,7 @@ export function GoalProgressCard({
     );
   }
 
-  const weeklyProgress = calculateWeeklyProgress();
+  const weeklyProgress = useMemo(() => calculateWeeklyProgress(), [calculateWeeklyProgress]);
   const hasWeekContext = !!week;
   const hasWeekActionsProvided = weekActionsProp !== undefined;
   const shouldShowWeeklyProgress =
@@ -304,13 +350,13 @@ export function GoalProgressCard({
         {shouldRenderWeekActions && week && expanded && (
           <View style={styles.weekActionsSection}>
             <View style={styles.weekActionsHeader}>
-              {onAddAction && (
+              {onAddAction && weekActions.length > 0 && (
                 <TouchableOpacity
                   style={[styles.addActionButton, { borderColor: cardColor }]}
                   onPress={onAddAction}
                 >
-                  <Plus size={12} color={cardColor} />
-                  <Text style={[styles.addActionButtonText, { color: cardColor }]}>Add</Text>
+                  <Plus size={14} color={cardColor} />
+                  <Text style={[styles.addActionButtonText, { color: cardColor }]}>Action</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -319,6 +365,22 @@ export function GoalProgressCard({
               <View style={styles.loadingActions}>
                 <ActivityIndicator size="small" color="#6b7280" />
                 <Text style={styles.loadingActionsText}>Loading actions...</Text>
+              </View>
+            ) : weekActions.length === 0 ? (
+              <View style={styles.emptyActionsContainer}>
+                <Text style={styles.emptyActionsTitle}>No Actions Yet</Text>
+                <Text style={styles.emptyActionsMessage}>
+                  Currently no actions are supporting your goal - create them here
+                </Text>
+                {onAddAction && (
+                  <TouchableOpacity
+                    style={[styles.emptyActionsButton, { backgroundColor: cardColor }]}
+                    onPress={onAddAction}
+                  >
+                    <Plus size={20} color="#ffffff" />
+                    <Text style={styles.emptyActionsButtonText}>Create Action</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View style={styles.actionsList}>
@@ -360,40 +422,31 @@ export function GoalProgressCard({
                         </View>
                       </View>
 
-                      {/* Day labels above circles for this action */}
-                      <View style={styles.dayLabelsRow}>
-                        {weekDays.map(day => (
-                          <Text key={day.date} style={styles.dayLabelText}>
-                            {day.dayName}
-                          </Text>
-                        ))}
-                      </View>
-
-                      <View style={styles.dayDots}>
+                      {/* Day dots with optimized rendering */}
+                      <View style={styles.dayDotsRow}>
                         {weekDays.map(day => {
-                           const hasLog = action.logs.some(
-                             log => log.measured_on === day.date && log.completed
-                           );
+                          const hasLog = action.logs.some(
+                            log => log.measured_on === day.date && log.completed
+                          );
 
-                           return (
-                             <TouchableOpacity
-                               key={day.date}
-                               style={[styles.dayDot, hasLog && styles.dayDotCompleted]}
-                               onPress={onToggleCompletion ? async () => {
-                                 console.log('[GoalProgressCard] Day dot clicked:', { actionId: action.id, date: day.date, hasLog });
-                                 try {
-                                   await onToggleCompletion(action.id, day.date, hasLog);
-                                   console.log('[GoalProgressCard] Toggle completed successfully');
-                                 } catch (error) {
-                                   console.error('[GoalProgressCard] Error in day dot toggle:', error);
-                                 }
-                               } : undefined}
-                               activeOpacity={onToggleCompletion ? 0.7 : 1}
-                             >
-                               {hasLog && <Check size={12} color="#ffffff" />}
-                             </TouchableOpacity>
-                           );
-                         })}
+                          return (
+                            <DayDot
+                              key={day.date}
+                              date={day.date}
+                              dayName={day.dayName}
+                              hasLog={hasLog}
+                              onToggle={async (date: string) => {
+                                if (!onToggleCompletion) return;
+                                try {
+                                  await onToggleCompletion(action.id, date, hasLog);
+                                } catch (error) {
+                                  console.error('[GoalProgressCard] Error in day dot toggle:', error);
+                                }
+                              }}
+                              disabled={!onToggleCompletion}
+                            />
+                          );
+                        })}
                       </View>
 
                     </View>
@@ -429,7 +482,7 @@ export function GoalProgressCard({
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
@@ -630,14 +683,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
   },
   addActionButtonText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
   },
   loadingActions: {
@@ -651,15 +704,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
-  emptyActions: {
+  emptyActionsContainer: {
     alignItems: 'center',
-    paddingVertical: 12,
-    gap: 8,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    gap: 12,
   },
-  emptyActionsText: {
-    fontSize: 12,
-    color: '#9ca3af',
-    fontStyle: 'italic',
+  emptyActionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+  },
+  emptyActionsMessage: {
+    fontSize: 13,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyActionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 4,
+  },
+  emptyActionsButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   actionsList: {
     gap: 8,
@@ -702,37 +777,37 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 4,
   },
-  dayDots: {
+  dayDotsRow: {
     flexDirection: 'row',
-    gap: 10, // Match gap with dayLabelsRow
+    gap: 10,
     justifyContent: 'center',
   },
-  dayLabelsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10, // Slightly increased gap for better spacing
-    marginBottom: 4, // Space between labels and circles
+  dayDotContainer: {
+    alignItems: 'center',
+    gap: 4,
   },
   dayLabelText: {
     fontSize: 10,
     fontWeight: '600',
     color: '#6b7280',
-    width: 22, // Slightly increased width to prevent letter wrapping
     textAlign: 'center',
   },
   dayDot: {
-    width: 22, // Increased to match label width
-    height: 22, // Increased to match label width
-    borderRadius: 11, // Half of width/height for perfect circle
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent', // Empty circle
-    borderWidth: 1, // Outline
-    borderColor: '#6b7280', // Gray outline
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#6b7280',
   },
   dayDotCompleted: {
-    backgroundColor: '#1f2937', // Filled dark circle
-    borderColor: '#1f2937', // Match border color
+    backgroundColor: '#1f2937',
+    borderColor: '#1f2937',
+  },
+  dayDotToggling: {
+    opacity: 0.6,
   },
   dayDotTouchable: {
     width: '100%',

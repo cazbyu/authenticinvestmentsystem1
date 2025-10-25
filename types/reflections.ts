@@ -95,6 +95,21 @@ export interface WeeklyAggregationData {
   totalGoalsTracked: number;
 }
 
+export interface GoalActionSummary {
+  goal_id: string;
+  goal_title: string;
+  action_count: number;
+}
+
+export interface DailyAggregationData {
+  goalSummaries: GoalActionSummary[];
+  roleInvestments: WeeklyRoleInvestment[];
+  domainBalance: WeeklyDomainBalance[];
+  withdrawalRoles: { role_label: string; count: number }[];
+  withdrawalDomains: { domain_name: string; count: number }[];
+  totalWithdrawals: number;
+}
+
 export type RichTextFormat = 'bold' | 'italic' | 'underline' | 'bulletList' | 'numberedList';
 
 export interface RichTextInputProps {

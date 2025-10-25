@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer, lazy, Suspense } from 'react';
+import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
-import { CreateGoalModal } from '@/components/goals/CreateGoalModal';
-import { EditGoalModal } from '@/components/goals/EditGoalModal';
-import ActionEffortModal from '@/components/goals/ActionEffortModal';
-import { ManageCustomTimelinesModal } from '@/components/timelines/ManageCustomTimelinesModal';
-import { ManageGlobalTimelinesModal } from '@/components/timelines/ManageGlobalTimelinesModal';
-import { ManageTimelinesView } from '@/components/timelines/ManageTimelinesView';
-import { WithdrawalForm } from '@/components/journal/WithdrawalForm';
+const CreateGoalModal = lazy(() => import('@/components/goals/CreateGoalModal').then(m => ({ default: m.CreateGoalModal })));
+const EditGoalModal = lazy(() => import('@/components/goals/EditGoalModal').then(m => ({ default: m.EditGoalModal })));
+const ActionEffortModal = lazy(() => import('@/components/goals/ActionEffortModal'));
+const ManageCustomTimelinesModal = lazy(() => import('@/components/timelines/ManageCustomTimelinesModal').then(m => ({ default: m.ManageCustomTimelinesModal })));
+const ManageGlobalTimelinesModal = lazy(() => import('@/components/timelines/ManageGlobalTimelinesModal').then(m => ({ default: m.ManageGlobalTimelinesModal })));
+const ManageTimelinesView = lazy(() => import('@/components/timelines/ManageTimelinesView').then(m => ({ default: m.ManageTimelinesView })));
+const WithdrawalForm = lazy(() => import('@/components/journal/WithdrawalForm').then(m => ({ default: m.WithdrawalForm })));
 import { GoalBankTabbedHeader, GoalBankTab } from '@/components/goals/GoalBankTabbedHeader';
 import { NorthStarQuickView } from '@/components/northStar/NorthStarQuickView';
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
@@ -26,38 +26,55 @@ import { DraggableFab } from '@/components/DraggableFab';
 import { router } from 'expo-router';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useTabReset } from '@/contexts/TabResetContext';
+import { goalsReducer, initialGoalsState, type Timeline, type TimelineWeek } from '@/reducers/goalsReducer';
 
-interface Timeline {
-  id: string;
-  source: 'custom' | 'global';
-  title?: string;
-  start_date: string | null;
-  end_date: string | null;
-  timeline_type?: 'cycle' | 'project' | 'challenge' | 'custom';
-  global_cycle_id?: string | null;
-  global_cycle?: {
-    id?: string | null;
-    title?: string | null;
-    cycle_label?: string | null;
-    start_date?: string | null;
-    end_date?: string | null;
-    is_active?: boolean | null;
-  } | null;
-}
-
-interface TimelineWeek {
-  week_number: number;
-  start_date: string;
-  end_date: string;
-}
 export default function Goals() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { colors } = useTheme();
-  const [activeTab, setActiveTab] = useState<GoalBankTab>('timelines');
-  const [selectedTimeline, setSelectedTimeline] = useState<Timeline | null>(null);
-  const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
-  const [weekGoalActions, setWeekGoalActions] = useState<Record<string, any[]>>({});
-  const [loadingWeekActions, setLoadingWeekActions] = useState(false);
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
+
+  // Use reducer for core business logic state
+  const [state, dispatch] = useReducer(goalsReducer, initialGoalsState);
+  const {
+    activeTab,
+    selectedTimeline,
+    currentWeekIndex,
+    weekGoalActions,
+    loadingWeekActions,
+    allTimelines,
+    timelineWeeks,
+    timelineDaysLeft,
+    timelinesWithGoals,
+    loadingTimelines,
+    timelineGoals,
+    timelineGoalProgress,
+    totalGoalProgress,
+    expandedGoals,
+  } = state;
+
+  // Wrapper functions for dispatch (maintains compatibility with existing code)
+  const setActiveTab = useCallback((tab: typeof activeTab) => dispatch({ type: 'SET_ACTIVE_TAB', payload: tab }), []);
+  const setSelectedTimeline = useCallback((timeline: Timeline | null) => dispatch({ type: 'SET_SELECTED_TIMELINE', payload: timeline }), []);
+  const setCurrentWeekIndex = useCallback((index: number) => dispatch({ type: 'SET_CURRENT_WEEK_INDEX', payload: index }), []);
+  const setWeekGoalActions = useCallback((actions: Record<string, any[]> | ((prev: Record<string, any[]>) => Record<string, any[]>)) => {
+    if (typeof actions === 'function') {
+      dispatch({ type: 'SET_WEEK_GOAL_ACTIONS', payload: actions(weekGoalActions) });
+    } else {
+      dispatch({ type: 'SET_WEEK_GOAL_ACTIONS', payload: actions });
+    }
+  }, [weekGoalActions]);
+  const setLoadingWeekActions = useCallback((loading: boolean) => dispatch({ type: 'SET_LOADING_WEEK_ACTIONS', payload: loading }), []);
+  const setAllTimelines = useCallback((timelines: Timeline[]) => dispatch({ type: 'SET_ALL_TIMELINES', payload: timelines }), []);
+  const setTimelineWeeks = useCallback((weeks: TimelineWeek[]) => dispatch({ type: 'SET_TIMELINE_WEEKS', payload: weeks }), []);
+  const setTimelineDaysLeft = useCallback((days: any) => dispatch({ type: 'SET_TIMELINE_DAYS_LEFT', payload: days }), []);
+  const setTimelinesWithGoals = useCallback((timelines: any[]) => dispatch({ type: 'SET_TIMELINES_WITH_GOALS', payload: timelines }), []);
+  const setLoadingTimelines = useCallback((loading: boolean) => dispatch({ type: 'SET_LOADING_TIMELINES', payload: loading }), []);
+  const setTimelineGoals = useCallback((goals: any[]) => dispatch({ type: 'SET_TIMELINE_GOALS', payload: goals }), []);
+  const setTimelineGoalProgress = useCallback((progress: Record<string, any>) => dispatch({ type: 'SET_TIMELINE_GOAL_PROGRESS', payload: progress }), []);
+  const setTotalGoalProgress = useCallback((progress: Record<string, { totalActual: number; totalTarget: number; percentage: number }>) => dispatch({ type: 'SET_TOTAL_GOAL_PROGRESS', payload: progress }), []);
+  const setExpandedGoals = useCallback((goals: Record<string, boolean>) => dispatch({ type: 'SET_EXPANDED_GOALS', payload: goals }), []);
+  const toggleGoalExpanded = useCallback((goalId: string) => dispatch({ type: 'TOGGLE_GOAL_EXPANDED', payload: goalId }), []);
 
   // Helper function to format dates without timezone shift
   const formatDateDisplay = (dateString: string): string => {
@@ -69,16 +86,22 @@ export default function Goals() {
   const [loadingNorthStar, setLoadingNorthStar] = useState(false);
   const [northStarEditorVisible, setNorthStarEditorVisible] = useState(false);
   const [northStarInitialSection, setNorthStarInitialSection] = useState<'mission' | 'vision' | 'goals'>('mission');
-  
+
   // Import functions from useGoalProgress hook (but NOT fetchGoalActionsForWeek or completion functions - we handle those locally)
   const {
     toggleTaskDay,
   } = useGoalProgress();
-  
-  // Local goals state for the selected timeline
-  const [timelineGoals, setTimelineGoals] = useState<any[]>([]);
-  const [timelineGoalProgress, setTimelineGoalProgress] = useState<Record<string, any>>({});
-  const [totalGoalProgress, setTotalGoalProgress] = useState<Record<string, { totalActual: number; totalTarget: number; percentage: number }>>({});
+
+  // Goals state now managed by reducer above
+
+  // Memoize current week computation for better performance
+  const currentWeek = useMemo(() => {
+    if (!selectedTimeline || !timelineWeeks || timelineWeeks.length === 0) return null;
+    return timelineWeeks[currentWeekIndex] || null;
+  }, [selectedTimeline, timelineWeeks, currentWeekIndex]);
+
+  // Memoize goal IDs for efficient comparison
+  const goalIds = useMemo(() => timelineGoals.map(g => g.id), [timelineGoals]);
 
   // MODIFIED: This function now accepts the goals array directly to avoid using stale state.
   const fetchWeekActions = async (goalsToFetch: any[]) => {
@@ -155,33 +178,88 @@ export default function Goals() {
   }, [selectedTimeline, currentWeekIndex, timelineGoals]);
 
   const handleToggleCompletion = async (actionId: string, date: string, completed: boolean) => {
-    try {
-      console.log('[Goals] Toggling completion:', { actionId, date, completed, selectedTimeline });
+    if (!selectedTimeline) {
+      Alert.alert('Error', 'No timeline selected');
+      return;
+    }
 
-      if (!selectedTimeline) {
-        throw new Error('No timeline selected');
+    const currentWeek = timelineWeeks[currentWeekIndex];
+    if (!currentWeek) {
+      Alert.alert('Error', 'No current week found');
+      return;
+    }
+
+    // Find goal and action info before state updates
+    let goalIdForAction: string | undefined;
+    let weeklyTarget = 0;
+
+    for (const goalId in weekGoalActions) {
+      const action = weekGoalActions[goalId]?.find(a => a.id === actionId);
+      if (action) {
+        goalIdForAction = goalId;
+        weeklyTarget = action.weeklyTarget;
+        break;
       }
+    }
+
+    // Store previous state for rollback on error
+    const previousState = { ...weekGoalActions };
+
+    // OPTIMISTIC UI UPDATE - Update immediately
+    setWeekGoalActions(prevActions => {
+      const updatedActions = { ...prevActions };
+
+      for (const goalId in updatedActions) {
+        const goalActions = updatedActions[goalId];
+        const actionIndex = goalActions.findIndex(action => action.id === actionId);
+
+        if (actionIndex !== -1) {
+          const updatedAction = { ...goalActions[actionIndex] };
+
+          if (completed) {
+            // Remove the log optimistically
+            updatedAction.logs = updatedAction.logs.filter(log => log.measured_on !== date);
+            updatedAction.weeklyActual = Math.max(0, updatedAction.weeklyActual - 1);
+          } else {
+            // Add the log optimistically
+            const logIndex = updatedAction.logs.findIndex(log => log.measured_on === date);
+            if (logIndex !== -1) {
+              updatedAction.logs[logIndex] = { ...updatedAction.logs[logIndex], completed: true };
+            } else {
+              updatedAction.logs.push({
+                id: `temp-${Date.now()}`,
+                task_id: actionId,
+                measured_on: date,
+                week_number: currentWeek.week_number,
+                day_of_week: new Date(date).getDay(),
+                value: 1,
+                completed: true,
+                created_at: new Date().toISOString(),
+              });
+            }
+            updatedAction.weeklyActual = updatedAction.weeklyActual + 1;
+          }
+
+          updatedActions[goalId] = [
+            ...goalActions.slice(0, actionIndex),
+            updatedAction,
+            ...goalActions.slice(actionIndex + 1)
+          ];
+
+          break;
+        }
+      }
+
+      return updatedActions;
+    });
+
+    // Perform database operations in background
+    try {
+      console.log('[Goals] Toggling completion (background):', { actionId, date, completed });
 
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-
-      const currentWeek = timelineWeeks[currentWeekIndex];
-      if (!currentWeek) {
-        throw new Error('No current week found');
-      }
-
-      let goalIdForAction: string | undefined;
-      let weeklyTarget = 0;
-
-      for (const goalId in weekGoalActions) {
-        const action = weekGoalActions[goalId]?.find(a => a.id === actionId);
-        if (action) {
-          goalIdForAction = goalId;
-          weeklyTarget = action.weeklyTarget;
-          break;
-        }
-      }
 
       if (completed) {
         const result = await handleActionUncompletion(supabase, actionId, date);
@@ -190,7 +268,7 @@ export default function Goals() {
           throw new Error(result.error || 'Failed to uncomplete action');
         }
 
-        console.log('[Goals] Action uncompleted, recalculating count');
+        console.log('[Goals] Action uncompleted, syncing count');
         const countResult = await getWeeklyCompletionCountWithTarget(
           supabase,
           actionId,
@@ -200,6 +278,7 @@ export default function Goals() {
           selectedTimeline
         );
 
+        // Update with actual count from database
         setWeekGoalActions(prevActions => {
           const updatedActions = { ...prevActions };
 
@@ -209,7 +288,6 @@ export default function Goals() {
 
             if (actionIndex !== -1) {
               const updatedAction = { ...goalActions[actionIndex] };
-              updatedAction.logs = updatedAction.logs.filter(log => log.measured_on !== date);
               updatedAction.weeklyActual = countResult.completedCount;
 
               updatedActions[goalId] = [
@@ -249,7 +327,7 @@ export default function Goals() {
           throw new Error(result.error || 'Failed to complete action');
         }
 
-        console.log('[Goals] Action completed, recalculating count');
+        console.log('[Goals] Action completed, syncing count');
         const countResult = await getWeeklyCompletionCountWithTarget(
           supabase,
           actionId,
@@ -259,6 +337,7 @@ export default function Goals() {
           selectedTimeline
         );
 
+        // Update with actual count from database
         setWeekGoalActions(prevActions => {
           const updatedActions = { ...prevActions };
 
@@ -268,23 +347,6 @@ export default function Goals() {
 
             if (actionIndex !== -1) {
               const updatedAction = { ...goalActions[actionIndex] };
-
-              const logIndex = updatedAction.logs.findIndex(log => log.measured_on === date);
-              if (logIndex !== -1) {
-                updatedAction.logs[logIndex] = { ...updatedAction.logs[logIndex], completed: true };
-              } else {
-                updatedAction.logs.push({
-                  id: `temp-${Date.now()}`,
-                  task_id: actionId,
-                  measured_on: date,
-                  week_number: currentWeek.week_number,
-                  day_of_week: new Date(date).getDay(),
-                  value: 1,
-                  completed: true,
-                  created_at: new Date().toISOString(),
-                });
-              }
-
               updatedAction.weeklyActual = countResult.completedCount;
 
               updatedActions[goalId] = [
@@ -316,7 +378,7 @@ export default function Goals() {
         );
       }
 
-      console.log('[Goals] Waiting for database commits, then refreshing score and total goal progress');
+      console.log('[Goals] Refreshing score and total goal progress');
       // Small delay to ensure all database writes (including RPC joins) complete
       await new Promise(resolve => setTimeout(resolve, 200));
       await refreshScore(true);
@@ -325,9 +387,11 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('[Goals] Error toggling completion:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to update completion status');
 
-      await fetchWeekActions(timelineGoals);
+      // ROLLBACK - Restore previous state on error
+      setWeekGoalActions(previousState);
+
+      Alert.alert('Error', (error as Error).message || 'Failed to update completion status');
     }
   };
 
@@ -468,17 +532,13 @@ export default function Goals() {
   const [editingAction, setEditingAction] = useState<any>(null);
   const [editingActionGoal, setEditingActionGoal] = useState<any>(null);
 
-  // Collapse/expand state for goal actions
-  const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>({});
-  
-  // Timeline data
-  const [allTimelines, setAllTimelines] = useState<Timeline[]>([]);
-  const [timelineWeeks, setTimelineWeeks] = useState<TimelineWeek[]>([]);
-  const [timelineDaysLeft, setTimelineDaysLeft] = useState<any>(null);
-  const [timelinesWithGoals, setTimelinesWithGoals] = useState<any[]>([]);
-  
+  // Timeline and goals state now managed by reducer above (see line 38)
+
   // Refs for initialization
   const initializedWeekRef = useRef(false);
+  const lastSelectedTimelineIdRef = useRef<string | null>(null);
+  const timelinesLoadedRef = useRef(false);
+  const timelinesDataCache = useRef<any[]>([]);
   
   // Use the goals hook with timeline scope
   const {
@@ -496,24 +556,102 @@ export default function Goals() {
     undoDeleteTaskWeekPlan,
   } = useGoals();
 
+
+  // Soft reset - clears selected timeline but preserves timeline list
+  const softResetToTimelines = useCallback(() => {
+    setActiveTab('timelines');
+    setSelectedTimeline(null);
+    setCurrentWeekIndex(0);
+    setTimelineWeeks([]);
+    setTimelineGoals([]);
+    setTimelineGoalProgress({});
+    setTotalGoalProgress({});
+    setWeekGoalActions({});
+    setLoadingWeekActions(false);
+    setTimelineDaysLeft(null);
+    setExpandedGoals({});
+    setSelectedGoal(null);
+    setSelectedGoalForAction(null);
+    setEditingAction(null);
+    setEditingActionGoal(null);
+    setActionModalMode('create');
+    setCreateGoalModalVisible(false);
+    setEditGoalModalVisible(false);
+    setActionEffortModalVisible(false);
+    setManageCustomTimelinesModalVisible(false);
+    setManageGlobalTimelinesModalVisible(false);
+    setWithdrawalFormVisible(false);
+    setNorthStarEditorVisible(false);
+    setNorthStarInitialSection('mission');
+    setDeleteConfirmVisible(false);
+    setDeleteActionData(null);
+    setUndoConfirmVisible(false);
+    setUndoMessage('');
+    setUndoState(prev => {
+      if (prev?.timeout) {
+        clearTimeout(prev.timeout);
+      }
+      return null;
+    });
+    initializedWeekRef.current = false;
+    // Restore cached timelines if available
+    if (timelinesDataCache.current.length > 0) {
+      setTimelinesWithGoals(timelinesDataCache.current);
+    }
+    // Don't clear timelinesLoadedRef or lastSelectedTimelineIdRef - we want to keep them
+  }, []);
+
+  // Full reset - clears everything (used on unmount)
+  const resetToMain = useCallback(() => {
+    softResetToTimelines();
+    setTimelinesWithGoals([]);
+    timelinesLoadedRef.current = false;
+    timelinesDataCache.current = [];
+    lastSelectedTimelineIdRef.current = null;
+  }, [softResetToTimelines]);
+
   useEffect(() => {
-    fetchAllTimelines();
-    refreshScore();
-    fetchNorthStarData();
+    console.log('[Goals] Component mounted, initializing...');
+    // Register soft reset for tab press
+    registerResetHandler('goals', softResetToTimelines);
+
+    const initializeGoals = async () => {
+      try {
+        await fetchAllTimelines();
+        refreshScore();
+        fetchNorthStarData();
+      } catch (error) {
+        console.error('[Goals] Error in initialization:', error);
+      }
+    };
+
+    initializeGoals();
 
     // Cleanup undo timeout on unmount
     return () => {
+      unregisterResetHandler('goals');
       if (undoState?.timeout) {
         clearTimeout(undoState.timeout);
       }
+      // Full reset on unmount
+      resetToMain();
     };
-  }, []);
+  }, [registerResetHandler, unregisterResetHandler, softResetToTimelines, resetToMain]);
 
+  // Parallel fetch all timeline data when timeline is selected
   useEffect(() => {
     if (selectedTimeline) {
-      fetchTimelineGoals(selectedTimeline);
-      fetchTimelineWeeks(selectedTimeline);
-      fetchTimelineDaysLeft(selectedTimeline);
+      // Store the last selected timeline ID
+      lastSelectedTimelineIdRef.current = selectedTimeline.id;
+
+      // Fetch all timeline data in parallel for better performance
+      Promise.all([
+        fetchTimelineGoals(selectedTimeline),
+        fetchTimelineWeeks(selectedTimeline),
+        fetchTimelineDaysLeft(selectedTimeline)
+      ]).catch(error => {
+        console.error('[Goals] Error loading timeline data:', error);
+      });
     }
   }, [selectedTimeline]);
 
@@ -563,13 +701,15 @@ export default function Goals() {
   };
 
 
-  const fetchAllTimelines = async () => {
+  const fetchAllTimelines = useCallback(async () => {
     console.log('[Goals] fetchAllTimelines called');
+    setLoadingTimelines(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         console.log('[Goals] No authenticated user found');
+        setLoadingTimelines(false);
         return;
       }
 
@@ -619,13 +759,15 @@ export default function Goals() {
           activated_at,
           created_at,
           updated_at,
-          global_cycle:0008-ap-global-cycles!inner(
+          title,
+          start_date,
+          end_date,
+          global_cycle:0008-ap-global-cycles(
             id,
             title,
             cycle_label,
             start_date,
-            end_date,
-            is_active
+            end_date
           )
         `)
         .eq('user_id', user.id)
@@ -647,12 +789,24 @@ export default function Goals() {
 
       if (globalData) {
         globalData.forEach(timeline => {
+          // Use snapshot data if global_cycle join failed
+          const title = timeline.global_cycle?.title
+            || timeline.global_cycle?.cycle_label
+            || timeline.title
+            || 'Global Timeline';
+          const startDate = timeline.global_cycle?.start_date
+            || timeline.start_date
+            || '';
+          const endDate = timeline.global_cycle?.end_date
+            || timeline.end_date
+            || '';
+
           timelines.push({
             id: timeline.id,
             source: 'global',
-            title: timeline.global_cycle?.title || timeline.global_cycle?.cycle_label || 'Global Timeline',
-            start_date: timeline.global_cycle?.start_date || '',
-            end_date: timeline.global_cycle?.end_date || '',
+            title: title,
+            start_date: startDate,
+            end_date: endDate,
             global_cycle_id: timeline.global_cycle_id ?? timeline.global_cycle?.id,
             global_cycle: timeline.global_cycle || null,
           });
@@ -676,11 +830,16 @@ export default function Goals() {
       await fetchTimelinesWithGoalCounts(timelines);
       console.log('[Goals] fetchAllTimelines complete');
 
+      // Mark timelines as loaded
+      timelinesLoadedRef.current = true;
+      setLoadingTimelines(false);
+
     } catch (error) {
       console.error('[Goals] Error fetching timelines:', error);
+      setLoadingTimelines(false);
       Alert.alert('Error', (error as Error).message);
     }
-  };
+  }, []); // Memoized with empty deps - only fetches from server
 
   const fetchTimelinesWithGoalCounts = async (timelines: Timeline[]) => {
     try {
@@ -752,6 +911,8 @@ export default function Goals() {
       );
 
       setTimelinesWithGoals(timelinesWithCounts);
+      // Cache the timeline data
+      timelinesDataCache.current = timelinesWithCounts;
     } catch (error) {
       console.error('Error fetching timeline goal counts:', error);
     }
@@ -911,8 +1072,11 @@ export default function Goals() {
   };
 
   const handleTimelineSelect = (timeline: Timeline) => {
+    console.log('[Goals] Timeline selected:', timeline.title);
     setSelectedTimeline(timeline);
     setCurrentWeekIndex(0);
+    // Store for future restoration
+    lastSelectedTimelineIdRef.current = timeline.id;
   };
 
   const handleBackToTimelines = () => {
@@ -924,12 +1088,7 @@ export default function Goals() {
     setExpandedGoals({});
   };
 
-  const toggleGoalExpanded = (goalId: string) => {
-    setExpandedGoals(prev => ({
-      ...prev,
-      [goalId]: !prev[goalId]
-    }));
-  };
+  // toggleGoalExpanded is now defined above using useCallback and dispatch
 
   const handleEditAction = (action: any, goal: any) => {
     console.log('[handleEditAction] Editing action:', action);
@@ -1031,7 +1190,7 @@ export default function Goals() {
       </View>
 
       <ScrollView style={styles.timelinesList}>
-        {loading ? (
+        {loadingTimelines ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#0078d4" />
             <Text style={styles.loadingText}>Loading timelines...</Text>
@@ -1165,20 +1324,22 @@ export default function Goals() {
           </View>
         )}
 
-        <ScrollView style={styles.goalsList}>
-          {timelineGoals.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No goals found for this timeline</Text>
-              <TouchableOpacity
-                style={styles.createGoalButton}
-                onPress={() => setCreateGoalModalVisible(true)}
-              >
-                <Plus size={20} color="#ffffff" />
-                <Text style={styles.createGoalButtonText}>Create Goal</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            timelineGoals.map(goal => {
+        {timelineGoals.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No goals found for this timeline</Text>
+            <TouchableOpacity
+              style={styles.createGoalButton}
+              onPress={() => setCreateGoalModalVisible(true)}
+            >
+              <Plus size={20} color="#ffffff" />
+              <Text style={styles.createGoalButtonText}>Create Goal</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={timelineGoals}
+            keyExtractor={(goal) => goal.id}
+            renderItem={({ item: goal }) => {
               const totalProgress = totalGoalProgress[goal.id] || { totalActual: 0, totalTarget: 0, percentage: 0 };
               const progress = timelineGoalProgress[goal.id] || {
                 currentWeek: currentWeek?.week_number || 1,
@@ -1239,18 +1400,31 @@ export default function Goals() {
                   onToggleExpanded={() => toggleGoalExpanded(goal.id)}
                 />
               );
-            })
-          )}
-        </ScrollView>
+            }}
+            style={styles.goalsList}
+            contentContainerStyle={styles.goalsListContent}
+            initialNumToRender={5}
+            maxToRenderPerBatch={3}
+            windowSize={5}
+            removeClippedSubviews={true}
+            getItemLayout={(data, index) => ({
+              length: 300, // Approximate height of GoalProgressCard
+              offset: 300 * index,
+              index,
+            })}
+          />
+        )}
       </View>
     );
   };
 
   const renderMainContent = () => {
+    // Show selected timeline if one is selected
     if (selectedTimeline) {
       return renderSelectedTimeline();
     }
 
+    // Show other tabs
     if (activeTab === 'northstar') {
       return renderNorthStarTab();
     }
@@ -1259,6 +1433,8 @@ export default function Goals() {
       return renderManageTab();
     }
 
+    // For timelines tab, if we have loaded timelines and auto-selected one,
+    // it will be shown above. Otherwise show the timeline list.
     return renderTimelinesTab();
   };
 
@@ -1286,95 +1462,97 @@ export default function Goals() {
       )}
 
       {/* Modals */}
-      <CreateGoalModal
-        visible={createGoalModalVisible}
-        onClose={() => setCreateGoalModalVisible(false)}
-        onSubmitSuccess={() => {
-          setCreateGoalModalVisible(false);
-          fetchTimelineGoals(selectedTimeline!);
-          fetchAllTimelines();
-        }}
-        createTwelveWeekGoal={createTwelveWeekGoal}
-        createCustomGoal={createCustomGoal}
-        selectedTimeline={selectedTimeline}
-        allTimelines={allTimelines}
-      />
+      <Suspense fallback={null}>
+        <CreateGoalModal
+          visible={createGoalModalVisible}
+          onClose={() => setCreateGoalModalVisible(false)}
+          onSubmitSuccess={() => {
+            setCreateGoalModalVisible(false);
+            fetchTimelineGoals(selectedTimeline!);
+            fetchAllTimelines();
+          }}
+          createTwelveWeekGoal={createTwelveWeekGoal}
+          createCustomGoal={createCustomGoal}
+          selectedTimeline={selectedTimeline}
+          allTimelines={allTimelines}
+        />
 
-      <EditGoalModal
-        visible={editGoalModalVisible}
-        onClose={() => setEditGoalModalVisible(false)}
-        onUpdate={() => {
-          setEditGoalModalVisible(false);
-          fetchTimelineGoals(selectedTimeline!);
-          fetchAllTimelines();
-        }}
-        goal={selectedGoal}
-        deleteGoal={deleteGoal}
-      />
+        <EditGoalModal
+          visible={editGoalModalVisible}
+          onClose={() => setEditGoalModalVisible(false)}
+          onUpdate={() => {
+            setEditGoalModalVisible(false);
+            fetchTimelineGoals(selectedTimeline!);
+            fetchAllTimelines();
+          }}
+          goal={selectedGoal}
+          deleteGoal={deleteGoal}
+        />
 
-      <ActionEffortModal
-        visible={actionEffortModalVisible}
-        onClose={async () => { // MODIFIED: The handler is now async.
-          console.log('[Goals] ActionEffortModal onClose - starting refresh');
-          setActionEffortModalVisible(false);
-          setEditingAction(null);
-          setEditingActionGoal(null);
-          setActionModalMode('create');
-          // MODIFIED: This logic now chains the fetches to prevent race conditions.
-          if (selectedTimeline) {
-            console.log('[Goals] Fetching timeline goals for:', selectedTimeline.id);
-            const newGoals = await fetchTimelineGoals(selectedTimeline);
-            console.log('[Goals] Timeline goals fetched, count:', newGoals.length);
-            console.log('[Goals] Fetching week actions for goals:', newGoals.map(g => g.id));
-            await fetchWeekActions(newGoals);
-            await fetchTotalGoalProgress(newGoals);
-            console.log('[Goals] Week actions and total progress fetch completed');
-          }
-        }}
-        goal={actionModalMode === 'create' ? selectedGoalForAction : editingActionGoal}
-        cycleWeeks={timelineWeeks}
-        timeline={selectedTimeline}
-        createTaskWithWeekPlan={createTaskWithWeekPlan}
-        initialData={editingAction}
-        mode={actionModalMode}
-      />
+        <ActionEffortModal
+          visible={actionEffortModalVisible}
+          onClose={async () => { // MODIFIED: The handler is now async.
+            console.log('[Goals] ActionEffortModal onClose - starting refresh');
+            setActionEffortModalVisible(false);
+            setEditingAction(null);
+            setEditingActionGoal(null);
+            setActionModalMode('create');
+            // MODIFIED: This logic now chains the fetches to prevent race conditions.
+            if (selectedTimeline) {
+              console.log('[Goals] Fetching timeline goals for:', selectedTimeline.id);
+              const newGoals = await fetchTimelineGoals(selectedTimeline);
+              console.log('[Goals] Timeline goals fetched, count:', newGoals.length);
+              console.log('[Goals] Fetching week actions for goals:', newGoals.map(g => g.id));
+              await fetchWeekActions(newGoals);
+              await fetchTotalGoalProgress(newGoals);
+              console.log('[Goals] Week actions and total progress fetch completed');
+            }
+          }}
+          goal={actionModalMode === 'create' ? selectedGoalForAction : editingActionGoal}
+          cycleWeeks={timelineWeeks}
+          timeline={selectedTimeline}
+          createTaskWithWeekPlan={createTaskWithWeekPlan}
+          initialData={editingAction}
+          mode={actionModalMode}
+        />
 
-      <ManageCustomTimelinesModal
-        visible={manageCustomTimelinesModalVisible}
-        onClose={() => setManageCustomTimelinesModalVisible(false)}
-        onUpdate={async () => {
-          console.log('[Goals] ManageCustomTimelinesModal onUpdate called');
-          await fetchAllTimelines();
-          if (selectedTimeline) {
-            console.log('[Goals] Refreshing selected timeline goals');
-            await fetchTimelineGoals(selectedTimeline);
-          }
-          console.log('[Goals] Custom timeline update complete');
-        }}
-      />
+        <ManageCustomTimelinesModal
+          visible={manageCustomTimelinesModalVisible}
+          onClose={() => setManageCustomTimelinesModalVisible(false)}
+          onUpdate={async () => {
+            console.log('[Goals] ManageCustomTimelinesModal onUpdate called');
+            await fetchAllTimelines();
+            if (selectedTimeline) {
+              console.log('[Goals] Refreshing selected timeline goals');
+              await fetchTimelineGoals(selectedTimeline);
+            }
+            console.log('[Goals] Custom timeline update complete');
+          }}
+        />
 
-      <ManageGlobalTimelinesModal
-        visible={manageGlobalTimelinesModalVisible}
-        onClose={() => setManageGlobalTimelinesModalVisible(false)}
-        onUpdate={async () => {
-          console.log('[Goals] ManageGlobalTimelinesModal onUpdate called');
-          await fetchAllTimelines();
-          if (selectedTimeline) {
-            console.log('[Goals] Refreshing selected timeline goals');
-            await fetchTimelineGoals(selectedTimeline);
-          }
-          console.log('[Goals] Global timeline update complete');
-        }}
-      />
+        <ManageGlobalTimelinesModal
+          visible={manageGlobalTimelinesModalVisible}
+          onClose={() => setManageGlobalTimelinesModalVisible(false)}
+          onUpdate={async () => {
+            console.log('[Goals] ManageGlobalTimelinesModal onUpdate called');
+            await fetchAllTimelines();
+            if (selectedTimeline) {
+              console.log('[Goals] Refreshing selected timeline goals');
+              await fetchTimelineGoals(selectedTimeline);
+            }
+            console.log('[Goals] Global timeline update complete');
+          }}
+        />
 
-      <WithdrawalForm
-        visible={withdrawalFormVisible}
-        onClose={() => setWithdrawalFormVisible(false)}
-        onSubmitSuccess={() => {
-          setWithdrawalFormVisible(false);
-          refreshScore(true);
-        }}
-      />
+        <WithdrawalForm
+          visible={withdrawalFormVisible}
+          onClose={() => setWithdrawalFormVisible(false)}
+          onSubmitSuccess={() => {
+            setWithdrawalFormVisible(false);
+            refreshScore(true);
+          }}
+        />
+      </Suspense>
 
       {/* Delete Confirmation Modal */}
       <Modal
@@ -1659,6 +1837,9 @@ const styles = StyleSheet.create({
   },
   goalsList: {
     flex: 1,
+  },
+  goalsListContent: {
+    paddingBottom: 20,
   },
   createGoalButton: {
     flexDirection: 'row',

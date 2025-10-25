@@ -48,14 +48,70 @@ export default function RichTextInput({
   };
 
   const handleBold = () => {
-    insertFormatting('**', '**');
+    const start = selection.start;
+    const end = selection.end;
+
+    // If text is selected, apply formatting to selection only
+    if (start !== end) {
+      const beforeText = value.substring(0, start);
+      const selectedText = value.substring(start, end);
+      const afterText = value.substring(end);
+
+      const newText = beforeText + '**' + selectedText + '**' + afterText;
+      onChangeText(newText);
+
+      // Keep selection on the formatted text
+      const newStart = start + 2;
+      const newEnd = end + 2;
+      setTimeout(() => {
+        textInputRef.current?.setNativeProps({
+          selection: { start: newStart, end: newEnd }
+        });
+      }, 0);
+    } else {
+      // No selection - insert formatting markers
+      insertFormatting('**', '**');
+    }
   };
 
   const handleItalic = () => {
-    insertFormatting('*', '*');
+    const start = selection.start;
+    const end = selection.end;
+
+    // If text is selected, apply formatting to selection only
+    if (start !== end) {
+      const beforeText = value.substring(0, start);
+      const selectedText = value.substring(start, end);
+      const afterText = value.substring(end);
+
+      const newText = beforeText + '*' + selectedText + '*' + afterText;
+      onChangeText(newText);
+
+      // Keep selection on the formatted text
+      const newStart = start + 1;
+      const newEnd = end + 1;
+      setTimeout(() => {
+        textInputRef.current?.setNativeProps({
+          selection: { start: newStart, end: newEnd }
+        });
+      }, 0);
+    } else {
+      // No selection - insert formatting markers
+      insertFormatting('*', '*');
+    }
   };
 
+  const [listType, setListType] = useState<'bullet' | 'numbered' | null>(null);
+
   const handleBulletList = () => {
+    // Toggle bullet list or switch from numbered to bullet
+    if (listType === 'bullet') {
+      setListType(null);
+      return;
+    }
+
+    setListType('bullet');
+
     const start = selection.start;
     const beforeText = value.substring(0, start);
     const afterText = value.substring(start);
@@ -75,6 +131,14 @@ export default function RichTextInput({
   };
 
   const handleNumberedList = () => {
+    // Toggle numbered list or switch from bullet to numbered
+    if (listType === 'numbered') {
+      setListType(null);
+      return;
+    }
+
+    setListType('numbered');
+
     const start = selection.start;
     const beforeText = value.substring(0, start);
     const afterText = value.substring(start);
@@ -98,28 +162,29 @@ export default function RichTextInput({
 
   return (
     <View style={styles.container}>
-      <TextInput
-        ref={textInputRef}
-        style={[
-          styles.input,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            color: colors.text,
-            minHeight,
-          },
-        ]}
-        value={value}
-        onChangeText={onChangeText}
-        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSecondary}
-        multiline
-        textAlignVertical="top"
-        {...textInputProps}
-      />
+      <View style={styles.inputWrapper}>
+        <TextInput
+          ref={textInputRef}
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              color: colors.text,
+              minHeight,
+            },
+          ]}
+          value={value}
+          onChangeText={onChangeText}
+          onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSecondary}
+          multiline
+          textAlignVertical="top"
+          {...textInputProps}
+        />
 
-      <View style={[styles.toolbar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={[styles.toolbar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.toolbarButton, { borderColor: colors.border }]}
           onPress={handleBold}
@@ -135,23 +200,32 @@ export default function RichTextInput({
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.toolbarButton, { borderColor: colors.border }]}
+          style={[
+            styles.toolbarButton,
+            { borderColor: colors.border },
+            listType === 'bullet' && { backgroundColor: colors.primary + '20' }
+          ]}
           onPress={handleBulletList}
         >
-          <List size={18} color={colors.text} />
+          <List size={18} color={listType === 'bullet' ? colors.primary : colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.toolbarButton, { borderColor: colors.border }]}
+          style={[
+            styles.toolbarButton,
+            { borderColor: colors.border },
+            listType === 'numbered' && { backgroundColor: colors.primary + '20' }
+          ]}
           onPress={handleNumberedList}
         >
-          <ListOrdered size={18} color={colors.text} />
+          <ListOrdered size={18} color={listType === 'numbered' ? colors.primary : colors.text} />
         </TouchableOpacity>
 
         <View style={styles.toolbarHint}>
           <Text style={[styles.hintText, { color: colors.textSecondary }]}>
             Markdown supported
           </Text>
+        </View>
         </View>
       </View>
     </View>
@@ -162,23 +236,27 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
   },
-  input: {
+  inputWrapper: {
     borderWidth: 1,
     borderRadius: 8,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  input: {
     paddingHorizontal: 12,
     paddingVertical: 12,
+    paddingBottom: 8,
     fontSize: 15,
     lineHeight: 22,
+    borderBottomWidth: 0,
   },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
     gap: 8,
   },
   toolbarButton: {

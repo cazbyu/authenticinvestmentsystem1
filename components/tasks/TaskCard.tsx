@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Check, FileText, Paperclip, Users, X, Trash2 } from 'lucide-react-native';
+import { calculateTaskPoints } from '@/lib/taskUtils';
 
 // Interface for a Task
 export interface Task {
@@ -12,6 +13,12 @@ export interface Task {
   start_time?: string;
   end_time?: string;
   recurrence_rule?: string;
+  recurrence_end_date?: string;
+  recurrence_exceptions?: string[];
+  occurrence_date?: string;
+  is_virtual_occurrence?: boolean;
+  source_task_id?: string;
+  parent_task_id?: string;
   user_global_timeline_id?: string;
   custom_timeline_id?: string;
   is_urgent?: boolean;
@@ -20,6 +27,9 @@ export interface Task {
   type?: string;
   is_authentic_deposit?: boolean;
   is_twelve_week_goal?: boolean;
+  is_all_day?: boolean;
+  is_anytime?: boolean;
+  completed_at?: string;
   roles?: Array<{id: string; label: string}>;
   domains?: Array<{id: string; name: string}>;
   goals?: Array<{id: string; title: string; goal_type?: string}>;
@@ -30,6 +40,7 @@ export interface Task {
   keyRelationships?: Array<{id: string; name: string}>;
   weeklyCompletedCount?: number;
   weeklyTargetCount?: number;
+  roleColor?: string;
 }
 
 // Props for the TaskCard component
@@ -38,15 +49,14 @@ interface TaskCardProps {
   onComplete: (task: Task) => void;
   onDelete?: (task: Task) => void;
   onLongPress?: () => void;
-  onDoublePress?: (task: Task) => void;
+  onPress?: (task: Task) => void;
   isDragging?: boolean;
 }
 
 // --- TaskCard Component ---
 // Renders a single task item in the list
 export const TaskCard = React.forwardRef<View, TaskCardProps>(
-  ({ task, onComplete, onDelete, onLongPress, onDoublePress, isDragging }, ref) => {
-    const [lastTap, setLastTap] = useState(0);
+  ({ task, onComplete, onDelete, onLongPress, onPress, isDragging }, ref) => {
 
   // Determines the border color based on task priority
   const getBorderColor = () => {
@@ -57,21 +67,15 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
     return "#9ca3af";
   };
 
-  // Calculates points for completing a task
+  // Calculate points using centralized function to ensure consistency
+  // This ensures the displayed score matches the actual score awarded on completion
   const calculatePoints = () => {
-    let points = 0;
-    if (task.roles && task.roles.length > 0) points += task.roles.length;
-    if (task.domains && task.domains.length > 0) points += task.domains.length;
-    if (task.is_authentic_deposit) points += 2;
-    if (task.is_urgent && task.is_important) points += 1.5;
-    else if (!task.is_urgent && task.is_important) points += 3;
-    else if (task.is_urgent && !task.is_important) points += 1;
-    else points += 0.5;
-
-    const activeGoals = (task.goals || []).filter((g: any) => g.goal_type !== 'deleted' && g.status !== 'archived' && g.status !== 'cancelled');
-    if (activeGoals.length > 0 && task.is_twelve_week_goal) points += 2;
-
-    return Math.round(points * 10) / 10;
+    return calculateTaskPoints(
+      task,
+      task.roles || [],
+      task.domains || [],
+      task.goals || []
+    );
   };
 
   // Formats the due date string
@@ -92,16 +96,8 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
     }
   };
 
-  const DOUBLE_PRESS_DELAY = 300;
-
   const handlePress = () => {
-    const now = Date.now();
-    if (lastTap && (now - lastTap) < DOUBLE_PRESS_DELAY) {
-      setLastTap(0); // Reset to prevent triple-tap issues
-      onDoublePress?.(task);
-    } else {
-      setLastTap(now);
-    }
+    onPress?.(task);
   };
 
 
@@ -121,7 +117,7 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
   return (
     <TouchableOpacity
       ref={ref}
-      style={[styles.taskCard, { borderLeftColor: getBorderColor() }, isDragging && styles.draggingItem]}
+      style={[styles.taskCard, { borderLeftColor: getBorderColor(), borderColor: getBorderColor() }, isDragging && styles.draggingItem]}
       onPress={handlePress}
       onLongPress={onLongPress}
       delayLongPress={200}
@@ -233,6 +229,7 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
         backgroundColor: '#ffffff',
         borderRadius: 8,
         borderLeftWidth: 4,
+        borderWidth: 2,
         marginBottom: 12,
         padding: 16,
         flexDirection: 'row',

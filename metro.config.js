@@ -10,4 +10,9 @@ config.resolver.alias = {
   'react-native': path.resolve(__dirname, 'node_modules/react-native'),
 };
 
+// Platform-specific extensions (web gets .web.tsx files first)
+config.resolver.sourceExts = ['tsx', 'ts', 'jsx', 'js', 'mjs', 'cjs', 'json'];
+config.resolver.assetExts = [...config.resolver.assetExts, 'css'];
+config.resolver.platforms = ['web', 'ios', 'android'];
+
 module.exports = config;

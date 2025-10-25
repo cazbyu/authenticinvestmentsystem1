@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS "0008-ap-tasks" (
   completed_at timestamptz,
   is_urgent boolean DEFAULT false,
   is_important boolean DEFAULT false,
-  is_anytime boolean DEFAULT false,
+  is_all_day boolean DEFAULT false,
   is_authentic_deposit boolean DEFAULT false,
   global_timeline_id uuid,
   custom_timeline_id uuid,

@@ -91,8 +91,8 @@ export function expandRecurrence(
   }
 
   const instances: EventInstance[] = [];
-  const startDate = new Date(event.start_date);
-  
+  const startDate = new Date(event.start_date || event.due_date);
+
   // If no BYDAY specified for weekly, use the weekday of the source event
   if (rule.freq === 'WEEKLY' && (!rule.byday || rule.byday.length === 0)) {
     rule.byday = [WEEKDAY_NAMES[startDate.getDay()]];
@@ -265,7 +265,7 @@ export function expandEventsWithRecurrence(
       // Expand recurring event
       const instances = expandRecurrence(event, window.start, window.end);
       expandedEvents.push(...instances);
-      
+
       // Mark base event as processed to avoid duplication
       processedBaseEvents.add(event.id);
     } else {
@@ -291,10 +291,10 @@ export function expandEventsForDate(events: any[], date: string): any[] {
       const dayStart = new Date(targetDate);
       const dayEnd = new Date(targetDate);
       dayEnd.setDate(dayEnd.getDate() + 1);
-      
+
       const instances = expandRecurrence(event, dayStart, dayEnd);
       expandedEvents.push(...instances);
-      
+
       processedBaseEvents.add(event.id);
     } else {
       // Non-recurring event - include if it matches the date

@@ -11,8 +11,11 @@ import { ArchivedTimelinesView } from '@/components/settings/ArchivedTimelinesVi
 import { LinkedAccountsManager } from '@/components/settings/LinkedAccountsManager';
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
 import { ManageCustomTimelinesModal } from '@/components/timelines/ManageCustomTimelinesModal';
+import { CalendarManagementModal } from '@/components/settings/CalendarManagementModal';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { getSupabaseClient } from '@/lib/supabase';
+import { getTimezonesByRegion, getTimezoneDisplayName, detectUserTimezone } from '@/lib/timezoneUtils';
 import { Camera, Upload, User } from 'lucide-react-native';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -25,6 +28,7 @@ const redirectUri = AuthSession.makeRedirectUri({
 export default function SettingsScreen() {
   const router = useRouter();
   const { isDarkMode, toggleDarkMode, colors, setThemeColorImmediate } = useTheme();
+  const { authenticScore, refreshScore } = useAuthenticScore();
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -32,17 +36,21 @@ export default function SettingsScreen() {
   const [isRolesModalVisible, setIsRolesModalVisible] = useState(false);
   const [showNorthStarEditor, setShowNorthStarEditor] = useState(false);
   const [showTimelineArchive, setShowTimelineArchive] = useState(false);
-  const [authenticScore, setAuthenticScore] = useState(0);
+  const [showCalendarManagement, setShowCalendarManagement] = useState(false);
   const [profile, setProfile] = useState({
     first_name: '',
     last_name: '',
     profile_image: '',
-    theme_color: '#0078d4'
+    theme_color: '#0078d4',
+    week_start_day: 'sunday',
+    timezone: 'UTC',
+    auto_detect_timezone: true
   });
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showTimezonePicker, setShowTimezonePicker] = useState(false);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -89,26 +97,34 @@ export default function SettingsScreen() {
       const { data, error } = await supabase
         .from('0008-ap-users')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (error && (error as any).code !== 'PGRST116') throw error;
 
       if (data) {
-        setProfile(data);
+        setProfile({
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          profile_image: data.profile_image || '',
+          theme_color: data.theme_color || '#0078d4',
+          week_start_day: data.week_start_day || 'sunday',
+          timezone: data.timezone || 'UTC',
+          auto_detect_timezone: data.settings?.auto_detect_timezone !== false
+        });
 
         if (data.profile_image) {
           try {
-            const { data: signed, error: signError } = await supabase
+            const { data: publicUrlData } = supabase
               .storage
               .from('0008-ap-profile-images')
-              .createSignedUrl(data.profile_image, 60 * 60);
+              .getPublicUrl(data.profile_image);
 
-            if (signError) {
-              console.error('Error creating signed URL:', signError);
-              setProfileImageUrl(null);
+            if (publicUrlData?.publicUrl) {
+              setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
             } else {
-              setProfileImageUrl(signed?.signedUrl ? `${signed.signedUrl}&cb=${Date.now()}` : null);
+              console.error('No public URL returned for profile image');
+              setProfileImageUrl(null);
             }
           } catch (imageError) {
             console.error('Error loading profile image:', imageError);
@@ -123,35 +139,10 @@ export default function SettingsScreen() {
     }
   };
 
-  const calculateTaskPoints = (task: any, roles: any[] = [], domains: any[] = []) => {
-    let points = 0;
-    if (roles && roles.length > 0) points += roles.length;
-    if (domains && domains.length > 0) points += domains.length;
-    if (task.is_authentic_deposit) points += 2;
-    if (task.is_urgent && task.is_important) points += 1.5;
-    else if (!task.is_urgent && task.is_important) points += 3;
-    else if (task.is_urgent && !task.is_important) points += 1;
-    else points += 0.5;
-    if (task.is_twelve_week_goal) points += 2;
-    return Math.round(points * 10) / 10;
-  };
-
-  const calculateAuthenticScore = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const score = await calculateAuthenticScore(supabase, user.id);
-      setAuthenticScore(score);
-    } catch (error) {
-      console.error('Error calculating authentic score:', error);
-    }
-  };
 
   useEffect(() => {
     fetchProfile();
-    calculateAuthenticScore();
+    refreshScore();
   }, []);
 
   useEffect(() => {
@@ -243,16 +234,15 @@ export default function SettingsScreen() {
         .upload(fileName, blob, { contentType, upsert: true });
       if (uploadError) throw uploadError;
 
-      const { data: signed, error: signError } = await supabase.storage
+      await updateProfile({ profile_image: fileName, profile_image_source: 'manual' });
+
+      const { data: publicUrlData } = supabase.storage
         .from('0008-ap-profile-images')
-        .createSignedUrl(fileName, 60 * 60);
+        .getPublicUrl(fileName);
 
-      if (signError) {
-        console.error('Error creating signed URL after upload:', signError);
+      if (publicUrlData?.publicUrl) {
+        setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
       }
-
-      await updateProfile({ profile_image: fileName });
-      setProfileImageUrl(signed?.signedUrl ? `${signed.signedUrl}&cb=${Date.now()}` : null);
     } catch (error) {
       console.error('Error uploading image:', error);
       Alert.alert('Error', 'Failed to upload image');
@@ -268,32 +258,61 @@ export default function SettingsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
 
-      const payload = {
-        user_id: user.id,
-        ...profile,
-        ...updates,
+      // Build a clean payload with only the fields we want to update
+      const payload: any = {
+        id: user.id,
+        email: user.email || '',
         updated_at: new Date().toISOString(),
-      } as any;
+      };
 
-      const { error } = await supabase
+      // Add fields from current profile state
+      if (profile.first_name !== undefined) payload.first_name = profile.first_name;
+      if (profile.last_name !== undefined) payload.last_name = profile.last_name;
+      if (profile.profile_image !== undefined) payload.profile_image = profile.profile_image;
+      if (profile.theme_color !== undefined) payload.theme_color = profile.theme_color;
+      if (profile.week_start_day !== undefined) payload.week_start_day = profile.week_start_day;
+      if (profile.timezone !== undefined) payload.timezone = profile.timezone;
+
+      if (profile.auto_detect_timezone !== undefined) {
+        payload.settings = {
+          ...payload.settings,
+          auto_detect_timezone: profile.auto_detect_timezone
+        };
+      }
+
+      // Override with any updates
+      Object.keys(updates).forEach(key => {
+        payload[key] = updates[key as keyof typeof profile];
+      });
+
+      console.log('[Settings] Updating profile with payload:', JSON.stringify(payload, null, 2));
+
+      const { error, data } = await supabase
         .from('0008-ap-users')
-        .upsert(payload, { onConflict: 'user_id' });
+        .upsert(payload, { onConflict: 'id' })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Settings] Error updating profile:', error);
+        console.error('[Settings] Error details:', JSON.stringify(error, null, 2));
+        console.error('[Settings] Failed payload was:', JSON.stringify(payload, null, 2));
+        throw error;
+      }
 
+      console.log('[Settings] Profile updated successfully. Database response:', JSON.stringify(data, null, 2));
       setProfile(prev => ({ ...prev, ...updates }));
 
       if (updates.profile_image) {
         try {
-          const { data: signed, error: signError } = await supabase.storage
+          const { data: publicUrlData } = supabase.storage
             .from('0008-ap-profile-images')
-            .createSignedUrl(updates.profile_image, 60 * 60);
+            .getPublicUrl(updates.profile_image);
 
-          if (signError) {
-            console.error('Error creating signed URL in updateProfile:', signError);
-            setProfileImageUrl(null);
+          if (publicUrlData?.publicUrl) {
+            setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
           } else {
-            setProfileImageUrl(signed?.signedUrl ? `${signed.signedUrl}&cb=${Date.now()}` : null);
+            console.error('No public URL returned in updateProfile');
+            setProfileImageUrl(null);
           }
         } catch (imageError) {
           console.error('Error loading updated profile image:', imageError);
@@ -494,6 +513,98 @@ export default function SettingsScreen() {
 
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Week Start Day</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>{
+                profile.week_start_day === 'sunday' ? 'Weeks start on Sunday' : 'Weeks start on Monday'
+              }</Text>
+            </View>
+            <View style={styles.weekStartButtonGroup}>
+              <TouchableOpacity
+                style={[
+                  styles.weekStartButton,
+                  profile.week_start_day === 'sunday' && styles.weekStartButtonActive,
+                  { borderColor: colors.border }
+                ]}
+                onPress={async () => {
+                  const updatedProfile = { ...profile, week_start_day: 'sunday' };
+                  setProfile(updatedProfile);
+                  await updateProfile({ week_start_day: 'sunday' });
+                }}
+              >
+                <Text style={[
+                  styles.weekStartButtonText,
+                  profile.week_start_day === 'sunday' && [styles.weekStartButtonTextActive, { color: colors.primary }],
+                  { color: colors.textSecondary }
+                ]}>Sun</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.weekStartButton,
+                  profile.week_start_day === 'monday' && styles.weekStartButtonActive,
+                  { borderColor: colors.border }
+                ]}
+                onPress={async () => {
+                  const updatedProfile = { ...profile, week_start_day: 'monday' };
+                  setProfile(updatedProfile);
+                  await updateProfile({ week_start_day: 'monday' });
+                }}
+              >
+                <Text style={[
+                  styles.weekStartButtonText,
+                  profile.week_start_day === 'monday' && [styles.weekStartButtonTextActive, { color: colors.primary }],
+                  { color: colors.textSecondary }
+                ]}>Mon</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Timezone</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                {getTimezoneDisplayName(profile.timezone)}
+              </Text>
+            </View>
+            <View style={styles.timezoneControls}>
+              <TouchableOpacity
+                style={[styles.timezoneButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={() => setShowTimezonePicker(true)}
+              >
+                <Text style={[styles.timezoneButtonText, { color: colors.primary }]}>
+                  Change
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Auto-detect Timezone</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                Automatically update timezone based on your location
+              </Text>
+            </View>
+            <Switch
+              value={profile.auto_detect_timezone}
+              onValueChange={async (value) => {
+                const updatedProfile = { ...profile, auto_detect_timezone: value };
+                setProfile(updatedProfile);
+                if (value) {
+                  const detectedTimezone = detectUserTimezone();
+                  updatedProfile.timezone = detectedTimezone;
+                  setProfile({ ...updatedProfile, timezone: detectedTimezone });
+                  await updateProfile({ timezone: detectedTimezone, auto_detect_timezone: value });
+                } else {
+                  await updateProfile({ auto_detect_timezone: value });
+                }
+              }}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.surface}
+            />
+          </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: colors.text }]}>Default 12-Week Global Cycle</Text>
               <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
                 Automatically sync with community cycles
@@ -502,8 +613,6 @@ export default function SettingsScreen() {
             <Switch
               value={true}
               onValueChange={() => {
-                // TODO: Implement global cycle toggle
-                // This requires database schema changes for user preferences
                 Alert.alert('Coming Soon', 'Global cycle preferences will be available in a future update');
               }}
               trackColor={{ false: colors.border, true: colors.primary }}
@@ -532,6 +641,26 @@ export default function SettingsScreen() {
               thumbColor={isDarkMode ? colors.surface : colors.surface}
             />
           </View>
+        </View>
+
+        {/* Calendar Management Section */}
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Calendar Management</Text>
+
+          <TouchableOpacity
+            style={styles.settingButton}
+            onPress={() => setShowCalendarManagement(true)}
+          >
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Holidays & Special Days</Text>
+                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                  Manage which holidays and special days appear on your calendar
+                </Text>
+              </View>
+              <Text style={[styles.settingButtonText, { color: colors.primary }]}>Manage</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Google Calendar Section */}
@@ -657,6 +786,53 @@ export default function SettingsScreen() {
           <ArchivedTimelinesView onUpdate={() => {}} />
         </SafeAreaView>
       </Modal>
+
+      <CalendarManagementModal
+        visible={showCalendarManagement}
+        onClose={() => setShowCalendarManagement(false)}
+      />
+
+      <Modal visible={showTimezonePicker} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Select Timezone</Text>
+            <TouchableOpacity onPress={() => setShowTimezonePicker(false)}>
+              <Text style={[styles.closeModalButton, { color: colors.primary }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.timezonePickerScroll}>
+            {Object.entries(getTimezonesByRegion()).map(([region, timezones]) => (
+              <View key={region} style={styles.timezoneRegion}>
+                <Text style={[styles.timezoneRegionTitle, { color: colors.textSecondary }]}>{region}</Text>
+                {timezones.map((tz) => (
+                  <TouchableOpacity
+                    key={tz}
+                    style={[
+                      styles.timezoneOption,
+                      profile.timezone === tz && styles.timezoneOptionSelected,
+                      { borderBottomColor: colors.border }
+                    ]}
+                    onPress={async () => {
+                      const updatedProfile = { ...profile, timezone: tz, auto_detect_timezone: false };
+                      setProfile(updatedProfile);
+                      await updateProfile({ timezone: tz, auto_detect_timezone: false });
+                      setShowTimezonePicker(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.timezoneOptionText,
+                      { color: colors.text },
+                      profile.timezone === tz && { color: colors.primary, fontWeight: '600' }
+                    ]}>
+                      {getTimezoneDisplayName(tz)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -703,6 +879,11 @@ const styles = StyleSheet.create({
   checkmarkText: { color: '#1f2937', fontSize: 12, fontWeight: 'bold' },
   settingInfo: { flex: 1 },
   settingDescription: { fontSize: 14, marginTop: 2 },
+  weekStartButtonGroup: { flexDirection: 'row', gap: 8 },
+  weekStartButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, borderWidth: 1, backgroundColor: 'transparent', minWidth: 50, alignItems: 'center' },
+  weekStartButtonActive: { backgroundColor: '#f0f9ff', borderColor: '#0078d4', borderWidth: 2 },
+  weekStartButtonText: { fontSize: 14, fontWeight: '500' },
+  weekStartButtonTextActive: { fontWeight: '700' },
   connectButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 },
   connectButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
   disconnectButton: { backgroundColor: '#dc2626' },
@@ -719,4 +900,13 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
   closeModalButton: { fontSize: 16, fontWeight: '600' },
+  timezoneControls: { flexDirection: 'row', gap: 8 },
+  timezoneButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, borderWidth: 1 },
+  timezoneButtonText: { fontSize: 14, fontWeight: '600' },
+  timezonePickerScroll: { flex: 1 },
+  timezoneRegion: { marginBottom: 24, paddingHorizontal: 16 },
+  timezoneRegionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginTop: 16 },
+  timezoneOption: { paddingVertical: 12, borderBottomWidth: 1 },
+  timezoneOptionSelected: { backgroundColor: 'rgba(0, 120, 212, 0.1)' },
+  timezoneOptionText: { fontSize: 16 },
 });

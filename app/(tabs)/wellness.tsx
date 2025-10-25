@@ -9,6 +9,7 @@ import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDet
 import { JournalView } from '@/components/journal/JournalView';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
+import { BalanceScoresView } from '@/components/wellness/BalanceScoresView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -18,6 +19,9 @@ import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { DraggableFab } from '@/components/DraggableFab';
 import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useTabReset } from '@/contexts/TabResetContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -30,6 +34,8 @@ interface Domain {
 export default function Wellness() {
   const navigation = useNavigation<DrawerNavigation>();
   const { authenticScore, refreshScoreForDomain } = useAuthenticScore();
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
+  const { colors } = useTheme();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -38,7 +44,7 @@ export default function Wellness() {
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
 
   // Main tab navigation state
-  const [activeMainTab, setActiveMainTab] = useState<'domains' | 'manage'>('domains');
+  const [activeMainTab, setActiveMainTab] = useState<'domains' | 'balance'>('domains');
 
   // Modal states
   const [taskFormVisible, setTaskFormVisible] = useState(false);
@@ -50,6 +56,7 @@ export default function Wellness() {
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [domainAuthenticScore, setDomainAuthenticScore] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scoreAbortControllerRef = useRef<AbortController | null>(null);
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
@@ -137,61 +144,109 @@ export default function Wellness() {
       }
 
       if (view === 'deposits') {
-        // Fetch all tasks/events for this user first
+        // First, get task IDs that are associated with this specific domain
+        const { data: domainJoinData, error: domainJoinError } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id')
+          .eq('parent_type', 'task')
+          .eq('domain_id', domainId);
+
+        if (domainJoinError) throw domainJoinError;
+
+        const domainTaskIds = domainJoinData?.map(dj => dj.parent_id) || [];
+
+        if (domainTaskIds.length === 0) {
+          setTasks([]);
+          setDepositIdeas([]);
+          return;
+        }
+
+        // Now fetch only the tasks that have this domain
         const { data: tasksData, error: tasksError } = await supabase
           .from('0008-ap-tasks')
           .select('*, custom_timeline_id')
           .eq('user_id', user.id)
+          .in('id', domainTaskIds)
           .is('deleted_at', null)
+          .is('parent_task_id', null)
           .not('status', 'in', '(completed,cancelled)')
           .in('type', ['task', 'event']);
 
         if (tasksError) throw tasksError;
-
-        if (!tasksData || tasksData.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          setLoading(false);
-          return;
-        }
 
         // Check if aborted
         if (controller.signal.aborted) {
           return;
         }
 
-        const taskIds = tasksData.map(t => t.id);
+        // Filter out Goal Bank actions by checking for week plans
+        let allTasks: any[] = [];
 
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: goalsData, error: goalsError },
-          { data: notesData, error: notesError },
-          { data: keyRelationshipsData, error: keyRelationshipsError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
-        ]);
+        if (tasksData && tasksData.length > 0) {
+          const taskIds = tasksData.map(t => t.id);
+          const { data: weekPlans, error: weekPlansError } = await supabase
+            .from('0008-ap-task-week-plan')
+            .select('task_id')
+            .in('task_id', taskIds)
+            .is('deleted_at', null);
 
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (goalsError) throw goalsError;
-        if (notesError) throw notesError;
-        if (keyRelationshipsError) throw keyRelationshipsError;
+          if (weekPlansError) throw weekPlansError;
+
+          // Check if aborted
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          // Create a Set of task IDs that have week plans (Goal Bank actions)
+          const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
+
+          // Only include standalone tasks (tasks WITHOUT week plans)
+          allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
+        }
+
+        // Fetch join data only if we have tasks
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let goalsData: any[] = [];
+        let notesData: any[] = [];
+        let keyRelationshipsData: any[] = [];
+
+        if (allTasks.length > 0) {
+          const taskIdsForJoins = allTasks.map(t => t.id);
+
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: goalsDataResult, error: goalsError },
+            { data: notesDataResult, error: notesError },
+            { data: keyRelationshipsDataResult, error: keyRelationshipsError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (goalsError) throw goalsError;
+          if (notesError) throw notesError;
+          if (keyRelationshipsError) throw keyRelationshipsError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          goalsData = goalsDataResult || [];
+          notesData = notesDataResult || [];
+          keyRelationshipsData = keyRelationshipsDataResult || [];
+        }
 
         // Check if aborted before processing
         if (controller.signal.aborted) {
           return;
         }
 
-        // Filter tasks that have the selected domain
-        const domainTaskIds = domainsData?.filter(d => d.domain?.id === domainId).map(d => d.parent_id) || [];
-        const filteredTasks = tasksData.filter(task => domainTaskIds.includes(task.id));
-
-        const transformedTasks = filteredTasks.map(task => ({
+        const transformedTasks = allTasks.map(task => ({
           ...task,
           roles: rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
@@ -206,57 +261,77 @@ export default function Wellness() {
         setDepositIdeas([]);
 
       } else {
-        // Fetch all deposit ideas for this user first
+        // First, get deposit idea IDs that are associated with this specific domain
+        const { data: domainJoinData, error: domainJoinError } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id')
+          .eq('parent_type', 'depositIdea')
+          .eq('domain_id', domainId);
+
+        if (domainJoinError) throw domainJoinError;
+
+        const domainDepositIdeaIds = domainJoinData?.map(dj => dj.parent_id) || [];
+
+        if (domainDepositIdeaIds.length === 0) {
+          setDepositIdeas([]);
+          setTasks([]);
+          return;
+        }
+
+        // Now fetch only the deposit ideas that have this domain
         const { data: depositIdeasData, error: depositIdeasError } = await supabase
           .from('0008-ap-deposit-ideas')
           .select('*')
           .eq('user_id', user.id)
+          .in('id', domainDepositIdeaIds)
           .eq('archived', false)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
-
-        if (!depositIdeasData || depositIdeasData.length === 0) {
-          setDepositIdeas([]);
-          setTasks([]);
-          setLoading(false);
-          return;
-        }
 
         // Check if aborted
         if (controller.signal.aborted) {
           return;
         }
 
-        const depositIdeaIds = depositIdeasData.map(di => di.id);
+        // Fetch join data only if we have deposit ideas
+        let rolesData: any[] = [];
+        let domainsData: any[] = [];
+        let krData: any[] = [];
+        let notesData: any[] = [];
 
-        const [
-          { data: rolesData, error: rolesError },
-          { data: domainsData, error: domainsError },
-          { data: krData, error: krError },
-          { data: notesData, error: notesError }
-        ] = await Promise.all([
-          supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-          supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
-        ]);
+        if (depositIdeasData && depositIdeasData.length > 0) {
+          const depositIdeaIds = depositIdeasData.map(di => di.id);
 
-        if (rolesError) throw rolesError;
-        if (domainsError) throw domainsError;
-        if (krError) throw krError;
-        if (notesError) throw notesError;
+          const [
+            { data: rolesDataResult, error: rolesError },
+            { data: domainsDataResult, error: domainsError },
+            { data: krDataResult, error: krError },
+            { data: notesDataResult, error: notesError }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
+          ]);
+
+          if (rolesError) throw rolesError;
+          if (domainsError) throw domainsError;
+          if (krError) throw krError;
+          if (notesError) throw notesError;
+
+          rolesData = rolesDataResult || [];
+          domainsData = domainsDataResult || [];
+          krData = krDataResult || [];
+          notesData = notesDataResult || [];
+        }
 
         // Check if aborted before processing
         if (controller.signal.aborted) {
           return;
         }
 
-        // Filter deposit ideas that have the selected domain
-        const domainDepositIdeaIds = domainsData?.filter(d => d.domain?.id === domainId).map(d => d.parent_id) || [];
-        const filteredDepositIdeas = depositIdeasData.filter(di => domainDepositIdeaIds.includes(di.id));
-
-        const transformedDepositIdeas = filteredDepositIdeas.map(di => ({
+        const transformedDepositIdeas = (depositIdeasData || []).map(di => ({
           ...di,
           roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
@@ -283,9 +358,63 @@ export default function Wellness() {
     }
   }, [activeView]);
 
+
+  // Reset to main Wellness Bank view when tab is pressed
+  const resetToMain = useCallback(() => {
+    setSelectedDomain(null);
+    setActiveMainTab('domains');
+    setActiveView('deposits');
+    setTasks([]);
+    setDepositIdeas([]);
+    setLoading(false);
+    setTaskFormVisible(false);
+    setTaskDetailVisible(false);
+    setDepositIdeaDetailVisible(false);
+    setSelectedTask(null);
+    setSelectedDepositIdea(null);
+    setEditingTask(null);
+    setDomainAuthenticScore(0);
+    setPeriodScore(undefined);
+    setJournalDateRange('week');
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    scoreAbortControllerRef.current?.abort();
+    scoreAbortControllerRef.current = null;
+  }, []);
+
   useEffect(() => {
+    registerResetHandler('wellness', resetToMain);
+
+    const loadUserId = async () => {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    };
+
+    loadUserId();
     fetchDomains();
-  }, [fetchDomains]);
+
+    // Listen for task creation events from other components
+    const handleTaskEvent = () => {
+      console.log('[WellnessBank] Received task event, refreshing data...');
+      if (selectedDomain) {
+        fetchDomainTasks(selectedDomain.id, activeView);
+      }
+    };
+
+    eventBus.on(EVENTS.TASK_CREATED, handleTaskEvent);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskEvent);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskEvent);
+
+    return () => {
+      unregisterResetHandler('wellness');
+      eventBus.off(EVENTS.TASK_CREATED, handleTaskEvent);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskEvent);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
+    };
+  }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain, selectedDomain, activeView]);
 
   const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
     try {
@@ -365,6 +494,26 @@ export default function Wellness() {
     }
   }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
 
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      if (selectedDomain) {
+        fetchDomainTasks(selectedDomain.id, activeView);
+      }
+      // Refresh score after task deletion
+      fetchAuthenticScoreLocal(true);
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message);
+    }
+  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
+
   const handleUpdateDepositIdea = useCallback((depositIdea: any) => {
     const editData = {
       ...depositIdea,
@@ -414,12 +563,12 @@ export default function Wellness() {
       Alert.alert('Error', (error as Error).message || 'Failed to activate deposit idea.');
     }
   }, []);
-  const handleTaskDoublePress = useCallback((task: Task) => {
+  const handleTaskPress = useCallback((task: Task) => {
     setSelectedTask(task);
     setTaskDetailVisible(true);
   }, []);
 
-  const handleDepositIdeaDoublePress = useCallback((depositIdea: any) => {
+  const handleDepositIdeaPress = useCallback((depositIdea: any) => {
     setSelectedDepositIdea(depositIdea);
     setDepositIdeaDetailVisible(true);
   }, []);
@@ -555,7 +704,7 @@ export default function Wellness() {
 
     // Main Wellness Bank header with tabs
     return (
-      <View style={styles.customHeader}>
+      <View style={[styles.customHeader, { backgroundColor: colors.primary }]}>
         <View style={styles.customHeaderTop}>
           <TouchableOpacity
             style={styles.customMenuButton}
@@ -577,16 +726,16 @@ export default function Wellness() {
               style={[styles.customToggleButton, activeMainTab === 'domains' && styles.customActiveToggle]}
               onPress={() => setActiveMainTab('domains')}
             >
-              <Text style={[styles.customToggleText, activeMainTab === 'domains' && styles.customActiveToggleText]}>
+              <Text style={[styles.customToggleText, activeMainTab === 'domains' && [styles.customActiveToggleText, { color: colors.primary }]]}>
                 Domains
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.customToggleButton, activeMainTab === 'manage' && styles.customActiveToggle]}
-              onPress={() => setActiveMainTab('manage')}
+              style={[styles.customToggleButton, activeMainTab === 'balance' && styles.customActiveToggle]}
+              onPress={() => setActiveMainTab('balance')}
             >
-              <Text style={[styles.customToggleText, activeMainTab === 'manage' && styles.customActiveToggleText]}>
-                Manage Domains
+              <Text style={[styles.customToggleText, activeMainTab === 'balance' && [styles.customActiveToggleText, { color: colors.primary }]]}>
+                Balance Scores
               </Text>
             </TouchableOpacity>
           </View>
@@ -654,8 +803,9 @@ export default function Wellness() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    onComplete={handleCompleteTask}
-                    onDoublePress={handleTaskDoublePress}
+                    onComplete={() => handleCompleteTask(task.id)}
+                    onDelete={() => handleDeleteTask(task.id)}
+                    onPress={handleTaskPress}
                   />
                 ))
               )
@@ -671,7 +821,7 @@ export default function Wellness() {
                     depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
-                    onDoublePress={handleDepositIdeaDoublePress}
+                    onPress={handleDepositIdeaPress}
                   />
                 ))
               )
@@ -726,19 +876,8 @@ export default function Wellness() {
           </ScrollView>
         )}
 
-        {activeMainTab === 'manage' && (
-          <ScrollView style={styles.manageContent}>
-            <View style={styles.manageHeader}>
-              <Text style={styles.manageTitle}>Manage Wellness Domains</Text>
-            </View>
-            <View style={styles.managePlaceholder}>
-              <Heart size={48} color="#9ca3af" />
-              <Text style={styles.managePlaceholderTitle}>Domain Management Coming Soon</Text>
-              <Text style={styles.managePlaceholderText}>
-                Future updates will allow you to customize domain names, add custom domains, and set priorities.
-              </Text>
-            </View>
-          </ScrollView>
+        {activeMainTab === 'balance' && (
+          <BalanceScoresView getDomainColor={getDomainColor} />
         )}
       </View>
     );

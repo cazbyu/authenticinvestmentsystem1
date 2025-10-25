@@ -1,9 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { WebView } from 'react-native-webview';
+import { termsHTML } from './legal/termsContent';
+import { privacyHTML } from './legal/privacyContent';
 
 interface LegalPageViewProps {
   title: string;
@@ -12,6 +14,17 @@ interface LegalPageViewProps {
 
 export function LegalPageView({ title, htmlPath }: LegalPageViewProps) {
   const router = useRouter();
+
+  const getHTMLContent = () => {
+    if (htmlPath.includes('terms')) {
+      return termsHTML;
+    } else if (htmlPath.includes('privacy')) {
+      return privacyHTML;
+    }
+    return '<html><body><h1>Content not found</h1></body></html>';
+  };
+
+  const htmlContent = getHTMLContent();
 
   if (Platform.OS === 'web') {
     return (
@@ -23,14 +36,14 @@ export function LegalPageView({ title, htmlPath }: LegalPageViewProps) {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{title}</Text>
         </View>
-        <iframe
-          src={htmlPath}
+        <div
           style={{
             flex: 1,
             width: '100%',
-            border: 'none',
+            overflow: 'auto',
+            backgroundColor: '#f9fafb',
           }}
-          title={title}
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
       </SafeAreaView>
     );
@@ -46,9 +59,10 @@ export function LegalPageView({ title, htmlPath }: LegalPageViewProps) {
         <Text style={styles.headerTitle}>{title}</Text>
       </View>
       <WebView
-        source={{ uri: htmlPath }}
+        source={{ html: htmlContent }}
         style={styles.webview}
         startInLoadingState
+        originWhitelist={['*']}
       />
     </SafeAreaView>
   );
