@@ -70,6 +70,12 @@ export default function CalendarScreen() {
   const [scrollTrigger, setScrollTrigger] = useState(0);
   const [isQuadrantRowExpanded, setIsQuadrantRowExpanded] = useState(true);
 
+  // Cache states for performance optimization
+  const [recurringTemplates, setRecurringTemplates] = useState<any[]>([]);
+  const [nonRecurringCache, setNonRecurringCache] = useState<Map<string, any[]>>(new Map());
+  const latestFetchId = useRef(0);
+  const fetchTimeoutRef = useRef<number | null>(null);
+
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
@@ -81,12 +87,20 @@ export default function CalendarScreen() {
   
   // Layout measurements for proper centering
 
-   useEffect(() => {
-     fetchTasksAndEvents();
-     if (viewMode === 'weekly') {
-       setScrollTrigger(prev => prev + 1);
-     }
-   }, [viewMode, currentDate]);
+  // Load recurring templates once on mount
+  useEffect(() => {
+    loadRecurringTemplates();
+  }, []);
+
+  useEffect(() => {
+    // Immediate render from cache + schedule server reconciliation
+    renderFromCache(currentDate, viewMode);
+    scheduleServerFetch(currentDate, viewMode);
+
+    if (viewMode === 'weekly') {
+      setScrollTrigger(prev => prev + 1);
+    }
+  }, [viewMode, currentDate]);
 
   useEffect(() => {
     calculateAuthenticScore();
@@ -117,25 +131,33 @@ export default function CalendarScreen() {
     // Event bus listeners for task lifecycle events
     const handleTaskCreated = () => {
       console.log('[Calendar] Received task created event, refreshing...');
-      fetchTasksAndEvents();
+      invalidateCache();
+      renderFromCache(currentDate, viewMode);
+      scheduleServerFetch(currentDate, viewMode, 100);
       calculateAuthenticScore();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Calendar] Received task updated event, refreshing...');
-      fetchTasksAndEvents();
+      invalidateCache();
+      renderFromCache(currentDate, viewMode);
+      scheduleServerFetch(currentDate, viewMode, 100);
       calculateAuthenticScore();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Calendar] Received task deleted event, refreshing...');
-      fetchTasksAndEvents();
+      invalidateCache();
+      renderFromCache(currentDate, viewMode);
+      scheduleServerFetch(currentDate, viewMode, 100);
       calculateAuthenticScore();
     };
 
     const handleRefreshAll = () => {
       console.log('[Calendar] Received refresh all event, refreshing...');
-      fetchTasksAndEvents();
+      invalidateCache();
+      renderFromCache(currentDate, viewMode);
+      scheduleServerFetch(currentDate, viewMode, 100);
       calculateAuthenticScore();
     };
 
@@ -183,20 +205,132 @@ export default function CalendarScreen() {
     }
   };
 
-  const fetchTasksAndEvents = async () => {
+  const loadRecurringTemplates = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch minimal fields for recurring templates only
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select(`
+          id, title, type, due_date, start_date, end_date, start_time, end_time,
+          is_all_day, is_anytime, is_urgent, is_important, is_authentic_deposit,
+          recurrence_rule, recurrence_end_date, recurrence_exceptions,
+          status, user_global_timeline_id, custom_timeline_id
+        `)
+        .eq('user_id', user.id)
+        .is('deleted_at', null)
+        .is('parent_task_id', null)
+        .not('recurrence_rule', 'is', null);
+
+      if (error) throw error;
+      if (data) {
+        // Fetch role colors for templates
+        const templateIds = data.map(t => t.id);
+        const { data: rolesData } = await supabase
+          .from('0008-ap-universal-roles-join')
+          .select('parent_id, role:0008-ap-roles(color)')
+          .in('parent_id', templateIds)
+          .eq('parent_type', 'task');
+
+        const templatesWithColors = data.map(t => {
+          const primaryRole = rolesData?.find(r => r.parent_id === t.id)?.role;
+          return {
+            ...t,
+            roleColor: primaryRole?.color || '#0078d4'
+          };
+        });
+        setRecurringTemplates(templatesWithColors);
+      }
+    } catch (error) {
+      console.error('Error loading recurring templates:', error);
+    }
+  };
+
+  const renderFromCache = (forDate: Date, mode: 'daily' | 'weekly' | 'monthly') => {
+    const { start, end } = getVisibleWindow(mode, forDate);
+
+    // Expand cached recurring templates
+    const virtualInstances: any[] = [];
+    recurringTemplates.forEach(template => {
+      const instances = expandEventsWithRecurrence([template], mode, forDate);
+      virtualInstances.push(...instances);
+    });
+
+    // Get cached non-recurring tasks for this range
+    const startStr = formatLocalDate(start);
+    const endStr = formatLocalDate(end);
+    const cacheKey = `${startStr}:${endStr}`;
+    const cachedNonRecurring = nonRecurringCache.get(cacheKey) || [];
+
+    // Merge and deduplicate
+    const merged = uniqByIdAndDate([...virtualInstances, ...cachedNonRecurring]);
+
+    // Transform to task format with minimal data
+    const transformedTasks = merged.map(task => ({
+      ...task,
+      roles: [],
+      domains: [],
+      goals: [],
+      keyRelationships: [],
+      has_notes: false,
+      has_delegates: false,
+      has_attachments: false,
+      roleColor: task.roleColor || '#0078d4',
+      isGoalActionTask: false,
+    }));
+
+    setTasks(transformedTasks);
+
+    // Convert to calendar events
+    const calendarEvents: CalendarEvent[] = transformedTasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      date: task.occurrence_date || task.start_date || task.due_date!,
+      time: task.start_time ? formatTime(task.start_time) : undefined,
+      endTime: task.end_time ? formatTime(task.end_time) : undefined,
+      type: task.type as 'task' | 'event',
+      color: task.roleColor,
+      isAllDay: task.is_all_day || task.is_anytime || (!task.start_time && !task.end_time),
+    }));
+
+    setEvents(calendarEvents);
+  };
+
+  const scheduleServerFetch = (centerDate: Date, mode: 'daily' | 'weekly' | 'monthly', delay: number = 250) => {
+    if (fetchTimeoutRef.current) {
+      window.clearTimeout(fetchTimeoutRef.current);
+    }
+    fetchTimeoutRef.current = window.setTimeout(() => {
+      fetchTasksAndEvents(centerDate, mode);
+      fetchTimeoutRef.current = null;
+    }, delay) as any;
+  };
+
+  const invalidateCache = () => {
+    setNonRecurringCache(new Map());
+    loadRecurringTemplates();
+  };
+
+  const fetchTasksAndEvents = async (centerDate: Date = currentDate, mode: 'daily' | 'weekly' | 'monthly' = viewMode) => {
+    // Increment fetch ID for race condition prevention
+    latestFetchId.current += 1;
+    const fetchId = latestFetchId.current;
+
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Center the fetch window on the calendar's currentDate (so navigation shows correct weeks)
-      // Daily: center +/- 7 days, Weekly: center week +/- 2 weeks, Monthly: center month +/- 1 month
-       const center = currentDate || new Date();
-       const startRange = new Date(center);
-       const endRange = new Date(center);
+      // Center the fetch window on the provided date
+      const center = centerDate || new Date();
+      const startRange = new Date(center);
+      const endRange = new Date(center);
 
-      switch (viewMode) {
+      switch (mode) {
         case 'daily':
           startRange.setDate(startRange.getDate() - 7);
           endRange.setDate(endRange.getDate() + 7);
@@ -213,20 +347,34 @@ export default function CalendarScreen() {
 
       const startStr = formatLocalDate(startRange);
       const endStr = formatLocalDate(endRange);
+      const cacheKey = `${startStr}:${endStr}`;
 
-      // Fetch tasks and events using expanded view for recurring task support
-      // Include ALL tasks (even completed recurring ones) so they show on calendar
-      // Exclude only cancelled tasks and goal action tasks
-      // Filter by occurrence_date for virtual occurrences, due_date/start_date for regular tasks
+      // Check if this request is stale
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch request');
+        return;
+      }
+
+      // Lightweight fetch: minimal fields first
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
-        .select('*')
+        .select(`
+          id, title, type, status, due_date, start_date, end_date, start_time, end_time,
+          is_urgent, is_important, is_all_day, is_anytime, is_authentic_deposit,
+          occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule
+        `)
         .eq('user_id', user.id)
         .neq('status', 'cancelled')
         .in('type', ['task', 'event'])
         .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
 
       if (tasksError) throw tasksError;
+
+      // Check if this request is stale before processing
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch after query');
+        return;
+      }
 
       if (!tasksData || tasksData.length === 0) {
         setTasks([]);
@@ -235,9 +383,26 @@ export default function CalendarScreen() {
         return;
       }
 
-      const taskIds = tasksData.map(t => t.id);
+      // Cache non-recurring tasks for this range
+      const nonRecurringTasks = tasksData.filter(t => !t.recurrence_rule && !t.is_virtual_occurrence);
+      if (nonRecurringTasks.length > 0) {
+        setNonRecurringCache(prev => {
+          const updated = new Map(prev);
+          updated.set(cacheKey, nonRecurringTasks);
+          return updated;
+        });
+      }
 
-      // Fetch comprehensive task data
+      // Get visible task IDs (only source tasks, not virtual occurrences)
+      const visibleSourceIds = [...new Set(tasksData.map(t => t.source_task_id || t.id))];
+
+      // Check if stale before expensive joins
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch before joins');
+        return;
+      }
+
+      // Fetch comprehensive task data ONLY for visible tasks
       const [
         { data: rolesData, error: rolesError },
         { data: domainsData, error: domainsError },
@@ -246,13 +411,19 @@ export default function CalendarScreen() {
         { data: delegatesData, error: delegatesError },
         { data: keyRelationshipsData, error: keyRelationshipsError }
       ] = await Promise.all([
-        supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label, color)').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
+        supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label, color)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task')
       ]);
+
+      // Final stale check before updating state
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch after joins');
+        return;
+      }
 
       if (rolesError) throw rolesError;
       if (domainsError) throw domainsError;
@@ -264,24 +435,32 @@ export default function CalendarScreen() {
       // Transform tasks with role colors and filter out goal action tasks
       const transformedTasks = tasksData
         .map(task => {
-          const taskRoles = rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [];
+          // For virtual occurrences, use source_task_id for joins
+          const lookupId = task.source_task_id || task.id;
+          const taskRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
           const primaryRole = taskRoles[0];
-          const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => g.goal).filter(Boolean) || [];
+          const taskGoals = goalsData?.filter(g => g.parent_id === lookupId).map(g => g.goal).filter(Boolean) || [];
 
           return {
             ...task,
             roles: taskRoles,
-            domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
+            domains: domainsData?.filter(d => d.parent_id === lookupId).map(d => d.domain).filter(Boolean) || [],
             goals: taskGoals,
-            keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === task.id).map(kr => kr.key_relationship).filter(Boolean) || [],
-            has_notes: notesData?.some(n => n.parent_id === task.id),
-            has_delegates: delegatesData?.some(d => d.parent_id === task.id),
+            keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === lookupId).map(kr => kr.key_relationship).filter(Boolean) || [],
+            has_notes: notesData?.some(n => n.parent_id === lookupId),
+            has_delegates: delegatesData?.some(d => d.parent_id === lookupId),
             has_attachments: false,
             roleColor: primaryRole?.color || '#0078d4',
             isGoalActionTask: taskGoals.length > 0,
           };
         })
         .filter(task => !task.isGoalActionTask);
+
+      // Final stale check before setting state
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch before setState');
+        return;
+      }
 
       setTasks(transformedTasks);
 
@@ -338,12 +517,14 @@ export default function CalendarScreen() {
         if (error) throw error;
       }
 
-      fetchTasksAndEvents();
+      invalidateCache();
+      renderFromCache(currentDate, viewMode);
+      scheduleServerFetch(currentDate, viewMode, 100);
       calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
-  }, [tasks, events]);
+  }, [tasks, events, currentDate, viewMode]);
 
   const handleTaskPress = useCallback((task: Task) => {
     setSelectedTask(task);
@@ -398,7 +579,9 @@ export default function CalendarScreen() {
       if (error) throw error;
       Alert.alert('Success', 'Task has been cancelled');
       setIsDetailModalVisible(false);
-      fetchTasksAndEvents();
+      invalidateCache();
+      renderFromCache(currentDate, viewMode);
+      scheduleServerFetch(currentDate, viewMode, 100);
       calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
@@ -408,7 +591,9 @@ export default function CalendarScreen() {
   const handleFormSubmitSuccess = () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
-    fetchTasksAndEvents();
+    invalidateCache();
+    renderFromCache(currentDate, viewMode);
+    scheduleServerFetch(currentDate, viewMode, 100);
     calculateAuthenticScore();
   };
 
