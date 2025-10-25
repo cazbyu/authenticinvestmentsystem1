@@ -596,8 +596,14 @@ export default function JournalForm({
           </Text>
           <View style={styles.headerRight}>
             {mode === 'edit' && (
-              <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-                <Text style={styles.deleteText}>Delete</Text>
+              <TouchableOpacity
+                onPress={handleDelete}
+                style={styles.deleteButton}
+                disabled={saving}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.6}
+              >
+                <Text style={[styles.deleteText, saving && styles.deleteTextDisabled]}>Delete</Text>
               </TouchableOpacity>
             )}
             {mode === 'create' && <View style={{ width: 60 }} />}
@@ -985,11 +991,16 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     },
     deleteButton: {
       padding: 8,
+      minWidth: 60,
+      alignItems: 'center',
     },
     deleteText: {
-      color: colors.error,
+      color: colors.error || '#ef4444',
       fontSize: 16,
       fontWeight: '600',
+    },
+    deleteTextDisabled: {
+      opacity: 0.4,
     },
     loadingContainer: {
       flex: 1,
