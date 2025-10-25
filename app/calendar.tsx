@@ -59,7 +59,7 @@ export default function CalendarScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  // Removed loading state - cache provides instant UI
+  const [loading, setLoading] = useState(true);
   const [authenticScore, setAuthenticScore] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
@@ -70,11 +70,9 @@ export default function CalendarScreen() {
   const [scrollTrigger, setScrollTrigger] = useState(0);
   const [isQuadrantRowExpanded, setIsQuadrantRowExpanded] = useState(true);
 
-  // Cache states for performance optimization
+  // Performance optimization: recurring templates cache
   const [recurringTemplates, setRecurringTemplates] = useState<any[]>([]);
-  const [nonRecurringCache, setNonRecurringCache] = useState<Map<string, any[]>>(new Map());
   const latestFetchId = useRef(0);
-  const fetchTimeoutRef = useRef<number | null>(null);
 
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -93,9 +91,8 @@ export default function CalendarScreen() {
   }, []);
 
   useEffect(() => {
-    // Immediate render from cache + schedule server reconciliation
-    renderFromCache(currentDate, viewMode);
-    scheduleServerFetch(currentDate, viewMode);
+    // Direct fetch without cache pre-rendering
+    fetchTasksAndEvents(currentDate, viewMode);
 
     if (viewMode === 'weekly') {
       setScrollTrigger(prev => prev + 1);
@@ -131,33 +128,25 @@ export default function CalendarScreen() {
     // Event bus listeners for task lifecycle events
     const handleTaskCreated = () => {
       console.log('[Calendar] Received task created event, refreshing...');
-      invalidateCache();
-      renderFromCache(currentDate, viewMode);
-      scheduleServerFetch(currentDate, viewMode, 100);
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Calendar] Received task updated event, refreshing...');
-      invalidateCache();
-      renderFromCache(currentDate, viewMode);
-      scheduleServerFetch(currentDate, viewMode, 100);
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Calendar] Received task deleted event, refreshing...');
-      invalidateCache();
-      renderFromCache(currentDate, viewMode);
-      scheduleServerFetch(currentDate, viewMode, 100);
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
     const handleRefreshAll = () => {
       console.log('[Calendar] Received refresh all event, refreshing...');
-      invalidateCache();
-      renderFromCache(currentDate, viewMode);
-      scheduleServerFetch(currentDate, viewMode, 100);
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
@@ -211,7 +200,6 @@ export default function CalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch minimal fields for recurring templates only
       const { data, error } = await supabase
         .from('0008-ap-tasks')
         .select(`
@@ -227,7 +215,6 @@ export default function CalendarScreen() {
 
       if (error) throw error;
       if (data) {
-        // Fetch role colors for templates
         const templateIds = data.map(t => t.id);
         const { data: rolesData } = await supabase
           .from('0008-ap-universal-roles-join')
@@ -249,84 +236,17 @@ export default function CalendarScreen() {
     }
   };
 
-  const renderFromCache = (forDate: Date, mode: 'daily' | 'weekly' | 'monthly') => {
-    const { start, end } = getVisibleWindow(mode, forDate);
-
-    // Expand cached recurring templates
-    const virtualInstances: any[] = [];
-    recurringTemplates.forEach(template => {
-      const instances = expandEventsWithRecurrence([template], mode, forDate);
-      virtualInstances.push(...instances);
-    });
-
-    // Get cached non-recurring tasks for this range
-    const startStr = formatLocalDate(start);
-    const endStr = formatLocalDate(end);
-    const cacheKey = `${startStr}:${endStr}`;
-    const cachedNonRecurring = nonRecurringCache.get(cacheKey) || [];
-
-    // Merge and deduplicate
-    const merged = uniqByIdAndDate([...virtualInstances, ...cachedNonRecurring]);
-
-    // Transform to task format with minimal data
-    const transformedTasks = merged.map(task => ({
-      ...task,
-      roles: [],
-      domains: [],
-      goals: [],
-      keyRelationships: [],
-      has_notes: false,
-      has_delegates: false,
-      has_attachments: false,
-      roleColor: task.roleColor || '#0078d4',
-      isGoalActionTask: false,
-    }));
-
-    setTasks(transformedTasks);
-
-    // Convert to calendar events
-    const calendarEvents: CalendarEvent[] = transformedTasks.map(task => ({
-      id: task.id,
-      title: task.title,
-      date: task.occurrence_date || task.start_date || task.due_date!,
-      time: task.start_time ? formatTime(task.start_time) : undefined,
-      endTime: task.end_time ? formatTime(task.end_time) : undefined,
-      type: task.type as 'task' | 'event',
-      color: task.roleColor,
-      isAllDay: task.is_all_day || task.is_anytime || (!task.start_time && !task.end_time),
-    }));
-
-    setEvents(calendarEvents);
-  };
-
-  const scheduleServerFetch = (centerDate: Date, mode: 'daily' | 'weekly' | 'monthly', delay: number = 250) => {
-    if (fetchTimeoutRef.current) {
-      window.clearTimeout(fetchTimeoutRef.current);
-    }
-    fetchTimeoutRef.current = window.setTimeout(() => {
-      fetchTasksAndEvents(centerDate, mode);
-      fetchTimeoutRef.current = null;
-    }, delay) as any;
-  };
-
-  const invalidateCache = () => {
-    setNonRecurringCache(new Map());
-    loadRecurringTemplates();
-  };
 
   const fetchTasksAndEvents = async (centerDate: Date = currentDate, mode: 'daily' | 'weekly' | 'monthly' = viewMode) => {
-    // Increment fetch ID for race condition prevention
     latestFetchId.current += 1;
     const fetchId = latestFetchId.current;
 
-    // Don't show loading state - cache provides instant UI
-    // setLoading(true) removed to eliminate loading flicker
+    setLoading(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Center the fetch window on the provided date
       const center = centerDate || new Date();
       const startRange = new Date(center);
       const endRange = new Date(center);
@@ -348,15 +268,12 @@ export default function CalendarScreen() {
 
       const startStr = formatLocalDate(startRange);
       const endStr = formatLocalDate(endRange);
-      const cacheKey = `${startStr}:${endStr}`;
 
-      // Check if this request is stale
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch request');
         return;
       }
 
-      // Lightweight fetch: minimal fields first
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select(`
@@ -371,7 +288,6 @@ export default function CalendarScreen() {
 
       if (tasksError) throw tasksError;
 
-      // Check if this request is stale before processing
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch after query');
         return;
@@ -384,26 +300,13 @@ export default function CalendarScreen() {
         return;
       }
 
-      // Cache non-recurring tasks for this range
-      const nonRecurringTasks = tasksData.filter(t => !t.recurrence_rule && !t.is_virtual_occurrence);
-      if (nonRecurringTasks.length > 0) {
-        setNonRecurringCache(prev => {
-          const updated = new Map(prev);
-          updated.set(cacheKey, nonRecurringTasks);
-          return updated;
-        });
-      }
-
-      // Get visible task IDs (only source tasks, not virtual occurrences)
       const visibleSourceIds = [...new Set(tasksData.map(t => t.source_task_id || t.id))];
 
-      // Check if stale before expensive joins
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch before joins');
         return;
       }
 
-      // Fetch comprehensive task data ONLY for visible tasks
       const [
         { data: rolesData, error: rolesError },
         { data: domainsData, error: domainsError },
@@ -420,7 +323,6 @@ export default function CalendarScreen() {
         supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task')
       ]);
 
-      // Final stale check before updating state
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch after joins');
         return;
@@ -433,10 +335,8 @@ export default function CalendarScreen() {
       if (delegatesError) throw delegatesError;
       if (keyRelationshipsError) throw keyRelationshipsError;
 
-      // Transform tasks with role colors and filter out goal action tasks
       const transformedTasks = tasksData
         .map(task => {
-          // For virtual occurrences, use source_task_id for joins
           const lookupId = task.source_task_id || task.id;
           const taskRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
           const primaryRole = taskRoles[0];
@@ -457,7 +357,6 @@ export default function CalendarScreen() {
         })
         .filter(task => !task.isGoalActionTask);
 
-      // Final stale check before setting state
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch before setState');
         return;
@@ -465,8 +364,6 @@ export default function CalendarScreen() {
 
       setTasks(transformedTasks);
 
-      // Convert to calendar events
-      // Use occurrence_date for virtual recurring occurrences, otherwise use start_date or due_date
       const calendarEvents: CalendarEvent[] = transformedTasks.map(task => ({
         id: task.id,
         title: task.title,
@@ -481,10 +378,10 @@ export default function CalendarScreen() {
       setEvents(calendarEvents);
     } catch (error) {
       console.error('Error fetching tasks and events:', error);
-      // Only show alert for errors, don't show loading state
       Alert.alert('Error', (error as Error).message);
+    } finally {
+      setLoading(false);
     }
-    // No finally block - no loading state to clear
   };
 
   const handleCompleteTask = useCallback(async (taskId: string) => {
@@ -493,7 +390,6 @@ export default function CalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Find the task in our current data to check if it's recurring
       const task = [...tasks, ...events].find(t => t.id === taskId);
 
       if (task && (task.is_virtual_occurrence || task.recurrence_rule)) {
@@ -509,7 +405,6 @@ export default function CalendarScreen() {
           throw new Error(result.error || 'Failed to complete recurring task');
         }
       } else {
-        // Regular task - just update status
         const { error } = await supabase
           .from('0008-ap-tasks')
           .update({ status: 'completed', completed_at: new Date().toISOString() })
@@ -518,9 +413,7 @@ export default function CalendarScreen() {
         if (error) throw error;
       }
 
-      invalidateCache();
-      renderFromCache(currentDate, viewMode);
-      scheduleServerFetch(currentDate, viewMode, 100);
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
@@ -580,9 +473,7 @@ export default function CalendarScreen() {
       if (error) throw error;
       Alert.alert('Success', 'Task has been cancelled');
       setIsDetailModalVisible(false);
-      invalidateCache();
-      renderFromCache(currentDate, viewMode);
-      scheduleServerFetch(currentDate, viewMode, 100);
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
@@ -592,9 +483,7 @@ export default function CalendarScreen() {
   const handleFormSubmitSuccess = () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
-    invalidateCache();
-    renderFromCache(currentDate, viewMode);
-    scheduleServerFetch(currentDate, viewMode, 100);
+    fetchTasksAndEvents(currentDate, viewMode);
     calculateAuthenticScore();
   };
 
