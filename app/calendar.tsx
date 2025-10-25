@@ -81,12 +81,12 @@ export default function CalendarScreen() {
   
   // Layout measurements for proper centering
 
-  useEffect(() => {
-    fetchTasksAndEvents();
-    if (viewMode === 'weekly') {
-      setScrollTrigger(prev => prev + 1);
-    }
-  }, [viewMode]);
+   useEffect(() => {
+     fetchTasksAndEvents();
+     if (viewMode === 'weekly') {
+       setScrollTrigger(prev => prev + 1);
+     }
+   }, [viewMode, currentDate]);
 
   useEffect(() => {
     calculateAuthenticScore();
