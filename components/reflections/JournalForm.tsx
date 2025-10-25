@@ -141,7 +141,7 @@ export default function JournalForm({
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
-        .from('0008-reflection-attachments')
+        .from('0008-ap-reflection-attachments')
         .select('*')
         .eq('reflection_id', reflectionId);
 
@@ -322,7 +322,7 @@ export default function JournalForm({
 
         // Delete from database
         await supabase
-          .from('0008-reflection-attachments')
+          .from('0008-ap-reflection-attachments')
           .delete()
           .eq('id', fileToRemove.id);
       } catch (error) {
@@ -430,7 +430,7 @@ export default function JournalForm({
           if (filePath) {
             // Save attachment metadata to database
             const { error } = await supabase
-              .from('0008-reflection-attachments')
+              .from('0008-ap-reflection-attachments')
               .insert({
                 reflection_id: reflectionId,
                 user_id: user.id,
