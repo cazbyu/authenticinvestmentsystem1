@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
 import { Header } from '@/components/Header';
@@ -54,6 +54,7 @@ interface CalendarEvent {
 }
 
 export default function CalendarScreen() {
+  const { width: screenWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -69,6 +70,11 @@ export default function CalendarScreen() {
   );
   const [scrollTrigger, setScrollTrigger] = useState(0);
   const [isQuadrantRowExpanded, setIsQuadrantRowExpanded] = useState(true);
+
+  // Responsive breakpoints
+  const isMobile = screenWidth < 400;
+  const isTablet = screenWidth >= 400 && screenWidth < 768;
+  const isDesktop = screenWidth >= 768;
 
   // Performance optimization: recurring templates cache
   const [recurringTemplates, setRecurringTemplates] = useState<any[]>([]);
@@ -615,6 +621,11 @@ export default function CalendarScreen() {
   const dailyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, true);
 
   const renderDailyView = () => {
+    // Filter tasks based on showCompleted toggle
+    const filteredDailyTasks = dailyExpandedTasks.filter(task =>
+      showCompleted ? task.status === 'completed' : task.status !== 'completed'
+    );
+
     return (
       <View style={styles.dailyViewContainer}>
         <View style={styles.dailyHeader}>
@@ -629,18 +640,31 @@ export default function CalendarScreen() {
               <ChevronRight size={24} color="#0078d4" />
             </TouchableOpacity>
           </View>
-          <PriorityQuadrant
-            tasks={dailyExpandedTasks}
-            size="medium"
-            onPress={(quadrant) => handleQuadrantPress(quadrant, dailyExpandedTasks)}
-            showCompleted={showCompleted}
-          />
+          <View style={styles.dailyHeaderRight}>
+            <View style={styles.toggleContainer}>
+              <Text style={[styles.toggleLabel, isMobile && styles.toggleLabelMobile]}>Total:</Text>
+              <TouchableOpacity
+                onPress={() => setShowCompleted(!showCompleted)}
+                style={[styles.toggleButton, isMobile && styles.toggleButtonMobile]}
+              >
+                <Text style={[styles.toggleButtonText, isMobile && styles.toggleButtonTextMobile]}>
+                  {showCompleted ? 'Completed' : 'Pending'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <PriorityQuadrant
+              tasks={filteredDailyTasks}
+              size={isMobile ? 'small' : 'medium'}
+              onPress={(quadrant) => handleQuadrantPress(quadrant, filteredDailyTasks)}
+              showCompleted={showCompleted}
+            />
+          </View>
         </View>
 
         <View style={styles.dailyContent}>
           <HourlyCalendarGrid
             selectedDate={selectedDate}
-            expandedTasks={dailyExpandedTasks}
+            expandedTasks={filteredDailyTasks}
             currentTimePosition={currentTimePosition}
             currentTimeString={currentTimeString}
             onCompleteTask={handleCompleteTask}
@@ -723,7 +747,7 @@ export default function CalendarScreen() {
           <View style={styles.spacer} />
 
           <View style={styles.toggleContainer}>
-            <Text style={styles.toggleLabel}>Show:</Text>
+            <Text style={styles.toggleLabel}>Total:</Text>
             <TouchableOpacity
               onPress={() => setShowCompleted(!showCompleted)}
               style={styles.toggleButton}
@@ -734,13 +758,16 @@ export default function CalendarScreen() {
             </TouchableOpacity>
           </View>
 
-          <PriorityQuadrant
-            tasks={allWeekTasks}
-            size="medium"
-            style={styles.weeklyQuadrant}
-            onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}
-            showCompleted={showCompleted}
-          />
+          {/* Show quadrant in header only on desktop */}
+          {isDesktop && (
+            <PriorityQuadrant
+              tasks={allWeekTasks}
+              size="medium"
+              style={styles.weeklyQuadrant}
+              onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}
+              showCompleted={showCompleted}
+            />
+          )}
         </View>
 
         <View
@@ -1001,12 +1028,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 8,
+    flexWrap: 'wrap',
+    gap: 12,
   },
   dailyHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
+  },
+  dailyHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   dailyTitle: {
     fontSize: 18,
@@ -1168,16 +1201,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
   },
+  toggleLabelMobile: {
+    fontSize: 12,
+  },
   toggleButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: '#0078d4',
     borderRadius: 6,
+    minHeight: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toggleButtonMobile: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    minHeight: 28,
   },
   toggleButtonText: {
     fontSize: 13,
     fontWeight: '500',
     color: '#ffffff',
+  },
+  toggleButtonTextMobile: {
+    fontSize: 11,
   },
   weeklyQuadrant: {
     marginLeft: 12,
