@@ -682,6 +682,24 @@ export default function CalendarScreen() {
     return Object.values(filteredTasksByDate).flat();
   }, [filteredTasksByDate]);
 
+  const getWeekDateRangeDisplay = () => {
+    const firstDate = weekDates[0];
+    const lastDate = weekDates[6];
+
+    const firstMonth = firstDate.getMonth();
+    const lastMonth = lastDate.getMonth();
+    const firstYear = firstDate.getFullYear();
+    const lastYear = lastDate.getFullYear();
+
+    if (firstMonth === lastMonth && firstYear === lastYear) {
+      return firstDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    } else {
+      const firstMonthYear = firstDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      const lastMonthYear = lastDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      return `${firstMonthYear} - ${lastMonthYear}`;
+    }
+  };
+
   const renderWeeklyView = () => {
     return (
       <View style={styles.weeklyViewRedesigned}>
@@ -695,7 +713,7 @@ export default function CalendarScreen() {
               <ChevronLeft size={20} color="#0078d4" />
             </TouchableOpacity>
             <Text style={styles.monthYearText}>
-              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {getWeekDateRangeDisplay()}
             </Text>
             <TouchableOpacity onPress={() => navigateDate('next')}>
               <ChevronRight size={20} color="#0078d4" />
