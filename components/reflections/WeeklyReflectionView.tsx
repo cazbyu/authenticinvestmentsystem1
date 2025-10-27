@@ -114,7 +114,7 @@ export default function WeeklyReflectionView() {
     if (!user) return;
 
     const { data: prefsData } = await supabase
-      .from('0008-ap-user-preferences')
+      .from('0008-ap-users')
       .select('week_start_day')
       .eq('user_id', user.id)
       .maybeSingle();

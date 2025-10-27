@@ -156,7 +156,7 @@ export function Header({
                   </Text>
                 </TouchableOpacity>
               </>
-            ) : activeView === 'reflectionHistory' ? (
+            ) : (['daily', 'weekly', 'reflectionHistory'].includes(activeView as string)) ? (
               /* Reflection Views */
               <>
                 <TouchableOpacity
