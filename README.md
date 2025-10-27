@@ -1,78 +1,42 @@
 # Authentic Investment System
 
-An Expo-based mobile application for goal tracking, timeline management, and personal development. Built with React Native (Expo) and Supabase backend.
+An Expo-based mobile application starter project that connects to a Supabase backend for authentication and data storage.
 
-## Quick Start
-
-### Prerequisites
+## Prerequisites
 
 - [Node.js](https://nodejs.org/) and npm
 - [Expo CLI](https://docs.expo.dev/get-started/installation/)
-- Active Supabase project
 
-### Installation
+## Installation
 
 ```bash
 npm install
 ```
 
-### Environment Variables
+## Environment Variables
 
-1. Copy [.env.example](.env.example) to `.env`
-2. Fill in your Supabase credentials:
+1. Copy [.env.example](.env.example) to `.env`.
+2. Fill in the required Supabase values:
 
    ```env
    EXPO_PUBLIC_SUPABASE_URL=your-supabase-url
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
    ```
 
-   Find these values in your Supabase project settings under API.
+   These values can be found in your Supabase project's settings. A Supabase project is required for authentication and database services.
 
-### Running the App
+## Running the App
+
+Start the development server:
 
 ```bash
 npm run dev
 ```
 
-This launches Expo development tools for running on a simulator or physical device.
+Or use the default command:
 
-## Documentation
-
-### Essential Guides
-- **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Production deployment steps
-- **[docs/global-timeline-activation-system.md](docs/global-timeline-activation-system.md)** - Timeline activation architecture
-- **[docs/completion-synchronization.md](docs/completion-synchronization.md)** - Task completion sync logic
-- **[docs/ui-ux-guidelines.md](docs/ui-ux-guidelines.md)** - UI/UX design standards
-
-### Database Documentation
-- **[docs/database/](docs/database/)** - Database setup, migrations, and SQL guides
-  - Migration guides and troubleshooting
-  - SQL reference scripts
-  - Database views implementation
-
-### Development History
-- **[docs/archive/](docs/archive/)** - Historical fix documentation and implementation summaries
-  - Completed fixes and debugging guides
-  - Feature implementation summaries
-  - Refactoring documentation
-
-## Project Structure
-
-```
-/app              # Expo Router pages and navigation
-/components       # Reusable React components
-/contexts         # React Context providers
-/hooks            # Custom React hooks
-/lib              # Utility functions and helpers
-/supabase         # Database migrations and functions
-/docs             # Project documentation
+```bash
+npm start
 ```
 
-## Features
-
-- Goal and timeline management (12-week cycles)
-- Role-based organization
-- Task and event tracking with recurrence
-- Weekly and daily reflections
-- Authentic score tracking
-- Calendar integration
+This will launch the Expo development tools for running the app on a simulator or physical device.
