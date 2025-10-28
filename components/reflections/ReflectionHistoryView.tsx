@@ -17,9 +17,23 @@ interface ReflectionHistoryViewProps {
   onReflectionPress?: (reflection: ReflectionWithRelations) => void;
 }
 
+type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
+
+interface TimelineItem {
+  id: string;
+  type: TimelineItemType;
+  created_at: string;
+  content?: string;
+  date?: string;
+  parent_type?: string;
+  roles?: Array<{ id: string; label: string; color?: string }>;
+  domains?: Array<{ id: string; name: string; color?: string }>;
+  keyRelationships?: Array<{ id: string; name: string }>;
+}
+
 export default function ReflectionHistoryView({ onReflectionPress }: ReflectionHistoryViewProps) {
   const { colors } = useTheme();
-  const [reflections, setReflections] = useState<ReflectionWithRelations[]>([]);
+  const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -27,12 +41,12 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
   const PAGE_SIZE = 50;
 
   useEffect(() => {
-    fetchReflections();
+    fetchTimelineData();
 
     const handleReflectionChange = () => {
       setPage(1);
       setHasMore(true);
-      fetchReflections(true);
+      fetchTimelineData(true);
     };
 
     eventBus.on(EVENTS.REFLECTION_CREATED, handleReflectionChange);
@@ -46,7 +60,7 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
     };
   }, []);
 
-  const fetchReflections = async (reset: boolean = false) => {
+  const fetchTimelineData = async (reset: boolean = false) => {
     if (!hasMore && !reset) return;
 
     setLoading(true);
@@ -57,56 +71,90 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const currentPage = reset ? 1 : page;
-      const from = (currentPage - 1) * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      const { data, error } = await supabase
+      // Fetch all reflections
+      const { data: reflectionsData, error: reflectionsError } = await supabase
         .from('0008-ap-reflections')
         .select('*')
         .eq('user_id', user.id)
         .eq('archived', false)
-        .order('created_at', { ascending: false })
-        .range(from, to);
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (reflectionsError) throw reflectionsError;
 
-      if (data) {
-        // Fetch related data for each reflection
-        const reflectionsWithRelations = await Promise.all(
-          data.map(async (reflection) => {
-            const [rolesData, domainsData, keyRelsData, notesData] = await Promise.all([
-              fetchReflectionRoles(reflection.id),
-              fetchReflectionDomains(reflection.id),
-              fetchReflectionKeyRelationships(reflection.id),
-              fetchReflectionNotes(reflection.id, reflection.date, user.id),
-            ]);
+      // Fetch related data for each reflection
+      const reflectionsWithRelations: TimelineItem[] = reflectionsData
+        ? await Promise.all(
+            reflectionsData.map(async (reflection) => {
+              const [rolesData, domainsData, keyRelsData] = await Promise.all([
+                fetchReflectionRoles(reflection.id),
+                fetchReflectionDomains(reflection.id),
+                fetchReflectionKeyRelationships(reflection.id),
+              ]);
 
-            return {
-              ...reflection,
-              roles: rolesData,
-              domains: domainsData,
-              keyRelationships: keyRelsData,
-              notes: notesData,
-            };
-          })
-        );
+              return {
+                ...reflection,
+                type: 'reflection' as TimelineItemType,
+                roles: rolesData,
+                domains: domainsData,
+                keyRelationships: keyRelsData,
+              };
+            })
+          )
+        : [];
 
-        if (reset) {
-          setReflections(reflectionsWithRelations);
-        } else {
-          setReflections((prev) => [...prev, ...reflectionsWithRelations]);
-        }
+      // Fetch all notes for the user
+      const { data: notesData, error: notesError } = await supabase
+        .from('0008-ap-universal-notes-join')
+        .select(`
+          parent_type,
+          note:0008-ap-notes(
+            id,
+            content,
+            created_at
+          )
+        `)
+        .eq('user_id', user.id);
 
-        setHasMore(data.length === PAGE_SIZE);
-        if (!reset) {
-          setPage(currentPage + 1);
-        } else {
-          setPage(2);
-        }
+      if (notesError) throw notesError;
+
+      // Transform notes into timeline items
+      const notesAsTimelineItems: TimelineItem[] = notesData
+        ? notesData
+            .filter((item: any) => item.note && item.note.id)
+            .map((item: any) => ({
+              id: item.note.id,
+              type: (item.parent_type || 'note') as TimelineItemType,
+              content: item.note.content,
+              created_at: item.note.created_at,
+              parent_type: item.parent_type,
+            }))
+        : [];
+
+      // Merge and sort by created_at
+      const combinedItems = [...reflectionsWithRelations, ...notesAsTimelineItems].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      // Apply pagination
+      const currentPage = reset ? 1 : page;
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE;
+      const paginatedItems = combinedItems.slice(from, to);
+
+      if (reset) {
+        setTimelineItems(paginatedItems);
+      } else {
+        setTimelineItems((prev) => [...prev, ...paginatedItems]);
+      }
+
+      setHasMore(to < combinedItems.length);
+      if (!reset) {
+        setPage(currentPage + 1);
+      } else {
+        setPage(2);
       }
     } catch (error) {
-      console.error('Error fetching reflections:', error);
+      console.error('Error fetching timeline data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -176,67 +224,11 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
     }
   };
 
-  const fetchReflectionNotes = async (
-    reflectionId: string,
-    reflectionDate?: string,
-    userId?: string
-  ): Promise<Array<{ id: string; content: string; created_at: string; parent_type?: string }>> => {
-    try {
-      const supabase = getSupabaseClient();
-
-      // First, try to fetch notes directly linked to the reflection
-      const { data: directNotes, error: directError } = await supabase
-        .from('0008-ap-universal-notes-join')
-        .select(`
-          parent_type,
-          note:0008-ap-notes(
-            id,
-            content,
-            created_at
-          )
-        `)
-        .eq('parent_type', 'reflection')
-        .eq('parent_id', reflectionId);
-
-      if (directError) throw directError;
-
-      let notes = directNotes?.map((item: any) => ({
-        ...item.note,
-        parent_type: item.parent_type
-      })).filter((note: any) => note !== null && note.id) || [];
-
-      // If we have a reflection date, also fetch notes from tasks/items completed on that date
-      if (reflectionDate && userId) {
-        const { data: dateBasedNotes, error: dateError } = await supabase.rpc(
-          'get_notes_for_reflection_date',
-          {
-            p_user_id: userId,
-            p_date: reflectionDate
-          }
-        );
-
-        if (!dateError && dateBasedNotes) {
-          notes = [...notes, ...dateBasedNotes];
-        }
-      }
-
-      // Remove duplicates by note id
-      const uniqueNotes = Array.from(
-        new Map(notes.map((note: any) => [note.id, note])).values()
-      );
-
-      return uniqueNotes;
-    } catch (error) {
-      console.error('Error fetching reflection notes:', error);
-      return [];
-    }
-  };
-
   const onRefresh = () => {
     setRefreshing(true);
     setPage(1);
     setHasMore(true);
-    fetchReflections(true);
+    fetchTimelineData(true);
   };
 
   const formatDateTime = (dateString: string, createdAt: string) => {
@@ -256,64 +248,63 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
     return content.substring(0, maxLength) + '...';
   };
 
-  const renderReflection = ({ item }: { item: ReflectionWithRelations }) => (
+  const getItemTypeBadgeColor = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return '#10b981';
+      case 'task':
+        return '#0078d4';
+      case 'depositIdea':
+        return '#8b5cf6';
+      case 'withdrawal':
+        return '#f59e0b';
+      case 'reflection':
+        return colors.primary;
+      default:
+        return colors.primary;
+    }
+  };
+
+  const getItemTypeLabel = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return 'Event';
+      case 'task':
+        return 'Task';
+      case 'depositIdea':
+        return 'Deposit Idea';
+      case 'withdrawal':
+        return 'Withdrawal';
+      case 'reflection':
+        return 'Reflection';
+      default:
+        return 'Note';
+    }
+  };
+
+  const renderTimelineItem = ({ item }: { item: TimelineItem }) => {
+    if (item.type === 'reflection') {
+      return renderReflectionCard(item);
+    }
+    return renderNoteCard(item);
+  };
+
+  const renderReflectionCard = (item: TimelineItem) => (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
       onPress={() => onReflectionPress?.(item)}
     >
       <View style={styles.cardHeader}>
         <Text style={[styles.dateText, { color: colors.text }]}>
-          {formatDateTime(item.date, item.created_at)}
+          {formatDateTime(item.date || '', item.created_at)}
         </Text>
-        <View style={[styles.tagBadge, { backgroundColor: colors.primary }]}>
-          <Text style={styles.tagBadgeText}>Reflection</Text>
+        <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+          <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
         </View>
       </View>
       <Text style={[styles.contentPreview, { color: colors.textSecondary }]} numberOfLines={2}>
-        {truncateContent(item.content)}
+        {truncateContent(item.content || '')}
       </Text>
-      {item.notes && item.notes.length > 0 && (
-        <View style={styles.notesSection}>
-          <Text style={[styles.notesSectionTitle, { color: colors.text }]}>
-            Notes ({item.notes.length})
-          </Text>
-          {item.notes.slice(0, 2).map((note) => (
-            <View key={note.id} style={[styles.notePreview, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <View style={styles.noteItemHeader}>
-                <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {truncateContent(note.content, 60)}
-                </Text>
-                {note.parent_type && (
-                  <View style={[
-                    styles.noteTypeBadge,
-                    {
-                      backgroundColor:
-                        note.parent_type === 'event' ? '#10b981' :
-                        note.parent_type === 'task' ? '#0078d4' :
-                        note.parent_type === 'depositIdea' ? '#8b5cf6' :
-                        note.parent_type === 'withdrawal' ? '#f59e0b' :
-                        colors.primary
-                    }
-                  ]}>
-                    <Text style={styles.noteTypeBadgeText}>
-                      {note.parent_type === 'event' ? 'Event' :
-                       note.parent_type === 'task' ? 'Task' :
-                       note.parent_type === 'depositIdea' ? 'Deposit Idea' :
-                       note.parent_type === 'withdrawal' ? 'Withdrawal' :
-                       note.parent_type}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          ))}
-          {item.notes.length > 2 && (
-            <Text style={[styles.moreNotesText, { color: colors.textSecondary }]}>
-              +{item.notes.length - 2} more {item.notes.length - 2 === 1 ? 'note' : 'notes'}
-            </Text>
-          )}
-        </View>
-      )}
       {(item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0) ? (
         <View style={styles.tagsRow}>
           {item.roles?.slice(0, 2).map((role) => (
@@ -333,6 +324,39 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
         </View>
       ) : null}
     </TouchableOpacity>
+  );
+
+  const renderNoteCard = (item: TimelineItem) => (
+    <View
+      style={[
+        styles.card,
+        styles.noteCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderLeftColor: getItemTypeBadgeColor(item.type),
+        },
+      ]}
+    >
+      <View style={styles.cardHeader}>
+        <Text style={[styles.dateText, { color: colors.text }]}>
+          {new Date(item.created_at).toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          })}
+        </Text>
+        <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+          <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+        </View>
+      </View>
+      <Text style={[styles.contentPreview, { color: colors.textSecondary }]} numberOfLines={3}>
+        {item.content || ''}
+      </Text>
+    </View>
   );
 
   const renderEmpty = () => (
@@ -355,12 +379,12 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={reflections}
-        renderItem={renderReflection}
-        keyExtractor={(item) => item.id}
+        data={timelineItems}
+        renderItem={renderTimelineItem}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
         ListEmptyComponent={!loading ? renderEmpty : null}
         ListFooterComponent={renderFooter}
-        onEndReached={() => fetchReflections()}
+        onEndReached={() => fetchTimelineData()}
         onEndReachedThreshold={0.5}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
@@ -390,6 +414,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  noteCard: {
+    minHeight: 80,
   },
   cardHeader: {
     flexDirection: 'row',
