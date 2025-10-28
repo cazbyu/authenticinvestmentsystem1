@@ -304,6 +304,42 @@ export default function Dashboard() {
   };
 
 
+  // Automatic midnight refresh effect
+  // This ensures recurring tasks appear at 12:01 AM local time
+  useEffect(() => {
+    const scheduleNextMidnightRefresh = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 1, 0, 0); // Set to 12:01 AM
+
+      const msUntilMidnight = tomorrow.getTime() - now.getTime();
+
+      console.log('[Dashboard] Scheduling midnight refresh in', Math.round(msUntilMidnight / 1000 / 60), 'minutes');
+
+      const timeoutId = setTimeout(() => {
+        console.log('[Dashboard] Midnight refresh triggered - fetching new tasks');
+        fetchData();
+        // Schedule the next one for tomorrow
+        scheduleNextMidnightRefresh();
+      }, msUntilMidnight);
+
+      return timeoutId;
+    };
+
+    // Only schedule midnight refresh if we're on the deposits view
+    let midnightTimeoutId: NodeJS.Timeout | null = null;
+    if (activeView === 'deposits') {
+      midnightTimeoutId = scheduleNextMidnightRefresh();
+    }
+
+    return () => {
+      if (midnightTimeoutId) {
+        clearTimeout(midnightTimeoutId);
+      }
+    };
+  }, [activeView, fetchData]);
+
   useEffect(() => {
     registerResetHandler('dashboard', resetToMain);
     fetchData();
