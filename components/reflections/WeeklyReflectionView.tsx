@@ -21,6 +21,17 @@ import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRang
 import { formatLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
+type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
+
+interface TimelineItem {
+  id: string;
+  type: TimelineItemType;
+  created_at: string;
+  content?: string;
+  date?: string;
+  parent_type?: string;
+}
+
 export default function WeeklyReflectionView() {
   const { colors } = useTheme();
   const [weekRange, setWeekRange] = useState(getWeekDateRange());
@@ -30,7 +41,7 @@ export default function WeeklyReflectionView() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [goalSummaries, setGoalSummaries] = useState<GoalActionSummary[]>([]);
-  const [weekReflections, setWeekReflections] = useState<ReflectionWithRelations[]>([]);
+  const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
 
   useEffect(() => {
     loadData();
@@ -55,7 +66,7 @@ export default function WeeklyReflectionView() {
     try {
       await Promise.all([
         fetchWeeklyData(),
-        fetchWeekReflections(),
+        fetchWeekTimelineData(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -108,7 +119,7 @@ export default function WeeklyReflectionView() {
     setGoalSummaries(summaries);
   };
 
-  const fetchWeekReflections = async () => {
+  const fetchWeekTimelineData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -122,8 +133,56 @@ export default function WeeklyReflectionView() {
     const weekStartDay = prefsData?.week_start_day || 'sunday';
     const { weekStart, weekEnd } = calculateWeekRange(new Date(), weekStartDay);
 
+    // Fetch reflections for the week
     const reflections = await fetchReflectionsByDateRange(user.id, weekStart, weekEnd);
-    setWeekReflections(reflections);
+
+    // Fetch all notes for the week
+    const { data: notesData, error: notesError } = await supabase
+      .from('0008-ap-universal-notes-join')
+      .select(`
+        parent_type,
+        note:0008-ap-notes(
+          id,
+          content,
+          created_at
+        )
+      `)
+      .eq('user_id', user.id)
+      .gte('created_at', weekStart)
+      .lte('created_at', weekEnd);
+
+    if (notesError) {
+      console.error('Error fetching week notes:', notesError);
+    }
+
+    // Transform reflections to timeline items
+    const reflectionItems: TimelineItem[] = reflections.map(r => ({
+      id: r.id,
+      type: 'reflection' as TimelineItemType,
+      created_at: r.created_at,
+      content: r.content,
+      date: r.date,
+    }));
+
+    // Transform notes to timeline items
+    const noteItems: TimelineItem[] = notesData
+      ? notesData
+          .filter((item: any) => item.note && item.note.id)
+          .map((item: any) => ({
+            id: item.note.id,
+            type: (item.parent_type || 'note') as TimelineItemType,
+            content: item.note.content,
+            created_at: item.note.created_at,
+            parent_type: item.parent_type,
+          }))
+      : [];
+
+    // Merge and sort by created_at
+    const combined = [...reflectionItems, ...noteItems].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setTimelineItems(combined);
   };
 
 
@@ -150,6 +209,40 @@ export default function WeeklyReflectionView() {
   const truncateContent = (content: string, maxLength: number = 80) => {
     if (content.length <= maxLength) return content;
     return content.substring(0, maxLength) + '...';
+  };
+
+  const getItemTypeBadgeColor = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return '#10b981';
+      case 'task':
+        return '#0078d4';
+      case 'depositIdea':
+        return '#8b5cf6';
+      case 'withdrawal':
+        return '#f59e0b';
+      case 'reflection':
+        return colors.primary;
+      default:
+        return colors.primary;
+    }
+  };
+
+  const getItemTypeLabel = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return 'Event';
+      case 'task':
+        return 'Task';
+      case 'depositIdea':
+        return 'Deposit Idea';
+      case 'withdrawal':
+        return 'Withdrawal';
+      case 'reflection':
+        return 'Reflection';
+      default:
+        return 'Note';
+    }
   };
 
 
@@ -283,48 +376,44 @@ export default function WeeklyReflectionView() {
           </>
         )}
 
-        {/* Week Reflections */}
-        {weekReflections.length > 0 && (
+        {/* Week Timeline */}
+        {timelineItems.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>This Week's Reflections and Notes</Text>
 
             <View style={styles.previousList}>
-              {weekReflections.map(reflection => (
-                <TouchableOpacity
-                  key={reflection.id}
-                  style={[styles.previousCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+              {timelineItems.map(item => (
+                <View
+                  key={`${item.type}-${item.id}`}
+                  style={[
+                    styles.previousCard,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                      borderLeftColor: getItemTypeBadgeColor(item.type),
+                      borderLeftWidth: 3,
+                    },
+                  ]}
                 >
                   <View style={styles.reflectionHeader}>
                     <Text style={[styles.previousWeek, { color: colors.text }]}>
-                      {formatDateTime(reflection.date, reflection.created_at)}
+                      {new Date(item.created_at).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      })}
                     </Text>
-                    <View style={[styles.tagBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.tagBadgeText}>Reflection</Text>
+                    <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+                      <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
                     </View>
                   </View>
-                  <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {truncateContent(reflection.content)}
+                  <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={3}>
+                    {truncateContent(item.content || '')}
                   </Text>
-                  {reflection.notes && reflection.notes.length > 0 && (
-                    <View style={styles.notesSection}>
-                      <Text style={[styles.notesSectionTitle, { color: colors.text }]}>
-                        Notes ({reflection.notes.length})
-                      </Text>
-                      {reflection.notes.slice(0, 2).map((note) => (
-                        <View key={note.id} style={[styles.notePreview, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                          <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {truncateContent(note.content, 60)}
-                          </Text>
-                        </View>
-                      ))}
-                      {reflection.notes.length > 2 && (
-                        <Text style={[styles.moreNotesText, { color: colors.textSecondary }]}>
-                          +{reflection.notes.length - 2} more {reflection.notes.length - 2 === 1 ? 'note' : 'notes'}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           </View>

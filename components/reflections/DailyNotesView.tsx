@@ -20,6 +20,17 @@ import { fetchReflectionsByDateRange, ReflectionWithRelations } from '@/lib/refl
 import { formatLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
+type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
+
+interface TimelineItem {
+  id: string;
+  type: TimelineItemType;
+  created_at: string;
+  content?: string;
+  date?: string;
+  parent_type?: string;
+}
+
 interface DailyNotesViewProps {
   onReflectionPress?: (reflection: ReflectionWithRelations) => void;
 }
@@ -32,7 +43,7 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [todayReflections, setTodayReflections] = useState<ReflectionWithRelations[]>([]);
+  const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
 
   useEffect(() => {
     loadData();
@@ -57,7 +68,7 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
     try {
       await Promise.all([
         fetchDailyData(),
-        fetchTodayReflections(),
+        fetchTodayTimelineData(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -107,14 +118,66 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
     setAggregationData(data);
   };
 
-  const fetchTodayReflections = async () => {
+  const fetchTodayTimelineData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const today = formatLocalDate(new Date());
     const reflections = await fetchReflectionsByDateRange(user.id, today, today);
-    setTodayReflections(reflections);
+
+    // Fetch all notes for today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const { data: notesData, error: notesError } = await supabase
+      .from('0008-ap-universal-notes-join')
+      .select(`
+        parent_type,
+        note:0008-ap-notes(
+          id,
+          content,
+          created_at
+        )
+      `)
+      .eq('user_id', user.id)
+      .gte('created_at', todayStart.toISOString())
+      .lte('created_at', todayEnd.toISOString());
+
+    if (notesError) {
+      console.error('Error fetching today notes:', notesError);
+    }
+
+    // Transform reflections to timeline items
+    const reflectionItems: TimelineItem[] = reflections.map(r => ({
+      id: r.id,
+      type: 'reflection' as TimelineItemType,
+      created_at: r.created_at,
+      content: r.content,
+      date: r.date,
+    }));
+
+    // Transform notes to timeline items
+    const noteItems: TimelineItem[] = notesData
+      ? notesData
+          .filter((item: any) => item.note && item.note.id)
+          .map((item: any) => ({
+            id: item.note.id,
+            type: (item.parent_type || 'note') as TimelineItemType,
+            content: item.note.content,
+            created_at: item.note.created_at,
+            parent_type: item.parent_type,
+          }))
+      : [];
+
+    // Merge and sort by created_at
+    const combined = [...reflectionItems, ...noteItems].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setTimelineItems(combined);
   };
 
 
@@ -134,6 +197,40 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
   const truncateContent = (content: string, maxLength: number = 80) => {
     if (content.length <= maxLength) return content;
     return content.substring(0, maxLength) + '...';
+  };
+
+  const getItemTypeBadgeColor = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return '#10b981';
+      case 'task':
+        return '#0078d4';
+      case 'depositIdea':
+        return '#8b5cf6';
+      case 'withdrawal':
+        return '#f59e0b';
+      case 'reflection':
+        return colors.primary;
+      default:
+        return colors.primary;
+    }
+  };
+
+  const getItemTypeLabel = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return 'Event';
+      case 'task':
+        return 'Task';
+      case 'depositIdea':
+        return 'Deposit Idea';
+      case 'withdrawal':
+        return 'Withdrawal';
+      case 'reflection':
+        return 'Reflection';
+      default:
+        return 'Note';
+    }
   };
 
   const formatCurrentDate = () => {
@@ -293,95 +390,45 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
           </>
         )}
 
-        {todayReflections.length > 0 && (
+        {timelineItems.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>
-              Today's Reflections and Notes ({todayReflections.length})
+              Today's Reflections and Notes ({timelineItems.length})
             </Text>
 
             <View style={styles.notesList}>
-              {todayReflections.map(reflection => (
-                <TouchableOpacity
-                  key={reflection.id}
-                  style={[styles.noteCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  onPress={() => onReflectionPress?.(reflection)}
+              {timelineItems.map(item => (
+                <View
+                  key={`${item.type}-${item.id}`}
+                  style={[
+                    styles.noteCard,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                      borderLeftColor: getItemTypeBadgeColor(item.type),
+                      borderLeftWidth: 3,
+                    },
+                  ]}
                 >
                   <View style={styles.noteHeader}>
                     <Text style={[styles.noteDate, { color: colors.text }]}>
-                      {formatDateTime(reflection.date, reflection.created_at)}
+                      {new Date(item.created_at).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      })}
                     </Text>
-                    <View style={[styles.tagBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.tagBadgeText}>Reflection</Text>
+                    <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+                      <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
                     </View>
                   </View>
-                  <Text
-                    style={[styles.notePreview, { color: colors.textSecondary }]}
-                    numberOfLines={2}
-                  >
-                    {truncateContent(reflection.content)}
+                  <Text style={[styles.notePreview, { color: colors.textSecondary }]} numberOfLines={3}>
+                    {truncateContent(item.content || '')}
                   </Text>
-                  {reflection.notes && reflection.notes.length > 0 && (
-                    <View style={styles.notesSection}>
-                      <Text style={[styles.notesSectionTitle, { color: colors.text }]}>
-                        Notes ({reflection.notes.length})
-                      </Text>
-                      {reflection.notes.slice(0, 2).map((note) => (
-                        <View key={note.id} style={[styles.noteItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                          <View style={styles.noteItemHeader}>
-                            <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={1}>
-                              {truncateContent(note.content, 60)}
-                            </Text>
-                            {note.parent_type && (
-                              <View style={[
-                                styles.noteTypeBadge,
-                                {
-                                  backgroundColor:
-                                    note.parent_type === 'event' ? '#10b981' :
-                                    note.parent_type === 'task' ? '#0078d4' :
-                                    note.parent_type === 'depositIdea' ? '#8b5cf6' :
-                                    note.parent_type === 'withdrawal' ? '#f59e0b' :
-                                    colors.primary
-                                }
-                              ]}>
-                                <Text style={styles.noteTypeBadgeText}>
-                                  {note.parent_type === 'event' ? 'Event' :
-                                   note.parent_type === 'task' ? 'Task' :
-                                   note.parent_type === 'depositIdea' ? 'Deposit Idea' :
-                                   note.parent_type === 'withdrawal' ? 'Withdrawal' :
-                                   note.parent_type}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-                      ))}
-                      {reflection.notes.length > 2 && (
-                        <Text style={[styles.moreNotesText, { color: colors.textSecondary }]}>
-                          +{reflection.notes.length - 2} more {reflection.notes.length - 2 === 1 ? 'note' : 'notes'}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-                  {(reflection.roles && reflection.roles.length > 0) ||
-                   (reflection.domains && reflection.domains.length > 0) ? (
-                    <View style={styles.tagsRow}>
-                      {reflection.roles?.slice(0, 3).map((role) => (
-                        <View key={`role-${role.id}`} style={[styles.tagChip, { backgroundColor: colors.primaryLight || `${colors.primary}20` }]}>
-                          <Text style={[styles.tagChipText, { color: colors.primary }]} numberOfLines={1}>
-                            {role.label}
-                          </Text>
-                        </View>
-                      ))}
-                      {reflection.domains?.slice(0, 2).map((domain) => (
-                        <View key={`domain-${domain.id}`} style={[styles.tagChip, { backgroundColor: colors.primaryLight || `${colors.primary}20` }]}>
-                          <Text style={[styles.tagChipText, { color: colors.primary }]} numberOfLines={1}>
-                            {domain.name}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           </View>
