@@ -320,6 +320,25 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
                   >
                     {truncateContent(reflection.content)}
                   </Text>
+                  {reflection.notes && reflection.notes.length > 0 && (
+                    <View style={styles.notesSection}>
+                      <Text style={[styles.notesSectionTitle, { color: colors.text }]}>
+                        Notes ({reflection.notes.length})
+                      </Text>
+                      {reflection.notes.slice(0, 2).map((note) => (
+                        <View key={note.id} style={[styles.noteItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                          <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {truncateContent(note.content, 60)}
+                          </Text>
+                        </View>
+                      ))}
+                      {reflection.notes.length > 2 && (
+                        <Text style={[styles.moreNotesText, { color: colors.textSecondary }]}>
+                          +{reflection.notes.length - 2} more {reflection.notes.length - 2 === 1 ? 'note' : 'notes'}
+                        </Text>
+                      )}
+                    </View>
+                  )}
                   {(reflection.roles && reflection.roles.length > 0) ||
                    (reflection.domains && reflection.domains.length > 0) ? (
                     <View style={styles.tagsRow}>
@@ -575,6 +594,32 @@ const styles = StyleSheet.create({
   tagChipText: {
     fontSize: 11,
     fontWeight: '500',
+  },
+  notesSection: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  notesSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  noteItem: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 4,
+    borderLeftWidth: 2,
+    borderLeftColor: '#0078d4',
+  },
+  noteText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  moreNotesText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   modalContainer: {
     flex: 1,

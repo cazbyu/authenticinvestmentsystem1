@@ -16,6 +16,7 @@ export interface ReflectionWithRelations {
   roles?: Array<{ id: string; label: string; color?: string }>;
   domains?: Array<{ id: string; name: string; color?: string }>;
   keyRelationships?: Array<{ id: string; name: string }>;
+  notes?: Array<{ id: string; content: string; created_at: string }>;
 }
 
 /**
@@ -42,10 +43,11 @@ export async function fetchReflectionsByDateRange(
     // Fetch related data for each reflection
     const reflectionsWithRelations = await Promise.all(
       reflections.map(async (reflection) => {
-        const [rolesData, domainsData, keyRelsData] = await Promise.all([
+        const [rolesData, domainsData, keyRelsData, notesData] = await Promise.all([
           fetchReflectionRoles(reflection.id),
           fetchReflectionDomains(reflection.id),
           fetchReflectionKeyRelationships(reflection.id),
+          fetchReflectionNotes(reflection.id),
         ]);
 
         return {
@@ -53,6 +55,7 @@ export async function fetchReflectionsByDateRange(
           roles: rolesData,
           domains: domainsData,
           keyRelationships: keyRelsData,
+          notes: notesData,
         };
       })
     );
@@ -81,10 +84,11 @@ export async function fetchReflectionById(
     if (error) throw error;
     if (!reflection) return null;
 
-    const [rolesData, domainsData, keyRelsData] = await Promise.all([
+    const [rolesData, domainsData, keyRelsData, notesData] = await Promise.all([
       fetchReflectionRoles(reflection.id),
       fetchReflectionDomains(reflection.id),
       fetchReflectionKeyRelationships(reflection.id),
+      fetchReflectionNotes(reflection.id),
     ]);
 
     return {
@@ -92,6 +96,7 @@ export async function fetchReflectionById(
       roles: rolesData,
       domains: domainsData,
       keyRelationships: keyRelsData,
+      notes: notesData,
     };
   } catch (error) {
     console.error('Error fetching reflection by ID:', error);
@@ -120,10 +125,11 @@ export async function fetchFollowUpReflections(
 
     const reflectionsWithRelations = await Promise.all(
       reflections.map(async (reflection) => {
-        const [rolesData, domainsData, keyRelsData] = await Promise.all([
+        const [rolesData, domainsData, keyRelsData, notesData] = await Promise.all([
           fetchReflectionRoles(reflection.id),
           fetchReflectionDomains(reflection.id),
           fetchReflectionKeyRelationships(reflection.id),
+          fetchReflectionNotes(reflection.id),
         ]);
 
         return {
@@ -131,6 +137,7 @@ export async function fetchFollowUpReflections(
           roles: rolesData,
           domains: domainsData,
           keyRelationships: keyRelsData,
+          notes: notesData,
         };
       })
     );
@@ -213,6 +220,37 @@ async function fetchReflectionKeyRelationships(
       .filter((kr: any) => kr !== null);
   } catch (error) {
     console.error('Error fetching reflection key relationships:', error);
+    return [];
+  }
+}
+
+/**
+ * Helper to fetch notes for a reflection
+ */
+async function fetchReflectionNotes(
+  reflectionId: string
+): Promise<Array<{ id: string; content: string; created_at: string }>> {
+  try {
+    const { data, error } = await supabase
+      .from('0008-ap-universal-notes-join')
+      .select(`
+        note:0008-ap-notes(
+          id,
+          content,
+          created_at
+        )
+      `)
+      .eq('parent_type', 'reflection')
+      .eq('parent_id', reflectionId);
+
+    if (error) throw error;
+    if (!data) return [];
+
+    return data
+      .map((item: any) => item.note)
+      .filter((note: any) => note !== null);
+  } catch (error) {
+    console.error('Error fetching reflection notes:', error);
     return [];
   }
 }

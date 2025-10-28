@@ -214,6 +214,25 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
       <Text style={[styles.contentPreview, { color: colors.textSecondary }]} numberOfLines={2}>
         {truncateContent(item.content)}
       </Text>
+      {item.notes && item.notes.length > 0 && (
+        <View style={styles.notesSection}>
+          <Text style={[styles.notesSectionTitle, { color: colors.text }]}>
+            Notes ({item.notes.length})
+          </Text>
+          {item.notes.slice(0, 2).map((note) => (
+            <View key={note.id} style={[styles.notePreview, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={1}>
+                {truncateContent(note.content, 60)}
+              </Text>
+            </View>
+          ))}
+          {item.notes.length > 2 && (
+            <Text style={[styles.moreNotesText, { color: colors.textSecondary }]}>
+              +{item.notes.length - 2} more {item.notes.length - 2 === 1 ? 'note' : 'notes'}
+            </Text>
+          )}
+        </View>
+      )}
       {(item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0) ? (
         <View style={styles.tagsRow}>
           {item.roles?.slice(0, 2).map((role) => (
@@ -329,6 +348,32 @@ const styles = StyleSheet.create({
   },
   tagText: {
     fontSize: 11,
+  },
+  notesSection: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  notesSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  notePreview: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 4,
+    borderLeftWidth: 2,
+    borderLeftColor: '#0078d4',
+  },
+  noteText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  moreNotesText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   emptyContainer: {
     flex: 1,
