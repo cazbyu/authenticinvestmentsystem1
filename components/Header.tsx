@@ -156,7 +156,7 @@ export function Header({
                   </Text>
                 </TouchableOpacity>
               </>
-            ) : (['daily', 'weekly', 'reflectionHistory'].includes(activeView as string)) ? (
+            ) : (title === 'Reflections' || activeView === 'reflectionHistory') ? (
               /* Reflection Views */
               <>
                 <TouchableOpacity
@@ -187,7 +187,7 @@ export function Header({
                 </TouchableOpacity>
               </>
             ) : (
-              /* Calendar Views - default case for 'daily', 'weekly', 'monthly' */
+              /* Calendar Views - for 'daily', 'weekly', 'monthly' OR when title is 'Calendar View' */
               <>
                 <TouchableOpacity
                   style={[styles.toggleButton, activeView === 'daily' && styles.activeToggle]}
