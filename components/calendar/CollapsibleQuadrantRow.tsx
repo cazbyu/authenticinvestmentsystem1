@@ -11,6 +11,7 @@ interface CollapsibleQuadrantRowProps {
   isExpanded: boolean;
   onToggle: () => void;
   onQuadrantPress?: (quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4', tasks: Task[]) => void;
+  onDayPress?: (date: Date, tasks: Task[]) => void;
   showCompleted?: boolean;
 }
 
@@ -21,6 +22,7 @@ export function CollapsibleQuadrantRow({
   isExpanded,
   onToggle,
   onQuadrantPress,
+  onDayPress,
   showCompleted,
 }: CollapsibleQuadrantRowProps) {
   const { width: screenWidth } = useWindowDimensions();
@@ -83,25 +85,22 @@ export function CollapsibleQuadrantRow({
             const dayTasks = tasksByDate[dateStr] || [];
 
             return (
-              <View
+              <TouchableOpacity
                 key={index}
                 style={[
                   styles.quadrantCell,
                   columnWidth > 0 && { width: columnWidth },
                 ]}
+                onPress={() => onDayPress?.(date, dayTasks)}
+                activeOpacity={0.7}
               >
                 <PriorityQuadrant
                   tasks={dayTasks}
                   size="medium"
                   customSize={quadrantSize}
-                  onPress={
-                    onQuadrantPress
-                      ? (quadrant) => onQuadrantPress(quadrant, dayTasks)
-                      : undefined
-                  }
                   showCompleted={showCompleted}
                 />
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
