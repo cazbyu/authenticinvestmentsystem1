@@ -1,14 +1,17 @@
 /*
-  # Update get_notes_for_reflection_date to return parent_type
+  # Update get_notes_for_reflection_date to return parent_type (FIXED)
 
   1. Changes
     - Add parent_type column to return table
-    - Return actual task type (task or event) from 0008-ap-tasks.type column
+    - Return actual task type (task or event) from 0008-ap-tasks.type column with proper casting
     - Return parent_type for depositIdea and withdrawal as-is
 
   2. Purpose
     - Enable UI to display correct badges (Task vs Event vs Deposit Idea vs Withdrawal)
     - Distinguish between tasks and events which are both stored in 0008-ap-tasks table
+
+  3. Fix
+    - Cast t.type::text to handle ENUM type properly
 */
 
 CREATE OR REPLACE FUNCTION get_notes_for_reflection_date(
