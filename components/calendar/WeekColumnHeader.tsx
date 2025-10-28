@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Task } from '../tasks/TaskCard';
+import { PriorityQuadrant } from './PriorityQuadrant';
 
 interface WeekColumnHeaderProps {
   dayLabel: string;
@@ -31,6 +32,17 @@ export function WeekColumnHeader({
           {dateNumber}
         </Text>
       </View>
+      {onQuadrantPress && (
+        <View style={styles.quadrantContainer}>
+          <PriorityQuadrant
+            tasks={tasks}
+            size="small"
+            customSize={40}
+            onPress={onQuadrantPress}
+            showCompleted={showCompleted}
+          />
+        </View>
+      )}
     </View>
   );
 
@@ -89,5 +101,9 @@ const styles = StyleSheet.create({
   },
   todayDateNumber: {
     color: '#ffffff',
+  },
+  quadrantContainer: {
+    marginTop: 8,
+    alignItems: 'center',
   },
 });

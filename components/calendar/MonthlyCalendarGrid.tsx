@@ -48,8 +48,16 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
       transparent
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          style={styles.modalContent}
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+        >
           <View style={styles.modalHeader}>
             <View>
               <Text style={styles.modalTitle}>{dateLabel}</Text>
@@ -61,7 +69,12 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
           </View>
 
           <ScrollView style={styles.modalTasksList}>
-            {sortedTasks.map((task, index) => {
+            {sortedTasks.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No tasks for this day</Text>
+              </View>
+            ) : (
+              sortedTasks.map((task, index) => {
               const priorityColor = task.is_urgent && task.is_important ? '#ef4444' :
                                    !task.is_urgent && task.is_important ? '#22c55e' :
                                    task.is_urgent && !task.is_important ? '#f59e0b' : '#9ca3af';
@@ -86,10 +99,10 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
                   </View>
                 </View>
               );
-            })}
+            }))}
           </ScrollView>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 };
@@ -124,11 +137,9 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
   });
 
   const handleDayPress = (date: Date, dayTasks: Task[]) => {
-    if (dayTasks.length > 0) {
-      setSelectedDay(date);
-      setSelectedDayTasks(dayTasks);
-      setModalVisible(true);
-    }
+    setSelectedDay(date);
+    setSelectedDayTasks(dayTasks);
+    setModalVisible(true);
     onDayPress(date);
   };
 
@@ -161,11 +172,9 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
               {dayNumber}
             </Text>
           </View>
-          {dayTasks.length > 0 && (
-            <View style={styles.quadrantContainer}>
-              <PriorityQuadrant tasks={dayTasks} size="small" />
-            </View>
-          )}
+          <View style={styles.quadrantContainer}>
+            <PriorityQuadrant tasks={dayTasks} size="small" />
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -394,5 +403,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     fontWeight: '500',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
 });

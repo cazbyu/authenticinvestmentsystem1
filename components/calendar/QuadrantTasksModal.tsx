@@ -58,8 +58,16 @@ export function QuadrantTasksModal({ visible, quadrant, tasks, onClose }: Quadra
       transparent
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          style={styles.modalContent}
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+        >
           <View style={styles.modalHeader}>
             <View style={styles.headerLeft}>
               <View style={[styles.quadrantIndicator, { backgroundColor: info.color }]} />
@@ -108,8 +116,8 @@ export function QuadrantTasksModal({ visible, quadrant, tasks, onClose }: Quadra
               ))
             )}
           </ScrollView>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }

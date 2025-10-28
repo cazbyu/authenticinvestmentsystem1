@@ -792,6 +792,7 @@ export default function CalendarScreen() {
                   isToday={isToday}
                   tasks={dayTasks}
                   showCompleted={showCompleted}
+                  onQuadrantPress={(quadrant) => handleQuadrantPress(quadrant, dayTasks)}
                 />
               </View>
             );
