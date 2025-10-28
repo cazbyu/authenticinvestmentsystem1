@@ -14,7 +14,7 @@ import { MonthlyCalendarGrid } from '@/components/calendar/MonthlyCalendarGrid';
 import { QuadrantTasksModal } from '@/components/calendar/QuadrantTasksModal';
 import { CollapsibleQuadrantRow } from '@/components/calendar/CollapsibleQuadrantRow';
 import { getSupabaseClient } from '@/lib/supabase';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
 import { getVisibleWindow } from '@/lib/recurrenceUtils';
 import { formatLocalDate, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
