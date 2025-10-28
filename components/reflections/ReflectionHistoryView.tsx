@@ -75,10 +75,11 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
         // Fetch related data for each reflection
         const reflectionsWithRelations = await Promise.all(
           data.map(async (reflection) => {
-            const [rolesData, domainsData, keyRelsData] = await Promise.all([
+            const [rolesData, domainsData, keyRelsData, notesData] = await Promise.all([
               fetchReflectionRoles(reflection.id),
               fetchReflectionDomains(reflection.id),
               fetchReflectionKeyRelationships(reflection.id),
+              fetchReflectionNotes(reflection.id, reflection.date, user.id),
             ]);
 
             return {
@@ -86,6 +87,7 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
               roles: rolesData,
               domains: domainsData,
               keyRelationships: keyRelsData,
+              notes: notesData,
             };
           })
         );
@@ -170,6 +172,62 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
         .filter((kr: any) => kr !== null);
     } catch (error) {
       console.error('Error fetching reflection key relationships:', error);
+      return [];
+    }
+  };
+
+  const fetchReflectionNotes = async (
+    reflectionId: string,
+    reflectionDate?: string,
+    userId?: string
+  ): Promise<Array<{ id: string; content: string; created_at: string; parent_type?: string }>> => {
+    try {
+      const supabase = getSupabaseClient();
+
+      // First, try to fetch notes directly linked to the reflection
+      const { data: directNotes, error: directError } = await supabase
+        .from('0008-ap-universal-notes-join')
+        .select(`
+          parent_type,
+          note:0008-ap-notes(
+            id,
+            content,
+            created_at
+          )
+        `)
+        .eq('parent_type', 'reflection')
+        .eq('parent_id', reflectionId);
+
+      if (directError) throw directError;
+
+      let notes = directNotes?.map((item: any) => ({
+        ...item.note,
+        parent_type: item.parent_type
+      })).filter((note: any) => note !== null && note.id) || [];
+
+      // If we have a reflection date, also fetch notes from tasks/items completed on that date
+      if (reflectionDate && userId) {
+        const { data: dateBasedNotes, error: dateError } = await supabase.rpc(
+          'get_notes_for_reflection_date',
+          {
+            p_user_id: userId,
+            p_date: reflectionDate
+          }
+        );
+
+        if (!dateError && dateBasedNotes) {
+          notes = [...notes, ...dateBasedNotes];
+        }
+      }
+
+      // Remove duplicates by note id
+      const uniqueNotes = Array.from(
+        new Map(notes.map((note: any) => [note.id, note])).values()
+      );
+
+      return uniqueNotes;
+    } catch (error) {
+      console.error('Error fetching reflection notes:', error);
       return [];
     }
   };
