@@ -16,7 +16,7 @@ export interface ReflectionWithRelations {
   roles?: Array<{ id: string; label: string; color?: string }>;
   domains?: Array<{ id: string; name: string; color?: string }>;
   keyRelationships?: Array<{ id: string; name: string }>;
-  notes?: Array<{ id: string; content: string; created_at: string }>;
+  notes?: Array<{ id: string; content: string; created_at: string; parent_type?: string }>;
 }
 
 /**
@@ -232,12 +232,13 @@ async function fetchReflectionNotes(
   reflectionId: string,
   reflectionDate?: string,
   userId?: string
-): Promise<Array<{ id: string; content: string; created_at: string }>> {
+): Promise<Array<{ id: string; content: string; created_at: string; parent_type?: string }>> {
   try {
     // First, try to fetch notes directly linked to the reflection
     const { data: directNotes, error: directError } = await supabase
       .from('0008-ap-universal-notes-join')
       .select(`
+        parent_type,
         note:0008-ap-notes(
           id,
           content,
@@ -249,7 +250,10 @@ async function fetchReflectionNotes(
 
     if (directError) throw directError;
 
-    let notes = directNotes?.map((item: any) => item.note).filter((note: any) => note !== null) || [];
+    let notes = directNotes?.map((item: any) => ({
+      ...item.note,
+      parent_type: item.parent_type
+    })).filter((note: any) => note !== null && note.id) || [];
 
     // If we have a reflection date, also fetch notes from tasks/items completed on that date
     if (reflectionDate && userId) {

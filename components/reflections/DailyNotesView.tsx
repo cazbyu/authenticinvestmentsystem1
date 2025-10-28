@@ -327,9 +327,32 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
                       </Text>
                       {reflection.notes.slice(0, 2).map((note) => (
                         <View key={note.id} style={[styles.noteItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                          <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {truncateContent(note.content, 60)}
-                          </Text>
+                          <View style={styles.noteItemHeader}>
+                            <Text style={[styles.noteText, { color: colors.textSecondary }]} numberOfLines={1}>
+                              {truncateContent(note.content, 60)}
+                            </Text>
+                            {note.parent_type && (
+                              <View style={[
+                                styles.noteTypeBadge,
+                                {
+                                  backgroundColor:
+                                    note.parent_type === 'event' ? '#10b981' :
+                                    note.parent_type === 'task' ? '#0078d4' :
+                                    note.parent_type === 'depositIdea' ? '#8b5cf6' :
+                                    note.parent_type === 'withdrawal' ? '#f59e0b' :
+                                    colors.primary
+                                }
+                              ]}>
+                                <Text style={styles.noteTypeBadgeText}>
+                                  {note.parent_type === 'event' ? 'Event' :
+                                   note.parent_type === 'task' ? 'Task' :
+                                   note.parent_type === 'depositIdea' ? 'Deposit Idea' :
+                                   note.parent_type === 'withdrawal' ? 'Withdrawal' :
+                                   note.parent_type}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                         </View>
                       ))}
                       {reflection.notes.length > 2 && (
@@ -612,9 +635,26 @@ const styles = StyleSheet.create({
     borderLeftWidth: 2,
     borderLeftColor: '#0078d4',
   },
+  noteItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
   noteText: {
     fontSize: 12,
     lineHeight: 16,
+    flex: 1,
+  },
+  noteTypeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  noteTypeBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '600',
   },
   moreNotesText: {
     fontSize: 11,
