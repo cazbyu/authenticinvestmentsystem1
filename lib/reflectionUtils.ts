@@ -257,6 +257,12 @@ async function fetchReflectionNotes(
 
     // If we have a reflection date, also fetch notes from tasks/items completed on that date
     if (reflectionDate && userId) {
+      console.log('[fetchReflectionNotes] Calling get_notes_for_reflection_date with:', {
+        userId,
+        reflectionDate,
+        reflectionId
+      });
+
       const { data: dateBasedNotes, error: dateError } = await supabase.rpc(
         'get_notes_for_reflection_date',
         {
@@ -265,8 +271,16 @@ async function fetchReflectionNotes(
         }
       );
 
+      console.log('[fetchReflectionNotes] RPC result:', {
+        notesCount: dateBasedNotes?.length || 0,
+        error: dateError,
+        notes: dateBasedNotes
+      });
+
       if (!dateError && dateBasedNotes) {
         notes = [...notes, ...dateBasedNotes];
+      } else if (dateError) {
+        console.error('[fetchReflectionNotes] Error from RPC:', dateError);
       }
     }
 
