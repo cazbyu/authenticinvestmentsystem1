@@ -734,13 +734,12 @@ export default function CalendarScreen() {
   };
 
   const renderWeeklyView = () => {
+    const todayDate = new Date();
+    const todayDayNumber = todayDate.getDate();
+
     return (
       <View style={styles.weeklyViewRedesigned}>
         <View style={styles.weeklyHeaderRedesigned}>
-          <TouchableOpacity onPress={goToToday} style={styles.todayButton}>
-            <Text style={styles.todayButtonText}>Today</Text>
-          </TouchableOpacity>
-
           <View style={styles.navigationSection}>
             <TouchableOpacity onPress={() => navigateDate('prev')}>
               <ChevronLeft size={20} color="#0078d4" />
@@ -750,6 +749,9 @@ export default function CalendarScreen() {
             </Text>
             <TouchableOpacity onPress={() => navigateDate('next')}>
               <ChevronRight size={20} color="#0078d4" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={goToToday} style={styles.todayButtonNew}>
+              <Text style={styles.todayButtonNewText}>{todayDayNumber}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1261,23 +1263,29 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  todayButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 6,
-    backgroundColor: '#ffffff',
-  },
-  todayButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
   navigationSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 4,
+  },
+  todayButtonNew: {
+    width: 36,
+    height: 36,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 16,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  todayButtonNewText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
   },
   monthYearText: {
     fontSize: 16,

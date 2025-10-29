@@ -120,22 +120,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 2,
   },
   toggleHeaderMobile: {
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 2,
   },
   toggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    minHeight: 44, // Touch-friendly minimum height
+    minHeight: 24,
+    paddingVertical: 4,
   },
   toggleButtonMobile: {
     gap: 6,
-    minHeight: 40,
+    minHeight: 20,
+    paddingVertical: 3,
   },
   toggleText: {
     fontSize: 13,
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
   },
   quadrantRowContainer: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: 6,
     backgroundColor: '#ffffff',
   },
   timeColumnSpacer: {
