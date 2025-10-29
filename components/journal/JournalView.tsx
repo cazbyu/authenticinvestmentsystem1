@@ -71,7 +71,11 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      console.log('[JournalView] User auth status:', user ? `Logged in as ${user.email} (${user.id})` : 'Not logged in');
+
       if (!user) {
+        console.log('[JournalView] No user found, showing empty journal');
         setEntries([]);
         setTotalBalance(0);
         setLoading(false);
@@ -102,8 +106,9 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
         }
 
         const { data: tasksData, error: tasksError } = await tasksQuery;
+        console.log('[JournalView] Completed tasks query result:', tasksData?.length || 0, 'tasks found for user', user.id);
         if (tasksError) {
-          console.error('Tasks query error:', tasksError);
+          console.error('[JournalView] Tasks query error:', tasksError);
           throw tasksError;
         }
 
@@ -369,6 +374,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
         return;
       }
 
+      console.log('[JournalView] Setting', journalEntries.length, 'journal entries, total balance:', runningBalance);
       setEntries(journalEntries);
       setTotalBalance(runningBalance);
     } catch (err: any) {
