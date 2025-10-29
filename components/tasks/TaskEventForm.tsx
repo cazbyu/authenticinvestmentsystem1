@@ -22,7 +22,6 @@ import { TimePickerDropdown } from './TimePickerDropdown';
 import { RecurrenceDropdown } from './RecurrenceDropdown';
 import { CustomRecurrenceModal } from './CustomRecurrenceModal';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { fetchAuthenticUsage, getWeekResetDay, formatAuthenticUsageText, invalidateCache } from '@/lib/authenticDepositUtils';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'depositIdea' | 'withdrawal';
@@ -81,7 +80,6 @@ interface FormData {
   isAnytime: boolean;
   isUrgent: boolean;
   isImportant: boolean;
-  isAuthenticDeposit: boolean;
   isGoal: boolean;
   selectedRoleIds: string[];
   selectedDomainIds: string[];
@@ -138,7 +136,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     isAnytime: false,
     isUrgent: false,
     isImportant: false,
-    isAuthenticDeposit: false,
     isGoal: false,
     selectedRoleIds: [],
     selectedDomainIds: [],
@@ -175,10 +172,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [dontShowWarningAgain, setDontShowWarningAgain] = useState(false);
   const [isEditingCompletedTask, setIsEditingCompletedTask] = useState(false);
 
-  // Authentic deposit tracking state
-  const [authenticUsage, setAuthenticUsage] = useState<{ used: number; remaining: number } | null>(null);
-  const [isCheckingAuthenticLimit, setIsCheckingAuthenticLimit] = useState(false);
-  const [weekStartDay, setWeekStartDay] = useState<'sunday' | 'monday'>('sunday');
 
   // Helper function to get next 15-minute interval + 15 min buffer
   const getDefaultStartTime = () => {
@@ -253,30 +246,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     if (initialData) {
       loadInitialData();
     }
-    loadAuthenticUsage();
   }, [mode, initialData]);
 
-  const loadAuthenticUsage = async () => {
-    if (mode === 'edit' && initialData?.is_authentic_deposit) {
-      return;
-    }
-
-    if (formData.type !== 'task') {
-      return;
-    }
-
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const usage = await fetchAuthenticUsage(supabase, user.id);
-      setAuthenticUsage({ used: usage.used, remaining: usage.remaining });
-      setWeekStartDay(await supabase.rpc('fn_get_user_week_start_day', { p_user_id: user.id }) || 'sunday');
-    } catch (error) {
-      console.error('Error loading authentic usage:', error);
-    }
-  };
 
   // Check if editing a completed task and show warning
   useEffect(() => {
@@ -441,7 +412,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       isAnytime: initialData.is_all_day || false,
       isUrgent: initialData.is_urgent || false,
       isImportant: initialData.is_important || false,
-      isAuthenticDeposit: initialData.is_authentic_deposit || false,
       isGoal: hasActiveGoals || initialData.is_twelve_week_goal || false,
       selectedRoleIds: initialData.roles?.map((r: any) => r.id) || initialData.selectedRoleIds || [],
       selectedDomainIds: initialData.domains?.map((d: any) => d.id) || initialData.selectedDomainIds || [],
@@ -676,7 +646,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           is_all_day: formData.isAnytime,
           is_urgent: formData.isUrgent,
           is_important: formData.isImportant,
-          is_authentic_deposit: formData.isAuthenticDeposit,
           is_twelve_week_goal: formData.isGoal,
           recurrence_rule: formData.recurrenceRule || null,
           recurrence_end_date: formData.recurrenceEndDate || null,
@@ -819,11 +788,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
 
-      // Invalidate authentic deposit cache if this is an authentic deposit task
-      if (formData.isAuthenticDeposit && formData.type === 'task') {
-        invalidateCache('authentic');
-      }
-
       // Broadcast event to notify other components
       if (formData.type === 'withdrawal') {
         eventBus.emit(mode === 'edit' ? EVENTS.WITHDRAWAL_CREATED : EVENTS.WITHDRAWAL_CREATED);
@@ -936,29 +900,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     </View>
   );
 
-  const handleAuthenticDepositToggle = async (value: boolean) => {
-    if (!value) {
-      setFormData(prev => ({ ...prev, isAuthenticDeposit: false }));
-      return;
-    }
-
-    if (mode === 'edit' && initialData?.is_authentic_deposit) {
-      setFormData(prev => ({ ...prev, isAuthenticDeposit: true }));
-      return;
-    }
-
-    if (!authenticUsage || authenticUsage.remaining <= 0) {
-      const resetDay = getWeekResetDay(weekStartDay);
-      Alert.alert(
-        'Weekly Limit Reached',
-        `You've used all 14 authentic deposits this week. Your limit resets on ${resetDay} night.`,
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setFormData(prev => ({ ...prev, isAuthenticDeposit: true }));
-  };
 
   const renderSwitchField = (label: string, value: boolean, onChange: (value: boolean) => void) => (
     <View style={styles.switchField}>
@@ -1085,14 +1026,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
               <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
                 <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  <View style={styles.switchFieldContainer}>
-                    {renderSwitchField('Authentic Deposit', formData.isAuthenticDeposit, handleAuthenticDepositToggle)}
-                    {authenticUsage && formData.type === 'task' && (
-                      <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-                        {authenticUsage.used} of 14 used this week
-                      </Text>
-                    )}
-                  </View>
                   {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
                 </View>
               </View>

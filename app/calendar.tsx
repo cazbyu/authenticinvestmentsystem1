@@ -19,7 +19,6 @@ import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
 import { getVisibleWindow } from '@/lib/recurrenceUtils';
 import { formatLocalDate, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
 import { DraggableFab } from '@/components/DraggableFab';
-import { fetchWeeklyAuthenticCount } from '@/lib/authenticDepositUtils';
 import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/useRecurrenceCache';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { getHolidaysForMonth, US_HOLIDAYS } from '@/lib/holidays';

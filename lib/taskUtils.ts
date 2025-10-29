@@ -8,13 +8,12 @@ import { SupabaseClient } from '@supabase/supabase-js';
  * Scoring Rules (as of the current implementation):
  * 1. Roles: +1 point if ANY role is assigned (binary, not per role)
  * 2. Domains: +1 point if ANY domain is assigned (binary, not per domain)
- * 3. Authentic Deposit: +2 points if flagged as authentic deposit
- * 4. Priority:
+ * 3. Priority:
  *    - Urgent + Important: +1.5 points
  *    - Important only: +3 points
  *    - Urgent only: +1 point
  *    - Neither: +0.5 points
- * 5. Active Goals: +2 points if linked to ANY active goal (12-week or custom)
+ * 4. Active Goals: +2 points if linked to ANY active goal (12-week or custom)
  *
  * IMPORTANT: Do NOT create duplicate calculation logic elsewhere.
  * If you need to calculate points, import and use this function.
@@ -36,9 +35,6 @@ export function calculateTaskPoints(
   // Role + Domain points (binary scoring: 1 point if any exist)
   if (roles.length > 0) points += 1;
   if (domains.length > 0) points += 1;
-
-  // Authentic deposit bonus
-  if (task.is_authentic_deposit) points += 2;
 
   // Urgency / Importance weights
   if (task.is_urgent && task.is_important) points += 1.5;

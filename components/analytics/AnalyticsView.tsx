@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, Award } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { fetchAuthenticUsage, fetchScopedAuthenticCount, fetchUserWeekStartDay, calculateWeekBoundaries } from '@/lib/authenticDepositUtils';
 import { eventBus } from '@/lib/eventBus';
 
 interface AnalyticsEntry {
@@ -10,7 +9,6 @@ interface AnalyticsEntry {
   date: string;
   type: 'deposit' | 'withdrawal';
   amount: number;
-  is_authentic_deposit?: boolean;
   is_urgent?: boolean;
   is_important?: boolean;
   roles?: Array<{id: string; label: string}>;
@@ -22,13 +20,11 @@ interface AnalyticsEntry {
 interface AnalyticsMetrics {
   netBalance: number;
   consistency: number;
-  authenticDeposit: number;
   quality: number;
   relationshipDistribution: number | null;
   compositeScore: number;
   totalDeposits: number;
   totalWithdrawals: number;
-  authenticDepositsCount: number;
   weeklyStreak: number;
   quadrantBreakdown: {
     q1: number; // Important & Urgent
@@ -37,7 +33,6 @@ interface AnalyticsMetrics {
     q4: number; // Neither
   };
   krDistribution: Array<{name: string; percentage: number; count: number}>;
-  authenticUsageThisWeek: number;
 }
 
 interface AnalyticsViewProps {
@@ -54,7 +49,6 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<'4weeks' | '12weeks' | '26weeks'>('12weeks');
   const [filter, setFilter] = useState<'all' | 'deposits' | 'withdrawals'>('all');
-  const [scopedAuthenticCount, setScopedAuthenticCount] = useState<number | null>(null);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const previousScopeRef = React.useRef<string>('');
@@ -168,7 +162,6 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
               date: task.completed_at?.split('T')[0] || task.due_date,
               type: 'deposit',
               amount: points,
-              is_authentic_deposit: task.is_authentic_deposit,
               is_urgent: task.is_urgent,
               is_important: task.is_important,
               roles: taskWithData.roles,
@@ -295,15 +288,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
     // Calculate streak
     const weeklyStreak = calculateWeeklyStreak(deposits);
 
-    // 3. Authentic Deposit % (with 14/week cap)
-    const authenticDepositsCount = await calculateAuthenticDepositsWithCap(deposits);
-    const authenticDeposit = deposits.length === 0 ? 0 : 
-      Math.round((authenticDepositsCount / deposits.length) * 100);
-
-    // Get current week authentic usage
-    const authenticUsageThisWeek = await getAuthenticUsageForWeek();
-
-    // 4. Quality % (Quadrant weights)
+    // 3. Quality % (Quadrant weights)
     const quadrantCounts = { q1: 0, q2: 0, q3: 0, q4: 0 };
     let totalQualityScore = 0;
     
@@ -360,32 +345,28 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
 
     // 6. Composite Score (weighted average)
     const hasDistribution = relationshipDistribution !== null;
-    const weights = hasDistribution 
-      ? { netBalance: 30, consistency: 20, authentic: 20, quality: 20, distribution: 10 }
-      : { netBalance: 33, consistency: 22, authentic: 23, quality: 22, distribution: 0 };
-    
+    const weights = hasDistribution
+      ? { netBalance: 35, consistency: 25, quality: 30, distribution: 10 }
+      : { netBalance: 40, consistency: 30, quality: 30, distribution: 0 };
+
     const compositeScore = Math.round(
-      (netBalance * weights.netBalance + 
-       consistency * weights.consistency + 
-       authenticDeposit * weights.authentic + 
-       quality * weights.quality + 
+      (netBalance * weights.netBalance +
+       consistency * weights.consistency +
+       quality * weights.quality +
        (relationshipDistribution || 0) * weights.distribution) / 100
     );
 
     setMetrics({
       netBalance,
       consistency,
-      authenticDeposit,
       quality,
       relationshipDistribution,
       compositeScore,
       totalDeposits,
       totalWithdrawals,
-      authenticDepositsCount,
       weeklyStreak,
       quadrantBreakdown,
       krDistribution,
-      authenticUsageThisWeek,
     });
   };
 
@@ -422,75 +403,8 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
     return streak;
   };
 
-  const calculateAuthenticDepositsWithCap = async (deposits: AnalyticsEntry[]) => {
-    // Group deposits by week
-    const weeklyDeposits = new Map<string, AnalyticsEntry[]>();
-    deposits.forEach(d => {
-      const weekStart = getWeekStart(new Date(d.date));
-      const weekKey = weekStart.toISOString().split('T')[0];
-      const weekDeposits = weeklyDeposits.get(weekKey) || [];
-      weekDeposits.push(d);
-      weeklyDeposits.set(weekKey, weekDeposits);
-    });
 
-    let totalAuthenticCounted = 0;
-    
-    // For each week, count up to 14 authentic deposits
-    for (const [weekKey, weekDeposits] of weeklyDeposits) {
-      const authenticInWeek = weekDeposits.filter(d => d.is_authentic_deposit);
-      const countedInWeek = Math.min(authenticInWeek.length, 14);
-      totalAuthenticCounted += countedInWeek;
-    }
-    
-    return totalAuthenticCounted;
-  };
 
-  const getAuthenticUsageForWeek = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return 0;
-
-      const usage = await fetchAuthenticUsage(supabase, user.id);
-      return usage.used;
-    } catch (error) {
-      console.error('Error getting authentic usage:', error);
-      return 0;
-    }
-  };
-
-  const getScopedAuthenticCount = async () => {
-    try {
-      if (!scope.id || scope.type === 'user') {
-        setScopedAuthenticCount(null);
-        return;
-      }
-
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const weekStartDay = await fetchUserWeekStartDay(supabase, user.id);
-      const { weekStart, weekEnd } = calculateWeekBoundaries(weekStartDay);
-
-      const count = await fetchScopedAuthenticCount(
-        supabase,
-        user.id,
-        {
-          type: scope.type as 'role' | 'domain' | 'key_relationship',
-          id: scope.id,
-          name: scope.name
-        },
-        weekStart,
-        weekEnd
-      );
-
-      setScopedAuthenticCount(count);
-    } catch (error) {
-      console.error('Error getting scoped authentic count:', error);
-      setScopedAuthenticCount(null);
-    }
-  };
 
   useEffect(() => {
     // Create a stable scope key for comparison
@@ -516,7 +430,6 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
     // Debounce the fetch to prevent rapid consecutive calls
     fetchTimeoutRef.current = setTimeout(() => {
       fetchAnalyticsData();
-      getScopedAuthenticCount();
     }, 300);
 
     return () => {
@@ -532,7 +445,6 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
   useEffect(() => {
     const handleTaskEvent = () => {
       fetchAnalyticsData();
-      getScopedAuthenticCount();
     };
 
     eventBus.on('TASK_CREATED', handleTaskEvent);
@@ -677,19 +589,6 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
             </Text>
           </View>
 
-          {/* Authentic Deposit */}
-          <View style={styles.metricCard}>
-            <View style={styles.metricHeader}>
-              <Zap size={16} color={getScoreColor(metrics.authenticDeposit)} />
-              <Text style={styles.metricTitle}>Authentic</Text>
-            </View>
-            <Text style={[styles.metricValue, { color: getScoreColor(metrics.authenticDeposit) }]}>
-              {metrics.authenticDeposit}%
-            </Text>
-            <Text style={styles.metricDescription}>
-              {metrics.authenticUsageThisWeek}/14 this week
-            </Text>
-          </View>
 
           {/* Quality */}
           <View style={styles.metricCard}>
@@ -763,31 +662,6 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
           </View>
         )}
 
-        {/* Authentic Usage Gauge */}
-        <View style={styles.breakdownCard}>
-          <Text style={styles.breakdownTitle}>Authentic Usage This Week</Text>
-          <View style={styles.gaugeContainer}>
-            <View style={styles.gauge}>
-              {Array.from({ length: 14 }, (_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.gaugeSegment,
-                    i < metrics.authenticUsageThisWeek && styles.gaugeSegmentFilled
-                  ]}
-                />
-              ))}
-            </View>
-            <Text style={styles.gaugeText}>
-              {metrics.authenticUsageThisWeek} / 14 authentic deposits used
-            </Text>
-            {scopedAuthenticCount !== null && scope.name && (
-              <Text style={styles.scopedCountText}>
-                {scopedAuthenticCount} for {scope.name} this week
-              </Text>
-            )}
-          </View>
-        </View>
       </ScrollView>
     </View>
   );

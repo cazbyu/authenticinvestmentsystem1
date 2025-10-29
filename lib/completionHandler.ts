@@ -203,7 +203,6 @@ export async function handleRecurringTaskCompletion(
       is_urgent: sourceTask.is_urgent,
       is_important: sourceTask.is_important,
       is_all_day: sourceTask.is_all_day,
-      is_authentic_deposit: sourceTask.is_authentic_deposit,
       is_twelve_week_goal: sourceTask.is_twelve_week_goal,
       user_global_timeline_id: sourceTask.user_global_timeline_id,
       custom_timeline_id: sourceTask.custom_timeline_id,
