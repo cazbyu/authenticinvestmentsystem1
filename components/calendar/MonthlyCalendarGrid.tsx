@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
 import { PriorityQuadrant } from './PriorityQuadrant';
 import { Task } from '../tasks/TaskCard';
-import { formatTimeForDisplay } from '@/lib/dateUtils';
+import { formatTimeForDisplay, formatLocalDate } from '@/lib/dateUtils';
 import { X } from 'lucide-react-native';
 
 interface MonthlyCalendarGridProps {
@@ -149,7 +149,8 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
     }
 
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNumber);
-    const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    // Use formatLocalDate to avoid UTC timezone conversion that shifts dates
+    const dateString = formatLocalDate(date);
     const dayTasks = tasksByDate[dateString] || [];
     const dayHoliday = holidays.find(h => h.date === dateString);
 
