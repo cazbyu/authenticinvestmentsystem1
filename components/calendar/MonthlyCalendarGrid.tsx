@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Dimensions
 import { PriorityQuadrant } from './PriorityQuadrant';
 import { Task } from '../tasks/TaskCard';
 import { formatTimeForDisplay, formatLocalDate } from '@/lib/dateUtils';
-import { X } from 'lucide-react-native';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 interface MonthlyCalendarGridProps {
   currentDate: Date;
   tasks: Task[];
   onDayPress: (date: Date) => void;
+  onNavigate?: (direction: 'prev' | 'next') => void;
   holidays?: Array<{ date: string; name: string; color?: string }>;
 }
 
@@ -107,7 +108,7 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
   );
 };
 
-export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays = [] }: MonthlyCalendarGridProps) {
+export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate, holidays = [] }: MonthlyCalendarGridProps) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [selectedDayTasks, setSelectedDayTasks] = useState<Task[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -205,6 +206,23 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
   return (
     <>
       <View style={styles.container}>
+        {/* Month navigation header */}
+        <View style={styles.monthNavigationRow}>
+          {onNavigate && (
+            <View style={styles.monthNavigation}>
+              <TouchableOpacity onPress={() => onNavigate('prev')} style={styles.navButton}>
+                <ChevronLeft size={20} color="#0078d4" />
+              </TouchableOpacity>
+              <Text style={styles.monthYearText}>
+                {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </Text>
+              <TouchableOpacity onPress={() => onNavigate('next')} style={styles.navButton}>
+                <ChevronRight size={20} color="#0078d4" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
         {/* Day headers */}
         <View style={styles.headerRow}>
           {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => (
@@ -240,6 +258,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  monthNavigationRow: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  monthNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  navButton: {
+    padding: 6,
+    marginHorizontal: 4,
+  },
+  monthYearText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginHorizontal: 8,
   },
   headerRow: {
     flexDirection: 'row',

@@ -842,18 +842,6 @@ export default function CalendarScreen() {
 
     return (
       <View style={styles.monthlyView}>
-        <View style={styles.monthlyHeader}>
-          <TouchableOpacity onPress={() => navigateDate('prev')} style={styles.monthNavButton}>
-            <ChevronLeft size={24} color="#0078d4" />
-          </TouchableOpacity>
-          <Text style={styles.monthYearTitle}>
-            {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </Text>
-          <TouchableOpacity onPress={() => navigateDate('next')} style={styles.monthNavButton}>
-            <ChevronRight size={24} color="#0078d4" />
-          </TouchableOpacity>
-        </View>
-
         <MonthlyCalendarGrid
           currentDate={currentDate}
           tasks={tasks}
@@ -861,6 +849,7 @@ export default function CalendarScreen() {
           onDayPress={(date) => {
             setSelectedDate(formatLocalDate(date));
           }}
+          onNavigate={navigateDate}
         />
       </View>
     );
