@@ -15,7 +15,7 @@ import { EditKRModal } from '@/components/settings/EditKRModal';
 import { JournalView } from '@/components/journal/JournalView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
-import { Plus, Users, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
+import { Plus, Users, UserX, Ban, Menu, Edit2, Pencil } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
@@ -1195,7 +1195,7 @@ export default function Roles() {
               style={styles.customBackButton}
               onPress={hideManageRolesView}
             >
-              <Text style={styles.customBackButtonText}>← Back to Role Bank</Text>
+              <Text style={styles.customBackButtonText}>← Role Bank</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>Manage Roles</Text>
@@ -1266,7 +1266,7 @@ export default function Roles() {
               style={styles.customBackButton}
               onPress={() => setSelectedRole(null)}
             >
-              <Text style={styles.customBackButtonText}>← Back to Role Bank</Text>
+              <Text style={styles.customBackButtonText}>← Role Bank</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedRole.label}</Text>
@@ -1640,9 +1640,6 @@ export default function Roles() {
 
                         <View style={styles.roleInfo}>
                           <Text style={styles.roleName} numberOfLines={2}>{role.label}</Text>
-                          {role.category && (
-                            <Text style={styles.roleCategory} numberOfLines={1}>{role.category}</Text>
-                          )}
                         </View>
                       </View>
 
@@ -1654,7 +1651,7 @@ export default function Roles() {
                         }}
                         hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                       >
-                        <Edit size={16} color="#6b7280" />
+                        <Pencil size={16} color="#6b7280" />
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
@@ -1731,7 +1728,7 @@ export default function Roles() {
                                   handleEditKR(kr);
                                 }}
                               >
-                                <Edit size={16} color="#6b7280" />
+                                <Pencil size={16} color="#6b7280" />
                               </TouchableOpacity>
                             </TouchableOpacity>
                           ))}
@@ -1946,7 +1943,7 @@ const styles = StyleSheet.create({
   },
   roleCardHalf: {
     width: '48%',
-    minHeight: 120,
+    minHeight: 140,
   },
   roleImage: {
     width: 56,
@@ -1973,12 +1970,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  roleCategory: {
-    fontSize: 12,
-    color: '#6b7280',
     textAlign: 'center',
   },
   editRoleButton: {

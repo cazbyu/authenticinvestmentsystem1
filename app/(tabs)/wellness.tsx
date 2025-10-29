@@ -740,36 +740,6 @@ export default function Wellness() {
             </TouchableOpacity>
           </View>
         </View>
-        {activeMainTab === 'domains' && (
-          <View style={styles.categoriesContainer}>
-            {domains.length === 0 ? (
-              <View style={styles.emptyCategoriesContainer}>
-                <Text style={styles.emptyCategoriesText}>No domains found</Text>
-              </View>
-            ) : (
-              <View style={styles.domainsGrid}>
-                {domains.map(domain => (
-                  <TouchableOpacity
-                    key={domain.id}
-                    style={[
-                      styles.domainCard,
-                      { borderTopColor: getDomainColor(domain.name) }
-                    ]}
-                    onPress={() => handleDomainPress(domain)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.domainCardContent}>
-                      <Text style={styles.domainName}>{domain.name}</Text>
-                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
-                        <Heart size={20} color="#ffffff" />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
       </View>
     );
   };
@@ -868,6 +838,36 @@ export default function Wellness() {
     // Main Wellness Bank view with tabs
     return (
       <View style={styles.content}>
+        {activeMainTab === 'domains' && (
+          <View style={styles.domainsContentContainer}>
+            {domains.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No domains found</Text>
+              </View>
+            ) : (
+              <View style={styles.domainsGrid}>
+                {domains.map(domain => (
+                  <TouchableOpacity
+                    key={domain.id}
+                    style={[
+                      styles.domainCard,
+                      { borderTopColor: getDomainColor(domain.name) }
+                    ]}
+                    onPress={() => handleDomainPress(domain)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.domainCardContent}>
+                      <Text style={styles.domainName}>{domain.name}</Text>
+                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
+                        <Heart size={20} color="#ffffff" />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
         {activeMainTab === 'balance' && (
           <BalanceScoresView getDomainColor={getDomainColor} />
         )}
@@ -933,18 +933,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  categoriesContainer: {
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-  },
-  emptyCategoriesContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  emptyCategoriesText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+  domainsContentContainer: {
+    padding: 16,
   },
   domainsGrid: {
     flexDirection: 'row',
