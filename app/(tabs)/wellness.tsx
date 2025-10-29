@@ -740,6 +740,38 @@ export default function Wellness() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Domain Cards Section - Below Header Tabs */}
+        {activeMainTab === 'domains' && (
+          <View style={styles.domainsCardsSection}>
+            {domains.length === 0 ? (
+              <View style={styles.emptyCardsContainer}>
+                <Text style={styles.emptyCardsText}>No domains found</Text>
+              </View>
+            ) : (
+              <View style={styles.domainsGrid}>
+                {domains.map(domain => (
+                  <TouchableOpacity
+                    key={domain.id}
+                    style={[
+                      styles.domainCard,
+                      { borderTopColor: getDomainColor(domain.name) }
+                    ]}
+                    onPress={() => handleDomainPress(domain)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.domainCardContent}>
+                      <Text style={styles.domainName}>{domain.name}</Text>
+                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
+                        <Heart size={20} color="#ffffff" />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
       </View>
     );
   };
@@ -749,7 +781,6 @@ export default function Wellness() {
       // Domain view
       return (
         <View style={styles.content}>
-
           {/* 12-Week Goals Section */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && (
             <View style={styles.goalsSection}>
@@ -758,7 +789,7 @@ export default function Wellness() {
                 {twelveWeekGoals.map(goal => {
                   const progress = goalProgress[goal.id];
                   if (!progress) return null;
-                  
+
                   return (
                     <GoalProgressCard
                       key={goal.id}
@@ -838,36 +869,6 @@ export default function Wellness() {
     // Main Wellness Bank view with tabs
     return (
       <View style={styles.content}>
-        {activeMainTab === 'domains' && (
-          <View style={styles.domainsContentContainer}>
-            {domains.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No domains found</Text>
-              </View>
-            ) : (
-              <View style={styles.domainsGrid}>
-                {domains.map(domain => (
-                  <TouchableOpacity
-                    key={domain.id}
-                    style={[
-                      styles.domainCard,
-                      { borderTopColor: getDomainColor(domain.name) }
-                    ]}
-                    onPress={() => handleDomainPress(domain)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.domainCardContent}>
-                      <Text style={styles.domainName}>{domain.name}</Text>
-                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
-                        <Heart size={20} color="#ffffff" />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
         {activeMainTab === 'balance' && (
           <BalanceScoresView getDomainColor={getDomainColor} />
         )}
@@ -933,8 +934,18 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  domainsContentContainer: {
-    padding: 16,
+  domainsCardsSection: {
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  emptyCardsContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyCardsText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
   },
   domainsGrid: {
     flexDirection: 'row',

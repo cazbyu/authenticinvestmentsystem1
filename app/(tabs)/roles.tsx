@@ -1938,12 +1938,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 8,
     paddingHorizontal: 16,
   },
   roleCardHalf: {
-    width: '48%',
-    minHeight: 140,
+    width: '23%',
+    minWidth: 70,
+    minHeight: 120,
   },
   roleImage: {
     width: 56,
