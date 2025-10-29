@@ -661,12 +661,13 @@ export default function CalendarScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <PriorityQuadrant
-              tasks={filteredDailyTasks}
-              size={isMobile ? 'small' : 'medium'}
-              onPress={(quadrant) => handleQuadrantPress(quadrant, filteredDailyTasks)}
-              showCompleted={showCompleted}
-            />
+            <TouchableOpacity onPress={() => handleDayPress(parseLocalDate(selectedDate), filteredDailyTasks)}>
+              <PriorityQuadrant
+                tasks={filteredDailyTasks}
+                size={isMobile ? 'small' : 'medium'}
+                showCompleted={showCompleted}
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
