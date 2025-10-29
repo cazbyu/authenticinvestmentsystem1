@@ -671,7 +671,7 @@ export default function Wellness() {
               style={styles.customBackButton}
               onPress={() => setSelectedDomain(null)}
             >
-              <Text style={styles.customBackButtonText}>← Back to Wellness Bank</Text>
+              <Text style={styles.customBackButtonText}>← Wellness Bank</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedDomain.name}</Text>
@@ -740,6 +740,36 @@ export default function Wellness() {
             </TouchableOpacity>
           </View>
         </View>
+        {activeMainTab === 'domains' && (
+          <View style={styles.categoriesContainer}>
+            {domains.length === 0 ? (
+              <View style={styles.emptyCategoriesContainer}>
+                <Text style={styles.emptyCategoriesText}>No domains found</Text>
+              </View>
+            ) : (
+              <View style={styles.domainsGrid}>
+                {domains.map(domain => (
+                  <TouchableOpacity
+                    key={domain.id}
+                    style={[
+                      styles.domainCard,
+                      { borderTopColor: getDomainColor(domain.name) }
+                    ]}
+                    onPress={() => handleDomainPress(domain)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.domainCardContent}>
+                      <Text style={styles.domainName}>{domain.name}</Text>
+                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
+                        <Heart size={20} color="#ffffff" />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
       </View>
     );
   };
@@ -838,44 +868,6 @@ export default function Wellness() {
     // Main Wellness Bank view with tabs
     return (
       <View style={styles.content}>
-        {activeMainTab === 'domains' && (
-          <ScrollView style={styles.domainsList}>
-            {domains.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No domains found</Text>
-              </View>
-            ) : (
-              <View style={styles.domainsGrid}>
-                {domains.map(domain => (
-                  <TouchableOpacity
-                    key={domain.id}
-                    style={[
-                      styles.domainCard,
-                      { borderLeftColor: getDomainColor(domain.name) }
-                    ]}
-                    onPress={() => handleDomainPress(domain)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.domainCardContent}>
-                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
-                        <Heart size={24} color="#ffffff" />
-                      </View>
-                      <View style={styles.domainInfo}>
-                        <Text style={styles.domainName}>{domain.name}</Text>
-                        {domain.description && (
-                          <Text style={styles.domainDescription} numberOfLines={2}>
-                            {domain.description}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </ScrollView>
-        )}
-
         {activeMainTab === 'balance' && (
           <BalanceScoresView getDomainColor={getDomainColor} />
         )}
@@ -941,54 +933,57 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  domainsList: {
-    flex: 1,
-    padding: 16,
+  categoriesContainer: {
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  emptyCategoriesContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyCategoriesText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
   },
   domainsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 8,
   },
   domainCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    marginBottom: 12,
+    borderRadius: 8,
+    borderTopWidth: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    width: '48%',
+    shadowRadius: 2,
+    elevation: 2,
+    width: '23%',
+    minWidth: 70,
   },
   domainCardContent: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    padding: 16,
+    padding: 8,
+    paddingVertical: 10,
   },
   domainIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
-  },
-  domainInfo: {
-    flex: 1,
+    marginTop: 4,
   },
   domainName: {
-    fontSize: 16,
+    fontSize: 11,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 4,
-  },
-  domainDescription: {
-    fontSize: 12,
-    color: '#6b7280',
-    lineHeight: 16,
+    textAlign: 'center',
+    lineHeight: 14,
   },
   taskListContainer: {
     flex: 1,
