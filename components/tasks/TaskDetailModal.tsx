@@ -205,9 +205,12 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
           )}
         </ScrollView>
         <View style={styles.detailActions}>
-          <TouchableOpacity 
-            style={[styles.detailButton, styles.updateButton]} 
-            onPress={() => onUpdate(task)}
+          <TouchableOpacity
+            style={[styles.detailButton, styles.updateButton]}
+            onPress={() => {
+              onClose();
+              setTimeout(() => onUpdate(task), 150);
+            }}
           >
             <Edit size={16} color="#ffffff" />
             <Text style={styles.detailButtonText}>Update</Text>

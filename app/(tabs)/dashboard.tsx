@@ -646,7 +646,11 @@ export default function Dashboard() {
 
     // Check if this is a recurring task
     if (task.recurrence_rule || task.is_virtual_occurrence) {
-      setRecurringActionModal({ visible: true, task, actionType: 'edit' });
+      // Close detail modal first, then show recurring action modal
+      setIsDetailModalVisible(false);
+      setTimeout(() => {
+        setRecurringActionModal({ visible: true, task, actionType: 'edit' });
+      }, 200);
       return;
     }
 
