@@ -88,8 +88,7 @@ export default function ReflectionsScreen() {
         tasks.forEach((task: any) => {
           let points = 0;
 
-          if (task.is_authentic_deposit) points += 3;
-          else if (!task.is_urgent && task.is_important) points += 2;
+          if (!task.is_urgent && task.is_important) points += 2;
           else if (task.is_urgent && task.is_important) points += 1.5;
           else if (task.is_urgent && !task.is_important) points += 1;
           else points += 0.5;

@@ -558,7 +558,6 @@ export default function Dashboard() {
           type: 'task',
           status: 'pending',
           due_date: formatLocalDate(new Date()),
-          is_authentic_deposit: true,
         })
         .select()
         .single();

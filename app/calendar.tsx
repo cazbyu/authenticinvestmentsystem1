@@ -180,7 +180,6 @@ export default function CalendarScreen() {
     let points = 0;
     if (roles && roles.length > 0) points += roles.length;
     if (domains && domains.length > 0) points += domains.length;
-    if (task.is_authentic_deposit) points += 2;
     if (task.is_urgent && task.is_important) points += 1.5;
     else if (!task.is_urgent && task.is_important) points += 3;
     else if (task.is_urgent && !task.is_important) points += 1;
@@ -212,7 +211,7 @@ export default function CalendarScreen() {
         .from('0008-ap-tasks')
         .select(`
           id, title, type, due_date, start_date, end_date, start_time, end_time,
-          is_all_day, is_anytime, is_urgent, is_important, is_authentic_deposit,
+          is_all_day, is_anytime, is_urgent, is_important,
           recurrence_rule, recurrence_end_date, recurrence_exceptions,
           status, user_global_timeline_id, custom_timeline_id
         `)
@@ -286,7 +285,7 @@ export default function CalendarScreen() {
         .from('v_tasks_with_recurrence_expanded')
         .select(`
           id, title, type, status, due_date, start_date, end_date, start_time, end_time,
-          is_urgent, is_important, is_all_day, is_anytime, is_authentic_deposit,
+          is_urgent, is_important, is_all_day, is_anytime,
           occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule
         `)
         .eq('user_id', user.id)
