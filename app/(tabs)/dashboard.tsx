@@ -95,17 +95,16 @@ export default function Dashboard() {
         const weekStartStr = formatLocalDate(weekStart);
         const weekEndStr = formatLocalDate(weekEnd);
 
-        // Fetch tasks using the dashboard view for recurring task support
-        // The v_dashboard_next_occurrences view automatically:
-        // - Expands recurring tasks to show only the NEXT pending occurrence
-        // - Includes all non-recurring tasks
-        // - Filters out virtual occurrences that have been completed
+        // Fetch all pending/in-progress tasks directly from the tasks table
+        // This includes both recurring and non-recurring tasks
         const { data: tasksData, error: tasksError } = await supabase
-          .from('v_dashboard_next_occurrences')
+          .from('0008-ap-tasks')
           .select('*')
           .eq('user_id', user.id)
           .in('status', ['pending', 'in_progress'])
           .in('type', ['task', 'event'])
+          .is('deleted_at', null)
+          .is('parent_task_id', null)
           .order('created_at', { ascending: false });
 
         if (tasksError) throw tasksError;
