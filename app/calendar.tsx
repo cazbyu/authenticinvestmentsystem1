@@ -63,7 +63,7 @@ export default function CalendarScreen() {
   const [authenticScore, setAuthenticScore] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(true);
   const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
   );
@@ -434,8 +434,6 @@ export default function CalendarScreen() {
 
   const filterTasksByQuadrant = useCallback((tasks: Task[], quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4') => {
     return tasks.filter(task => {
-      if (task.status === 'completed') return false;
-
       switch (quadrant) {
         case 'Q1':
           return task.is_urgent && task.is_important;
@@ -628,10 +626,8 @@ export default function CalendarScreen() {
   const dailyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, true);
 
   const renderDailyView = () => {
-    // Filter tasks based on showCompleted toggle
-    const filteredDailyTasks = dailyExpandedTasks.filter(task =>
-      showCompleted ? task.status === 'completed' : task.status !== 'completed'
-    );
+    // Show all tasks regardless of completion status
+    const filteredDailyTasks = dailyExpandedTasks;
 
     return (
       <View style={styles.dailyViewContainer}>
@@ -701,14 +697,9 @@ export default function CalendarScreen() {
   };
 
   const filteredTasksByDate = useMemo(() => {
-    const filtered: Record<string, Task[]> = {};
-    Object.keys(weeklyTasksByDate).forEach(dateStr => {
-      filtered[dateStr] = weeklyTasksByDate[dateStr].filter(task =>
-        showCompleted ? task.status === 'completed' : task.status !== 'completed'
-      );
-    });
-    return filtered;
-  }, [weeklyTasksByDate, showCompleted]);
+    // Show all tasks regardless of completion status
+    return weeklyTasksByDate;
+  }, [weeklyTasksByDate]);
 
   const allWeekTasks = useMemo(() => {
     return Object.values(filteredTasksByDate).flat();
@@ -1606,6 +1597,7 @@ const styles = StyleSheet.create({
   },
   completedText: {
     opacity: 0.6,
+    textDecorationLine: 'line-through',
   },
   taskMetadata: {
     flexDirection: 'row',
