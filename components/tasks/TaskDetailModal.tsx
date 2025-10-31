@@ -203,6 +203,18 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
               </View>
             </View>
           )}
+          {task.delegates?.length > 0 && (
+            <View style={styles.detailSection}>
+              <Text style={styles.detailLabel}>Delegated To:</Text>
+              <View style={styles.detailTagContainer}>
+                {task.delegates.map(delegate => (
+                  <View key={delegate.id} style={[styles.tag, styles.delegateTag]}>
+                    <Text style={styles.tagText}>{delegate.name}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </ScrollView>
         <View style={styles.detailActions}>
           <TouchableOpacity
@@ -296,13 +308,16 @@ const styles = StyleSheet.create({
   domainTag: { 
     backgroundColor: '#fed7aa' 
   },
-  goalTag: { 
-    backgroundColor: '#bfdbfe' 
+  goalTag: {
+    backgroundColor: '#bfdbfe'
   },
-  tagText: { 
-    fontSize: 10, 
-    fontWeight: '500', 
-    color: '#374151' 
+  delegateTag: {
+    backgroundColor: '#d1fae5'
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#374151'
   },
   notesContainer: {
     marginTop: 8,

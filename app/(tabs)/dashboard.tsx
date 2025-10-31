@@ -9,6 +9,7 @@ import { Task, TaskCard } from '@/components/tasks/TaskCard';
 import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import RecurringTaskActionModal from '@/components/tasks/RecurringTaskActionModal';
+import DelegateModal from '@/components/tasks/DelegateModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
@@ -45,6 +46,10 @@ export default function Dashboard() {
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isDelegateModalVisible, setIsDelegateModalVisible] = useState(false);
+  const [delegatingTask, setDelegatingTask] = useState<Task | null>(null);
+  const [delegates, setDelegates] = useState<Array<{id: string; name: string; email?: string; phone?: string}>>([]);
+  const [userId, setUserId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -651,7 +656,29 @@ export default function Dashboard() {
     setIsDetailModalVisible(false);
     setTimeout(() => setIsFormModalVisible(true), 100); // Small delay to ensure modal transition
   };
-  const handleDelegateTask = (task: Task) => { Alert.alert('Delegate', 'Delegation functionality coming soon!'); setIsDetailModalVisible(false); };
+  const handleDelegateTask = async (task: Task) => {
+    setDelegatingTask(task);
+    setIsDetailModalVisible(false);
+
+    // Fetch delegates for the user
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        const { data } = await supabase
+          .from('0008-ap-delegates')
+          .select('id, name, email, phone')
+          .eq('user_id', user.id)
+          .order('name');
+        if (data) setDelegates(data);
+      }
+    } catch (error) {
+      console.error('Error fetching delegates:', error);
+    }
+
+    setTimeout(() => setIsDelegateModalVisible(true), 150);
+  };
   const handleFormSubmitSuccess = async () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
@@ -829,6 +856,58 @@ export default function Dashboard() {
         }}
         actionType={recurringActionModal.actionType}
         taskTitle={recurringActionModal.task?.title || ''}
+      />
+
+      <DelegateModal
+        visible={isDelegateModalVisible}
+        onClose={() => {
+          setIsDelegateModalVisible(false);
+          setDelegatingTask(null);
+        }}
+        onSave={async (delegateId) => {
+          if (!delegatingTask) return;
+
+          try {
+            const supabase = getSupabaseClient();
+
+            // Clear existing delegate joins for this task
+            await supabase
+              .from('0008-ap-universal-delegates-join')
+              .delete()
+              .eq('parent_id', delegatingTask.id)
+              .eq('parent_type', 'task');
+
+            // Insert new delegate join
+            const { error } = await supabase
+              .from('0008-ap-universal-delegates-join')
+              .insert({
+                parent_id: delegatingTask.id,
+                parent_type: 'task',
+                delegate_id: delegateId,
+                user_id: userId,
+              });
+
+            if (error) throw error;
+
+            Alert.alert('Success', 'Task delegated successfully!');
+            setIsDelegateModalVisible(false);
+            setDelegatingTask(null);
+            fetchData(); // Refresh the task list
+
+            // Refresh delegates list
+            const { data } = await supabase
+              .from('0008-ap-delegates')
+              .select('id, name, email, phone')
+              .eq('user_id', userId)
+              .order('name');
+            if (data) setDelegates(data);
+          } catch (error) {
+            console.error('Error delegating task:', error);
+            Alert.alert('Error', 'Failed to delegate task. Please try again.');
+          }
+        }}
+        existingDelegates={delegates}
+        userId={userId}
       />
     </SafeAreaView>
   );
