@@ -21,6 +21,7 @@ import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
 import { RecurrenceDropdown } from './RecurrenceDropdown';
 import { CustomRecurrenceModal } from './CustomRecurrenceModal';
+import DelegateModal from './DelegateModal';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
 // ------------ Types & Models ------------
@@ -66,6 +67,13 @@ interface CycleWeek {
   user_custom_timeline_id?: string;
 }
 
+interface Delegate {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
 interface FormData {
   type: SchedulingType;
   title: string;
@@ -86,11 +94,15 @@ interface FormData {
   selectedKeyRelationshipIds: string[];
   selectedGoalIds: string[];
   notes: string;
-  
+
   // New fields for recurrence and goals
   recurrenceRule?: string;
   recurrenceEndDate?: string | null;
   selectedGoal?: UnifiedGoal;
+
+  // Delegate field
+  isDelegated: boolean;
+  selectedDelegateId?: string;
 }
 
 interface TaskEventFormProps {
@@ -143,6 +155,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     selectedGoalIds: [],
     notes: '',
     recurrenceEndDate: null,
+    isDelegated: false,
+    selectedDelegateId: undefined,
   });
 
   // Data state
@@ -171,6 +185,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [showCompletedWarning, setShowCompletedWarning] = useState(false);
   const [dontShowWarningAgain, setDontShowWarningAgain] = useState(false);
   const [isEditingCompletedTask, setIsEditingCompletedTask] = useState(false);
+
+  // Delegate state
+  const [delegates, setDelegates] = useState<Delegate[]>([]);
+  const [showDelegateModal, setShowDelegateModal] = useState(false);
+  const [userId, setUserId] = useState<string>('');
 
 
   // Helper function to get next 15-minute interval + 15 min buffer
@@ -306,23 +325,27 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       const [
         { data: rolesData },
         { data: domainsData },
         { data: krData },
-        { data: goalsData }
+        { data: goalsData },
+        { data: delegatesData }
       ] = await Promise.all([
         supabase.from('0008-ap-roles').select('id, label, color').eq('user_id', user.id).eq('is_active', true).order('label'),
         supabase.from('0008-ap-domains').select('id, name').order('name'),
         supabase.from('0008-ap-key-relationships').select('id, name, role_id').eq('user_id', user.id),
-        supabase.from('0008-ap-goals-12wk').select('id, title').eq('user_id', user.id).eq('status', 'active').order('title')
+        supabase.from('0008-ap-goals-12wk').select('id, title').eq('user_id', user.id).eq('status', 'active').order('title'),
+        supabase.from('0008-ap-delegates').select('id, name, email, phone').eq('user_id', user.id).order('name')
       ]);
 
       setRoles(rolesData || []);
       setDomains(domainsData || []);
       setKeyRelationships(krData || []);
       setTwelveWeekGoals(goalsData || []);
+      setDelegates(delegatesData || []);
 
       // Fetch unified goals
       await fetchGoalsUnified();
@@ -421,6 +444,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       notes: notesString,
       recurrenceRule: initialData.recurrence_rule || undefined,
       recurrenceEndDate: initialData.recurrence_end_date || null,
+      isDelegated: initialData.delegates && initialData.delegates.length > 0,
+      selectedDelegateId: initialData.delegates && initialData.delegates.length > 0 ? initialData.delegates[0].id : undefined,
     };
 
     setFormData(newFormData);
@@ -707,6 +732,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           supabase.from('0008-ap-universal-domains-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
           supabase.from('0008-ap-universal-key-relationships-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
           supabase.from('0008-ap-universal-goals-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+          supabase.from('0008-ap-universal-delegates-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
         ]);
       }
 
@@ -752,6 +778,16 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           user_id: user.id,
         }));
         joinPromises.push(supabase.from('0008-ap-universal-goals-join').insert(goalJoins));
+      }
+
+      if (formData.isDelegated && formData.selectedDelegateId && parentType === 'task') {
+        const delegateJoin = {
+          parent_id: mainRecordId,
+          parent_type: parentType,
+          delegate_id: formData.selectedDelegateId,
+          user_id: user.id,
+        };
+        joinPromises.push(supabase.from('0008-ap-universal-delegates-join').insert([delegateJoin]));
       }
 
       if (joinPromises.length > 0) {
@@ -1223,6 +1259,42 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
+          {/* Delegate to Checkbox (only for tasks and events) */}
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+              <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                <View style={styles.switchField}>
+                  <Text style={[styles.switchLabel, { color: colors.text }]} numberOfLines={1}>
+                    Delegate to
+                  </Text>
+                  <Switch
+                    value={formData.isDelegated}
+                    onValueChange={(value) => {
+                      setFormData(prev => ({ ...prev, isDelegated: value }));
+                      if (value) {
+                        setShowDelegateModal(true);
+                      }
+                    }}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+              </View>
+              {formData.isDelegated && formData.selectedDelegateId && (
+                <View style={styles.delegateInfoContainer}>
+                  <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
+                    {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
+                    <Text style={[styles.changeDelegateText, { color: colors.primary }]}>
+                      Change
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Roles */}
           {renderCheckboxGrid(
             'Roles',
@@ -1438,6 +1510,27 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         }
         initialRule={formData.recurrenceRule}
         initialEndDate={formData.recurrenceEndDate}
+      />
+
+      {/* Delegate Modal */}
+      <DelegateModal
+        visible={showDelegateModal}
+        onClose={() => setShowDelegateModal(false)}
+        onSave={async (delegateId) => {
+          setFormData(prev => ({ ...prev, selectedDelegateId: delegateId, isDelegated: true }));
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data } = await supabase
+              .from('0008-ap-delegates')
+              .select('id, name, email, phone')
+              .eq('user_id', user.id)
+              .order('name');
+            if (data) setDelegates(data);
+          }
+        }}
+        existingDelegates={delegates}
+        userId={userId}
       />
     </View>
   );
@@ -2028,6 +2121,22 @@ const styles = StyleSheet.create({
   warningButtonText: {
     color: '#ffffff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  delegateInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  delegateInfoText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  changeDelegateText: {
+    fontSize: 14,
     fontWeight: '600',
   },
 });
