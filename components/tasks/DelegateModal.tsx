@@ -37,7 +37,7 @@ export default function DelegateModal({
   existingDelegates,
   userId,
 }: DelegateModalProps) {
-  const { theme } = useTheme();
+  const { colors } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -111,18 +111,18 @@ export default function DelegateModal({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalOverlay}
       >
-        <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+        <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Delegate To</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Delegate To</Text>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <X size={24} color={theme.text} />
+              <X size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.scrollContent}>
             {existingDelegates.length > 0 && (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+                <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
                   Existing Delegates
                 </Text>
                 {existingDelegates.map((delegate) => (
@@ -132,23 +132,23 @@ export default function DelegateModal({
                       styles.delegateOption,
                       {
                         backgroundColor:
-                          selectedDelegateId === delegate.id ? theme.primary + '20' : theme.background,
+                          selectedDelegateId === delegate.id ? colors.primary + '20' : colors.background,
                         borderColor:
-                          selectedDelegateId === delegate.id ? theme.primary : theme.border,
+                          selectedDelegateId === delegate.id ? colors.primary : colors.border,
                       },
                     ]}
                     onPress={() => handleSelectExisting(delegate.id)}
                   >
-                    <Text style={[styles.delegateName, { color: theme.text }]}>
+                    <Text style={[styles.delegateName, { color: colors.text }]}>
                       {delegate.name}
                     </Text>
                     {delegate.email && (
-                      <Text style={[styles.delegateDetail, { color: theme.textSecondary }]}>
+                      <Text style={[styles.delegateDetail, { color: colors.textSecondary }]}>
                         {delegate.email}
                       </Text>
                     )}
                     {delegate.phone && (
-                      <Text style={[styles.delegateDetail, { color: theme.textSecondary }]}>
+                      <Text style={[styles.delegateDetail, { color: colors.textSecondary }]}>
                         {delegate.phone}
                       </Text>
                     )}
@@ -160,19 +160,19 @@ export default function DelegateModal({
             {!selectedDelegateId && (
               <>
                 {existingDelegates.length > 0 && (
-                  <Text style={[styles.orText, { color: theme.textSecondary }]}>
+                  <Text style={[styles.orText, { color: colors.textSecondary }]}>
                     Or create new delegate
                   </Text>
                 )}
 
                 <View style={styles.section}>
-                  <Text style={[styles.label, { color: theme.text }]}>
+                  <Text style={[styles.label, { color: colors.text }]}>
                     Name <Text style={styles.required}>*</Text>
                   </Text>
                   <TextInput
                     style={[
                       styles.input,
-                      { backgroundColor: theme.background, color: theme.text, borderColor: theme.border },
+                      { backgroundColor: colors.background, color: colors.text, borderColor: colors.border },
                     ]}
                     value={name}
                     onChangeText={(text) => {
@@ -180,33 +180,33 @@ export default function DelegateModal({
                       setError('');
                     }}
                     placeholder="Enter name"
-                    placeholderTextColor={theme.textSecondary}
+                    placeholderTextColor={colors.textSecondary}
                   />
 
-                  <Text style={[styles.label, { color: theme.text }]}>Email</Text>
+                  <Text style={[styles.label, { color: colors.text }]}>Email</Text>
                   <TextInput
                     style={[
                       styles.input,
-                      { backgroundColor: theme.background, color: theme.text, borderColor: theme.border },
+                      { backgroundColor: colors.background, color: colors.text, borderColor: colors.border },
                     ]}
                     value={email}
                     onChangeText={setEmail}
                     placeholder="Enter email (optional)"
-                    placeholderTextColor={theme.textSecondary}
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
 
-                  <Text style={[styles.label, { color: theme.text }]}>Phone</Text>
+                  <Text style={[styles.label, { color: colors.text }]}>Phone</Text>
                   <TextInput
                     style={[
                       styles.input,
-                      { backgroundColor: theme.background, color: theme.text, borderColor: theme.border },
+                      { backgroundColor: colors.background, color: colors.text, borderColor: colors.border },
                     ]}
                     value={phone}
                     onChangeText={setPhone}
                     placeholder="Enter phone (optional)"
-                    placeholderTextColor={theme.textSecondary}
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="phone-pad"
                   />
                 </View>
@@ -219,10 +219,10 @@ export default function DelegateModal({
           <View style={styles.buttonContainer}>
             {selectedDelegateId && (
               <TouchableOpacity
-                style={[styles.secondaryButton, { borderColor: theme.border }]}
+                style={[styles.secondaryButton, { borderColor: colors.border }]}
                 onPress={handleCreateNew}
               >
-                <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+                <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
                   Create New Instead
                 </Text>
               </TouchableOpacity>
@@ -230,7 +230,7 @@ export default function DelegateModal({
             <TouchableOpacity
               style={[
                 styles.saveButton,
-                { backgroundColor: theme.primary },
+                { backgroundColor: colors.primary },
                 loading && styles.disabledButton,
               ]}
               onPress={handleSave}
