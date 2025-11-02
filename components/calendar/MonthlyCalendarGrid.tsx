@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, useWindowDimensions } from 'react-native';
 import { PriorityQuadrant } from './PriorityQuadrant';
 import { Task } from '../tasks/TaskCard';
 import { formatTimeForDisplay, formatLocalDate } from '@/lib/dateUtils';
@@ -21,6 +21,9 @@ interface DayTasksModalProps {
 }
 
 const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) => {
+  const { width: screenWidth } = useWindowDimensions();
+  const isMobile = screenWidth < 600;
+
   const sortedTasks = [...tasks].sort((a, b) => {
     const aCompleted = a.status === 'completed' ? 1 : 0;
     const bCompleted = b.status === 'completed' ? 1 : 0;
