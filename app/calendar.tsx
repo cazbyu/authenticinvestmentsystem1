@@ -12,7 +12,6 @@ import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
 import { WeeklyTimeGrid } from '@/components/calendar/WeeklyTimeGrid';
 import { MonthlyCalendarGrid } from '@/components/calendar/MonthlyCalendarGrid';
 import { QuadrantTasksModal } from '@/components/calendar/QuadrantTasksModal';
-import { CollapsibleQuadrantRow } from '@/components/calendar/CollapsibleQuadrantRow';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
@@ -63,12 +62,10 @@ export default function CalendarScreen() {
   const [authenticScore, setAuthenticScore] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
-  const [showCompleted, setShowCompleted] = useState(true);
   const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
   );
   const [scrollTrigger, setScrollTrigger] = useState(0);
-  const [isQuadrantRowExpanded, setIsQuadrantRowExpanded] = useState(true);
 
   // Responsive breakpoints
   const isMobile = screenWidth < 400;
@@ -626,43 +623,27 @@ export default function CalendarScreen() {
   const dailyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, true);
 
   const renderDailyView = () => {
-    // Show all tasks regardless of completion status
     const filteredDailyTasks = dailyExpandedTasks;
 
     return (
       <View style={styles.dailyViewContainer}>
         <View style={styles.dailyHeader}>
-          <View style={styles.dailyHeaderLeft}>
-            <TouchableOpacity onPress={() => navigateDate('prev')}>
-              <ChevronLeft size={24} color="#0078d4" />
-            </TouchableOpacity>
-            <Text style={styles.dailyTitle}>
-              {formatDateForDisplay(selectedDate)}
-            </Text>
-            <TouchableOpacity onPress={() => navigateDate('next')}>
-              <ChevronRight size={24} color="#0078d4" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.dailyHeaderRight}>
-            <View style={styles.toggleContainer}>
-              <Text style={[styles.toggleLabel, isMobile && styles.toggleLabelMobile]}>Total:</Text>
-              <TouchableOpacity
-                onPress={() => setShowCompleted(!showCompleted)}
-                style={[styles.toggleButton, isMobile && styles.toggleButtonMobile]}
-              >
-                <Text style={[styles.toggleButtonText, isMobile && styles.toggleButtonTextMobile]}>
-                  {showCompleted ? 'Completed' : 'Pending'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity onPress={() => handleDayPress(parseLocalDate(selectedDate), filteredDailyTasks)}>
-              <PriorityQuadrant
-                tasks={filteredDailyTasks}
-                size={isMobile ? 'small' : 'medium'}
-                showCompleted={showCompleted}
-              />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={() => navigateDate('prev')}>
+            <ChevronLeft size={24} color="#0078d4" />
+          </TouchableOpacity>
+          <Text style={styles.dailyTitle}>
+            {formatDateForDisplay(selectedDate)}
+          </Text>
+          <TouchableOpacity onPress={() => navigateDate('next')}>
+            <ChevronRight size={24} color="#0078d4" />
+          </TouchableOpacity>
+          <View style={styles.spacer} />
+          <TouchableOpacity onPress={() => handleDayPress(parseLocalDate(selectedDate), filteredDailyTasks)}>
+            <PriorityQuadrant
+              tasks={filteredDailyTasks}
+              size={isMobile ? 'small' : 'medium'}
+            />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.dailyContent}>
@@ -747,28 +728,12 @@ export default function CalendarScreen() {
 
           <View style={styles.spacer} />
 
-          <View style={styles.toggleContainer}>
-            <Text style={styles.toggleLabel}>Total:</Text>
-            <TouchableOpacity
-              onPress={() => setShowCompleted(!showCompleted)}
-              style={styles.toggleButton}
-            >
-              <Text style={styles.toggleButtonText}>
-                {showCompleted ? 'Completed' : 'Pending'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Show quadrant in header only on desktop */}
-          {isDesktop && (
-            <PriorityQuadrant
-              tasks={allWeekTasks}
-              size="medium"
-              style={styles.weeklyQuadrant}
-              onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}
-              showCompleted={showCompleted}
-            />
-          )}
+          <PriorityQuadrant
+            tasks={allWeekTasks}
+            size="medium"
+            style={styles.weeklyQuadrant}
+            onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}
+          />
         </View>
 
         <View
@@ -792,23 +757,12 @@ export default function CalendarScreen() {
                   dateNumber={date.getDate()}
                   isToday={isToday}
                   tasks={dayTasks}
-                  showCompleted={showCompleted}
                 />
               </View>
             );
           })}
         </View>
 
-        <CollapsibleQuadrantRow
-          weekDates={weekDates}
-          tasksByDate={filteredTasksByDate}
-          columnWidth={columnWidth}
-          isExpanded={isQuadrantRowExpanded}
-          onToggle={() => setIsQuadrantRowExpanded(!isQuadrantRowExpanded)}
-          onQuadrantPress={handleQuadrantPress}
-          onDayPress={handleDayPress}
-          showCompleted={showCompleted}
-        />
 
         <WeeklyTimeGrid
           weekDates={weekDates}
@@ -1101,22 +1055,10 @@ const styles = StyleSheet.create({
   dailyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 16,
     backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 8,
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  dailyHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  dailyHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
   },
   dailyTitle: {
@@ -1276,42 +1218,8 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  toggleLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  toggleLabelMobile: {
-    fontSize: 12,
-  },
-  toggleButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#0078d4',
-    borderRadius: 6,
-    minHeight: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  toggleButtonMobile: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    minHeight: 28,
-  },
-  toggleButtonText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#ffffff',
-  },
-  toggleButtonTextMobile: {
-    fontSize: 11,
-  },
   weeklyQuadrant: {
-    marginLeft: 12,
+    marginLeft: 'auto',
   },
   weekColumnHeaders: {
     flexDirection: 'row',
