@@ -189,9 +189,6 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate
               {dayNumber}
             </Text>
           </View>
-          <View style={styles.quadrantContainer}>
-            <PriorityQuadrant tasks={dayTasks} size="small" />
-          </View>
         </View>
       </TouchableOpacity>
     );
@@ -386,11 +383,6 @@ const styles = StyleSheet.create({
   todayNumber: {
     color: '#ffffff',
     fontWeight: '700',
-  },
-  quadrantContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 
   // Modal styles
