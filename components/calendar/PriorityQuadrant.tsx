@@ -25,14 +25,17 @@ export function calculateQuadrantCounts(
 ): QuadrantCounts {
   const counts: QuadrantCounts = { Q1: 0, Q2: 0, Q3: 0, Q4: 0 };
 
-  // Log first few tasks to debug
+  // Debug: Check for duplicate task IDs (recurring tasks counted multiple times)
   if (tasks.length > 0) {
-    console.log('Sample tasks:', tasks.slice(0, 3).map(t => ({
-      urgent: t.is_urgent,
-      important: t.is_important,
-      status: t.status
-    })));
-    console.log('Total tasks:', tasks.length);
+    const taskIds = tasks.map((t: any) => t.task_id || t.id);
+    const uniqueTaskIds = new Set(taskIds);
+    console.log('Total task entries:', tasks.length);
+    console.log('Unique tasks:', uniqueTaskIds.size);
+    console.log('Duplicate count:', tasks.length - uniqueTaskIds.size);
+
+    // Check if tasks have occurrence_date (recurring instances)
+    const withOccurrence = tasks.filter((t: any) => t.occurrence_date).length;
+    console.log('Tasks with occurrence_date:', withOccurrence);
   }
 
   tasks.forEach((task) => {
