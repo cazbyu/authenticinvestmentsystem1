@@ -25,13 +25,17 @@ export function calculateQuadrantCounts(
 ): QuadrantCounts {
   const counts: QuadrantCounts = { Q1: 0, Q2: 0, Q3: 0, Q4: 0 };
 
-  // Only count pending/incomplete tasks
-  tasks.forEach((task) => {
-    // Skip completed tasks
-    if (task.status === 'completed') {
-      return;
-    }
+  // Log first few tasks to debug
+  if (tasks.length > 0) {
+    console.log('Sample tasks:', tasks.slice(0, 3).map(t => ({
+      urgent: t.is_urgent,
+      important: t.is_important,
+      status: t.status
+    })));
+    console.log('Total tasks:', tasks.length);
+  }
 
+  tasks.forEach((task) => {
     if (task.is_urgent && task.is_important) {
       counts.Q1++;
     } else if (!task.is_urgent && task.is_important) {
@@ -43,6 +47,7 @@ export function calculateQuadrantCounts(
     }
   });
 
+  console.log('Quadrant counts:', counts);
   return counts;
 }
 
