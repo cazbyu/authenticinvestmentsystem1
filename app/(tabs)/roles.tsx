@@ -927,7 +927,10 @@ export default function Roles() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ deleted_at: new Date().toISOString() })
+        .update({
+          deleted_at: new Date().toISOString(),
+          status: 'cancelled'
+        })
         .eq('id', taskId);
 
       if (error) throw error;

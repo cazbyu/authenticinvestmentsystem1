@@ -644,10 +644,13 @@ export function useGoals(options: UseGoalsOptions = {}) {
         throw new Error('Task not found or access denied');
       }
 
-      // Soft delete the task by setting deleted_at timestamp
+      // Soft delete the task by setting deleted_at timestamp and status to cancelled
       const { error: deleteError } = await supabase
         .from(DB.TASKS)
-        .update({ deleted_at: new Date().toISOString() })
+        .update({
+          deleted_at: new Date().toISOString(),
+          status: 'cancelled'
+        })
         .eq('id', taskId);
 
       if (deleteError) throw deleteError;
@@ -712,10 +715,13 @@ export function useGoals(options: UseGoalsOptions = {}) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Restore the task by clearing deleted_at timestamp
+      // Restore the task by clearing deleted_at timestamp and setting status back to pending
       const { error: restoreError } = await supabase
         .from(DB.TASKS)
-        .update({ deleted_at: null })
+        .update({
+          deleted_at: null,
+          status: 'pending'
+        })
         .eq('id', taskId)
         .eq('user_id', user.id);
 
