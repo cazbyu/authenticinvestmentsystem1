@@ -25,17 +25,11 @@ export function calculateQuadrantCounts(
 ): QuadrantCounts {
   const counts: QuadrantCounts = { Q1: 0, Q2: 0, Q3: 0, Q4: 0 };
 
-  // Deduplicate recurring tasks - count each unique task only once
-  const uniqueTasks = new Map<string, typeof tasks[0]>();
-  tasks.forEach((task: any) => {
-    const taskId = task.task_id || task.id;
-    if (taskId && !uniqueTasks.has(taskId)) {
-      uniqueTasks.set(taskId, task);
-    }
-  });
+  // Filter to only completed tasks and count each occurrence separately
+  const completedTasks = tasks.filter((task) => task.status === 'completed');
 
-  // Count each unique task
-  uniqueTasks.forEach((task) => {
+  // Count each completed task occurrence
+  completedTasks.forEach((task) => {
     if (task.is_urgent && task.is_important) {
       counts.Q1++;
     } else if (!task.is_urgent && task.is_important) {
