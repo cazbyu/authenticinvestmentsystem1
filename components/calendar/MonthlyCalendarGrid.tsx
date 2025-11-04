@@ -150,6 +150,24 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate
       }
       tasksByDate[taskDate].push(task);
     }
+
+    // Also group completed tasks by their completion date (in local time)
+    if (task.status === 'completed' && task.completed_at) {
+      const completedDate = new Date(task.completed_at);
+      // Get local date string (YYYY-MM-DD)
+      const year = completedDate.getFullYear();
+      const month = String(completedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(completedDate.getDate()).padStart(2, '0');
+      const completedDateStr = `${year}-${month}-${day}`;
+
+      // Only add if it's different from the task's regular date to avoid duplicates
+      if (completedDateStr !== taskDate) {
+        if (!tasksByDate[completedDateStr]) {
+          tasksByDate[completedDateStr] = [];
+        }
+        tasksByDate[completedDateStr].push(task);
+      }
+    }
   });
 
   const handleDayPress = (date: Date, dayTasks: Task[]) => {
