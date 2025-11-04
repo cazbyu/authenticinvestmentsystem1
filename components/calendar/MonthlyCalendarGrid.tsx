@@ -217,12 +217,14 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate
 
   // Calculate completed tasks for the current month for the quadrant
   // Filter to only tasks completed within the current month (00:00:01 on day 1 to 23:59:59 on last day)
+  // Note: completed_at is stored in UTC but we need to compare in local timezone
   const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1, 0, 0, 1);
   const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59);
 
   const allMonthTasks = Object.values(tasksByDate).flat();
   const completedThisMonth = allMonthTasks.filter(task => {
     if (task.status !== 'completed' || !task.completed_at) return false;
+    // Parse the UTC timestamp and convert to local timezone
     const completedDate = new Date(task.completed_at);
     return completedDate >= monthStart && completedDate <= monthEnd;
   });
