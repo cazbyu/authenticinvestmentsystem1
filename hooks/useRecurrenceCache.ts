@@ -56,7 +56,11 @@ export function useExpandedTasksForWeek(tasks: Task[], weekDates: Date[]) {
           // Also include completed tasks where completion date (in local time) matches this date
           if (t.status === 'completed' && (t as any).completed_at) {
             const completedDate = new Date((t as any).completed_at);
-            const completedDateStr = completedDate.toISOString().split('T')[0];
+            // Get local date string (YYYY-MM-DD) instead of UTC
+            const year = completedDate.getFullYear();
+            const month = String(completedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(completedDate.getDate()).padStart(2, '0');
+            const completedDateStr = `${year}-${month}-${day}`;
             if (completedDateStr === dateString) return true;
           }
           return taskDate === dateString;
@@ -96,7 +100,11 @@ export function useExpandedTasksWithAnytime(
         // Also include completed tasks where completion date (in local time) matches this date
         if (t.status === 'completed' && (t as any).completed_at) {
           const completedDate = new Date((t as any).completed_at);
-          const completedDateStr = completedDate.toISOString().split('T')[0];
+          // Get local date string (YYYY-MM-DD) instead of UTC
+          const year = completedDate.getFullYear();
+          const month = String(completedDate.getMonth() + 1).padStart(2, '0');
+          const day = String(completedDate.getDate()).padStart(2, '0');
+          const completedDateStr = `${year}-${month}-${day}`;
           if (completedDateStr === date) return true;
         }
         return taskDate === date;
