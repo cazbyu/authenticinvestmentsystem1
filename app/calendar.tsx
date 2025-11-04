@@ -625,6 +625,16 @@ export default function CalendarScreen() {
   const renderDailyView = () => {
     const filteredDailyTasks = dailyExpandedTasks;
 
+    // Filter to only tasks completed on this specific day for the quadrant
+    const selectedDateObj = parseLocalDate(selectedDate);
+    const dayStart = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate(), 0, 0, 0);
+    const dayEnd = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate(), 23, 59, 59);
+    const completedToday = filteredDailyTasks.filter(task => {
+      if (task.status !== 'completed' || !task.completed_at) return false;
+      const completedDate = new Date(task.completed_at);
+      return completedDate >= dayStart && completedDate <= dayEnd;
+    });
+
     return (
       <View style={styles.dailyViewContainer}>
         <View style={styles.dailyHeader}>
@@ -640,7 +650,7 @@ export default function CalendarScreen() {
           <View style={styles.spacer} />
           <TouchableOpacity onPress={() => handleDayPress(parseLocalDate(selectedDate), filteredDailyTasks)}>
             <PriorityQuadrant
-              tasks={filteredDailyTasks}
+              tasks={completedToday}
               size={isMobile ? 'small' : 'medium'}
             />
           </TouchableOpacity>
@@ -686,6 +696,19 @@ export default function CalendarScreen() {
     return Object.values(filteredTasksByDate).flat();
   }, [filteredTasksByDate]);
 
+  // Filter to only tasks completed during this specific week for the quadrant
+  const completedThisWeek = useMemo(() => {
+    if (weekDates.length === 0) return [];
+    const weekStart = new Date(weekDates[0].getFullYear(), weekDates[0].getMonth(), weekDates[0].getDate(), 0, 0, 0);
+    const weekEnd = new Date(weekDates[6].getFullYear(), weekDates[6].getMonth(), weekDates[6].getDate(), 23, 59, 59);
+
+    return allWeekTasks.filter(task => {
+      if (task.status !== 'completed' || !task.completed_at) return false;
+      const completedDate = new Date(task.completed_at);
+      return completedDate >= weekStart && completedDate <= weekEnd;
+    });
+  }, [allWeekTasks, weekDates]);
+
   const getWeekDateRangeDisplay = () => {
     const firstDate = weekDates[0];
     const lastDate = weekDates[6];
@@ -729,7 +752,7 @@ export default function CalendarScreen() {
           <View style={styles.spacer} />
 
           <PriorityQuadrant
-            tasks={allWeekTasks}
+            tasks={completedThisWeek}
             size="medium"
             style={styles.weeklyQuadrant}
             onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}

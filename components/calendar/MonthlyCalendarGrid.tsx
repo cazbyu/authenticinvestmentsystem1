@@ -215,8 +215,17 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate
     );
   };
 
-  // Calculate all tasks for the month for the quadrant
+  // Calculate completed tasks for the current month for the quadrant
+  // Filter to only tasks completed within the current month (00:00:01 on day 1 to 23:59:59 on last day)
+  const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1, 0, 0, 1);
+  const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59);
+
   const allMonthTasks = Object.values(tasksByDate).flat();
+  const completedThisMonth = allMonthTasks.filter(task => {
+    if (task.status !== 'completed' || !task.completed_at) return false;
+    const completedDate = new Date(task.completed_at);
+    return completedDate >= monthStart && completedDate <= monthEnd;
+  });
 
   return (
     <>
@@ -239,7 +248,7 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate
         </View>
         <View style={styles.spacer} />
         <PriorityQuadrant
-          tasks={allMonthTasks}
+          tasks={completedThisMonth}
           size="medium"
           style={styles.monthlyQuadrant}
         />
