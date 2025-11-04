@@ -283,12 +283,12 @@ export default function CalendarScreen() {
         .select(`
           id, title, type, status, due_date, start_date, end_date, start_time, end_time,
           is_urgent, is_important, is_all_day, is_anytime,
-          occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule
+          occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule, completed_at
         `)
         .eq('user_id', user.id)
         .neq('status', 'cancelled')
         .in('type', ['task', 'event'])
-        .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
+        .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr}),and(completed_at.gte.${startStr}T00:00:00,completed_at.lte.${endStr}T23:59:59)`);
 
       if (tasksError) throw tasksError;
 
