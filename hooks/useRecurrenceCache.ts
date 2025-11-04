@@ -53,6 +53,12 @@ export function useExpandedTasksForWeek(tasks: Task[], weekDates: Date[]) {
         // Tasks are already expanded by the database view
         matchingTasks = tasks.filter(t => {
           const taskDate = (t as any).occurrence_date || t.start_date || t.due_date;
+          // Also include completed tasks where completion date (in local time) matches this date
+          if (t.status === 'completed' && (t as any).completed_at) {
+            const completedDate = new Date((t as any).completed_at);
+            const completedDateStr = completedDate.toISOString().split('T')[0];
+            if (completedDateStr === dateString) return true;
+          }
           return taskDate === dateString;
         });
       } else {
@@ -87,6 +93,12 @@ export function useExpandedTasksWithAnytime(
       // Tasks are already expanded by the database view, just filter by date
       matchingTasks = tasks.filter(t => {
         const taskDate = (t as any).occurrence_date || t.start_date || t.due_date;
+        // Also include completed tasks where completion date (in local time) matches this date
+        if (t.status === 'completed' && (t as any).completed_at) {
+          const completedDate = new Date((t as any).completed_at);
+          const completedDateStr = completedDate.toISOString().split('T')[0];
+          if (completedDateStr === date) return true;
+        }
         return taskDate === date;
       });
     } else {
