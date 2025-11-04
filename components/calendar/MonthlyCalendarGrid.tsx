@@ -240,7 +240,13 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate
   const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59);
 
   const allMonthTasks = Object.values(tasksByDate).flat();
-  const completedThisMonth = allMonthTasks.filter(task => {
+
+  // Deduplicate tasks by ID (a task may appear multiple times if its completion date differs from task date)
+  const uniqueTasks = Array.from(
+    new Map(allMonthTasks.map(task => [task.id, task])).values()
+  );
+
+  const completedThisMonth = uniqueTasks.filter(task => {
     if (task.status !== 'completed' || !task.completed_at) return false;
     // Parse the UTC timestamp and convert to local timezone
     const completedDate = new Date(task.completed_at);
