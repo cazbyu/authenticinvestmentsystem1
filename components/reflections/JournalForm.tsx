@@ -24,7 +24,7 @@ import {
   File
 } from 'lucide-react-native';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
-import { getAttachmentPublicUrl } from '@/lib/reflectionUtils';
+import { getAttachmentSignedUrl } from '@/lib/reflectionUtils';
 import { Calendar } from 'react-native-calendars';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -163,11 +163,9 @@ export default function JournalForm({
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const attachments = data.map((att: any) => {
-          // Ensure we have a proper MIME type
+        const attachmentsPromises = data.map(async (att: any) => {
           let fileType = att.file_type;
           if (!fileType || !fileType.includes('/')) {
-            // Fallback: determine MIME type from file extension
             const fileName = att.file_name.toLowerCase();
             if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) fileType = 'image/jpeg';
             else if (fileName.endsWith('.png')) fileType = 'image/png';
@@ -179,15 +177,20 @@ export default function JournalForm({
             else fileType = 'application/octet-stream';
           }
 
+          const signedUrl = await getAttachmentSignedUrl(att.file_path);
+
           return {
             id: att.id,
-            uri: att.file_path,
+            uri: signedUrl,
+            filePath: att.file_path,
             name: att.file_name,
             type: fileType,
             size: att.file_size,
             isExisting: true,
           };
         });
+
+        const attachments = await Promise.all(attachmentsPromises);
         setAttachedFiles(attachments);
       }
     } catch (error) {
@@ -350,19 +353,16 @@ export default function JournalForm({
   const handleRemoveAttachment = async (index: number) => {
     const fileToRemove = attachedFiles[index];
 
-    // If it's an existing attachment from the database, delete it
     if (fileToRemove.isExisting && fileToRemove.id) {
       try {
         const supabase = getSupabaseClient();
 
-        // Delete from storage
-        if (fileToRemove.uri) {
+        if (fileToRemove.filePath) {
           await supabase.storage
             .from('0008-reflection-attachments')
-            .remove([fileToRemove.uri]);
+            .remove([fileToRemove.filePath]);
         }
 
-        // Delete from database
         await supabase
           .from('0008-ap-reflection-attachments')
           .delete()
@@ -734,34 +734,28 @@ export default function JournalForm({
                     Attachments ({attachedFiles.length})
                   </Text>
                   <View style={styles.attachmentsGrid}>
-                    {attachedFiles.map((file, index) => {
-                      const fileUrl = file.isExisting
-                        ? getAttachmentPublicUrl(file.uri)
-                        : file.uri;
-
-                      return (
-                        <View key={index} style={styles.attachmentThumbnailWrapper}>
-                          <AttachmentThumbnail
-                            uri={fileUrl}
-                            fileType={file.type}
-                            fileName={file.name}
-                            size="medium"
-                          />
-                          <TouchableOpacity
-                            style={[styles.removeButton, { backgroundColor: colors.error }]}
-                            onPress={() => handleRemoveAttachment(index)}
-                          >
-                            <X size={14} color="#ffffff" />
-                          </TouchableOpacity>
-                          <Text
-                            style={[styles.thumbnailFileName, { color: colors.text }]}
-                            numberOfLines={1}
-                          >
-                            {file.name}
-                          </Text>
-                        </View>
-                      );
-                    })}
+                    {attachedFiles.map((file, index) => (
+                      <View key={index} style={styles.attachmentThumbnailWrapper}>
+                        <AttachmentThumbnail
+                          uri={file.uri}
+                          fileType={file.type}
+                          fileName={file.name}
+                          size="medium"
+                        />
+                        <TouchableOpacity
+                          style={[styles.removeButton, { backgroundColor: colors.error }]}
+                          onPress={() => handleRemoveAttachment(index)}
+                        >
+                          <X size={14} color="#ffffff" />
+                        </TouchableOpacity>
+                        <Text
+                          style={[styles.thumbnailFileName, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
+                          {file.name}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
                 </View>
               )}

@@ -638,10 +638,12 @@ export async function fetchReflectionAttachments(
     if (error) throw error;
     if (!data) return [];
 
-    const attachmentsWithUrls = data.map((attachment) => ({
-      ...attachment,
-      public_url: getAttachmentPublicUrl(attachment.file_path),
-    }));
+    const attachmentsWithUrls = await Promise.all(
+      data.map(async (attachment) => ({
+        ...attachment,
+        public_url: await getAttachmentSignedUrl(attachment.file_path),
+      }))
+    );
 
     return attachmentsWithUrls;
   } catch (error) {
@@ -668,7 +670,27 @@ export async function fetchReflectionImageAttachments(
 }
 
 /**
+ * Generates a signed URL for an attachment stored in Supabase Storage
+ * Uses authentication to access private bucket files
+ */
+export async function getAttachmentSignedUrl(filePath: string): Promise<string> {
+  try {
+    const { data, error } = await supabase.storage
+      .from('0008-reflection-attachments')
+      .createSignedUrl(filePath, 3600);
+
+    if (error) throw error;
+
+    return data.signedUrl;
+  } catch (error) {
+    console.error('Error creating signed URL:', error);
+    return '';
+  }
+}
+
+/**
  * Generates a public URL for an attachment stored in Supabase Storage
+ * @deprecated Use getAttachmentSignedUrl for authenticated access
  */
 export function getAttachmentPublicUrl(filePath: string): string {
   const { data } = supabase.storage
@@ -698,18 +720,20 @@ export async function fetchAttachmentsForReflections(
 
     const attachmentMap = new Map<string, ReflectionAttachment[]>();
 
-    data.forEach((attachment) => {
-      const reflectionId = attachment.reflection_id;
-      const attachmentWithUrl = {
-        ...attachment,
-        public_url: getAttachmentPublicUrl(attachment.file_path),
-      };
+    await Promise.all(
+      data.map(async (attachment) => {
+        const reflectionId = attachment.reflection_id;
+        const attachmentWithUrl = {
+          ...attachment,
+          public_url: await getAttachmentSignedUrl(attachment.file_path),
+        };
 
-      if (!attachmentMap.has(reflectionId)) {
-        attachmentMap.set(reflectionId, []);
-      }
-      attachmentMap.get(reflectionId)!.push(attachmentWithUrl);
-    });
+        if (!attachmentMap.has(reflectionId)) {
+          attachmentMap.set(reflectionId, []);
+        }
+        attachmentMap.get(reflectionId)!.push(attachmentWithUrl);
+      })
+    );
 
     return attachmentMap;
   } catch (error) {
