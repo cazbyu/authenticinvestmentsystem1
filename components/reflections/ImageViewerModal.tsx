@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,18 @@ import {
   Modal,
   TouchableOpacity,
   Image,
-  ScrollView,
   Dimensions,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ReflectionAttachment } from '@/lib/reflectionUtils';
@@ -34,13 +42,36 @@ export default function ImageViewerModal({
 
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const lastTapTime = useRef(0);
+
   React.useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
       setImageLoading(true);
       setImageError(false);
+      resetZoomAndPosition();
     }
   }, [visible, initialIndex]);
+
+  React.useEffect(() => {
+    resetZoomAndPosition();
+  }, [currentIndex]);
+
+  const resetZoomAndPosition = () => {
+    scale.value = withSpring(1);
+    savedScale.value = 1;
+    translateX.value = withSpring(0);
+    translateY.value = withSpring(0);
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+  };
 
   const handlePrevious = () => {
     if (currentIndex > 0) {
@@ -57,6 +88,91 @@ export default function ImageViewerModal({
       setImageError(false);
     }
   };
+
+  const handleDoubleTap = () => {
+    if (scale.value > 1) {
+      scale.value = withSpring(1);
+      savedScale.value = 1;
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    } else {
+      scale.value = withSpring(2);
+      savedScale.value = 2;
+    }
+  };
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else if (scale.value > 4) {
+        scale.value = withSpring(4);
+        savedScale.value = 4;
+      } else {
+        savedScale.value = scale.value;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (scale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      }
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const tapGesture = Gesture.Tap()
+    .numberOfTaps(1)
+    .onEnd(() => {
+      const now = Date.now();
+      const timeSinceLastTap = now - lastTapTime.current;
+
+      if (timeSinceLastTap < 300) {
+        runOnJS(handleDoubleTap)();
+      }
+
+      lastTapTime.current = now;
+    });
+
+  const swipeGesture = Gesture.Pan()
+    .onEnd((e) => {
+      if (scale.value <= 1) {
+        if (e.velocityX > 500 && e.translationX > 50) {
+          runOnJS(handlePrevious)();
+        } else if (e.velocityX < -500 && e.translationX < -50) {
+          runOnJS(handleNext)();
+        }
+      }
+    });
+
+  const composedGestures = Gesture.Simultaneous(
+    pinchGesture,
+    panGesture,
+    swipeGesture,
+    tapGesture
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   const currentImage = images[currentIndex];
 
@@ -90,28 +206,24 @@ export default function ImageViewerModal({
               <Text style={styles.errorText}>Failed to load image</Text>
             </View>
           ) : (
-            <ScrollView
-              maximumZoomScale={3}
-              minimumZoomScale={1}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollContent}
-            >
-              <Image
-                source={{ uri: currentImage.public_url }}
-                style={{
-                  width: screenWidth,
-                  height: screenHeight - 120,
-                }}
-                resizeMode="contain"
-                onLoadStart={() => setImageLoading(true)}
-                onLoadEnd={() => setImageLoading(false)}
-                onError={() => {
-                  setImageLoading(false);
-                  setImageError(true);
-                }}
-              />
-            </ScrollView>
+            <GestureDetector gesture={composedGestures}>
+              <Animated.View style={[styles.imageWrapper, animatedStyle]}>
+                <Image
+                  source={{ uri: currentImage.public_url }}
+                  style={{
+                    width: screenWidth,
+                    height: screenHeight - 120,
+                  }}
+                  resizeMode="contain"
+                  onLoadStart={() => setImageLoading(true)}
+                  onLoadEnd={() => setImageLoading(false)}
+                  onError={() => {
+                    setImageLoading(false);
+                    setImageError(true);
+                  }}
+                />
+              </Animated.View>
+            </GestureDetector>
           )}
         </View>
 
@@ -193,8 +305,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scrollContent: {
-    flexGrow: 1,
+  imageWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
   },

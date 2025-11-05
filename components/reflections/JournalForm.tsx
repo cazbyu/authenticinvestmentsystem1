@@ -11,7 +11,9 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { X, Paperclip, Calendar as CalendarIcon, Bold, Italic, AlignCenter, List, ListOrdered, File, Image as ImageIcon } from 'lucide-react-native';
+import { X, Paperclip, Calendar as CalendarIcon, Bold, Italic, AlignCenter, List, ListOrdered } from 'lucide-react-native';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import { getAttachmentPublicUrl } from '@/lib/reflectionUtils';
 import { Calendar } from 'react-native-calendars';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -693,28 +695,36 @@ export default function JournalForm({
                   <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
                     Attachments ({attachedFiles.length})
                   </Text>
-                  {attachedFiles.map((file, index) => (
-                    <View key={index} style={[styles.attachmentItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      {file.type?.startsWith('image/') ? (
-                        <ImageIcon size={16} color={colors.primary} />
-                      ) : (
-                        <File size={16} color={colors.primary} />
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.attachmentName, { color: colors.text }]} numberOfLines={1}>
-                          {file.name}
-                        </Text>
-                        {file.size && (
-                          <Text style={[styles.attachmentSize, { color: colors.textSecondary }]}>
-                            {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  <View style={styles.attachmentsGrid}>
+                    {attachedFiles.map((file, index) => {
+                      const fileUrl = file.isExisting
+                        ? getAttachmentPublicUrl(file.uri)
+                        : file.uri;
+
+                      return (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={fileUrl}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
                           </Text>
-                        )}
-                      </View>
-                      <TouchableOpacity onPress={() => handleRemoveAttachment(index)}>
-                        <X size={16} color={colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
             </View>
@@ -1214,27 +1224,41 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     },
     attachmentsContainer: {
       marginTop: 12,
-      gap: 8,
     },
     attachmentsLabel: {
       fontSize: 12,
       fontWeight: '600',
-      marginBottom: 4,
+      marginBottom: 8,
     },
-    attachmentItem: {
+    attachmentsGrid: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    attachmentThumbnailWrapper: {
+      width: 80,
       alignItems: 'center',
-      padding: 8,
-      borderRadius: 6,
-      borderWidth: 1,
-      gap: 8,
+      gap: 4,
     },
-    attachmentName: {
-      fontSize: 14,
+    removeButton: {
+      position: 'absolute',
+      top: -6,
+      right: -6,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 3,
+      elevation: 4,
     },
-    attachmentSize: {
-      fontSize: 11,
-      marginTop: 2,
+    thumbnailFileName: {
+      fontSize: 10,
+      textAlign: 'center',
+      width: '100%',
     },
     attachmentPickerContent: {
       backgroundColor: colors.surface,

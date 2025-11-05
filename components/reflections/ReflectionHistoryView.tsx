@@ -14,6 +14,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { ReflectionWithRelations, ReflectionAttachment, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import ImageViewerModal from './ImageViewerModal';
+import AttachmentBadge from '../attachments/AttachmentBadge';
 
 interface ReflectionHistoryViewProps {
   onReflectionPress?: (reflection: ReflectionWithRelations) => void;
@@ -317,9 +318,14 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
         onPress={() => onReflectionPress?.(item)}
       >
         <View style={styles.cardHeader}>
-          <Text style={[styles.dateText, { color: colors.text }]}>
-            {formatDateTime(item.date || '', item.created_at)}
-          </Text>
+          <View style={styles.cardHeaderLeft}>
+            <Text style={[styles.dateText, { color: colors.text }]}>
+              {formatDateTime(item.date || '', item.created_at)}
+            </Text>
+            {item.attachments && item.attachments.length > 0 && (
+              <AttachmentBadge count={item.attachments.length} size="small" />
+            )}
+          </View>
           <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
             <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
           </View>
@@ -330,7 +336,7 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
 
         {imageAttachments.length > 0 && (
           <View style={styles.imagePreviewContainer}>
-            {imageAttachments.slice(0, 2).map((attachment, index) => (
+            {imageAttachments.slice(0, 4).map((attachment, index) => (
               <TouchableOpacity
                 key={attachment.id}
                 onPress={(e) => {
@@ -338,6 +344,7 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
                   handleImagePress(imageAttachments, index);
                 }}
                 style={styles.imageThumbnail}
+                activeOpacity={0.7}
               >
                 <Image
                   source={{ uri: attachment.public_url }}
@@ -346,16 +353,22 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
                 />
               </TouchableOpacity>
             ))}
-            {imageAttachments.length > 2 && (
+            {imageAttachments.length > 4 && (
               <TouchableOpacity
                 onPress={(e) => {
                   e.stopPropagation();
-                  handleImagePress(imageAttachments, 2);
+                  handleImagePress(imageAttachments, 4);
                 }}
                 style={[styles.imageThumbnail, styles.moreImagesThumbnail]}
+                activeOpacity={0.7}
               >
+                <Image
+                  source={{ uri: imageAttachments[4].public_url }}
+                  style={styles.thumbnailImage}
+                  resizeMode="cover"
+                />
                 <View style={styles.moreImagesOverlay}>
-                  <Text style={styles.moreImagesText}>+{imageAttachments.length - 2}</Text>
+                  <Text style={styles.moreImagesText}>+{imageAttachments.length - 4}</Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -489,6 +502,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
   dateText: {
     fontSize: 14,
     fontWeight: '600',
@@ -585,12 +604,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
     gap: 8,
+    flexWrap: 'wrap',
   },
   imageThumbnail: {
-    width: 80,
-    height: 80,
+    width: 72,
+    height: 72,
     borderRadius: 8,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   thumbnailImage: {
     width: '100%',
