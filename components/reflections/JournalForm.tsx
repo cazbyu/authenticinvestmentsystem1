@@ -837,46 +837,44 @@ export default function JournalForm({
             )}
 
             {/* Actions */}
-            {mode === 'create' && (
-              <View style={styles.section}>
-                <Text style={styles.label}>Actions</Text>
-                <Text style={styles.helperText}>
-                  Do you want to take any of the following actions on this reflection?
-                </Text>
-                <View style={styles.actionButtonsContainer}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('task')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Task</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('event')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create an Event</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('depositIdea')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Deposit Idea</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('withdrawal')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Withdrawal</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('followUp')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Follow Up</Text>
-                  </TouchableOpacity>
-                </View>
+            <View style={styles.section}>
+              <Text style={styles.label}>Actions</Text>
+              <Text style={styles.helperText}>
+                Do you want to take any of the following actions on this reflection?
+              </Text>
+              <View style={styles.actionButtonsContainer}>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('task')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Task</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('event')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create an Event</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('depositIdea')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Deposit Idea</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('withdrawal')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Withdrawal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('followUp')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Follow Up</Text>
+                </TouchableOpacity>
               </View>
-            )}
+            </View>
 
             {/* Save Button */}
             <TouchableOpacity

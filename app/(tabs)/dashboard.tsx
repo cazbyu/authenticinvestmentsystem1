@@ -10,6 +10,7 @@ import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import RecurringTaskActionModal from '@/components/tasks/RecurringTaskActionModal';
 import DelegateModal from '@/components/tasks/DelegateModal';
+import JournalForm from '@/components/reflections/JournalForm';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
@@ -54,6 +55,8 @@ export default function Dashboard() {
   const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [journalRefreshKey, setJournalRefreshKey] = useState(0);
+  const [isReflectionModalVisible, setIsReflectionModalVisible] = useState(false);
+  const [editingReflection, setEditingReflection] = useState<any>(null);
 
   // Import functions from useGoalProgress hook
   const {
@@ -712,6 +715,10 @@ export default function Dashboard() {
       };
       setEditingTask(editData);
       setIsFormModalVisible(true);
+    } else if (entry.source_type === 'reflection') {
+      // Open JournalForm in edit mode for reflections
+      setEditingReflection(entry.source_data);
+      setIsReflectionModalVisible(true);
     }
   };
   const handleDragEnd = ({ data }: { data: Task[] }) => setTasks(data);
@@ -856,6 +863,22 @@ export default function Dashboard() {
         }}
         actionType={recurringActionModal.actionType}
         taskTitle={recurringActionModal.task?.title || ''}
+      />
+
+      <JournalForm
+        visible={isReflectionModalVisible}
+        mode="edit"
+        initialData={editingReflection}
+        onClose={() => {
+          setIsReflectionModalVisible(false);
+          setEditingReflection(null);
+        }}
+        onSaveSuccess={() => {
+          setIsReflectionModalVisible(false);
+          setEditingReflection(null);
+          setJournalRefreshKey(prev => prev + 1);
+        }}
+        openedFromJournal={true}
       />
 
       <DelegateModal
