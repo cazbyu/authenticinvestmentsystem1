@@ -241,13 +241,23 @@ export default function JournalForm({
           const fileSize = asset.fileSize || 0;
           const fileName = asset.fileName || 'image.jpg';
 
+          // Determine MIME type from URI or filename
+          let mimeType = 'image/jpeg';
+          if (asset.uri) {
+            const lowerUri = asset.uri.toLowerCase();
+            if (lowerUri.endsWith('.png')) mimeType = 'image/png';
+            else if (lowerUri.endsWith('.gif')) mimeType = 'image/gif';
+            else if (lowerUri.endsWith('.webp')) mimeType = 'image/webp';
+            else if (lowerUri.endsWith('.heic')) mimeType = 'image/heic';
+          }
+
           if (fileSize > MAX_FILE_SIZE) {
             oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
           } else {
             validFiles.push({
               uri: asset.uri,
               name: fileName,
-              type: asset.type || 'image/jpeg',
+              type: mimeType,
               size: fileSize,
             });
           }
@@ -711,6 +721,15 @@ export default function JournalForm({
                       const fileUrl = file.isExisting
                         ? getAttachmentPublicUrl(file.uri)
                         : file.uri;
+
+                      console.log('[JournalForm] Rendering attachment:', {
+                        index,
+                        isExisting: file.isExisting,
+                        originalUri: file.uri,
+                        fileUrl,
+                        fileType: file.type,
+                        fileName: file.name
+                      });
 
                       return (
                         <View key={index} style={styles.attachmentThumbnailWrapper}>

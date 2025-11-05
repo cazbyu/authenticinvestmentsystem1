@@ -28,7 +28,11 @@ export default function AttachmentThumbnail({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const isImage = fileType.startsWith('image/');
+  const isImage = fileType?.startsWith('image/');
+
+  React.useEffect(() => {
+    console.log('[AttachmentThumbnail] Props:', { uri, fileType, fileName, isImage });
+  }, [uri, fileType, fileName]);
 
   const sizeStyles = {
     small: { width: 48, height: 48 },
