@@ -1,6 +1,18 @@
 import { supabase } from './supabase';
 import { formatLocalDate, getWeekStart, getWeekEnd } from './dateUtils';
 
+export interface ReflectionAttachment {
+  id: string;
+  reflection_id: string;
+  user_id: string;
+  file_name: string;
+  file_path: string;
+  file_type: string;
+  file_size: number;
+  created_at: string;
+  public_url?: string;
+}
+
 export interface ReflectionWithRelations {
   id: string;
   user_id: string;
@@ -17,6 +29,7 @@ export interface ReflectionWithRelations {
   domains?: Array<{ id: string; name: string; color?: string }>;
   keyRelationships?: Array<{ id: string; name: string }>;
   notes?: Array<{ id: string; content: string; created_at: string; parent_type?: string }>;
+  attachments?: ReflectionAttachment[];
 }
 
 /**
@@ -606,5 +619,101 @@ export async function archiveReflection(
   } catch (error) {
     console.error('Error archiving reflection:', error);
     return false;
+  }
+}
+
+/**
+ * Fetches attachments for a reflection
+ */
+export async function fetchReflectionAttachments(
+  reflectionId: string
+): Promise<ReflectionAttachment[]> {
+  try {
+    const { data, error } = await supabase
+      .from('0008-ap-reflection-attachments')
+      .select('*')
+      .eq('reflection_id', reflectionId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    if (!data) return [];
+
+    const attachmentsWithUrls = data.map((attachment) => ({
+      ...attachment,
+      public_url: getAttachmentPublicUrl(attachment.file_path),
+    }));
+
+    return attachmentsWithUrls;
+  } catch (error) {
+    console.error('Error fetching reflection attachments:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetches only image attachments for a reflection
+ */
+export async function fetchReflectionImageAttachments(
+  reflectionId: string
+): Promise<ReflectionAttachment[]> {
+  try {
+    const attachments = await fetchReflectionAttachments(reflectionId);
+    return attachments.filter((attachment) =>
+      attachment.file_type.startsWith('image/')
+    );
+  } catch (error) {
+    console.error('Error fetching reflection image attachments:', error);
+    return [];
+  }
+}
+
+/**
+ * Generates a public URL for an attachment stored in Supabase Storage
+ */
+export function getAttachmentPublicUrl(filePath: string): string {
+  const { data } = supabase.storage
+    .from('0008-reflection-attachments')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
+
+/**
+ * Fetches attachments for multiple reflections in batch
+ */
+export async function fetchAttachmentsForReflections(
+  reflectionIds: string[]
+): Promise<Map<string, ReflectionAttachment[]>> {
+  try {
+    if (reflectionIds.length === 0) return new Map();
+
+    const { data, error } = await supabase
+      .from('0008-ap-reflection-attachments')
+      .select('*')
+      .in('reflection_id', reflectionIds)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    if (!data) return new Map();
+
+    const attachmentMap = new Map<string, ReflectionAttachment[]>();
+
+    data.forEach((attachment) => {
+      const reflectionId = attachment.reflection_id;
+      const attachmentWithUrl = {
+        ...attachment,
+        public_url: getAttachmentPublicUrl(attachment.file_path),
+      };
+
+      if (!attachmentMap.has(reflectionId)) {
+        attachmentMap.set(reflectionId, []);
+      }
+      attachmentMap.get(reflectionId)!.push(attachmentWithUrl);
+    });
+
+    return attachmentMap;
+  } catch (error) {
+    console.error('Error fetching attachments for reflections:', error);
+    return new Map();
   }
 }

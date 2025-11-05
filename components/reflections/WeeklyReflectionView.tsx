@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -17,9 +18,10 @@ import {
 } from '@/lib/weeklyReflectionData';
 import { WeeklyAggregationData, GoalActionSummary } from '@/types/reflections';
 import { Target, Users, Activity, CircleAlert as AlertCircle } from 'lucide-react-native';
-import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRange } from '@/lib/reflectionUtils';
+import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRange, ReflectionAttachment, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import ImageViewerModal from './ImageViewerModal';
 
 type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
 
@@ -30,6 +32,7 @@ interface TimelineItem {
   content?: string;
   date?: string;
   parent_type?: string;
+  attachments?: ReflectionAttachment[];
 }
 
 export default function WeeklyReflectionView() {
@@ -39,6 +42,9 @@ export default function WeeklyReflectionView() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<ReflectionAttachment[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [goalSummaries, setGoalSummaries] = useState<GoalActionSummary[]>([]);
   const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
@@ -136,6 +142,10 @@ export default function WeeklyReflectionView() {
     // Fetch reflections for the week
     const reflections = await fetchReflectionsByDateRange(user.id, weekStart, weekEnd);
 
+    // Fetch attachments for all reflections in batch
+    const reflectionIds = reflections.map((r) => r.id);
+    const attachmentsMap = await fetchAttachmentsForReflections(reflectionIds);
+
     // Fetch all notes for the week
     const { data: notesData, error: notesError } = await supabase
       .from('0008-ap-universal-notes-join')
@@ -162,6 +172,7 @@ export default function WeeklyReflectionView() {
       created_at: r.created_at,
       content: r.content,
       date: r.date,
+      attachments: attachmentsMap.get(r.id) || [],
     }));
 
     // Transform notes to timeline items
@@ -382,44 +393,90 @@ export default function WeeklyReflectionView() {
             <Text style={[styles.cardTitle, { color: colors.text }]}>This Week's Reflections and Notes</Text>
 
             <View style={styles.previousList}>
-              {timelineItems.map(item => (
-                <View
-                  key={`${item.type}-${item.id}`}
-                  style={[
-                    styles.previousCard,
-                    {
-                      backgroundColor: colors.background,
-                      borderColor: colors.border,
-                      borderLeftColor: getItemTypeBadgeColor(item.type),
-                      borderLeftWidth: 3,
-                    },
-                  ]}
-                >
-                  <View style={styles.reflectionHeader}>
-                    <Text style={[styles.previousWeek, { color: colors.text }]}>
-                      {new Date(item.created_at).toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true,
-                      })}
-                    </Text>
-                    <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
-                      <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+              {timelineItems.map(item => {
+                const imageAttachments = item.attachments?.filter((att) => att.file_type.startsWith('image/')) || [];
+
+                return (
+                  <View
+                    key={`${item.type}-${item.id}`}
+                    style={[
+                      styles.previousCard,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                        borderLeftColor: getItemTypeBadgeColor(item.type),
+                        borderLeftWidth: 3,
+                      },
+                    ]}
+                  >
+                    <View style={styles.reflectionHeader}>
+                      <Text style={[styles.previousWeek, { color: colors.text }]}>
+                        {new Date(item.created_at).toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        })}
+                      </Text>
+                      <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+                        <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+                      </View>
                     </View>
+                    <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={3}>
+                      {truncateContent(item.content || '')}
+                    </Text>
+
+                    {imageAttachments.length > 0 && (
+                      <View style={styles.imagePreviewContainer}>
+                        {imageAttachments.slice(0, 2).map((attachment, index) => (
+                          <TouchableOpacity
+                            key={attachment.id}
+                            onPress={() => {
+                              setSelectedImages(imageAttachments);
+                              setSelectedImageIndex(index);
+                              setImageViewerVisible(true);
+                            }}
+                            style={styles.imageThumbnail}
+                          >
+                            <Image
+                              source={{ uri: attachment.public_url }}
+                              style={styles.thumbnailImage}
+                              resizeMode="cover"
+                            />
+                          </TouchableOpacity>
+                        ))}
+                        {imageAttachments.length > 2 && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              setSelectedImages(imageAttachments);
+                              setSelectedImageIndex(2);
+                              setImageViewerVisible(true);
+                            }}
+                            style={[styles.imageThumbnail, styles.moreImagesThumbnail]}
+                          >
+                            <View style={styles.moreImagesOverlay}>
+                              <Text style={styles.moreImagesText}>+{imageAttachments.length - 2}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
                   </View>
-                  <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={3}>
-                    {truncateContent(item.content || '')}
-                  </Text>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </View>
         )}
       </View>
 
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        images={selectedImages}
+        initialIndex={selectedImageIndex}
+        onClose={() => setImageViewerVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -688,5 +745,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 8,
+  },
+  imageThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  moreImagesThumbnail: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });

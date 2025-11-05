@@ -7,11 +7,13 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { ReflectionWithRelations } from '@/lib/reflectionUtils';
+import { ReflectionWithRelations, ReflectionAttachment, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import ImageViewerModal from './ImageViewerModal';
 
 interface ReflectionHistoryViewProps {
   onReflectionPress?: (reflection: ReflectionWithRelations) => void;
@@ -29,6 +31,7 @@ interface TimelineItem {
   roles?: Array<{ id: string; label: string; color?: string }>;
   domains?: Array<{ id: string; name: string; color?: string }>;
   keyRelationships?: Array<{ id: string; name: string }>;
+  attachments?: ReflectionAttachment[];
 }
 
 export default function ReflectionHistoryView({ onReflectionPress }: ReflectionHistoryViewProps) {
@@ -38,6 +41,9 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<ReflectionAttachment[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const PAGE_SIZE = 50;
 
   useEffect(() => {
@@ -81,6 +87,10 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
 
       if (reflectionsError) throw reflectionsError;
 
+      // Fetch attachments for all reflections in batch
+      const reflectionIds = reflectionsData?.map((r) => r.id) || [];
+      const attachmentsMap = await fetchAttachmentsForReflections(reflectionIds);
+
       // Fetch related data for each reflection
       const reflectionsWithRelations: TimelineItem[] = reflectionsData
         ? await Promise.all(
@@ -91,12 +101,15 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
                 fetchReflectionKeyRelationships(reflection.id),
               ]);
 
+              const attachments = attachmentsMap.get(reflection.id) || [];
+
               return {
                 ...reflection,
                 type: 'reflection' as TimelineItemType,
                 roles: rolesData,
                 domains: domainsData,
                 keyRelationships: keyRelsData,
+                attachments,
               };
             })
           )
@@ -289,42 +302,87 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
     return renderNoteCard(item);
   };
 
-  const renderReflectionCard = (item: TimelineItem) => (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-      onPress={() => onReflectionPress?.(item)}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={[styles.dateText, { color: colors.text }]}>
-          {formatDateTime(item.date || '', item.created_at)}
+  const handleImagePress = (images: ReflectionAttachment[], index: number) => {
+    setSelectedImages(images);
+    setSelectedImageIndex(index);
+    setImageViewerVisible(true);
+  };
+
+  const renderReflectionCard = (item: TimelineItem) => {
+    const imageAttachments = item.attachments?.filter((att) => att.file_type.startsWith('image/')) || [];
+
+    return (
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        onPress={() => onReflectionPress?.(item)}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={[styles.dateText, { color: colors.text }]}>
+            {formatDateTime(item.date || '', item.created_at)}
+          </Text>
+          <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+            <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+          </View>
+        </View>
+        <Text style={[styles.contentPreview, { color: colors.textSecondary }]} numberOfLines={2}>
+          {truncateContent(item.content || '')}
         </Text>
-        <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
-          <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
-        </View>
-      </View>
-      <Text style={[styles.contentPreview, { color: colors.textSecondary }]} numberOfLines={2}>
-        {truncateContent(item.content || '')}
-      </Text>
-      {(item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0) ? (
-        <View style={styles.tagsRow}>
-          {item.roles?.slice(0, 2).map((role) => (
-            <View key={`role-${role.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
-              <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {role.label}
-              </Text>
-            </View>
-          ))}
-          {item.domains?.slice(0, 2).map((domain) => (
-            <View key={`domain-${domain.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
-              <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {domain.name}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </TouchableOpacity>
-  );
+
+        {imageAttachments.length > 0 && (
+          <View style={styles.imagePreviewContainer}>
+            {imageAttachments.slice(0, 2).map((attachment, index) => (
+              <TouchableOpacity
+                key={attachment.id}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleImagePress(imageAttachments, index);
+                }}
+                style={styles.imageThumbnail}
+              >
+                <Image
+                  source={{ uri: attachment.public_url }}
+                  style={styles.thumbnailImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ))}
+            {imageAttachments.length > 2 && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleImagePress(imageAttachments, 2);
+                }}
+                style={[styles.imageThumbnail, styles.moreImagesThumbnail]}
+              >
+                <View style={styles.moreImagesOverlay}>
+                  <Text style={styles.moreImagesText}>+{imageAttachments.length - 2}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {(item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0) ? (
+          <View style={styles.tagsRow}>
+            {item.roles?.slice(0, 2).map((role) => (
+              <View key={`role-${role.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
+                <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {role.label}
+                </Text>
+              </View>
+            ))}
+            {item.domains?.slice(0, 2).map((domain) => (
+              <View key={`domain-${domain.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
+                <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {domain.name}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
 
   const renderNoteCard = (item: TimelineItem) => (
     <View
@@ -390,6 +448,13 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         contentContainerStyle={styles.listContent}
+      />
+
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        images={selectedImages}
+        initialIndex={selectedImageIndex}
+        onClose={() => setImageViewerVisible(false)}
       />
     </View>
   );
@@ -514,5 +579,41 @@ const styles = StyleSheet.create({
   footerLoader: {
     paddingVertical: 20,
     alignItems: 'center',
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    marginTop: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  imageThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  moreImagesThumbnail: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
