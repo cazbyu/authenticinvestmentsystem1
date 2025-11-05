@@ -7,7 +7,7 @@
     - Allowed MIME types: images, PDFs, and common document types
 
   2. New Tables
-    - `0008-reflection-attachments`
+    - `0008-ap-reflection-attachments`
       - `id` (uuid, primary key)
       - `reflection_id` (uuid, foreign key to reflections)
       - `user_id` (uuid, not null)
@@ -39,7 +39,7 @@ ON CONFLICT (id) DO UPDATE SET
   allowed_mime_types = ARRAY['image/*', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/plain'];
 
 -- Create reflection attachments table
-CREATE TABLE IF NOT EXISTS "0008-reflection-attachments" (
+CREATE TABLE IF NOT EXISTS "0008-ap-reflection-attachments" (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   reflection_id uuid NOT NULL REFERENCES "0008-ap-reflections"(id) ON DELETE CASCADE,
   user_id uuid NOT NULL,
@@ -51,23 +51,23 @@ CREATE TABLE IF NOT EXISTS "0008-reflection-attachments" (
 );
 
 -- Enable RLS
-ALTER TABLE "0008-reflection-attachments" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "0008-ap-reflection-attachments" ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for reflection attachments
 CREATE POLICY "Users can view own reflection attachments"
-  ON "0008-reflection-attachments"
+  ON "0008-ap-reflection-attachments"
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can insert own reflection attachments"
-  ON "0008-reflection-attachments"
+  ON "0008-ap-reflection-attachments"
   FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete own reflection attachments"
-  ON "0008-reflection-attachments"
+  ON "0008-ap-reflection-attachments"
   FOR DELETE
   TO authenticated
   USING (auth.uid() = user_id);
@@ -107,7 +107,10 @@ CREATE POLICY "Public read access to reflection attachments"
 
 -- Create index for better performance
 CREATE INDEX IF NOT EXISTS idx_reflection_attachments_reflection_id
-  ON "0008-reflection-attachments"(reflection_id);
+  ON "0008-ap-reflection-attachments"(reflection_id);
 
 CREATE INDEX IF NOT EXISTS idx_reflection_attachments_user_id
-  ON "0008-reflection-attachments"(user_id);
+  ON "0008-ap-reflection-attachments"(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_reflection_attachments_reflection_user
+  ON "0008-ap-reflection-attachments"(reflection_id, user_id);
