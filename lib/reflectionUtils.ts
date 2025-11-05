@@ -630,7 +630,7 @@ export async function fetchReflectionAttachments(
 ): Promise<ReflectionAttachment[]> {
   try {
     const { data, error } = await supabase
-      .from('0008-ap-reflection-attachments')
+      .from('0008-reflection-attachments')
       .select('*')
       .eq('reflection_id', reflectionId)
       .order('created_at', { ascending: true });
@@ -688,7 +688,7 @@ export async function fetchAttachmentsForReflections(
     if (reflectionIds.length === 0) return new Map();
 
     const { data, error } = await supabase
-      .from('0008-ap-reflection-attachments')
+      .from('0008-reflection-attachments')
       .select('*')
       .in('reflection_id', reflectionIds)
       .order('created_at', { ascending: true });
