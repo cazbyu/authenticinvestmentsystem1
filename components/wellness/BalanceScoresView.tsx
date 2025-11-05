@@ -7,6 +7,7 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 
 const BalanceWheelChart = lazy(() => import('./BalanceWheelChart').then(module => ({ default: module.BalanceWheelChart })));
 const BalanceBarChart = lazy(() => import('./BalanceBarChart').then(module => ({ default: module.BalanceBarChart })));
+const BalancePieChart = lazy(() => import('./BalancePieChart').then(module => ({ default: module.BalancePieChart })));
 
 interface Domain {
   id: string;
@@ -25,7 +26,7 @@ interface BalanceScoresViewProps {
 }
 
 export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
-  const [activeChartView, setActiveChartView] = useState<'wheel' | 'bar'>('wheel');
+  const [activeChartView, setActiveChartView] = useState<'wheel' | 'bar' | 'pie'>('wheel');
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'all'>('week');
   const [calculationMode, setCalculationMode] = useState<'count' | 'score'>('count');
   const [domainScores, setDomainScores] = useState<DomainScore[]>([]);
@@ -293,6 +294,14 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
               Bar Graph
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chartToggleButton, activeChartView === 'pie' && styles.activeChartToggle]}
+            onPress={() => setActiveChartView('pie')}
+          >
+            <Text style={[styles.chartToggleText, activeChartView === 'pie' && styles.activeChartToggleText]}>
+              Pie Chart
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.timeRangeGroup}>
@@ -356,7 +365,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
               <BalanceWheelChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
             </ChartErrorBoundary>
           </Suspense>
-        ) : (
+        ) : activeChartView === 'bar' ? (
           <Suspense fallback={
             <View style={styles.chartLoadingContainer}>
               <ActivityIndicator size="large" color="#0078d4" />
@@ -365,6 +374,17 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
           }>
             <ChartErrorBoundary>
               <BalanceBarChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
+            </ChartErrorBoundary>
+          </Suspense>
+        ) : (
+          <Suspense fallback={
+            <View style={styles.chartLoadingContainer}>
+              <ActivityIndicator size="large" color="#0078d4" />
+              <Text style={styles.chartLoadingText}>Loading chart...</Text>
+            </View>
+          }>
+            <ChartErrorBoundary>
+              <BalancePieChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
             </ChartErrorBoundary>
           </Suspense>
         )}
