@@ -163,14 +163,31 @@ export default function JournalForm({
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const attachments = data.map((att: any) => ({
-          id: att.id,
-          uri: att.file_path,
-          name: att.file_name,
-          type: att.file_type,
-          size: att.file_size,
-          isExisting: true,
-        }));
+        const attachments = data.map((att: any) => {
+          // Ensure we have a proper MIME type
+          let fileType = att.file_type;
+          if (!fileType || !fileType.includes('/')) {
+            // Fallback: determine MIME type from file extension
+            const fileName = att.file_name.toLowerCase();
+            if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) fileType = 'image/jpeg';
+            else if (fileName.endsWith('.png')) fileType = 'image/png';
+            else if (fileName.endsWith('.gif')) fileType = 'image/gif';
+            else if (fileName.endsWith('.webp')) fileType = 'image/webp';
+            else if (fileName.endsWith('.heic')) fileType = 'image/heic';
+            else if (fileName.endsWith('.pdf')) fileType = 'application/pdf';
+            else if (fileName.endsWith('.txt')) fileType = 'text/plain';
+            else fileType = 'application/octet-stream';
+          }
+
+          return {
+            id: att.id,
+            uri: att.file_path,
+            name: att.file_name,
+            type: fileType,
+            size: att.file_size,
+            isExisting: true,
+          };
+        });
         setAttachedFiles(attachments);
       }
     } catch (error) {
@@ -721,15 +738,6 @@ export default function JournalForm({
                       const fileUrl = file.isExisting
                         ? getAttachmentPublicUrl(file.uri)
                         : file.uri;
-
-                      console.log('[JournalForm] Rendering attachment:', {
-                        index,
-                        isExisting: file.isExisting,
-                        originalUri: file.uri,
-                        fileUrl,
-                        fileType: file.type,
-                        fileName: file.name
-                      });
 
                       return (
                         <View key={index} style={styles.attachmentThumbnailWrapper}>
