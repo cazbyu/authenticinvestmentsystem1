@@ -11,7 +11,18 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { X, Paperclip, Calendar as CalendarIcon, Bold, Italic, AlignCenter, List, ListOrdered, Image as ImageIcon, File } from 'lucide-react-native';
+import {
+  X,
+  Paperclip,
+  Calendar as CalendarIcon,
+  Bold,
+  Italic,
+  AlignCenter,
+  List,
+  ListOrdered,
+  Image as ImageIcon,
+  File
+} from 'lucide-react-native';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import { getAttachmentPublicUrl } from '@/lib/reflectionUtils';
 import { Calendar } from 'react-native-calendars';
