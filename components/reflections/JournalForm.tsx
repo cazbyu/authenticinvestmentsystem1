@@ -51,6 +51,7 @@ interface JournalFormProps {
   onClose: () => void;
   onSaveSuccess?: () => void;
   onActionSelected?: (action: ActionType, data: ActionData) => void;
+  openedFromJournal?: boolean;
 }
 
 type ActionType = 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'followUp';
@@ -69,6 +70,7 @@ export default function JournalForm({
   onClose,
   onSaveSuccess,
   onActionSelected,
+  openedFromJournal = false,
 }: JournalFormProps) {
   const { colors, isDarkMode } = useTheme();
 
@@ -616,6 +618,15 @@ export default function JournalForm({
           </View>
         ) : (
           <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+            {/* Journal Tab Message */}
+            {openedFromJournal && mode === 'edit' && (
+              <View style={styles.journalMessage}>
+                <Text style={styles.journalMessageText}>
+                  You are updating a reflection. Your changes will be saved and it will remain in your Journal with the updated information.
+                </Text>
+              </View>
+            )}
+
             {/* Reflection Content */}
             <View style={styles.section}>
               <Text style={styles.label}>Reflection</Text>
@@ -1012,6 +1023,19 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     },
     contentContainer: {
       padding: 16,
+    },
+    journalMessage: {
+      backgroundColor: '#ede9fe',
+      borderLeftWidth: 4,
+      borderLeftColor: '#8b5cf6',
+      padding: 12,
+      marginBottom: 16,
+      borderRadius: 8,
+    },
+    journalMessageText: {
+      fontSize: 14,
+      color: '#5b21b6',
+      lineHeight: 20,
     },
     section: {
       marginBottom: 24,

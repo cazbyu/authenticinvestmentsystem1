@@ -13,6 +13,8 @@ import { ManageRolesContent } from '@/components/settings/ManageRolesContent';
 import { EditRoleModal } from '@/components/settings/EditRoleModal';
 import { EditKRModal } from '@/components/settings/EditKRModal';
 import { JournalView } from '@/components/journal/JournalView';
+import JournalForm from '@/components/reflections/JournalForm';
+import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
 import { getSupabaseClient } from '@/lib/supabase';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { Plus, Users, UserX, Ban, Menu, Edit2, Pencil } from 'lucide-react-native';
@@ -72,6 +74,8 @@ export default function Roles() {
   const [taskFormVisible, setTaskFormVisible] = useState(false);
   const [taskDetailVisible, setTaskDetailVisible] = useState(false);
   const [depositIdeaDetailVisible, setDepositIdeaDetailVisible] = useState(false);
+  const [reflectionFormVisible, setReflectionFormVisible] = useState(false);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
 
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -153,7 +157,7 @@ export default function Roles() {
     }
   }, [selectedRole, selectedKR, calculatePeriodScore]);
 
-  const handleJournalEntryPress = (entry: any) => {
+  const handleJournalEntryPress = async (entry: any) => {
     if (entry.source_type === 'task') {
       setSelectedTask(entry.source_data);
       setTaskDetailVisible(true);
@@ -165,6 +169,13 @@ export default function Roles() {
       };
       setEditingTask(editData);
       setTaskFormVisible(true);
+    } else if (entry.source_type === 'reflection') {
+      // Fetch full reflection data and open JournalForm
+      const reflection = await fetchReflectionById(entry.source_id);
+      if (reflection) {
+        setSelectedReflection(reflection);
+        setReflectionFormVisible(true);
+      }
     }
   };
 
@@ -1819,6 +1830,23 @@ export default function Roles() {
         onClose={() => setDepositIdeaDetailVisible(false)}
         onUpdate={handleUpdateDepositIdea}
         onCancel={handleCancelDepositIdea}
+      />
+      <JournalForm
+        visible={reflectionFormVisible}
+        mode={selectedReflection ? 'edit' : 'create'}
+        initialData={selectedReflection || undefined}
+        openedFromJournal={true}
+        onClose={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+        }}
+        onSaveSuccess={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+          if (selectedRole) {
+            fetchRoleTasks(selectedRole.id, activeView);
+          }
+        }}
       />
     </SafeAreaView>
   );

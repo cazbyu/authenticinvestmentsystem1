@@ -8,6 +8,8 @@ import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import JournalForm from '@/components/reflections/JournalForm';
+import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { BalanceScoresView } from '@/components/wellness/BalanceScoresView';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -50,6 +52,8 @@ export default function Wellness() {
   const [taskFormVisible, setTaskFormVisible] = useState(false);
   const [taskDetailVisible, setTaskDetailVisible] = useState(false);
   const [depositIdeaDetailVisible, setDepositIdeaDetailVisible] = useState(false);
+  const [reflectionFormVisible, setReflectionFormVisible] = useState(false);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
 
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -627,7 +631,7 @@ export default function Wellness() {
     setSelectedDomain(domain);
   }, []);
 
-  const handleJournalEntryPress = useCallback((entry: any) => {
+  const handleJournalEntryPress = useCallback(async (entry: any) => {
     if (entry.source_type === 'task') {
       setSelectedTask(entry.source_data);
       setTaskDetailVisible(true);
@@ -639,6 +643,13 @@ export default function Wellness() {
       };
       setEditingTask(editData);
       setTaskFormVisible(true);
+    } else if (entry.source_type === 'reflection') {
+      // Fetch full reflection data and open JournalForm
+      const reflection = await fetchReflectionById(entry.source_id);
+      if (reflection) {
+        setSelectedReflection(reflection);
+        setReflectionFormVisible(true);
+      }
     }
   }, []);
 
@@ -924,6 +935,24 @@ export default function Wellness() {
         onClose={() => setDepositIdeaDetailVisible(false)}
         onUpdate={handleUpdateDepositIdea}
         onCancel={handleCancelDepositIdea}
+      />
+
+      <JournalForm
+        visible={reflectionFormVisible}
+        mode={selectedReflection ? 'edit' : 'create'}
+        initialData={selectedReflection || undefined}
+        openedFromJournal={true}
+        onClose={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+        }}
+        onSaveSuccess={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+          if (selectedDomain) {
+            fetchDomainTasks(selectedDomain.id);
+          }
+        }}
       />
     </SafeAreaView>
   );

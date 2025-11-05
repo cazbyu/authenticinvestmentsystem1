@@ -6,14 +6,14 @@ import { calculateTaskPoints } from '@/lib/taskUtils';
 
 interface JournalEntry {
   id: string;
-  date: string; // completed_at (task) or withdrawn_at (withdrawal)
+  date: string; // completed_at (task) or withdrawn_at (withdrawal) or created_at (reflection)
   description: string;
-  type: 'deposit' | 'withdrawal';
+  type: 'deposit' | 'withdrawal' | 'reflection';
   amount: number; // deposit points or withdrawal amount
   balance: number; // running balance
   has_notes: boolean;
-  source_id: string; // task_id or withdrawal_id
-  source_type: 'task' | 'withdrawal';
+  source_id: string; // task_id or withdrawal_id or reflection_id
+  source_type: 'task' | 'withdrawal' | 'reflection';
   source_data?: any;
 }
 
@@ -346,7 +346,111 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       }
 
       // ---------------------------------------------------------
-      // 3) Sort & compute running balance
+      // 3) Reflections (don't affect balance)
+      // ---------------------------------------------------------
+      let reflectionsQuery = supabase
+        .from('0008-ap-reflections')
+        .select('id, content, date, created_at, reflection_type')
+        .eq('user_id', user.id)
+        .eq('archived', false);
+
+      if (dateFilter) {
+        reflectionsQuery = reflectionsQuery.gte('created_at', dateFilter);
+      }
+
+      const { data: reflectionsData, error: reflectionsError } = await reflectionsQuery;
+      if (reflectionsError) {
+        console.error('Reflections query error:', reflectionsError);
+        throw reflectionsError;
+      }
+
+      if (reflectionsData && reflectionsData.length) {
+        const rIds = reflectionsData.map((r: any) => r.id);
+
+        const [rRolesRes, rDomainsRes, rKeyRelsRes, rNotesRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id, role_id, role:0008-ap-roles(id,label)')
+            .in('parent_id', rIds)
+            .eq('parent_type', 'reflection'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
+            .in('parent_id', rIds)
+            .eq('parent_type', 'reflection'),
+          supabase
+            .from('0008-ap-universal-key-relationships-join')
+            .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
+            .in('parent_id', rIds)
+            .eq('parent_type', 'reflection'),
+          supabase
+            .from('0008-ap-universal-notes-join')
+            .select('parent_id, note:0008-ap-notes(id,content,created_at)')
+            .in('parent_id', rIds)
+            .eq('parent_type', 'reflection'),
+        ]);
+
+        const rRoles = rRolesRes.data ?? [];
+        const rDomains = rDomainsRes.data ?? [];
+        const rKeyRels = rKeyRelsRes.data ?? [];
+        const rNotes = rNotesRes.data ?? [];
+
+        // scope filter for reflections
+        let allowedRids = new Set(rIds);
+        if (scope.type !== 'user' && scope.id) {
+          if (scope.type === 'role') {
+            allowedRids = new Set(
+              rRoles
+                .filter((r: any) => r.role?.id === scope.id || r.role_id === scope.id)
+                .map((r: any) => r.parent_id)
+            );
+          } else if (scope.type === 'domain') {
+            allowedRids = new Set(
+              rDomains
+                .filter((d: any) => d.domain?.id === scope.id || d.domain_id === scope.id)
+                .map((d: any) => d.parent_id)
+            );
+          } else if (scope.type === 'key_relationship') {
+            allowedRids = new Set(
+              rKeyRels
+                .filter((k: any) => k.key_relationship?.id === scope.id || k.key_relationship_id === scope.id)
+                .map((k: any) => k.parent_id)
+            );
+          }
+        }
+
+        const rolesByR = groupByParentId(rRoles);
+        const domainsByR = groupByParentId(rDomains);
+        const keyRelsByR = groupByParentId(rKeyRels);
+        const notesByR = groupByParentId(rNotes);
+
+        for (const r of reflectionsData) {
+          if (!allowedRids.has(r.id)) continue;
+
+          const roles = (rolesByR.get(r.id) ?? []).map((rl: any) => rl.role).filter(Boolean);
+          const domains = (domainsByR.get(r.id) ?? []).map((d: any) => d.domain).filter(Boolean);
+          const keyRelationships = (keyRelsByR.get(r.id) ?? [])
+            .map((k: any) => k.key_relationship)
+            .filter(Boolean);
+          const notes = (notesByR.get(r.id) ?? []).map((n: any) => n.note).filter(Boolean);
+
+          journalEntries.push({
+            id: r.id,
+            date: r.created_at,
+            description: r.content.substring(0, 100) + (r.content.length > 100 ? '...' : ''),
+            type: 'reflection',
+            amount: 0, // reflections don't affect balance
+            balance: 0,
+            has_notes: notes.length > 0,
+            source_id: r.id,
+            source_type: 'reflection',
+            source_data: { ...r, roles, domains, keyRelationships, notes },
+          });
+        }
+      }
+
+      // ---------------------------------------------------------
+      // 4) Sort & compute running balance
       // ---------------------------------------------------------
       journalEntries.sort((a, b) => {
         const ta = new Date(a.date).getTime();
@@ -355,18 +459,21 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       });
 
       // compute balance across time (oldest->newest), then assign (newest-first view)
+      // NOTE: Reflections don't affect balance
       let runningBalance = 0;
       const chronological = [...journalEntries].reverse();
       chronological.forEach((e) => {
         if (e.type === 'deposit') runningBalance += e.amount;
-        else runningBalance -= e.amount;
+        else if (e.type === 'withdrawal') runningBalance -= e.amount;
+        // reflections don't affect balance
       });
 
       let current = runningBalance;
       journalEntries.forEach((e) => {
         e.balance = current;
         if (e.type === 'deposit') current -= e.amount;
-        else current += e.amount;
+        else if (e.type === 'withdrawal') current += e.amount;
+        // reflections don't affect balance
       });
 
       // Final abort check before setting state
@@ -553,7 +660,15 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
               <Text style={styles.cellDescription} numberOfLines={2}>
                 {entry.description}
               </Text>
-              <View style={styles.cellNotes}>{entry.has_notes && <FileText size={14} color="#6b7280" />}</View>
+              <View style={styles.cellNotes}>
+                {entry.type === 'reflection' ? (
+                  <View style={styles.reflectionBadge}>
+                    <Text style={styles.reflectionBadgeText}>R</Text>
+                  </View>
+                ) : entry.has_notes ? (
+                  <FileText size={14} color="#6b7280" />
+                ) : null}
+              </View>
               <Text style={styles.cellDeposit}>
                 {entry.type === 'deposit' ? `+${entry.amount.toFixed(1)}` : ''}
               </Text>
@@ -561,7 +676,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
                 {entry.type === 'withdrawal' ? entry.amount.toFixed(1) : ''}
               </Text>
               <Text style={[styles.cellBalance, { color: getBalanceColor(entry.balance) }]}>
-                {formatBalance(entry.balance)}
+                {entry.type === 'reflection' ? '—' : formatBalance(entry.balance)}
               </Text>
             </TouchableOpacity>
           ))
@@ -657,4 +772,19 @@ const styles = StyleSheet.create({
   loadingText: { color: '#6b7280', fontSize: 16 },
   emptyContainer: { padding: 40, alignItems: 'center' },
   emptyText: { color: '#6b7280', fontSize: 16, textAlign: 'center' },
+  reflectionBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#8b5cf6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#7c3aed',
+  },
+  reflectionBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
 });
