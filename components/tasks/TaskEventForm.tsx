@@ -295,17 +295,23 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
-          const { data: userProfile } = await supabase
+          const { data: userProfile, error: profileError } = await supabase
             .from('0008-ap-users')
             .select('hide_completed_task_warning')
             .eq('id', user.id)
             .maybeSingle();
 
-          if (!userProfile?.hide_completed_task_warning) {
+          // If the column doesn't exist or query fails, default to showing the warning
+          if (profileError) {
+            console.warn('Could not fetch completed task warning preference (column may not exist):', profileError.message);
+            setShowCompletedWarning(true);
+          } else if (!userProfile?.hide_completed_task_warning) {
             setShowCompletedWarning(true);
           }
         } catch (error) {
-          console.error('Error checking completed task warning preference:', error);
+          console.warn('Error checking completed task warning preference (non-critical):', error);
+          // Default to showing warning on any error - this is a non-critical preference
+          setShowCompletedWarning(true);
         }
       }
     };
@@ -752,13 +758,19 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         const supabase = getSupabaseClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await supabase
+          const { error: updateError } = await supabase
             .from('0008-ap-users')
             .update({ hide_completed_task_warning: true })
             .eq('id', user.id);
+
+          if (updateError) {
+            console.warn('Could not save warning preference (column may not exist):', updateError.message);
+            // Continue anyway - this is a non-critical preference
+          }
         }
       } catch (error) {
-        console.error('Error updating completed task warning preference:', error);
+        console.warn('Error updating completed task warning preference (non-critical):', error);
+        // Continue anyway - this is a non-critical preference
       }
     }
     setShowCompletedWarning(false);

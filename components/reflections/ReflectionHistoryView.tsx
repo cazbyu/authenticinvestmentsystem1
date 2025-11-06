@@ -375,24 +375,46 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
           </View>
         )}
 
-        {(item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0) ? (
-          <View style={styles.tagsRow}>
-            {item.roles?.slice(0, 2).map((role) => (
-              <View key={`role-${role.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
-                <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {role.label}
-                </Text>
+        <View style={styles.metadataContainer}>
+          {item.roles && item.roles.length > 0 && (
+            <View style={styles.metadataRow}>
+              <Text style={[styles.metadataLabel, { color: colors.textSecondary }]}>Roles:</Text>
+              <View style={styles.tagsRow}>
+                {item.roles.slice(0, 3).map((role) => (
+                  <View key={`role-${role.id}`} style={[styles.tag, styles.roleTag]}>
+                    <Text style={styles.tagText} numberOfLines={1}>
+                      {role.label}
+                    </Text>
+                  </View>
+                ))}
+                {item.roles.length > 3 && (
+                  <View style={[styles.tag, styles.moreTag]}>
+                    <Text style={styles.tagText}>+{item.roles.length - 3}</Text>
+                  </View>
+                )}
               </View>
-            ))}
-            {item.domains?.slice(0, 2).map((domain) => (
-              <View key={`domain-${domain.id}`} style={[styles.tag, { backgroundColor: colors.background }]}>
-                <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {domain.name}
-                </Text>
+            </View>
+          )}
+          {item.domains && item.domains.length > 0 && (
+            <View style={styles.metadataRow}>
+              <Text style={[styles.metadataLabel, { color: colors.textSecondary }]}>Domains:</Text>
+              <View style={styles.tagsRow}>
+                {item.domains.slice(0, 3).map((domain) => (
+                  <View key={`domain-${domain.id}`} style={[styles.tag, styles.domainTag]}>
+                    <Text style={styles.tagText} numberOfLines={1}>
+                      {domain.name}
+                    </Text>
+                  </View>
+                ))}
+                {item.domains.length > 3 && (
+                  <View style={[styles.tag, styles.moreTag]}>
+                    <Text style={styles.tagText}>+{item.domains.length - 3}</Text>
+                  </View>
+                )}
               </View>
-            ))}
-          </View>
-        ) : null}
+            </View>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -527,19 +549,48 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 8,
   },
+  metadataContainer: {
+    marginTop: 8,
+    gap: 6,
+  },
+  metadataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metadataLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    minWidth: 50,
+  },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
+    gap: 4,
+    flex: 1,
   },
   tag: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 2,
     borderRadius: 12,
+    borderWidth: 1,
+  },
+  roleTag: {
+    backgroundColor: '#fce7f3',
+    borderColor: '#f3e8ff',
+  },
+  domainTag: {
+    backgroundColor: '#fed7aa',
+    borderColor: '#fdba74',
+  },
+  moreTag: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 8,
+    fontWeight: '500',
+    color: '#374151',
   },
   notesSection: {
     marginTop: 8,

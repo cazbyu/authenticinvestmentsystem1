@@ -22,7 +22,7 @@ export function DraggableFab({
   onPress,
   children,
   style,
-  size = 48,
+  size = 24,
   backgroundColor
 }: DraggableFabProps) {
   const { colors } = useTheme();
