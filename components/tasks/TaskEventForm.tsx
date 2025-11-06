@@ -13,7 +13,10 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { X, Calendar as CalendarIcon, Repeat } from 'lucide-react-native';
+import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { Platform } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
@@ -23,6 +26,8 @@ import { RecurrenceDropdown } from './RecurrenceDropdown';
 import { CustomRecurrenceModal } from './CustomRecurrenceModal';
 import DelegateModal from './DelegateModal';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import { uploadNoteAttachment, saveNoteAttachmentMetadata, fetchNoteAttachments, deleteNoteAttachment, getNoteAttachmentSignedUrl } from '@/lib/noteAttachmentUtils';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'depositIdea' | 'withdrawal';
@@ -190,6 +195,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [delegates, setDelegates] = useState<Delegate[]>([]);
   const [showDelegateModal, setShowDelegateModal] = useState(false);
   const [userId, setUserId] = useState<string>('');
+
+  // Attachment state
+  const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
+  const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
+  const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
 
 
   // Helper function to get next 15-minute interval + 15 min buffer
@@ -396,7 +406,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     setCycleWeeks(fakeWeeks);
   };
 
-  const loadInitialData = () => {
+  const loadInitialData = async () => {
     if (!initialData) return;
 
     // Handle notes - can be string or array of note objects
@@ -410,6 +420,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     }
 
     setExistingNotes(notesArray);
+
+    // Load attachments for existing notes
+    if (notesArray.length > 0) {
+      await loadAttachmentsForExistingNotes(notesArray);
+    }
 
     // Check if there are active goals associated with this task
     const hasActiveGoals = initialData.goals && Array.isArray(initialData.goals) && initialData.goals.length > 0;
@@ -449,6 +464,189 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     };
 
     setFormData(newFormData);
+  };
+
+  const loadAttachmentsForExistingNotes = async (notes: Array<{id: string; content: string; created_at: string}>) => {
+    try {
+      const attachmentsMap = new Map<string, any[]>();
+
+      for (const note of notes) {
+        const attachments = await fetchNoteAttachments(note.id);
+        if (attachments.length > 0) {
+          const formattedAttachments = attachments.map(att => ({
+            id: att.id,
+            uri: att.public_url,
+            filePath: att.file_path,
+            name: att.file_name,
+            type: att.file_type,
+            size: att.file_size,
+            isExisting: true,
+            noteId: note.id,
+          }));
+          attachmentsMap.set(note.id, formattedAttachments);
+        }
+      }
+
+      setNoteAttachmentsMap(attachmentsMap);
+    } catch (error) {
+      console.error('Error loading note attachments:', error);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 5 * 1024 * 1024;
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.fileSize || 0;
+          const fileName = asset.fileName || 'image.jpg';
+
+          let mimeType = 'image/jpeg';
+          if (asset.uri) {
+            const lowerUri = asset.uri.toLowerCase();
+            if (lowerUri.endsWith('.png')) mimeType = 'image/png';
+            else if (lowerUri.endsWith('.gif')) mimeType = 'image/gif';
+            else if (lowerUri.endsWith('.webp')) mimeType = 'image/webp';
+            else if (lowerUri.endsWith('.heic')) mimeType = 'image/heic';
+          }
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: mimeType,
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 5 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+
+        setShowAttachmentPicker(false);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 5 * 1024 * 1024;
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.size || 0;
+          const fileName = asset.name;
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.mimeType || 'application/octet-stream',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 5 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+
+        setShowAttachmentPicker(false);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const handleRemoveAttachment = async (index: number) => {
+    const fileToRemove = attachedFiles[index];
+
+    if (fileToRemove.isExisting && fileToRemove.id && fileToRemove.noteId) {
+      try {
+        const success = await deleteNoteAttachment(fileToRemove.id, fileToRemove.filePath);
+        if (!success) {
+          Alert.alert('Error', 'Failed to delete attachment');
+          return;
+        }
+
+        // Update the noteAttachmentsMap
+        const noteAttachments = noteAttachmentsMap.get(fileToRemove.noteId) || [];
+        const updatedNoteAttachments = noteAttachments.filter(att => att.id !== fileToRemove.id);
+        const newMap = new Map(noteAttachmentsMap);
+        if (updatedNoteAttachments.length > 0) {
+          newMap.set(fileToRemove.noteId, updatedNoteAttachments);
+        } else {
+          newMap.delete(fileToRemove.noteId);
+        }
+        setNoteAttachmentsMap(newMap);
+      } catch (error) {
+        console.error('Error deleting attachment:', error);
+        Alert.alert('Error', 'Failed to delete attachment');
+        return;
+      }
+    }
+
+    const newFiles = attachedFiles.filter((_, i) => i !== index);
+    setAttachedFiles(newFiles);
+  };
+
+  const uploadFileToStorage = async (file: any, userId: string): Promise<string | null> => {
+    try {
+      let fileData: any;
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      } else {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      }
+
+      const filePath = await uploadNoteAttachment(fileData, file.name, file.type, userId);
+      return filePath;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    }
   };
 
   const handleCalendarOpen = (mode: 'due' | 'start' | 'end' | 'withdrawal') => {
@@ -820,6 +1018,25 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           });
 
         if (noteJoinError) throw noteJoinError;
+
+        // Upload attachments for the new note
+        if (attachedFiles.length > 0) {
+          const uploadPromises = attachedFiles.map(async (file) => {
+            const filePath = await uploadFileToStorage(file, user.id);
+            if (filePath) {
+              await saveNoteAttachmentMetadata(
+                noteData.id,
+                user.id,
+                file.name,
+                filePath,
+                file.type,
+                file.size
+              );
+            }
+          });
+
+          await Promise.all(uploadPromises);
+        }
       }
 
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
@@ -1329,27 +1546,63 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
           {/* Notes */}
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
+            <View style={styles.notesHeader}>
+              <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
+              <TouchableOpacity
+                style={styles.attachmentButton}
+                onPress={() => setShowAttachmentPicker(true)}
+              >
+                <Paperclip size={20} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
 
             {/* Display existing notes in stacked format */}
             {existingNotes.length > 0 && (
               <View style={styles.existingNotesContainer}>
-                {existingNotes.map((note) => (
-                  <View key={note.id} style={styles.existingNoteItem}>
-                    <Text style={[styles.existingNoteContent, { color: colors.text }]}>{note.content}</Text>
-                    <Text style={[styles.existingNoteDate, { color: colors.textSecondary }]}>
-                      {new Date(note.created_at).toLocaleDateString('en-US', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                      })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                      })})
-                    </Text>
-                  </View>
-                ))}
+                {existingNotes.map((note) => {
+                  const noteAttachments = noteAttachmentsMap.get(note.id) || [];
+                  return (
+                    <View key={note.id} style={styles.existingNoteItem}>
+                      <Text style={[styles.existingNoteContent, { color: colors.text }]}>{note.content}</Text>
+                      <Text style={[styles.existingNoteDate, { color: colors.textSecondary }]}>
+                        {new Date(note.created_at).toLocaleDateString('en-US', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        })})
+                      </Text>
+                      {noteAttachments.length > 0 && (
+                        <View style={styles.noteAttachmentsContainer}>
+                          <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
+                            Attachments ({noteAttachments.length})
+                          </Text>
+                          <View style={styles.attachmentsGrid}>
+                            {noteAttachments.map((file, index) => (
+                              <View key={index} style={styles.attachmentThumbnailWrapper}>
+                                <AttachmentThumbnail
+                                  uri={file.uri}
+                                  fileType={file.type}
+                                  fileName={file.name}
+                                  size="small"
+                                />
+                                <Text
+                                  style={[styles.thumbnailFileName, { color: colors.text }]}
+                                  numberOfLines={1}
+                                >
+                                  {file.name}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             )}
 
@@ -1363,6 +1616,39 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               multiline
               numberOfLines={3}
             />
+
+            {/* Attached Files Display for New Note */}
+            {attachedFiles.length > 0 && (
+              <View style={styles.attachmentsContainer}>
+                <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
+                  Attachments ({attachedFiles.length})
+                </Text>
+                <View style={styles.attachmentsGrid}>
+                  {attachedFiles.map((file, index) => (
+                    <View key={index} style={styles.attachmentThumbnailWrapper}>
+                      <AttachmentThumbnail
+                        uri={file.uri}
+                        fileType={file.type}
+                        fileName={file.name}
+                        size="medium"
+                      />
+                      <TouchableOpacity
+                        style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                        onPress={() => handleRemoveAttachment(index)}
+                      >
+                        <X size={14} color="#ffffff" />
+                      </TouchableOpacity>
+                      <Text
+                        style={[styles.thumbnailFileName, { color: colors.text }]}
+                        numberOfLines={1}
+                      >
+                        {file.name}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -1532,6 +1818,43 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         existingDelegates={delegates}
         userId={userId}
       />
+
+      {/* Attachment Picker Modal */}
+      <Modal
+        visible={showAttachmentPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAttachmentPicker(false)}
+      >
+        <View style={styles.attachmentPickerOverlay}>
+          <View style={[styles.attachmentPickerContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.attachmentPickerHeader}>
+              <Text style={[styles.attachmentPickerTitle, { color: colors.text }]}>Add Attachment</Text>
+              <TouchableOpacity onPress={() => setShowAttachmentPicker(false)}>
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={[styles.attachmentOption, { borderColor: colors.border }]}
+              onPress={handlePickImage}
+            >
+              <ImageIcon size={24} color={colors.primary} />
+              <Text style={[styles.attachmentOptionText, { color: colors.text }]}>
+                Choose Image
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.attachmentOption, { borderColor: colors.border }]}
+              onPress={handlePickDocument}
+            >
+              <File size={24} color={colors.primary} />
+              <Text style={[styles.attachmentOptionText, { color: colors.text }]}>
+                Choose Document
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2138,5 +2461,93 @@ const styles = StyleSheet.create({
   changeDelegateText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  notesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  attachmentButton: {
+    padding: 8,
+  },
+  attachmentsContainer: {
+    marginTop: 12,
+  },
+  attachmentsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  attachmentsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  attachmentThumbnailWrapper: {
+    width: 80,
+    alignItems: 'center',
+    gap: 4,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  thumbnailFileName: {
+    fontSize: 10,
+    textAlign: 'center',
+    width: '100%',
+  },
+  attachmentPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentPickerContent: {
+    borderRadius: 12,
+    padding: 16,
+    width: '90%',
+    maxWidth: 400,
+  },
+  attachmentPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  attachmentPickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  attachmentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginVertical: 8,
+    gap: 12,
+  },
+  attachmentOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  noteAttachmentsContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
   },
 });
