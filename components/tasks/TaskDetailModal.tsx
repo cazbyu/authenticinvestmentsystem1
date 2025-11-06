@@ -6,6 +6,9 @@ import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
 import { fetchAttachmentsForNotes } from '@/lib/noteAttachmentUtils';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import AttachmentBadge from '../attachments/AttachmentBadge';
+import ImageViewerModal from '../reflections/ImageViewerModal';
+import { Linking, Image } from 'react-native';
 
 interface TaskDetailModalProps {
   visible: boolean;
@@ -26,6 +29,9 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
   const [taskNotes, setTaskNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<any[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -213,23 +219,56 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
                       </Text>
                       {hasAttachments && (
                         <View style={styles.noteAttachmentsContainer}>
-                          <Text style={styles.attachmentsLabel}>
-                            Attachments ({noteAttachments.length})
-                          </Text>
+                          <View style={styles.attachmentsHeader}>
+                            <AttachmentBadge count={noteAttachments.length} size="small" />
+                          </View>
                           <View style={styles.attachmentsGrid}>
-                            {noteAttachments.map((file, idx) => (
-                              <View key={idx} style={styles.attachmentThumbnailWrapper}>
-                                <AttachmentThumbnail
-                                  uri={file.public_url || file.uri}
-                                  fileType={file.file_type || file.type}
-                                  fileName={file.file_name || file.name}
-                                  size="small"
-                                />
-                                <Text style={styles.thumbnailFileName} numberOfLines={1}>
-                                  {file.file_name || file.name}
-                                </Text>
+                            {noteAttachments.slice(0, 4).map((file, idx) => {
+                              const isImage = file.file_type?.startsWith('image/');
+                              return (
+                                <TouchableOpacity
+                                  key={idx}
+                                  style={styles.attachmentThumbnailWrapper}
+                                  onPress={() => {
+                                    if (isImage) {
+                                      const imageAttachments = noteAttachments.filter(f => f.file_type?.startsWith('image/'));
+                                      const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                                      setSelectedImages(imageAttachments);
+                                      setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                                      setImageViewerVisible(true);
+                                    } else {
+                                      Linking.openURL(file.public_url || file.uri);
+                                    }
+                                  }}
+                                  activeOpacity={0.7}
+                                >
+                                  {isImage ? (
+                                    <Image
+                                      source={{ uri: file.public_url || file.uri }}
+                                      style={styles.thumbnailImage}
+                                      resizeMode="cover"
+                                    />
+                                  ) : (
+                                    <View style={styles.documentThumbnail}>
+                                      <AttachmentThumbnail
+                                        uri={file.public_url || file.uri}
+                                        fileType={file.file_type || file.type}
+                                        fileName={file.file_name || file.name}
+                                        size="small"
+                                      />
+                                    </View>
+                                  )}
+                                  <Text style={styles.thumbnailFileName} numberOfLines={1}>
+                                    {file.file_name || file.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                            {noteAttachments.length > 4 && (
+                              <View style={styles.moreAttachmentsIndicator}>
+                                <Text style={styles.moreAttachmentsText}>+{noteAttachments.length - 4}</Text>
                               </View>
-                            ))}
+                            )}
                           </View>
                         </View>
                       )}
@@ -292,6 +331,14 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Image Viewer Modal */}
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        images={selectedImages}
+        initialIndex={selectedImageIndex}
+        onClose={() => setImageViewerVisible(false)}
+      />
     </Modal>
   );
 }
@@ -396,6 +443,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },
+  attachmentsHeader: {
+    marginBottom: 8,
+  },
   attachmentsLabel: {
     fontSize: 12,
     fontWeight: '600',
@@ -408,14 +458,41 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   attachmentThumbnailWrapper: {
-    width: 60,
+    width: 70,
     alignItems: 'center',
     gap: 4,
+  },
+  thumbnailImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  documentThumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   thumbnailFileName: {
     fontSize: 9,
     textAlign: 'center',
     width: '100%',
+    color: '#6b7280',
+  },
+  moreAttachmentsIndicator: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreAttachmentsText: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#6b7280',
   },
   recurrenceHeader: {

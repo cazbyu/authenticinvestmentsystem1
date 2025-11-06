@@ -16,7 +16,7 @@ import { Calendar } from 'react-native-calendars';
 import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { Platform } from 'react-native';
+import { Platform, Image, Linking } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
@@ -27,6 +27,8 @@ import { CustomRecurrenceModal } from './CustomRecurrenceModal';
 import DelegateModal from './DelegateModal';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import AttachmentBadge from '../attachments/AttachmentBadge';
+import ImageViewerModal from '../reflections/ImageViewerModal';
 import { uploadNoteAttachment, saveNoteAttachmentMetadata, fetchNoteAttachments, deleteNoteAttachment, getNoteAttachmentSignedUrl } from '@/lib/noteAttachmentUtils';
 
 // ------------ Types & Models ------------
@@ -200,6 +202,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
   const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<any[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
 
   // Helper function to get next 15-minute interval + 15 min buffer
@@ -1577,26 +1582,61 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                       </Text>
                       {noteAttachments.length > 0 && (
                         <View style={styles.noteAttachmentsContainer}>
-                          <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
-                            Attachments ({noteAttachments.length})
-                          </Text>
+                          <View style={styles.existingAttachmentsHeader}>
+                            <AttachmentBadge count={noteAttachments.length} size="small" />
+                          </View>
                           <View style={styles.attachmentsGrid}>
-                            {noteAttachments.map((file, index) => (
-                              <View key={index} style={styles.attachmentThumbnailWrapper}>
-                                <AttachmentThumbnail
-                                  uri={file.uri}
-                                  fileType={file.type}
-                                  fileName={file.name}
-                                  size="small"
-                                />
-                                <Text
-                                  style={[styles.thumbnailFileName, { color: colors.text }]}
-                                  numberOfLines={1}
+                            {noteAttachments.slice(0, 4).map((file, index) => {
+                              const isImage = file.type?.startsWith('image/');
+                              return (
+                                <TouchableOpacity
+                                  key={index}
+                                  style={styles.attachmentThumbnailWrapper}
+                                  onPress={() => {
+                                    if (isImage) {
+                                      const imageAttachments = noteAttachments.filter(f => f.type?.startsWith('image/'));
+                                      const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                                      setSelectedImages(imageAttachments);
+                                      setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                                      setImageViewerVisible(true);
+                                    } else {
+                                      Linking.openURL(file.uri);
+                                    }
+                                  }}
+                                  activeOpacity={0.7}
                                 >
-                                  {file.name}
+                                  {isImage ? (
+                                    <Image
+                                      source={{ uri: file.uri }}
+                                      style={styles.existingThumbnailImage}
+                                      resizeMode="cover"
+                                    />
+                                  ) : (
+                                    <View style={styles.existingDocumentThumbnail}>
+                                      <AttachmentThumbnail
+                                        uri={file.uri}
+                                        fileType={file.type}
+                                        fileName={file.name}
+                                        size="small"
+                                      />
+                                    </View>
+                                  )}
+                                  <Text
+                                    style={[styles.thumbnailFileName, { color: colors.text }]}
+                                    numberOfLines={1}
+                                  >
+                                    {file.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                            {noteAttachments.length > 4 && (
+                              <View style={styles.moreAttachmentsIndicator}>
+                                <Text style={[styles.moreAttachmentsText, { color: colors.textSecondary }]}>
+                                  +{noteAttachments.length - 4}
                                 </Text>
                               </View>
-                            ))}
+                            )}
                           </View>
                         </View>
                       )}
@@ -1855,6 +1895,14 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           </View>
         </View>
       </Modal>
+
+      {/* Image Viewer Modal */}
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        images={selectedImages}
+        initialIndex={selectedImageIndex}
+        onClose={() => setImageViewerVisible(false)}
+      />
     </View>
   );
 }
@@ -2549,5 +2597,34 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
+  },
+  existingAttachmentsHeader: {
+    marginBottom: 8,
+  },
+  existingThumbnailImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  existingDocumentThumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreAttachmentsIndicator: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreAttachmentsText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
