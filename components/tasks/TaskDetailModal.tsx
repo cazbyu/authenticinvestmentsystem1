@@ -4,6 +4,8 @@ import { X, CreditCard as Edit, UserX, Ban, Repeat } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
+import { fetchAttachmentsForNotes } from '@/lib/noteAttachmentUtils';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 
 interface TaskDetailModalProps {
   visible: boolean;
@@ -14,9 +16,16 @@ interface TaskDetailModalProps {
   onCancel: (task: Task) => void;
 }
 
+interface Note {
+  id: string;
+  content: string;
+  created_at: string;
+}
+
 export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, onCancel }: TaskDetailModalProps) {
-  const [taskNotes, setTaskNotes] = useState([]);
+  const [taskNotes, setTaskNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -46,6 +55,13 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
 
       const notes = data?.map(item => item.note).filter(Boolean) || [];
       setTaskNotes(notes);
+
+      // Fetch attachments for all notes
+      if (notes.length > 0) {
+        const noteIds = notes.map(note => note.id);
+        const attachmentsMap = await fetchAttachmentsForNotes(noteIds);
+        setNoteAttachmentsMap(attachmentsMap);
+      }
     } catch (error) {
       console.error('Error fetching task notes:', error);
       Alert.alert('Error', (error as Error).message);
@@ -171,22 +187,55 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
                 <Text style={styles.detailValue}>Loading notes...</Text>
               ) : (
                 <View style={styles.notesContainer}>
-                  {taskNotes.map((note, index) => (
+                  {taskNotes.map((note, index) => {
+                    const noteAttachments = noteAttachmentsMap.get(note.id) || [];
+                    const hasContent = note.content && note.content.trim();
+                    const hasAttachments = noteAttachments.length > 0;
+
+                    // Only show notes that have content or attachments
+                    if (!hasContent && !hasAttachments) return null;
+
+                    return (
                     <View key={note.id} style={styles.noteItem}>
-                      <Text style={styles.noteContent}>{note.content}</Text>
+                      {hasContent && (
+                        <Text style={styles.noteContent}>{note.content}</Text>
+                      )}
                       <Text style={styles.noteDate}>
-                        {new Date(note.created_at).toLocaleDateString('en-US', { 
-                          day: '2-digit', 
-                          month: 'short', 
-                          year: 'numeric' 
-                        })} ({new Date(note.created_at).toLocaleTimeString('en-US', { 
-                          hour: 'numeric', 
-                          minute: '2-digit', 
-                          hour12: true 
+                        {new Date(note.created_at).toLocaleDateString('en-US', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
                         })})
                       </Text>
+                      {hasAttachments && (
+                        <View style={styles.noteAttachmentsContainer}>
+                          <Text style={styles.attachmentsLabel}>
+                            Attachments ({noteAttachments.length})
+                          </Text>
+                          <View style={styles.attachmentsGrid}>
+                            {noteAttachments.map((file, idx) => (
+                              <View key={idx} style={styles.attachmentThumbnailWrapper}>
+                                <AttachmentThumbnail
+                                  uri={file.public_url || file.uri}
+                                  fileType={file.file_type || file.type}
+                                  fileName={file.file_name || file.name}
+                                  size="small"
+                                />
+                                <Text style={styles.thumbnailFileName} numberOfLines={1}>
+                                  {file.file_name || file.name}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
                     </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -340,6 +389,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     fontStyle: 'italic',
+  },
+  noteAttachmentsContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  attachmentsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  attachmentsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  attachmentThumbnailWrapper: {
+    width: 60,
+    alignItems: 'center',
+    gap: 4,
+  },
+  thumbnailFileName: {
+    fontSize: 9,
+    textAlign: 'center',
+    width: '100%',
+    color: '#6b7280',
   },
   recurrenceHeader: {
     flexDirection: 'row',
