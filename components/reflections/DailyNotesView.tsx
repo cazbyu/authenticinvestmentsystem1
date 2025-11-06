@@ -22,6 +22,16 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 
 type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
 
+interface ParentItemData {
+  id: string;
+  title?: string;
+  completed_at?: string;
+  archived?: boolean;
+  is_urgent?: boolean;
+  is_important?: boolean;
+  type?: string;
+}
+
 interface TimelineItem {
   id: string;
   type: TimelineItemType;
@@ -29,13 +39,17 @@ interface TimelineItem {
   content?: string;
   date?: string;
   parent_type?: string;
+  parentItem?: ParentItemData;
+  isActive?: boolean;
+  priorityColor?: string;
 }
 
 interface DailyNotesViewProps {
   onReflectionPress?: (reflection: ReflectionWithRelations) => void;
+  onNotePress?: (item: TimelineItem) => void;
 }
 
-export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProps) {
+export default function DailyNotesView({ onReflectionPress, onNotePress }: DailyNotesViewProps) {
   const { colors } = useTheme();
   const [dayRange, setDayRange] = useState(getDayDateRange());
   const [aggregationData, setAggregationData] = useState<DailyAggregationData | null>(null);
@@ -135,6 +149,7 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
     const { data: notesData, error: notesError } = await supabase
       .from('0008-ap-universal-notes-join')
       .select(`
+        parent_id,
         parent_type,
         note:0008-ap-notes(
           id,
@@ -150,6 +165,44 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
       console.error('Error fetching today notes:', notesError);
     }
 
+    // Get unique parent IDs by type
+    const taskParentIds = notesData?.filter((n: any) => n.parent_type === 'task').map((n: any) => n.parent_id) || [];
+    const depositIdeaIds = notesData?.filter((n: any) => n.parent_type === 'depositIdea').map((n: any) => n.parent_id) || [];
+    const withdrawalIds = notesData?.filter((n: any) => n.parent_type === 'withdrawal').map((n: any) => n.parent_id) || [];
+
+    // Fetch parent item data
+    const parentItemsMap = new Map<string, ParentItemData>();
+
+    if (taskParentIds.length > 0) {
+      const { data: tasksData } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, title, completed_at, is_urgent, is_important, type')
+        .in('id', taskParentIds);
+      tasksData?.forEach((task: any) => {
+        parentItemsMap.set(task.id, task);
+      });
+    }
+
+    if (depositIdeaIds.length > 0) {
+      const { data: depositIdeasData } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .select('id, title, archived')
+        .in('id', depositIdeaIds);
+      depositIdeasData?.forEach((di: any) => {
+        parentItemsMap.set(di.id, di);
+      });
+    }
+
+    if (withdrawalIds.length > 0) {
+      const { data: withdrawalsData } = await supabase
+        .from('0008-ap-withdrawals')
+        .select('id, title')
+        .in('id', withdrawalIds);
+      withdrawalsData?.forEach((w: any) => {
+        parentItemsMap.set(w.id, { ...w, completed_at: new Date().toISOString() });
+      });
+    }
+
     // Transform reflections to timeline items
     const reflectionItems: TimelineItem[] = reflections.map(r => ({
       id: r.id,
@@ -159,17 +212,55 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
       date: r.date,
     }));
 
-    // Transform notes to timeline items
+    // Transform notes to timeline items with parent item data
     const noteItems: TimelineItem[] = notesData
       ? notesData
           .filter((item: any) => item.note && item.note.id)
-          .map((item: any) => ({
-            id: item.note.id,
-            type: (item.parent_type || 'note') as TimelineItemType,
-            content: item.note.content,
-            created_at: item.note.created_at,
-            parent_type: item.parent_type,
-          }))
+          .map((item: any) => {
+            const parentItem = parentItemsMap.get(item.parent_id);
+            let type = item.parent_type || 'note';
+
+            // If parent is a task, determine if it's task or event
+            if (item.parent_type === 'task' && parentItem?.type) {
+              type = parentItem.type;
+            }
+
+            // Determine if item is active
+            let isActive = false;
+            let priorityColor = undefined;
+
+            if (parentItem) {
+              if (item.parent_type === 'task') {
+                isActive = !parentItem.completed_at;
+                if (isActive) {
+                  // Calculate priority color
+                  if (parentItem.is_urgent && parentItem.is_important) {
+                    priorityColor = '#ef4444';
+                  } else if (!parentItem.is_urgent && parentItem.is_important) {
+                    priorityColor = '#10b981';
+                  } else if (parentItem.is_urgent && !parentItem.is_important) {
+                    priorityColor = '#f59e0b';
+                  } else {
+                    priorityColor = '#6b7280';
+                  }
+                }
+              } else if (item.parent_type === 'depositIdea') {
+                isActive = !parentItem.archived;
+                if (isActive) priorityColor = '#8b5cf6';
+              }
+            }
+
+            return {
+              id: item.note.id,
+              type: type as TimelineItemType,
+              content: item.note.content,
+              created_at: item.note.created_at,
+              parent_type: item.parent_type,
+              parentItem,
+              isActive,
+              priorityColor,
+            };
+          })
       : [];
 
     // Merge and sort by created_at
@@ -398,17 +489,20 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
 
             <View style={styles.notesList}>
               {timelineItems.map(item => (
-                <View
+                <TouchableOpacity
                   key={`${item.type}-${item.id}`}
                   style={[
                     styles.noteCard,
                     {
-                      backgroundColor: colors.background,
-                      borderColor: colors.border,
-                      borderLeftColor: getItemTypeBadgeColor(item.type),
+                      backgroundColor: item.isActive ? '#f3f4f6' : colors.background,
+                      borderColor: item.isActive && item.priorityColor ? item.priorityColor : colors.border,
+                      borderLeftColor: item.isActive && item.priorityColor ? item.priorityColor : getItemTypeBadgeColor(item.type),
                       borderLeftWidth: 3,
+                      borderWidth: item.isActive ? 2 : 1,
                     },
                   ]}
+                  onPress={() => onNotePress?.(item)}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.noteHeader}>
                     <Text style={[styles.noteDate, { color: colors.text }]}>
@@ -428,7 +522,7 @@ export default function DailyNotesView({ onReflectionPress }: DailyNotesViewProp
                   <Text style={[styles.notePreview, { color: colors.textSecondary }]} numberOfLines={3}>
                     {truncateContent(item.content || '')}
                   </Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>

@@ -10,6 +10,10 @@ import WeeklyReflectionView from '@/components/reflections/WeeklyReflectionView'
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 import JournalForm from '@/components/reflections/JournalForm';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import TaskDetailModal from '@/components/tasks/TaskDetailModal';
+import DepositIdeaDetailModal from '@/components/depositIdeas/DepositIdeaDetailModal';
+import ActionConfirmationDialog from '@/components/reflections/ActionConfirmationDialog';
+import ActionSelectionModal, { ActionType as ActionModalType } from '@/components/reflections/ActionSelectionModal';
 import { DraggableFab } from '@/components/DraggableFab';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
 
@@ -34,6 +38,13 @@ export default function ReflectionsScreen() {
   const [taskEventFormType, setTaskEventFormType] = useState<'task' | 'event' | 'depositIdea' | 'withdrawal'>('task');
   const [taskEventFormInitialData, setTaskEventFormInitialData] = useState<any>(null);
   const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
+  const [isActionConfirmationVisible, setIsActionConfirmationVisible] = useState(false);
+  const [isActionSelectionVisible, setIsActionSelectionVisible] = useState(false);
+  const [pendingReflection, setPendingReflection] = useState<ReflectionWithRelations | null>(null);
+  const [isTaskDetailModalVisible, setIsTaskDetailModalVisible] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isDepositIdeaModalVisible, setIsDepositIdeaModalVisible] = useState(false);
+  const [selectedDepositIdeaId, setSelectedDepositIdeaId] = useState<string | null>(null);
 
   useEffect(() => {
     loadActiveTab();
@@ -139,8 +150,68 @@ export default function ReflectionsScreen() {
   };
 
   const handleReflectionPress = (reflection: ReflectionWithRelations) => {
-    setSelectedReflection(reflection);
-    setIsJournalFormVisible(true);
+    setPendingReflection(reflection);
+    setIsActionConfirmationVisible(true);
+  };
+
+  const handleActionConfirmationYes = () => {
+    setIsActionConfirmationVisible(false);
+    setIsActionSelectionVisible(true);
+  };
+
+  const handleActionConfirmationNo = () => {
+    setIsActionConfirmationVisible(false);
+    if (pendingReflection) {
+      setSelectedReflection(pendingReflection);
+      setPendingReflection(null);
+      setIsJournalFormVisible(true);
+    }
+  };
+
+  const handleActionSelection = (action: ActionModalType) => {
+    if (!pendingReflection) return;
+
+    if (action === 'followUp') {
+      setIsActionSelectionVisible(false);
+      setSelectedReflection(pendingReflection);
+      setPendingReflection(null);
+      setIsJournalFormVisible(true);
+    } else {
+      const typeMapping: Record<Exclude<ActionModalType, 'followUp'>, 'task' | 'event' | 'depositIdea' | 'withdrawal'> = {
+        task: 'task',
+        event: 'event',
+        depositIdea: 'depositIdea',
+        withdrawal: 'withdrawal',
+      };
+
+      setTaskEventFormType(typeMapping[action]);
+      setTaskEventFormInitialData({
+        notes: pendingReflection.content || '',
+        selectedRoleIds: pendingReflection.roles?.map((r) => r.id) || [],
+        selectedDomainIds: pendingReflection.domains?.map((d) => d.id) || [],
+        selectedKeyRelationshipIds: pendingReflection.keyRelationships?.map((kr) => kr.id) || [],
+      });
+      setPendingReflection(null);
+      setIsActionSelectionVisible(false);
+      setIsTaskEventFormVisible(true);
+    }
+  };
+
+  const handleNoteCardPress = (item: any) => {
+    if (item.type === 'reflection') {
+      handleReflectionPress(item as ReflectionWithRelations);
+    } else if (item.isActive && item.parentItem) {
+      if (item.parent_type === 'task') {
+        setSelectedTaskId(item.parentItem.id);
+        setIsTaskDetailModalVisible(true);
+      } else if (item.parent_type === 'depositIdea') {
+        setSelectedDepositIdeaId(item.parentItem.id);
+        setIsDepositIdeaModalVisible(true);
+      }
+    } else if (!item.isActive || item.type === 'withdrawal') {
+      setSelectedReflection(item);
+      setIsJournalFormVisible(true);
+    }
   };
 
   const handleJournalFormClose = () => {
@@ -168,8 +239,8 @@ export default function ReflectionsScreen() {
       />
 
       <View style={styles.content}>
-        {activeTab === 'daily' && <DailyNotesView onReflectionPress={handleReflectionPress} />}
-        {activeTab === 'weekly' && <WeeklyReflectionView />}
+        {activeTab === 'daily' && <DailyNotesView onReflectionPress={handleReflectionPress} onNotePress={handleNoteCardPress} />}
+        {activeTab === 'weekly' && <WeeklyReflectionView onNotePress={handleNoteCardPress} />}
         {activeTab === 'reflectionHistory' && (
           <ReflectionHistoryView onReflectionPress={handleReflectionPress} />
         )}
@@ -207,6 +278,45 @@ export default function ReflectionsScreen() {
           }}
           onSubmitSuccess={handleTaskEventFormSuccess}
           onClose={handleTaskEventFormClose}
+        />
+      )}
+
+      <ActionConfirmationDialog
+        visible={isActionConfirmationVisible}
+        onYes={handleActionConfirmationYes}
+        onNo={handleActionConfirmationNo}
+        onClose={() => {
+          setIsActionConfirmationVisible(false);
+          setPendingReflection(null);
+        }}
+      />
+
+      <ActionSelectionModal
+        visible={isActionSelectionVisible}
+        onActionSelect={handleActionSelection}
+        onClose={() => {
+          setIsActionSelectionVisible(false);
+          setPendingReflection(null);
+        }}
+      />
+
+      {isTaskDetailModalVisible && selectedTaskId && (
+        <TaskDetailModal
+          taskId={selectedTaskId}
+          onClose={() => {
+            setIsTaskDetailModalVisible(false);
+            setSelectedTaskId(null);
+          }}
+        />
+      )}
+
+      {isDepositIdeaModalVisible && selectedDepositIdeaId && (
+        <DepositIdeaDetailModal
+          depositIdeaId={selectedDepositIdeaId}
+          onClose={() => {
+            setIsDepositIdeaModalVisible(false);
+            setSelectedDepositIdeaId(null);
+          }}
         />
       )}
     </SafeAreaView>
