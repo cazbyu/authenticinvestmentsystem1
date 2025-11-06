@@ -19,6 +19,10 @@ import {
 import { WeeklyAggregationData, GoalActionSummary } from '@/types/reflections';
 import { Target, Users, Activity, CircleAlert as AlertCircle } from 'lucide-react-native';
 import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRange, ReflectionAttachment, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
+import { fetchAttachmentsForNotes, NoteAttachment } from '@/lib/noteAttachmentUtils';
+import AttachmentBadge from '../attachments/AttachmentBadge';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import { Linking } from 'react-native';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import ImageViewerModal from './ImageViewerModal';
@@ -33,6 +37,7 @@ interface TimelineItem {
   date?: string;
   parent_type?: string;
   attachments?: ReflectionAttachment[];
+  noteAttachments?: NoteAttachment[];
 }
 
 export default function WeeklyReflectionView() {
@@ -165,6 +170,10 @@ export default function WeeklyReflectionView() {
       console.error('Error fetching week notes:', notesError);
     }
 
+    // Fetch attachments for all notes in batch
+    const noteIds = notesData?.filter((item: any) => item.note && item.note.id).map((item: any) => item.note.id) || [];
+    const noteAttachmentsMap = noteIds.length > 0 ? await fetchAttachmentsForNotes(noteIds) : new Map();
+
     // Transform reflections to timeline items
     const reflectionItems: TimelineItem[] = reflections.map(r => ({
       id: r.id,
@@ -185,6 +194,7 @@ export default function WeeklyReflectionView() {
             content: item.note.content,
             created_at: item.note.created_at,
             parent_type: item.parent_type,
+            noteAttachments: noteAttachmentsMap.get(item.note.id) || [],
           }))
       : [];
 
@@ -395,6 +405,9 @@ export default function WeeklyReflectionView() {
             <View style={styles.previousList}>
               {timelineItems.map(item => {
                 const imageAttachments = item.attachments?.filter((att) => att.file_type.startsWith('image/')) || [];
+                const noteAttachments = item.noteAttachments || [];
+                const allAttachments = [...imageAttachments, ...noteAttachments];
+                const allImageAttachments = allAttachments.filter((att) => att.file_type.startsWith('image/'));
 
                 return (
                   <View
@@ -420,21 +433,26 @@ export default function WeeklyReflectionView() {
                           hour12: true,
                         })}
                       </Text>
-                      <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
-                        <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+                      <View style={styles.headerRight}>
+                        {noteAttachments.length > 0 && (
+                          <AttachmentBadge count={noteAttachments.length} size="small" />
+                        )}
+                        <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+                          <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+                        </View>
                       </View>
                     </View>
                     <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={3}>
                       {truncateContent(item.content || '')}
                     </Text>
 
-                    {imageAttachments.length > 0 && (
+                    {allImageAttachments.length > 0 && (
                       <View style={styles.imagePreviewContainer}>
-                        {imageAttachments.slice(0, 2).map((attachment, index) => (
+                        {allImageAttachments.slice(0, 3).map((attachment, index) => (
                           <TouchableOpacity
                             key={attachment.id}
                             onPress={() => {
-                              setSelectedImages(imageAttachments);
+                              setSelectedImages(allImageAttachments);
                               setSelectedImageIndex(index);
                               setImageViewerVisible(true);
                             }}
@@ -447,20 +465,44 @@ export default function WeeklyReflectionView() {
                             />
                           </TouchableOpacity>
                         ))}
-                        {imageAttachments.length > 2 && (
+                        {allImageAttachments.length > 3 && (
                           <TouchableOpacity
                             onPress={() => {
-                              setSelectedImages(imageAttachments);
-                              setSelectedImageIndex(2);
+                              setSelectedImages(allImageAttachments);
+                              setSelectedImageIndex(3);
                               setImageViewerVisible(true);
                             }}
                             style={[styles.imageThumbnail, styles.moreImagesThumbnail]}
                           >
                             <View style={styles.moreImagesOverlay}>
-                              <Text style={styles.moreImagesText}>+{imageAttachments.length - 2}</Text>
+                              <Text style={styles.moreImagesText}>+{allImageAttachments.length - 3}</Text>
                             </View>
                           </TouchableOpacity>
                         )}
+                      </View>
+                    )}
+
+                    {noteAttachments.length > 0 && noteAttachments.some(att => !att.file_type.startsWith('image/')) && (
+                      <View style={styles.documentAttachmentsContainer}>
+                        {noteAttachments.filter(att => !att.file_type.startsWith('image/')).slice(0, 3).map((attachment) => (
+                          <TouchableOpacity
+                            key={attachment.id}
+                            onPress={() => {
+                              Linking.openURL(attachment.public_url || '');
+                            }}
+                            style={styles.documentAttachmentItem}
+                          >
+                            <AttachmentThumbnail
+                              uri={attachment.public_url || ''}
+                              fileType={attachment.file_type}
+                              fileName={attachment.file_name}
+                              size="small"
+                            />
+                            <Text style={[styles.documentFileName, { color: colors.text }]} numberOfLines={1}>
+                              {attachment.file_name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
                       </View>
                     )}
                   </View>
@@ -683,6 +725,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   tagBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -780,5 +827,25 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  documentAttachmentsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 8,
+  },
+  documentAttachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    maxWidth: '100%',
+  },
+  documentFileName: {
+    fontSize: 12,
+    flex: 1,
   },
 });
