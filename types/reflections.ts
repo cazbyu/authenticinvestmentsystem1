@@ -11,6 +11,11 @@ export interface Reflection {
   created_at: string;
   updated_at: string;
 
+  // AI-generated title fields
+  reflection_title?: string;
+  title_generated_at?: string;
+  title_generation_method?: 'ai' | 'manual';
+
   // Weekly reflection specific fields
   week_start_date?: string;
   week_end_date?: string;

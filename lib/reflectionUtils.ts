@@ -20,6 +20,9 @@ export interface ReflectionWithRelations {
   date: string;
   content: string;
   reflection_image?: string;
+  reflection_title?: string;
+  title_generated_at?: string;
+  title_generation_method?: 'ai' | 'manual';
   follow_up: boolean;
   follow_up_date?: string;
   archived: boolean;
@@ -403,6 +406,49 @@ export async function archiveOldReflections(userId: string): Promise<number> {
 }
 
 /**
+ * Generates an AI title for a reflection using the Edge Function
+ */
+async function generateReflectionTitle(
+  reflectionId: string,
+  content: string
+): Promise<void> {
+  try {
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      console.warn('No active session, skipping title generation');
+      return;
+    }
+
+    const apiUrl = `${supabaseUrl}/functions/v1/generate-reflection-title`;
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        reflectionId,
+        content,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Failed to generate reflection title:', errorData);
+      return;
+    }
+
+    const result = await response.json();
+    console.log('Reflection title generated successfully:', result.title);
+  } catch (error) {
+    console.error('Error generating reflection title:', error);
+  }
+}
+
+/**
  * Saves a reflection with its associations
  */
 export async function saveReflection(
@@ -487,6 +533,14 @@ export async function saveReflection(
         .insert(krJoins);
 
       if (krError) throw krError;
+    }
+
+    // Generate AI title asynchronously (non-blocking)
+    // This happens in the background and won't delay the user
+    if (reflection.id && content) {
+      generateReflectionTitle(reflection.id, content).catch((error) => {
+        console.error('Background title generation failed:', error);
+      });
     }
 
     return reflection.id;

@@ -122,7 +122,7 @@ export default function MonthlyIndexView({
             </View>
             <View style={styles.contentColumn}>
               <Text style={[styles.tableHeaderText, { color: colors.text }]}>
-                Items Imported or Created on this date Only (View)
+                Reflections & Daily Items
               </Text>
             </View>
           </View>
