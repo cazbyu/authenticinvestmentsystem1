@@ -80,8 +80,8 @@ export default function MonthlyCardsView({ onMonthPress }: MonthlyCardsViewProps
           },
         ]}
         onPress={() => onMonthPress(item.year, item.month, item.monthYear)}
-        onPressIn={() => setHoveredCardId(cardId)}
-        onPressOut={() => setHoveredCardId(null)}
+        onMouseEnter={() => setHoveredCardId(cardId)}
+        onMouseLeave={() => setHoveredCardId(null)}
         activeOpacity={0.7}
       >
         <View style={styles.cardContent}>
