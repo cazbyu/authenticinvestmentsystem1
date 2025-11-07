@@ -45,11 +45,12 @@ interface TimelineItem {
 }
 
 interface DailyNotesViewProps {
+  selectedDate?: string;
   onReflectionPress?: (reflection: ReflectionWithRelations) => void;
   onNotePress?: (item: TimelineItem) => void;
 }
 
-export default function DailyNotesView({ onReflectionPress, onNotePress }: DailyNotesViewProps) {
+export default function DailyNotesView({ selectedDate, onReflectionPress, onNotePress }: DailyNotesViewProps) {
   const { colors } = useTheme();
   const [dayRange, setDayRange] = useState(getDayDateRange());
   const [aggregationData, setAggregationData] = useState<DailyAggregationData | null>(null);
@@ -75,7 +76,7 @@ export default function DailyNotesView({ onReflectionPress, onNotePress }: Daily
       eventBus.off(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
       eventBus.off(EVENTS.REFLECTION_DELETED, handleReflectionChange);
     };
-  }, []);
+  }, [selectedDate]);
 
   const loadData = async () => {
     setLoading(true);
@@ -106,7 +107,7 @@ export default function DailyNotesView({ onReflectionPress, onNotePress }: Daily
       return;
     }
 
-    const range = getDayDateRange();
+    const range = selectedDate ? getDayDateRangeForDate(selectedDate) : getDayDateRange();
     setDayRange(range);
 
     console.log('[DailyNotes] Fetching data for date range:', {
@@ -132,18 +133,29 @@ export default function DailyNotesView({ onReflectionPress, onNotePress }: Daily
     setAggregationData(data);
   };
 
+  const getDayDateRangeForDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    return {
+      start: startOfDay.toISOString(),
+      end: endOfDay.toISOString(),
+    };
+  };
+
   const fetchTodayTimelineData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const today = formatLocalDate(new Date());
-    const reflections = await fetchReflectionsByDateRange(user.id, today, today);
+    const targetDate = selectedDate ? new Date(selectedDate) : new Date();
+    const dateString = formatLocalDate(targetDate);
+    const reflections = await fetchReflectionsByDateRange(user.id, dateString, dateString);
 
-    // Fetch all notes for today
-    const todayStart = new Date();
+    // Fetch all notes for the target date
+    const todayStart = new Date(targetDate);
     todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
+    const todayEnd = new Date(targetDate);
     todayEnd.setHours(23, 59, 59, 999);
 
     const { data: notesData, error: notesError } = await supabase
