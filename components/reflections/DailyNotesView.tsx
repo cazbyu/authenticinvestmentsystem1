@@ -169,18 +169,23 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
           created_at
         )
       `)
-      .eq('user_id', user.id)
-      .gte('created_at', todayStart.toISOString())
-      .lte('created_at', todayEnd.toISOString());
+      .eq('user_id', user.id);
+
+    // Filter notes by the created_at timestamp from the notes table
+    const filteredNotesData = notesData?.filter((item: any) => {
+      if (!item.note || !item.note.created_at) return false;
+      const noteDate = new Date(item.note.created_at);
+      return noteDate >= todayStart && noteDate <= todayEnd;
+    });
 
     if (notesError) {
       console.error('Error fetching today notes:', notesError);
     }
 
     // Get unique parent IDs by type
-    const taskParentIds = notesData?.filter((n: any) => n.parent_type === 'task').map((n: any) => n.parent_id) || [];
-    const depositIdeaIds = notesData?.filter((n: any) => n.parent_type === 'depositIdea').map((n: any) => n.parent_id) || [];
-    const withdrawalIds = notesData?.filter((n: any) => n.parent_type === 'withdrawal').map((n: any) => n.parent_id) || [];
+    const taskParentIds = filteredNotesData?.filter((n: any) => n.parent_type === 'task').map((n: any) => n.parent_id) || [];
+    const depositIdeaIds = filteredNotesData?.filter((n: any) => n.parent_type === 'depositIdea').map((n: any) => n.parent_id) || [];
+    const withdrawalIds = filteredNotesData?.filter((n: any) => n.parent_type === 'withdrawal').map((n: any) => n.parent_id) || [];
 
     // Fetch parent item data
     const parentItemsMap = new Map<string, ParentItemData>();
@@ -225,8 +230,8 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     }));
 
     // Transform notes to timeline items with parent item data
-    const noteItems: TimelineItem[] = notesData
-      ? notesData
+    const noteItems: TimelineItem[] = filteredNotesData
+      ? filteredNotesData
           .filter((item: any) => item.note && item.note.id)
           .map((item: any) => {
             const parentItem = parentItemsMap.get(item.parent_id);
@@ -337,8 +342,8 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   };
 
   const formatCurrentDate = () => {
-    const today = new Date();
-    return today.toLocaleDateString('en-US', {
+    const dateToFormat = selectedDate ? new Date(selectedDate) : new Date();
+    return dateToFormat.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
