@@ -47,7 +47,12 @@ export default function MonthlyIndexView({
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    // Parse YYYY-MM-DD format without timezone shifts
+    // When you do `new Date("2025-11-01")`, it creates a Date at midnight UTC
+    // which can shift to the previous day in western timezones.
+    // Instead, parse the components and create a Date in local time.
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',

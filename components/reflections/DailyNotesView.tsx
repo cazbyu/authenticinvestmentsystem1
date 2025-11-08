@@ -134,12 +134,39 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   };
 
   const getDayDateRangeForDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    // Instead of trying to calculate timezone offsets in the frontend,
+    // we'll use a wide UTC range that covers the entire day in any timezone.
+    // The database functions already handle timezone conversion correctly,
+    // so we just need to not filter out valid data.
+    //
+    // For a date like "2025-11-01", we want all items where:
+    // (created_at AT TIME ZONE 'America/Denver')::date = '2025-11-01'
+    //
+    // To achieve this, we'll create a range that covers Nov 1 in ALL timezones:
+    // Start: Nov 1 00:00 in UTC+14 (earliest timezone) = Oct 31 10:00 UTC
+    // End:   Nov 2 00:00 in UTC-12 (latest timezone) = Nov 2 12:00 UTC
+    //
+    // This ensures we don't accidentally filter out items that fall on the
+    // target date in the user's timezone but different date in UTC.
+
+    const [year, month, day] = dateString.split('-').map(Number);
+
+    // Start: previous day at 10:00 UTC (covers all of target day in earliest timezone)
+    const start = new Date(Date.UTC(year, month - 1, day - 1, 10, 0, 0));
+
+    // End: next day at 12:00 UTC (covers all of target day in latest timezone)
+    const end = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+
+    console.log('[DailyNotes] Date range calculation:', {
+      inputDate: dateString,
+      startUTC: start.toISOString(),
+      endUTC: end.toISOString(),
+      note: 'Wide range to ensure timezone coverage',
+    });
+
     return {
-      start: startOfDay.toISOString(),
-      end: endOfDay.toISOString(),
+      start: start.toISOString(),
+      end: end.toISOString(),
     };
   };
 
@@ -148,15 +175,21 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const targetDate = selectedDate ? new Date(selectedDate) : new Date();
-    const dateString = formatLocalDate(targetDate);
+    // Use the selectedDate if provided, otherwise use today
+    const dateString = selectedDate || formatLocalDate(new Date());
     const reflections = await fetchReflectionsByDateRange(user.id, dateString, dateString);
 
-    // Fetch all notes for the target date
-    const todayStart = new Date(targetDate);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(targetDate);
-    todayEnd.setHours(23, 59, 59, 999);
+    // Create a wide UTC range that covers the entire target day in all timezones
+    // This matches the logic in getDayDateRangeForDate
+    const [year, month, day] = dateString.split('-').map(Number);
+    const todayStart = new Date(Date.UTC(year, month - 1, day - 1, 10, 0, 0));
+    const todayEnd = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+
+    console.log('[DailyNotes] Fetching notes for date:', {
+      targetDate: dateString,
+      utcRangeStart: todayStart.toISOString(),
+      utcRangeEnd: todayEnd.toISOString(),
+    });
 
     const { data: notesData, error: notesError } = await supabase
       .from('0008-ap-universal-notes-join')
@@ -172,6 +205,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       .eq('user_id', user.id);
 
     // Filter notes by the created_at timestamp from the notes table
+    // Use a wide range to ensure we don't miss notes due to timezone differences
     const filteredNotesData = notesData?.filter((item: any) => {
       if (!item.note || !item.note.created_at) return false;
       const noteDate = new Date(item.note.created_at);
