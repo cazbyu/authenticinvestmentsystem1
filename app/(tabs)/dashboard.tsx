@@ -806,7 +806,7 @@ export default function Dashboard() {
             </ScrollView>
         }
       </View>
-      <DraggableFab onPress={() => setIsFormModalVisible(true)} size={56}>
+      <DraggableFab onPress={() => setIsFormModalVisible(true)} size={36}>
         <Plus size={24} color="#ffffff" />
       </DraggableFab>
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
