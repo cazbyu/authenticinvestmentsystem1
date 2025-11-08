@@ -248,7 +248,7 @@ export default function ReflectionsScreen() {
 
       <DraggableFab
         onPress={() => setIsJournalFormVisible(true)}
-        size={28}
+        size={36}
         backgroundColor={colors.primary}
       >
         <Text style={styles.fabText}>J</Text>

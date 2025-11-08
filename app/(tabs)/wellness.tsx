@@ -906,7 +906,7 @@ export default function Wellness() {
           setEditingTask(null);
           setTaskFormVisible(true);
         }
-      }}>
+      }} size={36}>
         <Plus size={24} color="#ffffff" />
       </DraggableFab>
 
