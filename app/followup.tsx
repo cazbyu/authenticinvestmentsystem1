@@ -103,45 +103,32 @@ export default function FollowUpScreen() {
     router.push('/reflections' as any);
   };
 
-  const handleMarkComplete = async (reflectionId: string) => {
-    Alert.alert(
-      'Mark as Complete',
-      'Do you want to clear the follow-up for this reflection?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Complete',
-          onPress: async () => {
-            try {
-              const supabase = getSupabaseClient();
-              const {
-                data: { user },
-              } = await supabase.auth.getUser();
-              if (!user) return;
+  const handleMarkComplete = async (followUpId: string) => {
+  Alert.alert('Mark as Complete', 'Do you want to clear the follow-up?', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Complete',
+      onPress: async () => {
+        try {
+          const supabase = getSupabaseClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return;
 
-              const { error } = await supabase
-                .from('0008-ap-reflections')
-                .update({
-                  follow_up: false,
-                  follow_up_date: null,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', reflectionId)
-                .eq('user_id', user.id);
+          const success = await markFollowUpDone(followUpId, user.id);
+          if (!success) throw new Error('Failed to update follow-up');
 
-              if (error) throw error;
-
-              eventBus.emit(EVENTS.REFLECTION_UPDATED);
-              Alert.alert('Success', 'Follow-up marked as complete');
-            } catch (error) {
-              console.error('Error marking follow-up complete:', error);
-              Alert.alert('Error', 'Failed to update follow-up');
-            }
-          },
-        },
-      ]
-    );
-  };
+          eventBus.emit(EVENTS.REFLECTION_UPDATED); // or create a dedicated FOLLOWUP_UPDATED if you prefer
+          Alert.alert('Success', 'Follow-up marked as complete');
+        } catch (error) {
+          console.error('Error marking follow-up complete:', error);
+          Alert.alert('Error', 'Failed to update follow-up');
+        }
+      },
+    },
+  ]);
+};
 
   const renderReflection = ({ item }: { item: ReflectionWithRelations }) => {
     const isOverdue = item.follow_up_date
