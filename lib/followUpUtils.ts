@@ -7,6 +7,7 @@ export interface FollowUpItem {
   parent_id: string;
   follow_up_date: string;
   status: 'pending' | 'done' | 'snoozed' | 'cancelled';
+  reason_type?: 'review' | 'decide' | 'check_outcome' | 'waiting_for' | 'other' | null;
   reason?: string | null;
   created_at: string;
   completed_at?: string | null;
