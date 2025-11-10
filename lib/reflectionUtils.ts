@@ -668,6 +668,31 @@ export async function updateReflection(
   } catch (error) {
     console.error('Error updating reflection:', error);
     return false;
+
+    // Clear existing follow-up join(s) for this reflection
+await supabase
+  .from('0008-ap-universal-follow-up-join')
+  .delete()
+  .eq('parent_type', 'reflection')
+  .eq('parent_id', reflectionId);
+
+// If follow-up is enabled, insert a new join
+if (followUp && followUpDate) {
+  const { error: followUpError } = await supabase
+    .from('0008-ap-universal-follow-up-join')
+    .insert({
+      user_id: userId,
+      parent_type: 'reflection',
+      parent_id: reflectionId,
+      follow_up_date: followUpDate,
+      status: 'pending',
+      reason_type: 'review', // or null if you prefer
+      reason: null,
+    });
+
+  if (followUpError) throw followUpError;
+}
+
   }
 }
 
