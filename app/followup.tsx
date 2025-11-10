@@ -261,10 +261,10 @@ export default function FollowUpScreen() {
         </View>
       ) : (
         <FlatList
-          data={reflections}
-          renderItem={renderReflection}
-          keyExtractor={(item) => item.id}
-          ListEmptyComponent={renderEmpty}
+  data={items}
+  renderItem={renderFollowUp}
+  keyExtractor={(item) => item.followUp.id}
+  ListEmptyComponent={renderEmpty}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
