@@ -13,7 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { fetchFollowUpReflections, ReflectionWithRelations } from '@/lib/reflectionUtils';
+import { fetchPendingReflectionFollowUps, markFollowUpDone, FollowUpItem } from '@/lib/followUpUtils';
+import { fetchReflectionById, ReflectionWithRelations } from '@/lib/reflectionUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { useRouter } from 'expo-router';
 import { Calendar, Check } from 'lucide-react-native';
@@ -21,7 +22,7 @@ import { Calendar, Check } from 'lucide-react-native';
 export default function FollowUpScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const [reflections, setReflections] = useState<ReflectionWithRelations[]>([]);
+  const [followUps, setFollowUps] = useState<Array<{ followUp: FollowUpItem; reflection: ReflectionWithRelations | null }>>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -44,23 +45,31 @@ export default function FollowUpScreen() {
   }, []);
 
   const fetchReflections = async () => {
-    setLoading(true);
-    try {
-      const supabase = getSupabaseClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+  setLoading(true);
+  try {
+    const supabase = getSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const data = await fetchFollowUpReflections(user.id);
-      setReflections(data);
-    } catch (error) {
-      console.error('Error fetching follow-up reflections:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    const followUpRows = await fetchPendingReflectionFollowUps(user.id);
+
+    const items = await Promise.all(
+      followUpRows.map(async (fu) => {
+        const reflection = await fetchReflectionById(fu.parent_id);
+        return { followUp: fu, reflection };
+      })
+    );
+
+    setFollowUps(items.filter((i) => i.reflection !== null));
+  } catch (error) {
+    console.error('Error fetching follow-up reflections:', error);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   const onRefresh = () => {
     setRefreshing(true);
