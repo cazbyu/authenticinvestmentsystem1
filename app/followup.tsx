@@ -144,71 +144,101 @@ export default function FollowUpScreen() {
   );
 };
 
-  const renderReflection = ({ item }: { item: ReflectionWithRelations }) => {
-    const isOverdue = item.follow_up_date
-      ? new Date(item.follow_up_date) < new Date()
-      : false;
+  const renderFollowUp = ({
+  item,
+}: {
+  item: FollowUpWithReflection;
+}) => {
+  const { followUp, reflection } = item;
+  const isOverdue = followUp.follow_up_date
+    ? new Date(followUp.follow_up_date) < new Date()
+    : false;
 
-    return (
-      <TouchableOpacity
-        style={[
-          styles.card,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-          isOverdue && { borderLeftColor: colors.warning, borderLeftWidth: 4 },
-        ]}
-        onPress={() => handleReflectionPress(item)}
-      >
-        <View style={styles.cardHeader}>
-          <View style={styles.dateContainer}>
-            <Calendar size={16} color={colors.primary} />
-            <Text style={[styles.followUpDate, { color: isOverdue ? colors.warning : colors.primary }]}>
-              {item.follow_up_date ? formatFollowUpDate(item.follow_up_date) : 'No date'}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.completeButton, { backgroundColor: colors.success }]}
-            onPress={() => handleMarkComplete(item.id)}
+  return (
+    <TouchableOpacity
+      style={[
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+        isOverdue && { borderLeftColor: colors.warning, borderLeftWidth: 4 },
+      ]}
+      onPress={() => handleReflectionPress(reflection)}
+    >
+      <View className={styles.cardHeader}>
+        <View style={styles.dateContainer}>
+          <Calendar size={16} color={colors.primary} />
+          <Text
+            style={[
+              styles.followUpDate,
+              { color: isOverdue ? colors.warning : colors.primary },
+            ]}
           >
-            <Check size={16} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={[styles.contentPreview, { color: colors.text }]} numberOfLines={3}>
-          {truncateContent(item.content)}
-        </Text>
-
-        <View style={styles.metaRow}>
-          <Text style={[styles.originalDate, { color: colors.textSecondary }]}>
-            Created: {formatOriginalDate(item.date, item.created_at)}
+            {followUp.follow_up_date
+              ? formatFollowUpDate(followUp.follow_up_date)
+              : 'No date'}
           </Text>
-          {isOverdue && (
-            <View style={[styles.overdueTag, { backgroundColor: colors.warning }]}>
-              <Text style={styles.overdueText}>Overdue</Text>
-            </View>
-          )}
         </View>
+        <TouchableOpacity
+          style={[styles.completeButton, { backgroundColor: colors.success }]}
+          onPress={() => handleMarkComplete(followUp.id)}
+        >
+          <Check size={16} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
 
-        {(item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0) ? (
-          <View style={styles.tagsRow}>
-            {item.roles?.slice(0, 2).map((role) => (
-              <View key={role.id} style={[styles.tag, { backgroundColor: colors.background }]}>
-                <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {role.label}
-                </Text>
-              </View>
-            ))}
-            {item.domains?.slice(0, 2).map((domain) => (
-              <View key={domain.id} style={[styles.tag, { backgroundColor: colors.background }]}>
-                <Text style={[styles.tagText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {domain.name}
-                </Text>
-              </View>
-            ))}
+      <Text
+        style={[styles.contentPreview, { color: colors.text }]}
+        numberOfLines={3}
+      >
+        {truncateContent(reflection.content)}
+      </Text>
+
+      <View style={styles.metaRow}>
+        <Text style={[styles.originalDate, { color: colors.textSecondary }]}>
+          Created: {formatOriginalDate(reflection.date, reflection.created_at)}
+        </Text>
+        {isOverdue && (
+          <View
+            style={[styles.overdueTag, { backgroundColor: colors.warning }]}
+          >
+            <Text style={styles.overdueText}>Overdue</Text>
           </View>
-        ) : null}
-      </TouchableOpacity>
-    );
-  };
+        )}
+      </View>
+
+      {(reflection.roles && reflection.roles.length > 0) ||
+      (reflection.domains && reflection.domains.length > 0) ? (
+        <View style={styles.tagsRow}>
+          {reflection.roles?.slice(0, 2).map((role) => (
+            <View
+              key={role.id}
+              style={[styles.tag, { backgroundColor: colors.background }]}
+            >
+              <Text
+                style={[styles.tagText, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {role.label}
+              </Text>
+            </View>
+          ))}
+          {reflection.domains?.slice(0, 2).map((domain) => (
+            <View
+              key={domain.id}
+              style={[styles.tag, { backgroundColor: colors.background }]}
+            >
+              <Text
+                style={[styles.tagText, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {domain.name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </TouchableOpacity>
+  );
+};
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
