@@ -1,5 +1,17 @@
 import { supabase } from './supabase';
 
+export interface FollowUpItem {
+  id: string;
+  user_id: string;
+  parent_type: 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'goal' | 'custom_goal' | '1y_goal';
+  parent_id: string;
+  follow_up_date: string;
+  status: 'pending' | 'done' | 'snoozed' | 'cancelled';
+  reason?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+}
+
 export async function fetchPendingFollowUps(userId: string): Promise<FollowUpItem[]> {
   const { data, error } = await supabase
     .from('0008-ap-universal-follow-up-join')
