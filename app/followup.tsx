@@ -112,31 +112,36 @@ export default function FollowUpScreen() {
     router.push('/reflections' as any);
   };
 
-  const handleMarkComplete = async (followUpId: string) => {
-  Alert.alert('Mark as Complete', 'Do you want to clear the follow-up?', [
-    { text: 'Cancel', style: 'cancel' },
-    {
-      text: 'Complete',
-      onPress: async () => {
-        try {
-          const supabase = getSupabaseClient();
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (!user) return;
+  const handleMarkComplete = (followUpId: string) => {
+  Alert.alert(
+    'Mark as Complete',
+    'Do you want to clear the follow-up for this item?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Complete',
+        onPress: async () => {
+          try {
+            const supabase = getSupabaseClient();
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
+            if (!user) return;
 
-          const success = await markFollowUpDone(followUpId, user.id);
-          if (!success) throw new Error('Failed to update follow-up');
+            const success = await markFollowUpDone(followUpId, user.id);
+            if (!success) throw new Error('Failed to update follow-up');
 
-          eventBus.emit(EVENTS.REFLECTION_UPDATED); // or create a dedicated FOLLOWUP_UPDATED if you prefer
-          Alert.alert('Success', 'Follow-up marked as complete');
-        } catch (error) {
-          console.error('Error marking follow-up complete:', error);
-          Alert.alert('Error', 'Failed to update follow-up');
-        }
+            await fetchReflections();
+            eventBus.emit(EVENTS.REFLECTION_UPDATED);
+            Alert.alert('Success', 'Follow-up marked as complete');
+          } catch (error) {
+            console.error('Error marking follow-up complete:', error);
+            Alert.alert('Error', 'Failed to update follow-up');
+          }
+        },
       },
-    },
-  ]);
+    ]
+  );
 };
 
   const renderReflection = ({ item }: { item: ReflectionWithRelations }) => {
