@@ -19,6 +19,11 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { useRouter } from 'expo-router';
 import { Calendar, Check } from 'lucide-react-native';
 
+type FollowUpWithReflection = {
+  followUp: FollowUpItem;
+  reflection: ReflectionWithRelations;
+};
+
 export default function FollowUpScreen() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -53,16 +58,20 @@ export default function FollowUpScreen() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const followUpRows = await fetchPendingReflectionFollowUps(user.id);
+    // 1) Get pending follow-ups for reflections from the universal table
+    const followUps = await fetchPendingReflectionFollowUps(user.id);
 
-    const items = await Promise.all(
-      followUpRows.map(async (fu) => {
-        const reflection = await fetchReflectionById(fu.parent_id);
-        return { followUp: fu, reflection };
-      })
-    );
+    // 2) For each follow-up row, fetch the associated reflection with relations
+    const itemsWithReflections: FollowUpWithReflection[] = [];
 
-    setFollowUps(items.filter((i) => i.reflection !== null));
+    for (const fu of followUps) {
+      const reflection = await fetchReflectionById(fu.parent_id);
+      if (reflection) {
+        itemsWithReflections.push({ followUp: fu, reflection });
+      }
+    }
+
+    setItems(itemsWithReflections);
   } catch (error) {
     console.error('Error fetching follow-up reflections:', error);
   } finally {
