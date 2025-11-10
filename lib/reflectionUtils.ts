@@ -484,6 +484,23 @@ export async function saveReflection(
     const reflection = newReflection;
     const reflectionError = insertError;
 
+    // After reflection is successfully created
+if (followUp && followUpDate) {
+  const { error: followUpError } = await supabase
+    .from('0008-ap-universal-follow-up-join')
+    .insert({
+      user_id: userId,
+      parent_type: 'reflection',
+      parent_id: reflection.id,
+      follow_up_date: followUpDate,
+      status: 'pending',
+      reason_type: 'review', // or null for now
+      reason: null,
+    });
+
+  if (followUpError) throw followUpError;
+}
+
     if (reflectionError) throw reflectionError;
     if (!reflection) throw new Error('Failed to create reflection');
 
