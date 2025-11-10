@@ -13,8 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { fetchPendingReflectionFollowUps, markFollowUpDone, FollowUpItem } from '@/lib/followUpUtils';
 import { fetchReflectionById, ReflectionWithRelations } from '@/lib/reflectionUtils';
+import { fetchPendingReflectionFollowUps, FollowUpItem, markFollowUpDone } from '@/lib/followUpUtils'; // whatever file name you used
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { useRouter } from 'expo-router';
 import { Calendar, Check } from 'lucide-react-native';
