@@ -10,14 +10,11 @@ import {
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import {
-  getDayDateRange,
-  fetchDailyAggregationData,
-} from '@/lib/weeklyReflectionData';
+import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
 import { DailyAggregationData } from '@/types/reflections';
 import { Target, Users, Activity, AlertCircle } from 'lucide-react-native';
 import { fetchReflectionsByDateRange, ReflectionWithRelations } from '@/lib/reflectionUtils';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
 type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
@@ -50,15 +47,22 @@ interface DailyNotesViewProps {
   onNotePress?: (item: TimelineItem) => void;
 }
 
+interface DailyRange {
+  start: string;
+  end: string;
+  dateString: string;
+}
+
 export default function DailyNotesView({ selectedDate, onReflectionPress, onNotePress }: DailyNotesViewProps) {
   const { colors } = useTheme();
-  const [dayRange, setDayRange] = useState(getDayDateRange());
   const [aggregationData, setAggregationData] = useState<DailyAggregationData | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
+
+  const normalizeDateInput = (value: string) => value.split('T')[0];
 
   useEffect(() => {
     loadData();
@@ -81,9 +85,12 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   const loadData = async () => {
     setLoading(true);
     try {
+      const inputDate = selectedDate || formatLocalDate(new Date());
+      const normalizedTargetDate = normalizeDateInput(inputDate);
+      const range = getDayDateRangeForDate(normalizedTargetDate);
       await Promise.all([
-        fetchDailyData(),
-        fetchTodayTimelineData(),
+        fetchDailyData(normalizedTargetDate, range, inputDate),
+        fetchTodayTimelineData(normalizedTargetDate, range),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -98,8 +105,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     await loadData();
     setRefreshing(false);
   };
-
-  const fetchDailyData = async () => {
+  const fetchDailyData = async (targetDate: string, range: DailyRange, originalInput: string) => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -107,17 +113,16 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       return;
     }
 
-    const range = selectedDate ? getDayDateRangeForDate(selectedDate) : getDayDateRange();
-    setDayRange(range);
-
     console.log('[DailyNotes] Fetching data for date range:', {
+      originalInput,
+      normalizedTargetDate: targetDate,
       start: range.start,
       end: range.end,
-      dateOnly: range.start.split('T')[0],
+      dateOnly: range.dateString,
       userId: user.id,
     });
 
-    const data = await fetchDailyAggregationData(user.id, range.start, range.end);
+    const data = await fetchDailyAggregationData(user.id, range.start, range.end, range.dateString);
 
     console.log('[DailyNotes] Data fetched:', {
       goalSummaries: data.goalSummaries.length,
@@ -133,32 +138,26 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     setAggregationData(data);
   };
 
-  const getDayDateRangeForDate = (dateString: string) => {
-    // Instead of trying to calculate timezone offsets in the frontend,
-    // we'll use a wide UTC range that covers the entire day in any timezone.
-    // The database functions already handle timezone conversion correctly,
-    // so we just need to not filter out valid data.
-    //
-    // For a date like "2025-11-01", we want all items where:
-    // (created_at AT TIME ZONE 'America/Denver')::date = '2025-11-01'
-    //
-    // To achieve this, we'll create a range that covers Nov 1 in ALL timezones:
-    // Start: Nov 1 00:00 in UTC+14 (earliest timezone) = Oct 31 10:00 UTC
-    // End:   Nov 2 00:00 in UTC-12 (latest timezone) = Nov 2 12:00 UTC
-    //
-    // This ensures we don't accidentally filter out items that fall on the
-    // target date in the user's timezone but different date in UTC.
+  const getDayDateRangeForDate = (dateString: string): DailyRange => {
+    const normalizedDate = dateString.split('T')[0];
+    const parsedDate = parseLocalDate(normalizedDate);
 
-    const [year, month, day] = dateString.split('-').map(Number);
+    if (Number.isNaN(parsedDate.getTime())) {
+      const fallback = new Date();
+      const fallbackDateString = formatLocalDate(fallback);
+      return getDayDateRangeForDate(fallbackDateString);
+    }
 
-    // Start: previous day at 10:00 UTC (covers all of target day in earliest timezone)
-    const start = new Date(Date.UTC(year, month - 1, day - 1, 10, 0, 0));
+    const year = parsedDate.getFullYear();
+    const monthIndex = parsedDate.getMonth();
+    const dayOfMonth = parsedDate.getDate();
 
-    // End: next day at 12:00 UTC (covers all of target day in latest timezone)
-    const end = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+    // Create a wide UTC range that safely covers the full target day
+    const start = new Date(Date.UTC(year, monthIndex, dayOfMonth - 1, 10, 0, 0));
+    const end = new Date(Date.UTC(year, monthIndex, dayOfMonth + 1, 12, 0, 0));
 
     console.log('[DailyNotes] Date range calculation:', {
-      inputDate: dateString,
+      inputDate: normalizedDate,
       startUTC: start.toISOString(),
       endUTC: end.toISOString(),
       note: 'Wide range to ensure timezone coverage',
@@ -167,26 +166,24 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     return {
       start: start.toISOString(),
       end: end.toISOString(),
+      dateString: formatLocalDate(parsedDate),
     };
   };
 
-  const fetchTodayTimelineData = async () => {
+  const fetchTodayTimelineData = async (targetDateString: string, range: DailyRange) => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Use the selectedDate if provided, otherwise use today
-    const dateString = selectedDate || formatLocalDate(new Date());
-    const reflections = await fetchReflectionsByDateRange(user.id, dateString, dateString);
+    const normalizedDate = targetDateString.split('T')[0];
 
-    // Create a wide UTC range that covers the entire target day in all timezones
-    // This matches the logic in getDayDateRangeForDate
-    const [year, month, day] = dateString.split('-').map(Number);
-    const todayStart = new Date(Date.UTC(year, month - 1, day - 1, 10, 0, 0));
-    const todayEnd = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+    const reflections = await fetchReflectionsByDateRange(user.id, normalizedDate, normalizedDate);
+
+    const todayStart = new Date(range.start);
+    const todayEnd = new Date(range.end);
 
     console.log('[DailyNotes] Fetching notes for date:', {
-      targetDate: dateString,
+      targetDate: normalizedDate,
       utcRangeStart: todayStart.toISOString(),
       utcRangeEnd: todayEnd.toISOString(),
     });
@@ -376,12 +373,22 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   };
 
   const formatCurrentDate = () => {
-    const dateToFormat = selectedDate ? new Date(selectedDate) : new Date();
+    const dateToFormat = selectedDate ? parseLocalDate(selectedDate) : new Date();
+
+    if (Number.isNaN(dateToFormat.getTime())) {
+      return selectedDate || new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+
     return dateToFormat.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     });
   };
 

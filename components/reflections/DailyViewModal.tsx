@@ -4,6 +4,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import DailyNotesView from './DailyNotesView';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
 import { X } from 'lucide-react-native';
+import { parseLocalDate } from '@/lib/dateUtils';
 
 interface DailyViewModalProps {
   visible: boolean;
@@ -23,7 +24,12 @@ export default function DailyViewModal({
   const { colors } = useTheme();
 
   const formatDateHeader = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = parseLocalDate(dateString);
+
+    if (Number.isNaN(date.getTime())) {
+      return dateString;
+    }
+
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
