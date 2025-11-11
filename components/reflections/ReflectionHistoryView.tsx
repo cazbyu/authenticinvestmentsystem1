@@ -24,7 +24,8 @@ export default function ReflectionHistoryView({ onReflectionPress }: ReflectionH
   };
 
   const handleDatePress = (date: string) => {
-    setSelectedDate(date);
+    const normalizedDate = date.split('T')[0];
+    setSelectedDate(normalizedDate);
     setCurrentView('dailyView');
   };
 
