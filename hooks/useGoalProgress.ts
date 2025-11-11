@@ -224,6 +224,7 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
         0008-ap-task-week-plan!inner(target_days)
       `)
       .eq('type', 'task')
+      .is('deleted_at', null)
       .gte('due_date', weekStartISO)
       .lte('due_date', weekEndISO);
 
@@ -312,6 +313,7 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
       .from('0008-ap-tasks')
       .select('id, title')
       .eq('id', parentTaskId)
+      .is('deleted_at', null)
       .single();
     if (pErr || !parent) throw pErr ?? new Error('Parent task not found');
 

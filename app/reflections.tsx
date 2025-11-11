@@ -85,6 +85,7 @@ export default function ReflectionsScreen() {
         .from('0008-ap-tasks')
         .select('*')
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .not('completed_at', 'is', null)
         .gte('completed_at', startOfDay.toISOString())
         .lt('completed_at', endOfDay.toISOString());

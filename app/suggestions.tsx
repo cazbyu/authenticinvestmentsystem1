@@ -35,6 +35,7 @@ export default function SuggestionsScreen() {
           universal_domains:0008-ap-universal-domains-join!parent_id(domain_id)
         `)
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .not('completed_at', 'is', null)
         .gte('completed_at', startOfDay.toISOString())
         .lt('completed_at', endOfDay.toISOString());

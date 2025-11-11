@@ -168,6 +168,8 @@ BEGIN
         d.id,
         d.user_id,
         d.title,
+        d.archived,
+        COALESCE(d.is_active, true) AS is_active,
         COALESCE(
           (d.activated_at AT TIME ZONE v_user_timezone)::date,
           (d.created_at AT TIME ZONE v_user_timezone)::date
@@ -178,6 +180,8 @@ BEGIN
       ON nf.parent_type = 'depositIdea'
      AND nf.parent_id = d.id
     WHERE d.user_id = v_user_id
+      AND d.archived = false
+      AND d.is_active = true
       AND d.idea_date IS NOT NULL
       AND d.idea_date >= v_start_date
       AND d.idea_date < v_end_date

@@ -79,6 +79,8 @@ BEGIN
     WHERE unj.user_id = v_user_id
       AND unj.parent_type = 'depositIdea'
       AND d.user_id = v_user_id
+      AND d.archived = false
+      AND COALESCE(d.is_active, true) = true
     GROUP BY date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date
   ),
   monthly_withdrawals AS (
@@ -237,6 +239,8 @@ BEGIN
     WHERE unj.user_id = v_user_id
       AND unj.parent_type = 'depositIdea'
       AND d.user_id = v_user_id
+      AND d.archived = false
+      AND COALESCE(d.is_active, true) = true
       AND (n.created_at AT TIME ZONE v_user_timezone)::date >= v_start_date
       AND (n.created_at AT TIME ZONE v_user_timezone)::date < v_end_date
     GROUP BY (n.created_at AT TIME ZONE v_user_timezone)::date

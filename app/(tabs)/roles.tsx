@@ -421,6 +421,7 @@ export default function Roles() {
           .eq('user_id', user.id)
           .in('id', roleDepositIdeaIds)
           .eq('archived', false)
+          .eq('is_active', true)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
@@ -619,6 +620,7 @@ export default function Roles() {
           .eq('user_id', user.id)
           .in('id', krDepositIdeaIds)
           .eq('archived', false)
+          .eq('is_active', true)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;

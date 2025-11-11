@@ -111,6 +111,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
           .select('*')
           .eq('user_id', user.id)
           .eq('status', 'completed')
+          .is('deleted_at', null)
           .not('completed_at', 'is', null)
           .gte('completed_at', dateFilter);
 

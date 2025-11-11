@@ -36,6 +36,7 @@ export async function handleActionCompletion(
       .from('0008-ap-tasks')
       .select('id, title, user_global_timeline_id, custom_timeline_id')
       .eq('id', actionId)
+      .is('deleted_at', null)
       .single();
 
     if (parentError || !parent) {
@@ -182,6 +183,7 @@ export async function handleRecurringTaskCompletion(
       .from('0008-ap-tasks')
       .select('*')
       .eq('id', sourceTaskId)
+      .is('deleted_at', null)
       .single();
 
     if (sourceError || !sourceTask) {

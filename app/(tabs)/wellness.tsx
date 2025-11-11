@@ -289,6 +289,7 @@ export default function Wellness() {
           .eq('user_id', user.id)
           .in('id', domainDepositIdeaIds)
           .eq('archived', false)
+          .eq('is_active', true)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
