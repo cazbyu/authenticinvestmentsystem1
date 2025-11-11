@@ -484,7 +484,10 @@ export async function saveReflection(
     const reflection = newReflection;
     const reflectionError = insertError;
 
-    // After reflection is successfully created
+    if (reflectionError) throw reflectionError;
+if (!reflection) throw new Error('Failed to create reflection');
+
+    // Create universal follow-up join row if needed
 if (followUp && followUpDate) {
   const { error: followUpError } = await supabase
     .from('0008-ap-universal-follow-up-join')
@@ -494,15 +497,12 @@ if (followUp && followUpDate) {
       parent_id: reflection.id,
       follow_up_date: followUpDate,
       status: 'pending',
-      reason_type: 'review', // or null for now
+      reason_type: 'review', // or null if you prefer
       reason: null,
     });
 
   if (followUpError) throw followUpError;
 }
-
-    if (reflectionError) throw reflectionError;
-    if (!reflection) throw new Error('Failed to create reflection');
 
     // Insert role associations
     if (selectedRoleIds.length > 0) {
