@@ -20,11 +20,18 @@ import Animated, {
 } from 'react-native-reanimated';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ReflectionAttachment } from '@/lib/reflectionUtils';
+export interface ImageAttachment {
+  id: string;
+  file_name: string;
+  file_type: string;
+  file_path: string;
+  created_at: string;
+  public_url?: string;
+}
 
 interface ImageViewerModalProps {
   visible: boolean;
-  images: ReflectionAttachment[];
+  images: ImageAttachment[];
   initialIndex?: number;
   onClose: () => void;
 }
