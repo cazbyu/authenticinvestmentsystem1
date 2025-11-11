@@ -31,7 +31,7 @@ export interface ReflectionWithRelations {
   roles?: Array<{ id: string; label: string; color?: string }>;
   domains?: Array<{ id: string; name: string; color?: string }>;
   keyRelationships?: Array<{ id: string; name: string }>;
-  notes?: Array<{ id: string; content: string; created_at: string; parent_type?: string }>;
+  notes?: Array<{ id: string; parent_id?: string; content: string; created_at: string; parent_type?: string }>;
   attachments?: ReflectionAttachment[];
 }
 
@@ -248,7 +248,7 @@ async function fetchReflectionNotes(
   reflectionId: string,
   reflectionDate?: string,
   userId?: string
-): Promise<Array<{ id: string; content: string; created_at: string; parent_type?: string }>> {
+): Promise<Array<{ id: string; parent_id?: string; content: string; created_at: string; parent_type?: string }>> {
   try {
     // First, try to fetch notes directly linked to the reflection
     const { data: directNotes, error: directError } = await supabase
@@ -271,6 +271,7 @@ async function fetchReflectionNotes(
         ?.map((item: any) => ({
           ...item.note,
           parent_type: item.parent_type,
+          parent_id: reflectionId,
         }))
         .filter((note: any) => note !== null && note.id) || [];
 

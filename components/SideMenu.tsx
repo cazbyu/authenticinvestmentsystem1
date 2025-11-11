@@ -12,6 +12,7 @@ import {
   Lightbulb,
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
+import { fetchPendingFollowUps } from '@/lib/followUpUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
@@ -91,21 +92,8 @@ export function SideMenu() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // NEW: count pending follow-ups from the universal follow-up table
-      const { data, error, count } = await supabase
-        .from('0008-ap-universal-follow-up-join')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'pending');
-
-      if (error) {
-        console.error('Error fetching follow-up count:', error);
-        return;
-      }
-
-      // When head: true, data is usually null and count is populated
-      const total = typeof count === 'number' ? count : data?.length || 0;
-      setFollowUpCount(total);
+      const filteredFollowUps = await fetchPendingFollowUps(user.id);
+      setFollowUpCount(filteredFollowUps.length);
     } catch (error) {
       console.error('Error fetching follow-up count:', error);
     }

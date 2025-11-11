@@ -66,6 +66,10 @@ interface DailyRange {
   dateString: string;
 }
 
+// DailyNotesView renders "Today's Reflections and Notes". Reflections arrive via
+// fetchReflectionsByDateRange (Supabase table 0008-ap-reflections + reflection RPCs)
+// and note timeline items come from fetchTodayTimelineData which reads
+// 0008-ap-universal-notes-join alongside parent tables for the selected day.
 export default function DailyNotesView({ selectedDate, onReflectionPress, onNotePress }: DailyNotesViewProps) {
   const { colors } = useTheme();
   const [aggregationData, setAggregationData] = useState<DailyAggregationData | null>(null);
@@ -294,8 +298,20 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     const noteItems: TimelineItem[] = filteredNotesData
       ? filteredNotesData
           .filter((item: any) => item.note && item.note.id)
-          .map((item: any) => {
+          .reduce((acc: TimelineItem[], item: any) => {
             const parentItem = parentItemsMap.get(item.parent_id);
+            const requiresParent = ['task', 'event', 'depositIdea', 'withdrawal'].includes(item.parent_type);
+
+            if (requiresParent && !parentItem) {
+              // Drop orphaned cards completely so deleted parents never appear.
+              console.warn('[DailyNotes] Skipping orphaned note without active parent', {
+                noteId: item.note.id,
+                parentId: item.parent_id,
+                parentType: item.parent_type,
+              });
+              return acc;
+            }
+
             let resolvedType: TimelineItemType = (item.parent_type || 'note') as TimelineItemType;
 
             // If parent is a task, determine if it's task or event
@@ -328,7 +344,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
               }
             }
 
-            return {
+            acc.push({
               id: item.note.id,
               type: resolvedType,
               content: item.note.content,
@@ -339,8 +355,10 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
               parentItem,
               isActive,
               priorityColor,
-            };
-          })
+            });
+
+            return acc;
+          }, [])
       : [];
 
     // Merge and sort by created_at

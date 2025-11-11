@@ -20,6 +20,7 @@ CREATE OR REPLACE FUNCTION get_notes_for_reflection_date(
 )
 RETURNS TABLE (
   id uuid,
+  parent_id uuid,
   content text,
   created_at timestamptz,
   parent_type text
@@ -28,9 +29,12 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
+  -- Enforce deleted/archived parent filtering here so downstream UI never
+  -- receives orphaned notes.
   RETURN QUERY
   SELECT DISTINCT
     n.id,
+    unj.parent_id,
     n.content,
     n.created_at,
     -- Return the actual type from tasks table for tasks/events, or the join table parent_type for others
@@ -46,14 +50,21 @@ BEGIN
   WHERE
     n.user_id = p_user_id
     AND (
-      (unj.parent_type = 'task' AND t.deleted_at IS NULL AND DATE(t.completed_at) = p_date)
+      (
+        unj.parent_type = 'task'
+        AND t.deleted_at IS NULL
+        AND DATE(t.completed_at) = p_date
+      )
       OR (
         unj.parent_type = 'depositIdea'
         AND di.archived = false
         AND COALESCE(di.is_active, true) = true
         AND DATE(di.created_at) = p_date
       )
-      OR (unj.parent_type = 'withdrawal' AND DATE(w.withdrawn_at) = p_date)
+      OR (
+        unj.parent_type = 'withdrawal'
+        AND DATE(w.withdrawn_at) = p_date
+      )
     )
   ORDER BY n.created_at DESC;
 END;
