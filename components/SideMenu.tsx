@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Calendar, MessageCircle, Settings, LogOut, BookOpen, Bell, Lightbulb } from 'lucide-react-native';
+import {
+  Calendar,
+  MessageCircle,
+  Settings,
+  LogOut,
+  BookOpen,
+  Bell,
+  Lightbulb,
+} from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
@@ -45,7 +53,9 @@ export function SideMenu() {
   const fetchUserData = async () => {
     try {
       const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user?.email) {
         setUserEmail(user.email);
       }
@@ -76,20 +86,26 @@ export function SideMenu() {
   const fetchFollowUpCount = async () => {
     try {
       const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from('0008-ap-reflections')
+      // NEW: count pending follow-ups from the universal follow-up table
+      const { data, error, count } = await supabase
+        .from('0008-ap-universal-follow-up-join')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .eq('archived', false)
-        .eq('follow_up', true)
-        .not('follow_up_date', 'is', null);
+        .eq('status', 'pending');
 
-      if (!error && data !== null) {
-        setFollowUpCount(data.length || 0);
+      if (error) {
+        console.error('Error fetching follow-up count:', error);
+        return;
       }
+
+      // When head: true, data is usually null and count is populated
+      const total = typeof count === 'number' ? count : data?.length || 0;
+      setFollowUpCount(total);
     } catch (error) {
       console.error('Error fetching follow-up count:', error);
     }
@@ -99,7 +115,6 @@ export function SideMenu() {
     router.push(route as any);
   };
 
-  // --- ADD THIS FUNCTION ---
   const handleSignOut = async () => {
     try {
       const supabase = getSupabaseClient();
@@ -107,7 +122,6 @@ export function SideMenu() {
       if (error) {
         Alert.alert('Error signing out', error.message);
       } else {
-        // This will clear the local session and send the user to the login screen
         router.replace('/login');
       }
     } catch (error) {
@@ -115,7 +129,6 @@ export function SideMenu() {
       Alert.alert('Error', (error as Error).message);
     }
   };
-  // -------------------------
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -123,7 +136,7 @@ export function SideMenu() {
         <Text style={styles.headerTitle}>Authentic</Text>
         <Text style={styles.headerSubtitle}>Investments</Text>
       </View>
-      
+
       <ScrollView style={[styles.menuContainer, { backgroundColor: colors.background }]}>
         {menuItems.map((item) => {
           const IconComponent = item.icon;
@@ -152,11 +165,14 @@ export function SideMenu() {
           <Text style={[styles.versionText, { color: colors.textSecondary }]}>v 0.01</Text>
         </View>
       </ScrollView>
-      
+
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         {(userName || userEmail) && (
           <View style={styles.userEmailContainer}>
-            <Text style={[styles.userEmailText, { color: colors.textSecondary }]} numberOfLines={1}>
+            <Text
+              style={[styles.userEmailText, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
               {userName || `Signed in as ${userEmail}`}
             </Text>
           </View>
