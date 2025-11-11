@@ -37,6 +37,8 @@ export default function MonthlyIndexView({
   const loadMonthlyDates = async () => {
     try {
       setLoading(true);
+      // Daily history rows come straight from get_month_dates_with_items so
+      // they share filtering with the monthly summaries.
       const data = await fetchMonthlyDates(year, month);
       setDates(data);
     } catch (error) {

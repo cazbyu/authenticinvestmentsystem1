@@ -9,7 +9,7 @@ export interface MonthlyStatistics {
   eventsCount: number;
   depositIdeasCount: number;
   withdrawalsCount: number;
-  followUpItemsCount: number;
+  totalItems: number;
 }
 
 export interface DateWithContent {
@@ -52,7 +52,7 @@ export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Pro
     }
 
     const formattedData: MonthlyStatistics[] = (data || []).map((item: any) => ({
-      monthYear: item.month_year,
+      monthYear: formatMonthYear(item.year, item.month),
       year: item.year,
       month: item.month,
       reflectionsCount: parseInt(item.reflections_count, 10),
@@ -60,7 +60,7 @@ export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Pro
       eventsCount: parseInt(item.events_count, 10),
       depositIdeasCount: parseInt(item.deposit_ideas_count, 10),
       withdrawalsCount: parseInt(item.withdrawals_count, 10),
-      followUpItemsCount: parseInt(item.follow_up_items_count, 10),
+      totalItems: parseInt(item.total_items, 10),
     }));
 
     monthlyStatsCache = formattedData;
@@ -120,7 +120,7 @@ export function formatMonthYear(year: number, month: number): string {
 }
 
 export function getTotalItemsForMonth(stats: MonthlyStatistics): number {
-  return (
+  return stats.totalItems ?? (
     stats.reflectionsCount +
     stats.tasksCount +
     stats.eventsCount +
