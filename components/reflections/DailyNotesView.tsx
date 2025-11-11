@@ -7,15 +7,25 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Image,
+  Linking,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
 import { DailyAggregationData } from '@/types/reflections';
 import { Target, Users, Activity, AlertCircle } from 'lucide-react-native';
-import { fetchReflectionsByDateRange, ReflectionWithRelations } from '@/lib/reflectionUtils';
+import {
+  fetchReflectionsByDateRange,
+  ReflectionWithRelations,
+  ReflectionAttachment,
+  fetchAttachmentsForReflections,
+} from '@/lib/reflectionUtils';
 import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { fetchAttachmentsForNotes, NoteAttachment } from '@/lib/noteAttachmentUtils';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import ImageViewerModal, { ImageAttachment } from './ImageViewerModal';
 
 type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
 
@@ -36,6 +46,9 @@ interface TimelineItem {
   content?: string;
   date?: string;
   parent_type?: string;
+  title?: string;
+  attachments?: ReflectionAttachment[];
+  noteAttachments?: NoteAttachment[];
   parentItem?: ParentItemData;
   isActive?: boolean;
   priorityColor?: string;
@@ -61,6 +74,9 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   const [refreshing, setRefreshing] = useState(false);
 
   const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<ImageAttachment[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const normalizeDateInput = (value: string) => value.split('T')[0];
 
@@ -178,6 +194,10 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     const normalizedDate = targetDateString.split('T')[0];
 
     const reflections = await fetchReflectionsByDateRange(user.id, normalizedDate, normalizedDate);
+    const reflectionIds = reflections.map((r) => r.id);
+    const reflectionAttachmentsMap = reflectionIds.length > 0
+      ? await fetchAttachmentsForReflections(reflectionIds)
+      : new Map<string, ReflectionAttachment[]>();
 
     const todayStart = new Date(range.start);
     const todayEnd = new Date(range.end);
@@ -251,13 +271,20 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       });
     }
 
+    const noteIds = filteredNotesData?.filter((item: any) => item.note && item.note.id).map((item: any) => item.note.id) || [];
+    const noteAttachmentsMap = noteIds.length > 0
+      ? await fetchAttachmentsForNotes(noteIds)
+      : new Map<string, NoteAttachment[]>();
+
     // Transform reflections to timeline items
-    const reflectionItems: TimelineItem[] = reflections.map(r => ({
+    const reflectionItems: TimelineItem[] = reflections.map((r) => ({
       id: r.id,
       type: 'reflection' as TimelineItemType,
       created_at: r.created_at,
       content: r.content,
       date: r.date,
+      title: r.reflection_title?.trim() || 'Reflection',
+      attachments: reflectionAttachmentsMap.get(r.id) || [],
     }));
 
     // Transform notes to timeline items with parent item data
@@ -266,11 +293,11 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
           .filter((item: any) => item.note && item.note.id)
           .map((item: any) => {
             const parentItem = parentItemsMap.get(item.parent_id);
-            let type = item.parent_type || 'note';
+            let resolvedType: TimelineItemType = (item.parent_type || 'note') as TimelineItemType;
 
             // If parent is a task, determine if it's task or event
             if (item.parent_type === 'task' && parentItem?.type) {
-              type = parentItem.type;
+              resolvedType = parentItem.type as TimelineItemType;
             }
 
             // Determine if item is active
@@ -300,10 +327,12 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
 
             return {
               id: item.note.id,
-              type: type as TimelineItemType,
+              type: resolvedType,
               content: item.note.content,
               created_at: item.note.created_at,
               parent_type: item.parent_type,
+              title: parentItem?.title || getItemTypeLabel(resolvedType),
+              noteAttachments: noteAttachmentsMap.get(item.note.id) || [],
               parentItem,
               isActive,
               priorityColor,
@@ -321,7 +350,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
 
 
 
-  const formatDateTime = (dateString: string, createdAt: string) => {
+  const formatDateTime = (createdAt: string) => {
     const date = new Date(createdAt);
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
@@ -331,11 +360,6 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       minute: '2-digit',
       hour12: true,
     });
-  };
-
-  const truncateContent = (content: string, maxLength: number = 80) => {
-    if (content.length <= maxLength) return content;
-    return content.substring(0, maxLength) + '...';
   };
 
   const getItemTypeBadgeColor = (type: TimelineItemType) => {
@@ -402,142 +426,139 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-      }
-    >
-      <View style={styles.content}>
-        <Text style={[styles.weekTitle, { color: colors.text }]}>
-          Daily Reflection - {formatCurrentDate()}
-        </Text>
+    <>
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+      >
+        <View style={styles.content}>
+          <Text style={[styles.weekTitle, { color: colors.text }]}>
+            Daily Reflection - {formatCurrentDate()}
+          </Text>
 
-        {aggregationData && (
-          <>
-            <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
-                <Target size={24} color={colors.primary} />
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
-              </View>
+          {aggregationData && (
+            <>
+              <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <View style={styles.cardHeader}>
+                  <Target size={24} color={colors.primary} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
+                </View>
 
-              {aggregationData.goalSummaries.length === 0 ? (
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  You completed no actions towards your goals today.
-                </Text>
-              ) : (
-                <View style={styles.goalsList}>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    Today, you completed {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {aggregationData.goalSummaries.length} {aggregationData.goalSummaries.length === 1 ? 'goal' : 'goals'}.
+                {aggregationData.goalSummaries.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    You completed no actions towards your goals today.
                   </Text>
-                  {aggregationData.goalSummaries.map(goal => (
-                    <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
-                      For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
+                ) : (
+                  <View style={styles.goalsList}>
+                    <Text style={[styles.highlightText, { color: colors.text }]}>
+                      Today, you completed {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {aggregationData.goalSummaries.length} {aggregationData.goalSummaries.length === 1 ? 'goal' : 'goals'}.
                     </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
-                <Users size={24} color={colors.primary} />
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Role Investment Summary</Text>
-              </View>
-
-              {aggregationData.roleInvestments.length === 0 ? (
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  You invested in no roles today.
-                </Text>
-              ) : (
-                <View style={styles.rolesList}>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    You invested in the following roles today:
-                  </Text>
-                  {aggregationData.roleInvestments.map(role => {
-                    const totalDeposits = role.task_count + role.deposit_idea_count;
-                    return (
-                      <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
-                        • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
+                    {aggregationData.goalSummaries.map(goal => (
+                      <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
+                        For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
                       </Text>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-
-            <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
-                <Activity size={24} color={colors.primary} />
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Wellness Domain Balance</Text>
+                    ))}
+                  </View>
+                )}
               </View>
 
-              {aggregationData.domainBalance.length === 0 ? (
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  You invested in no wellness domains today.
-                </Text>
-              ) : (
-                <View style={styles.domainsList}>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    You have invested in the following domains today:
+              <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <View style={styles.cardHeader}>
+                  <Users size={24} color={colors.primary} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Role Investment Summary</Text>
+                </View>
+
+                {aggregationData.roleInvestments.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    You invested in no roles today.
                   </Text>
-                  {aggregationData.domainBalance.map(domain => (
-                    <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
-                      • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
+                ) : (
+                  <View style={styles.rolesList}>
+                    <Text style={[styles.highlightText, { color: colors.text }]}>
+                      You invested in the following roles today:
                     </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
-                <AlertCircle size={24} color={aggregationData.totalWithdrawals > 0 ? '#f59e0b' : '#10b981'} />
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Withdrawals and Lessons</Text>
+                    {aggregationData.roleInvestments.map(role => {
+                      const totalDeposits = role.task_count + role.deposit_idea_count;
+                      return (
+                        <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
+                          • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
+                        </Text>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
 
-              {aggregationData.totalWithdrawals === 0 ? (
-                <Text style={[styles.successText, { color: '#10b981' }]}>
-                  You made no withdrawals today.
-                </Text>
-              ) : (
-                <View>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    You made {aggregationData.totalWithdrawals} {aggregationData.totalWithdrawals === 1 ? 'withdrawal' : 'withdrawals'} today{aggregationData.withdrawalRoles.length > 0 || aggregationData.withdrawalDomains.length > 0 ? ' in the following:' : '.'}
-                  </Text>
-                  {aggregationData.withdrawalRoles.length > 0 && (
-                    <View>
-                      <Text style={[styles.warningText, { color: '#f59e0b' }]}>
-                        Roles:
-                      </Text>
-                      <View style={styles.withdrawalsList}>
-                        {aggregationData.withdrawalRoles.map((role, index) => (
-                          <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
-                            • {role.role_label} ({role.count})
-                          </Text>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-                  {aggregationData.withdrawalDomains.length > 0 && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={[styles.warningText, { color: '#f59e0b' }]}>
-                        Domains:
-                      </Text>
-                      <View style={styles.withdrawalsList}>
-                        {aggregationData.withdrawalDomains.map((domain, index) => (
-                          <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
-                            • {domain.domain_name} ({domain.count})
-                          </Text>
-                        ))}
-                      </View>
-                    </View>
-                  )}
+              <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <View style={styles.cardHeader}>
+                  <Activity size={24} color={colors.primary} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Wellness Domain Balance</Text>
                 </View>
-              )}
-            </View>
-          </>
-        )}
+
+                {aggregationData.domainBalance.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    You invested in no wellness domains today.
+                  </Text>
+                ) : (
+                  <View style={styles.domainsList}>
+                    <Text style={[styles.highlightText, { color: colors.text }]}>
+                      You have invested in the following domains today:
+                    </Text>
+                    {aggregationData.domainBalance.map(domain => (
+                      <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
+                        • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <View style={styles.cardHeader}>
+                  <AlertCircle size={24} color={aggregationData.totalWithdrawals > 0 ? '#f59e0b' : '#10b981'} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Withdrawals and Lessons</Text>
+                </View>
+
+                {aggregationData.totalWithdrawals === 0 ? (
+                  <Text style={[styles.successText, { color: '#10b981' }]}>
+                    You made no withdrawals today.
+                  </Text>
+                ) : (
+                  <View>
+                    <Text style={[styles.highlightText, { color: colors.text }]}>
+                      You made {aggregationData.totalWithdrawals} {aggregationData.totalWithdrawals === 1 ? 'withdrawal' : 'withdrawals'} today{aggregationData.withdrawalRoles.length > 0 || aggregationData.withdrawalDomains.length > 0 ? ' in the following:' : '.'}
+                    </Text>
+                    {aggregationData.withdrawalRoles.length > 0 && (
+                      <View>
+                        <Text style={[styles.warningText, { color: '#f59e0b' }]}>Roles:</Text>
+                        <View style={styles.withdrawalsList}>
+                          {aggregationData.withdrawalRoles.map((role, index) => (
+                            <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
+                              • {role.role_label} ({role.count})
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                    {aggregationData.withdrawalDomains.length > 0 && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={[styles.warningText, { color: '#f59e0b' }]}>Domains:</Text>
+                        <View style={styles.withdrawalsList}>
+                          {aggregationData.withdrawalDomains.map((domain, index) => (
+                            <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
+                              • {domain.domain_name} ({domain.count})
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            </>
+          )}
 
         {timelineItems.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
@@ -546,48 +567,126 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
             </Text>
 
             <View style={styles.notesList}>
-              {timelineItems.map(item => (
-                <TouchableOpacity
-                  key={`${item.type}-${item.id}`}
-                  style={[
-                    styles.noteCard,
-                    {
-                      backgroundColor: item.isActive ? '#f3f4f6' : colors.background,
-                      borderColor: item.isActive && item.priorityColor ? item.priorityColor : colors.border,
-                      borderLeftColor: item.isActive && item.priorityColor ? item.priorityColor : getItemTypeBadgeColor(item.type),
-                      borderLeftWidth: 3,
-                      borderWidth: item.isActive ? 2 : 1,
-                    },
-                  ]}
-                  onPress={() => onNotePress?.(item)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.noteHeader}>
-                    <Text style={[styles.noteDate, { color: colors.text }]}>
-                      {new Date(item.created_at).toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true,
-                      })}
-                    </Text>
-                    <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
-                      <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+              {timelineItems.map((item) => {
+                const reflectionAttachments = item.attachments || [];
+                const noteAttachments = item.noteAttachments || [];
+                const allAttachments = [...reflectionAttachments, ...noteAttachments];
+                const imageAttachments = allAttachments
+                  .filter((attachment) => attachment.file_type?.startsWith('image/')) as ImageAttachment[];
+                const documentAttachments = allAttachments.filter(
+                  (attachment) => attachment.file_type && !attachment.file_type.startsWith('image/')
+                );
+                const displayTitle = item.title || getItemTypeLabel(item.type);
+                const timestamp = formatDateTime(item.created_at);
+
+                return (
+                  <TouchableOpacity
+                    key={`${item.type}-${item.id}`}
+                    style={[
+                      styles.noteCard,
+                      {
+                        backgroundColor: item.isActive ? '#f3f4f6' : colors.background,
+                        borderColor: item.isActive && item.priorityColor ? item.priorityColor : colors.border,
+                        borderLeftColor: item.isActive && item.priorityColor ? item.priorityColor : getItemTypeBadgeColor(item.type),
+                        borderLeftWidth: 3,
+                        borderWidth: item.isActive ? 2 : 1,
+                      },
+                    ]}
+                    onPress={() => onNotePress?.(item)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.noteHeader}>
+                      <View style={styles.noteTitleContainer}>
+                        <Text style={[styles.noteTitle, { color: colors.text }]}>{displayTitle}</Text>
+                        <Text style={[styles.noteTimestamp, { color: colors.textSecondary }]}>{timestamp}</Text>
+                      </View>
+                      <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+                        <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+                      </View>
                     </View>
-                  </View>
-                  <Text style={[styles.notePreview, { color: colors.textSecondary }]} numberOfLines={3}>
-                    {truncateContent(item.content || '')}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+
+                    {item.content ? (
+                      <Text style={[styles.noteContent, { color: colors.text }]}>{item.content}</Text>
+                    ) : null}
+
+                    {imageAttachments.length > 0 && (
+                      <View style={styles.imagePreviewContainer}>
+                        {imageAttachments.slice(0, 3).map((attachment, index) => (
+                          <TouchableOpacity
+                            key={attachment.id}
+                            onPress={() => {
+                              setSelectedImages(imageAttachments);
+                              setSelectedImageIndex(index);
+                              setImageViewerVisible(true);
+                            }}
+                            style={styles.imageThumbnail}
+                          >
+                            <Image
+                              source={{ uri: attachment.public_url }}
+                              style={styles.thumbnailImage}
+                              resizeMode="cover"
+                            />
+                          </TouchableOpacity>
+                        ))}
+                        {imageAttachments.length > 3 && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              setSelectedImages(imageAttachments);
+                              setSelectedImageIndex(3);
+                              setImageViewerVisible(true);
+                            }}
+                            style={[styles.imageThumbnail, styles.moreImagesThumbnail]}
+                          >
+                            <View style={styles.moreImagesOverlay}>
+                              <Text style={styles.moreImagesText}>+{imageAttachments.length - 3}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+
+                    {documentAttachments.length > 0 && (
+                      <View style={styles.documentAttachmentsContainer}>
+                        {documentAttachments.slice(0, 3).map((attachment) => (
+                          <TouchableOpacity
+                            key={attachment.id}
+                            onPress={() => {
+                              if (attachment.public_url) {
+                                Linking.openURL(attachment.public_url);
+                              }
+                            }}
+                            style={styles.documentAttachmentItem}
+                          >
+                            <AttachmentThumbnail
+                              uri={attachment.public_url || ''}
+                              fileType={attachment.file_type}
+                              fileName={attachment.file_name}
+                              size="small"
+                            />
+                            <Text style={[styles.documentFileName, { color: colors.text }]} numberOfLines={1}>
+                              {attachment.file_name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         )}
-      </View>
+        </View>
 
-    </ScrollView>
+      </ScrollView>
+
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        images={selectedImages}
+        initialIndex={selectedImageIndex}
+        onClose={() => setImageViewerVisible(false)}
+      />
+    </>
   );
 }
 
@@ -784,9 +883,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  noteDate: {
-    fontSize: 14,
-    fontWeight: '600',
+  noteTitleContainer: {
+    flex: 1,
+  },
+  noteTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  noteTimestamp: {
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   tagBadge: {
     paddingHorizontal: 8,
@@ -798,9 +905,65 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  notePreview: {
-    fontSize: 13,
-    lineHeight: 18,
+  noteContent: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 8,
+  },
+  imageThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  moreImagesThumbnail: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  documentAttachmentsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 8,
+  },
+  documentAttachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    maxWidth: '100%',
+  },
+  documentFileName: {
+    fontSize: 12,
+    flex: 1,
   },
   tagsRow: {
     flexDirection: 'row',

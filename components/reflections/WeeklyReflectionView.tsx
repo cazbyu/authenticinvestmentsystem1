@@ -25,7 +25,7 @@ import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import { Linking } from 'react-native';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import ImageViewerModal from './ImageViewerModal';
+import ImageViewerModal, { ImageAttachment } from './ImageViewerModal';
 
 type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
 
@@ -65,7 +65,7 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
-  const [selectedImages, setSelectedImages] = useState<ReflectionAttachment[]>([]);
+  const [selectedImages, setSelectedImages] = useState<ImageAttachment[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [goalSummaries, setGoalSummaries] = useState<GoalActionSummary[]>([]);
