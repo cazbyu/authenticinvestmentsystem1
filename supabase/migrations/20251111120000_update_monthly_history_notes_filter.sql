@@ -1,7 +1,64 @@
--- Ensure monthly history views only include items with associated notes
-CREATE OR REPLACE FUNCTION get_monthly_item_counts(p_user_id uuid DEFAULT NULL)
+CREATE OR REPLACE FUNCTION get_monthly_item_counts(
+  p_year integer,
+  p_month integer,
+  p_user_id uuid DEFAULT NULL
+)
 RETURNS TABLE (
-  month_year text,
+  month_start date,
+  reflections_count bigint,
+  tasks_count bigint,
+  events_count bigint,
+  deposit_ideas_count bigint,
+  withdrawals_count bigint,
+  total_items bigint
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id uuid;
+  v_start_date date;
+BEGIN
+  v_user_id := COALESCE(p_user_id, auth.uid());
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'User ID is required';
+  END IF;
+
+  v_start_date := make_date(p_year, p_month, 1);
+
+  RETURN QUERY
+  WITH per_day AS (
+    SELECT *
+    FROM get_month_dates_with_items(p_year, p_month, v_user_id)
+  )
+  SELECT
+    v_start_date AS month_start,
+    COALESCE(SUM(reflections_count), 0)   AS reflections_count,
+    COALESCE(SUM(tasks_count), 0)         AS tasks_count,
+    COALESCE(SUM(events_count), 0)        AS events_count,
+    COALESCE(SUM(deposit_ideas_count), 0) AS deposit_ideas_count,
+    COALESCE(SUM(withdrawals_count), 0)   AS withdrawals_count,
+    COALESCE(
+      SUM(
+        reflections_count
+        + tasks_count
+        + events_count
+        + deposit_ideas_count
+        + withdrawals_count
+      ),
+      0
+    ) AS total_items;
+
+  RETURN;
+END;
+$$;
+
+COMMENT ON FUNCTION get_monthly_item_counts(integer, integer, uuid) IS
+  'Aggregates month-level item counts by summing get_month_dates_with_items results.';
+
+CREATE OR REPLACE FUNCTION get_history_month_summaries(p_user_id uuid DEFAULT NULL)
+RETURNS TABLE (
+  month_start date,
   year integer,
   month integer,
   reflections_count bigint,
@@ -9,7 +66,7 @@ RETURNS TABLE (
   events_count bigint,
   deposit_ideas_count bigint,
   withdrawals_count bigint,
-  follow_up_items_count bigint
+  total_items bigint
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -17,6 +74,8 @@ AS $$
 DECLARE
   v_user_id uuid;
   v_user_timezone text;
+  v_min_date date;
+  v_max_date date;
 BEGIN
   v_user_id := COALESCE(p_user_id, auth.uid());
 
@@ -31,103 +90,74 @@ BEGIN
 
   v_user_timezone := COALESCE(v_user_timezone, 'UTC');
 
-  RETURN QUERY
-  WITH monthly_reflections AS (
-    SELECT
-      date_trunc('month', (created_at AT TIME ZONE v_user_timezone))::date AS month_date,
-      COUNT(DISTINCT id) AS count
+  SELECT
+    MIN(item_date),
+    MAX(item_date)
+  INTO v_min_date, v_max_date
+  FROM (
+    SELECT (created_at AT TIME ZONE v_user_timezone)::date AS item_date
     FROM "0008-ap-reflections"
     WHERE user_id = v_user_id
       AND archived = false
-    GROUP BY date_trunc('month', (created_at AT TIME ZONE v_user_timezone))::date
-  ),
-  monthly_tasks AS (
-    SELECT
-      date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date AS month_date,
-      COUNT(DISTINCT t.id) AS count
+
+    UNION ALL
+
+    SELECT (n.created_at AT TIME ZONE v_user_timezone)::date AS item_date
     FROM "0008-ap-universal-notes-join" unj
     INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-tasks" t ON t.id = unj.parent_id
     WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'task'
-      AND t.user_id = v_user_id
-      AND t.type = 'task'
-      AND t.deleted_at IS NULL
-    GROUP BY date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date
+      AND n.user_id = v_user_id
+  ) all_dates;
+
+  IF v_min_date IS NULL OR v_max_date IS NULL THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  WITH month_series AS (
+    SELECT DATE_TRUNC('month', gs)::date AS month_start
+    FROM generate_series(
+      DATE_TRUNC('month', v_min_date),
+      DATE_TRUNC('month', v_max_date),
+      INTERVAL '1 month'
+    ) AS gs
   ),
-  monthly_events AS (
+  totals AS (
     SELECT
-      date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date AS month_date,
-      COUNT(DISTINCT t.id) AS count
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-tasks" t ON t.id = unj.parent_id
-    WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'task'
-      AND t.user_id = v_user_id
-      AND t.type = 'event'
-      AND t.deleted_at IS NULL
-    GROUP BY date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date
-  ),
-  monthly_deposit_ideas AS (
-    SELECT
-      date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date AS month_date,
-      COUNT(DISTINCT d.id) AS count
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-deposit-ideas" d ON d.id = unj.parent_id
-    WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'depositIdea'
-      AND d.user_id = v_user_id
-      AND d.archived = false
-      AND COALESCE(d.is_active, true) = true
-    GROUP BY date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date
-  ),
-  monthly_withdrawals AS (
-    SELECT
-      date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date AS month_date,
-      COUNT(DISTINCT w.id) AS count
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-withdrawals" w ON w.id = unj.parent_id
-    WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'withdrawal'
-      AND w.user_id = v_user_id
-    GROUP BY date_trunc('month', (n.created_at AT TIME ZONE v_user_timezone))::date
-  ),
-  all_months AS (
-    SELECT DISTINCT month_date FROM monthly_reflections
-    UNION
-    SELECT DISTINCT month_date FROM monthly_tasks
-    UNION
-    SELECT DISTINCT month_date FROM monthly_events
-    UNION
-    SELECT DISTINCT month_date FROM monthly_deposit_ideas
-    UNION
-    SELECT DISTINCT month_date FROM monthly_withdrawals
+      ms.month_start,
+      counts.reflections_count,
+      counts.tasks_count,
+      counts.events_count,
+      counts.deposit_ideas_count,
+      counts.withdrawals_count,
+      counts.total_items
+    FROM month_series ms
+    CROSS JOIN LATERAL get_monthly_item_counts(
+      EXTRACT(YEAR FROM ms.month_start)::integer,
+      EXTRACT(MONTH FROM ms.month_start)::integer,
+      v_user_id
+    ) counts
   )
   SELECT
-    TO_CHAR(am.month_date, 'Month YYYY') AS month_year,
-    EXTRACT(YEAR FROM am.month_date)::integer AS year,
-    EXTRACT(MONTH FROM am.month_date)::integer AS month,
-    COALESCE(mr.count, 0) AS reflections_count,
-    COALESCE(mt.count, 0) AS tasks_count,
-    COALESCE(me.count, 0) AS events_count,
-    COALESCE(mdi.count, 0) AS deposit_ideas_count,
-    COALESCE(mw.count, 0) AS withdrawals_count,
-    0::bigint AS follow_up_items_count
-  FROM all_months am
-  LEFT JOIN monthly_reflections mr ON mr.month_date = am.month_date
-  LEFT JOIN monthly_tasks mt ON mt.month_date = am.month_date
-  LEFT JOIN monthly_events me ON me.month_date = am.month_date
-  LEFT JOIN monthly_deposit_ideas mdi ON mdi.month_date = am.month_date
-  LEFT JOIN monthly_withdrawals mw ON mw.month_date = am.month_date
-  ORDER BY am.month_date DESC;
+    month_start,
+    EXTRACT(YEAR FROM month_start)::integer AS year,
+    EXTRACT(MONTH FROM month_start)::integer AS month,
+    reflections_count,
+    tasks_count,
+    events_count,
+    deposit_ideas_count,
+    withdrawals_count,
+    total_items
+  FROM totals
+  WHERE total_items > 0
+  ORDER BY month_start DESC;
+
+  RETURN;
 END;
 $$;
 
-COMMENT ON FUNCTION get_monthly_item_counts IS
-  'Returns month-level item counts limited to reflections and items with associated notes.';
+COMMENT ON FUNCTION get_history_month_summaries IS
+  'Lists months with history data by reusing get_monthly_item_counts for each month.';
 
 CREATE OR REPLACE FUNCTION get_month_dates_with_items(
   p_year integer,
@@ -313,5 +343,6 @@ $$;
 COMMENT ON FUNCTION get_month_dates_with_items IS
   'Returns dates with item counts limited to reflections and note-backed daily items.';
 
-GRANT EXECUTE ON FUNCTION get_monthly_item_counts TO authenticated;
-GRANT EXECUTE ON FUNCTION get_month_dates_with_items TO authenticated;
+GRANT EXECUTE ON FUNCTION get_monthly_item_counts(integer, integer, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_history_month_summaries(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_month_dates_with_items(integer, integer, uuid) TO authenticated;

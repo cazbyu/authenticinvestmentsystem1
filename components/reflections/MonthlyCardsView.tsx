@@ -50,6 +50,8 @@ export default function MonthlyCardsView({ onMonthPress }: MonthlyCardsViewProps
   const loadMonthlyData = async (forceRefresh: boolean = false) => {
     try {
       setLoading(!forceRefresh);
+      // Month card summaries ultimately come from get_monthly_item_counts via
+      // fetchMonthlyStatistics so they match the daily history totals.
       const data = await fetchMonthlyStatistics(forceRefresh);
       setMonthlyStats(data);
     } catch (error) {
@@ -68,6 +70,7 @@ export default function MonthlyCardsView({ onMonthPress }: MonthlyCardsViewProps
   const renderMonthCard = ({ item }: { item: MonthlyStatistics }) => {
     const cardId = `${item.year}-${item.month}`;
     const isHovered = hoveredCardId === cardId;
+    // Card label pulls totals directly from get_monthly_item_counts data.
     const totalItems = getTotalItemsForMonth(item);
 
     return (
@@ -106,6 +109,7 @@ export default function MonthlyCardsView({ onMonthPress }: MonthlyCardsViewProps
             ]}
           >
             <View style={styles.tooltipArrow} />
+            {/* Hover breakdown uses the same get_monthly_item_counts totals as the card label. */}
             <View style={styles.tooltipContent}>
               <Text style={[styles.tooltipTitle, { color: colors.text }]}>Monthly Summary</Text>
               <View style={styles.tooltipStats}>
@@ -114,9 +118,6 @@ export default function MonthlyCardsView({ onMonthPress }: MonthlyCardsViewProps
                 <TooltipRow label="Events" count={item.eventsCount} colors={colors} />
                 <TooltipRow label="Deposit Ideas" count={item.depositIdeasCount} colors={colors} />
                 <TooltipRow label="Withdrawals" count={item.withdrawalsCount} colors={colors} />
-                {item.followUpItemsCount > 0 && (
-                  <TooltipRow label="Follow Up Items" count={item.followUpItemsCount} colors={colors} />
-                )}
               </View>
             </View>
           </View>

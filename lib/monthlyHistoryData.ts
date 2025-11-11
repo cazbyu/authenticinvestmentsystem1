@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './supabase';
 
 export interface MonthlyStatistics {
+  monthStart: string;
   monthYear: string;
   year: number;
   month: number;
@@ -9,7 +10,7 @@ export interface MonthlyStatistics {
   eventsCount: number;
   depositIdeasCount: number;
   withdrawalsCount: number;
-  followUpItemsCount: number;
+  totalItems: number;
 }
 
 export interface DateWithContent {
@@ -42,7 +43,7 @@ export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Pro
       throw new Error('User not authenticated');
     }
 
-    const { data, error } = await supabase.rpc('get_monthly_item_counts', {
+    const { data, error } = await supabase.rpc('get_history_month_summaries', {
       p_user_id: user.id
     });
 
@@ -52,7 +53,8 @@ export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Pro
     }
 
     const formattedData: MonthlyStatistics[] = (data || []).map((item: any) => ({
-      monthYear: item.month_year,
+      monthStart: item.month_start,
+      monthYear: formatMonthYear(item.year, item.month),
       year: item.year,
       month: item.month,
       reflectionsCount: parseInt(item.reflections_count, 10),
@@ -60,7 +62,7 @@ export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Pro
       eventsCount: parseInt(item.events_count, 10),
       depositIdeasCount: parseInt(item.deposit_ideas_count, 10),
       withdrawalsCount: parseInt(item.withdrawals_count, 10),
-      followUpItemsCount: parseInt(item.follow_up_items_count, 10),
+      totalItems: parseInt(item.total_items, 10),
     }));
 
     monthlyStatsCache = formattedData;
@@ -120,11 +122,5 @@ export function formatMonthYear(year: number, month: number): string {
 }
 
 export function getTotalItemsForMonth(stats: MonthlyStatistics): number {
-  return (
-    stats.reflectionsCount +
-    stats.tasksCount +
-    stats.eventsCount +
-    stats.depositIdeasCount +
-    stats.withdrawalsCount
-  );
+  return stats.totalItems;
 }
