@@ -131,7 +131,7 @@ export default function FollowUpScreen() {
             if (!user) return;
 
             const success = await markFollowUpDone(followUpId, user.id);
-            if (!success) throw new Error('Failed to update follow-up');
+            if (!success) throw new Error('Failed to mark follow-up done');
 
             await fetchReflections();
             eventBus.emit(EVENTS.REFLECTION_UPDATED);
