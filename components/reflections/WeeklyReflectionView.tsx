@@ -498,10 +498,14 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
 
             <View style={styles.previousList}>
               {timelineItems.map(item => {
-                const imageAttachments = item.attachments?.filter((att) => att.file_type.startsWith('image/')) || [];
+                const reflectionAttachments = item.attachments || [];
                 const noteAttachments = item.noteAttachments || [];
-                const allAttachments = [...imageAttachments, ...noteAttachments];
-                const allImageAttachments = allAttachments.filter((att) => att.file_type.startsWith('image/'));
+                const allAttachments = [...reflectionAttachments, ...noteAttachments];
+                const allImageAttachments = allAttachments.filter((att) => att.file_type?.startsWith('image/'));
+                const documentAttachments = allAttachments.filter(
+                  (att) => att.file_type && !att.file_type.startsWith('image/')
+                );
+                const totalAttachmentCount = allAttachments.length;
 
                 return (
                   <TouchableOpacity
@@ -531,8 +535,8 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
                         })}
                       </Text>
                       <View style={styles.headerRight}>
-                        {noteAttachments.length > 0 && (
-                          <AttachmentBadge count={noteAttachments.length} size="small" />
+                        {totalAttachmentCount > 0 && (
+                          <AttachmentBadge count={totalAttachmentCount} size="small" />
                         )}
                         <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
                           <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
@@ -579,13 +583,15 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
                       </View>
                     )}
 
-                    {noteAttachments.length > 0 && noteAttachments.some(att => !att.file_type.startsWith('image/')) && (
+                    {documentAttachments.length > 0 && (
                       <View style={styles.documentAttachmentsContainer}>
-                        {noteAttachments.filter(att => !att.file_type.startsWith('image/')).slice(0, 3).map((attachment) => (
+                        {documentAttachments.slice(0, 3).map((attachment) => (
                           <TouchableOpacity
                             key={attachment.id}
                             onPress={() => {
-                              Linking.openURL(attachment.public_url || '');
+                              if (attachment.public_url) {
+                                Linking.openURL(attachment.public_url);
+                              }
                             }}
                             style={styles.documentAttachmentItem}
                           >
