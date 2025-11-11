@@ -27,7 +27,7 @@ type FollowUpWithReflection = {
 export default function FollowUpScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const [followUps, setFollowUps] = useState<Array<{ followUp: FollowUpItem; reflection: ReflectionWithRelations | null }>>([]);
+  const [followUps, setFollowUps] = useState<FollowUpWithReflection[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -58,20 +58,21 @@ export default function FollowUpScreen() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1) Get pending follow-ups for reflections from the universal table
-    const followUps = await fetchPendingReflectionFollowUps(user.id);
+    // 1) Get pending reflection follow-ups from the universal table
+    const pendingFollowUps = await fetchPendingReflectionFollowUps(user.id);
 
-    // 2) For each follow-up row, fetch the associated reflection with relations
-    const itemsWithReflections: FollowUpWithReflection[] = [];
+    // 2) For each follow-up, load the associated reflection with relations
+    const items: FollowUpWithReflection[] = [];
 
-    for (const fu of followUps) {
+    for (const fu of pendingFollowUps) {
       const reflection = await fetchReflectionById(fu.parent_id);
       if (reflection) {
-        itemsWithReflections.push({ followUp: fu, reflection });
+        items.push({ followUp: fu, reflection });
       }
+      // if reflection is null (deleted / archived), we just skip it
     }
 
-    setItems(itemsWithReflections);
+    setFollowUps(items);
   } catch (error) {
     console.error('Error fetching follow-up reflections:', error);
   } finally {
@@ -79,6 +80,7 @@ export default function FollowUpScreen() {
     setRefreshing(false);
   }
 };
+
 
   const onRefresh = () => {
     setRefreshing(true);
