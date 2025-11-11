@@ -48,12 +48,16 @@ BEGIN
 
   RETURN QUERY
   WITH note_filter AS (
-    SELECT
-      n.id AS note_id
-    FROM "0008-ap-notes" n
+    SELECT DISTINCT
+      j.parent_type,
+      j.parent_id,
+      j.note_id
+    FROM "0008-ap-universal-notes-join" j
+    INNER JOIN "0008-ap-notes" n ON n.id = j.note_id
     LEFT JOIN "0008-ap-note-attachments" na ON na.note_id = n.id
     WHERE
-      n.user_id = v_user_id
+      j.user_id = v_user_id
+      AND n.user_id = v_user_id
       AND (
         (n.content IS NOT NULL AND btrim(n.content) <> '')
         OR na.id IS NOT NULL
@@ -76,83 +80,125 @@ BEGIN
   ),
   daily_tasks AS (
     SELECT
-      (n.created_at AT TIME ZONE v_user_timezone)::date AS date_val,
+      t.task_date AS date_val,
       COUNT(DISTINCT t.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || t.title,
         E'\n'
       ) AS summary_val
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-tasks" t ON t.id = unj.parent_id
-    WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'task'
-      AND t.user_id = v_user_id
+    FROM (
+      SELECT
+        t.id,
+        t.user_id,
+        t.title,
+        t.type,
+        t.deleted_at,
+        COALESCE(
+          (t.completed_at AT TIME ZONE v_user_timezone)::date,
+          t.due_date,
+          (t.created_at AT TIME ZONE v_user_timezone)::date
+        ) AS task_date
+      FROM "0008-ap-tasks" t
+    ) t
+    INNER JOIN note_filter nf
+      ON nf.parent_type = 'task'
+     AND nf.parent_id = t.id
+    WHERE t.user_id = v_user_id
       AND t.type = 'task'
       AND t.deleted_at IS NULL
-      AND n.id IN (SELECT note_id FROM note_filter)
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date >= v_start_date
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date < v_end_date
-    GROUP BY (n.created_at AT TIME ZONE v_user_timezone)::date
+      AND t.task_date IS NOT NULL
+      AND t.task_date >= v_start_date
+      AND t.task_date < v_end_date
+    GROUP BY t.task_date
   ),
   daily_events AS (
     SELECT
-      (n.created_at AT TIME ZONE v_user_timezone)::date AS date_val,
+      t.event_date AS date_val,
       COUNT(DISTINCT t.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || t.title,
         E'\n'
       ) AS summary_val
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-tasks" t ON t.id = unj.parent_id
-    WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'task'
-      AND t.user_id = v_user_id
+    FROM (
+      SELECT
+        t.id,
+        t.user_id,
+        t.title,
+        t.type,
+        t.deleted_at,
+        COALESCE(
+          t.start_date,
+          t.due_date,
+          (t.created_at AT TIME ZONE v_user_timezone)::date
+        ) AS event_date
+      FROM "0008-ap-tasks" t
+    ) t
+    INNER JOIN note_filter nf
+      ON nf.parent_type = 'task'
+     AND nf.parent_id = t.id
+    WHERE t.user_id = v_user_id
       AND t.type = 'event'
       AND t.deleted_at IS NULL
-      AND n.id IN (SELECT note_id FROM note_filter)
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date >= v_start_date
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date < v_end_date
-    GROUP BY (n.created_at AT TIME ZONE v_user_timezone)::date
+      AND t.event_date IS NOT NULL
+      AND t.event_date >= v_start_date
+      AND t.event_date < v_end_date
+    GROUP BY t.event_date
   ),
   daily_deposit_ideas AS (
     SELECT
-      (n.created_at AT TIME ZONE v_user_timezone)::date AS date_val,
+      d.idea_date AS date_val,
       COUNT(DISTINCT d.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || d.title,
         E'\n'
       ) AS summary_val
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-deposit-ideas" d ON d.id = unj.parent_id
-    WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'depositIdea'
-      AND d.user_id = v_user_id
-      AND n.id IN (SELECT note_id FROM note_filter)
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date >= v_start_date
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date < v_end_date
-    GROUP BY (n.created_at AT TIME ZONE v_user_timezone)::date
+    FROM (
+      SELECT
+        d.id,
+        d.user_id,
+        d.title,
+        COALESCE(
+          (d.activated_at AT TIME ZONE v_user_timezone)::date,
+          (d.created_at AT TIME ZONE v_user_timezone)::date
+        ) AS idea_date
+      FROM "0008-ap-deposit-ideas" d
+    ) d
+    INNER JOIN note_filter nf
+      ON nf.parent_type = 'depositIdea'
+     AND nf.parent_id = d.id
+    WHERE d.user_id = v_user_id
+      AND d.idea_date IS NOT NULL
+      AND d.idea_date >= v_start_date
+      AND d.idea_date < v_end_date
+    GROUP BY d.idea_date
   ),
   daily_withdrawals AS (
     SELECT
-      (n.created_at AT TIME ZONE v_user_timezone)::date AS date_val,
+      w.withdrawal_date AS date_val,
       COUNT(DISTINCT w.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || COALESCE(w.title, 'Withdrawal'),
         E'\n'
       ) AS summary_val
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-withdrawals" w ON w.id = unj.parent_id
-    WHERE unj.user_id = v_user_id
-      AND unj.parent_type = 'withdrawal'
-      AND w.user_id = v_user_id
-      AND n.id IN (SELECT note_id FROM note_filter)
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date >= v_start_date
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date < v_end_date
-    GROUP BY (n.created_at AT TIME ZONE v_user_timezone)::date
+    FROM (
+      SELECT
+        w.id,
+        w.user_id,
+        w.title,
+        COALESCE(
+          (w.withdrawn_at AT TIME ZONE v_user_timezone)::date,
+          (w.created_at AT TIME ZONE v_user_timezone)::date
+        ) AS withdrawal_date
+      FROM "0008-ap-withdrawals" w
+    ) w
+    INNER JOIN note_filter nf
+      ON nf.parent_type = 'withdrawal'
+     AND nf.parent_id = w.id
+    WHERE w.user_id = v_user_id
+      AND w.withdrawal_date IS NOT NULL
+      AND w.withdrawal_date >= v_start_date
+      AND w.withdrawal_date < v_end_date
+    GROUP BY w.withdrawal_date
   ),
   all_dates AS (
     SELECT DISTINCT date_val FROM daily_reflections
