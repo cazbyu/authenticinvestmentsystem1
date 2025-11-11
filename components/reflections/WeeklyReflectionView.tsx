@@ -197,24 +197,27 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
     const parentItemsMap = new Map<string, ParentItemData>();
 
     if (taskParentIds.length > 0) {
-      const { data: tasksData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, title, completed_at, is_urgent, is_important, type')
-        .in('id', taskParentIds);
-      tasksData?.forEach((task: any) => {
-        parentItemsMap.set(task.id, task);
-      });
-    }
+    const { data: tasksData } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, title, completed_at, is_urgent, is_important, type')
+      .in('id', taskParentIds)
+      .is('deleted_at', null);
+    tasksData?.forEach((task: any) => {
+      parentItemsMap.set(task.id, task);
+    });
+  }
 
-    if (depositIdeaIds.length > 0) {
-      const { data: depositIdeasData } = await supabase
-        .from('0008-ap-deposit-ideas')
-        .select('id, title, archived')
-        .in('id', depositIdeaIds);
-      depositIdeasData?.forEach((di: any) => {
-        parentItemsMap.set(di.id, di);
-      });
-    }
+  if (depositIdeaIds.length > 0) {
+    const { data: depositIdeasData } = await supabase
+      .from('0008-ap-deposit-ideas')
+      .select('id, title, archived')
+      .in('id', depositIdeaIds)
+      .eq('archived', false)
+      .eq('is_active', true);
+    depositIdeasData?.forEach((di: any) => {
+      parentItemsMap.set(di.id, di);
+    });
+  }
 
     if (withdrawalIds.length > 0) {
       const { data: withdrawalsData } = await supabase

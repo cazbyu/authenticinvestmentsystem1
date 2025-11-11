@@ -87,6 +87,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
         .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
         .eq('user_id', user.id)
         .eq('status', 'completed')
+        .is('deleted_at', null)
         .not('completed_at', 'is', null);
 
       if (dateFilter) {

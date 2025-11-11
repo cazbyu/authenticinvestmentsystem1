@@ -94,6 +94,7 @@ LEFT JOIN "0008-ap-universal-domains-join" dj
 LEFT JOIN "0008-ap-universal-goals-join" gj
   ON gj.parent_id = t.id AND gj.parent_type = 'task'
 WHERE t.completed_at IS NOT NULL
+  AND t.deleted_at IS NULL
 GROUP BY t.id, t.user_id, t.title, t.completed_at, t.is_authentic_deposit, t.is_urgent, t.is_important;
 
 -- =====================================================
@@ -129,6 +130,7 @@ LEFT JOIN "0008-ap-goals-12wk" tw
 LEFT JOIN "0008-ap-goals-custom" cg
   ON gj.custom_goal_id = cg.id
 WHERE t.completed_at IS NOT NULL
+  AND t.deleted_at IS NULL
 GROUP BY
   t.user_id,
   goal_id,
@@ -154,6 +156,7 @@ WITH task_activities AS (
   INNER JOIN "0008-ap-universal-roles-join" rj
     ON rj.parent_id = t.id AND rj.parent_type = 'task'
   WHERE t.completed_at IS NOT NULL
+    AND t.deleted_at IS NULL
   GROUP BY t.user_id, rj.role_id, get_sunday_week_start(t.completed_at)
 ),
 deposit_activities AS (
@@ -166,6 +169,7 @@ deposit_activities AS (
   INNER JOIN "0008-ap-universal-roles-join" rj
     ON rj.parent_id = di.id AND rj.parent_type = 'depositIdea'
   WHERE di.archived = false
+    AND COALESCE(di.is_active, true) = true
   GROUP BY di.user_id, rj.role_id, get_sunday_week_start(di.created_at)
 )
 SELECT
@@ -206,6 +210,7 @@ INNER JOIN "0008-ap-universal-domains-join" dj
 INNER JOIN "0008-ap-domains" d
   ON d.id = dj.domain_id
 WHERE t.completed_at IS NOT NULL
+  AND t.deleted_at IS NULL
 GROUP BY
   t.user_id,
   dj.domain_id,
@@ -285,6 +290,7 @@ LEFT JOIN "0008-ap-goals-12wk" tw
 LEFT JOIN "0008-ap-goals-custom" cg
   ON gj.custom_goal_id = cg.id
 WHERE t.completed_at IS NOT NULL
+  AND t.deleted_at IS NULL
 GROUP BY
   t.user_id,
   goal_id,
@@ -307,6 +313,7 @@ WITH task_activities AS (
   INNER JOIN "0008-ap-universal-roles-join" rj
     ON rj.parent_id = t.id AND rj.parent_type = 'task'
   WHERE t.completed_at IS NOT NULL
+    AND t.deleted_at IS NULL
   GROUP BY t.user_id, rj.role_id, t.completed_at::date
 ),
 deposit_activities AS (
@@ -319,6 +326,7 @@ deposit_activities AS (
   INNER JOIN "0008-ap-universal-roles-join" rj
     ON rj.parent_id = di.id AND rj.parent_type = 'depositIdea'
   WHERE di.archived = false
+    AND COALESCE(di.is_active, true) = true
   GROUP BY di.user_id, rj.role_id, di.created_at::date
 )
 SELECT
@@ -357,6 +365,7 @@ INNER JOIN "0008-ap-universal-domains-join" dj
 INNER JOIN "0008-ap-domains" d
   ON d.id = dj.domain_id
 WHERE t.completed_at IS NOT NULL
+  AND t.deleted_at IS NULL
 GROUP BY
   t.user_id,
   dj.domain_id,

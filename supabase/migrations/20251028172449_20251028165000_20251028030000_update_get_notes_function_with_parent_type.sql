@@ -46,8 +46,13 @@ BEGIN
   WHERE
     n.user_id = p_user_id
     AND (
-      (unj.parent_type = 'task' AND DATE(t.completed_at) = p_date)
-      OR (unj.parent_type = 'depositIdea' AND DATE(di.created_at) = p_date)
+      (unj.parent_type = 'task' AND t.deleted_at IS NULL AND DATE(t.completed_at) = p_date)
+      OR (
+        unj.parent_type = 'depositIdea'
+        AND di.archived = false
+        AND COALESCE(di.is_active, true) = true
+        AND DATE(di.created_at) = p_date
+      )
       OR (unj.parent_type = 'withdrawal' AND DATE(w.withdrawn_at) = p_date)
     )
   ORDER BY n.created_at DESC;

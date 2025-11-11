@@ -245,7 +245,8 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       const { data: tasksData } = await supabase
         .from('0008-ap-tasks')
         .select('id, title, completed_at, is_urgent, is_important, type')
-        .in('id', taskParentIds);
+        .in('id', taskParentIds)
+        .is('deleted_at', null);
       tasksData?.forEach((task: any) => {
         parentItemsMap.set(task.id, task);
       });
@@ -255,7 +256,9 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       const { data: depositIdeasData } = await supabase
         .from('0008-ap-deposit-ideas')
         .select('id, title, archived')
-        .in('id', depositIdeaIds);
+        .in('id', depositIdeaIds)
+        .eq('archived', false)
+        .eq('is_active', true);
       depositIdeasData?.forEach((di: any) => {
         parentItemsMap.set(di.id, di);
       });

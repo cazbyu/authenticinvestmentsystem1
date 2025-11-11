@@ -66,6 +66,7 @@ export async function calculateAuthenticScore(
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (tasksErr) throw tasksErr;
@@ -197,6 +198,7 @@ export async function calculateAuthenticScoreForRole(
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (tasksErr) throw tasksErr;
@@ -309,6 +311,7 @@ export async function calculateAuthenticScoreForDomain(
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (tasksErr) throw tasksErr;
@@ -759,6 +762,7 @@ export async function calculateAuthenticScoreForPeriod(
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (startDate) {
