@@ -48,12 +48,13 @@ BEGIN
 
   RETURN QUERY
   WITH note_filter AS (
+    -- Parents that have at least one "real" note this month
     SELECT DISTINCT
       j.parent_type,
       j.parent_id,
       j.note_id
     FROM "0008-ap-universal-notes-join" j
-    INNER JOIN "0008-ap-notes" n ON n.id = j.note_id
+    JOIN "0008-ap-notes" n ON n.id = j.note_id
     LEFT JOIN "0008-ap-note-attachments" na ON na.note_id = n.id
     WHERE
       j.user_id = v_user_id
@@ -62,7 +63,11 @@ BEGIN
         (n.content IS NOT NULL AND btrim(n.content) <> '')
         OR na.id IS NOT NULL
       )
+      AND (n.created_at AT TIME ZONE v_user_timezone)::date >= v_start_date
+      AND (n.created_at AT TIME ZONE v_user_timezone)::date < v_end_date
   ),
+
+  -- Reflections are always included (no note requirement)
   daily_reflections AS (
     SELECT
       (created_at AT TIME ZONE v_user_timezone)::date AS date_val,
@@ -78,13 +83,15 @@ BEGIN
       AND (created_at AT TIME ZONE v_user_timezone)::date < v_end_date
     GROUP BY (created_at AT TIME ZONE v_user_timezone)::date
   ),
+
+  -- Tasks (including "event-style" tasks live in 0008-ap-tasks, type = 'task')
   daily_tasks AS (
     SELECT
       t.task_date AS date_val,
       COUNT(DISTINCT t.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || t.title,
-        E'\n'
+        E'\n' ORDER BY t.title
       ) AS summary_val
     FROM (
       SELECT
@@ -100,7 +107,7 @@ BEGIN
         ) AS task_date
       FROM "0008-ap-tasks" t
     ) t
-    INNER JOIN note_filter nf
+    JOIN note_filter nf
       ON nf.parent_type = 'task'
      AND nf.parent_id = t.id
     WHERE t.user_id = v_user_id
@@ -111,13 +118,15 @@ BEGIN
       AND t.task_date < v_end_date
     GROUP BY t.task_date
   ),
+
+  -- Events (also stored in 0008-ap-tasks, type = 'event')
   daily_events AS (
     SELECT
       t.event_date AS date_val,
       COUNT(DISTINCT t.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || t.title,
-        E'\n'
+        E'\n' ORDER BY t.title
       ) AS summary_val
     FROM (
       SELECT
@@ -133,8 +142,8 @@ BEGIN
         ) AS event_date
       FROM "0008-ap-tasks" t
     ) t
-    INNER JOIN note_filter nf
-      ON nf.parent_type = 'task'
+    JOIN note_filter nf
+      ON nf.parent_type = 'event'
      AND nf.parent_id = t.id
     WHERE t.user_id = v_user_id
       AND t.type = 'event'
@@ -144,13 +153,15 @@ BEGIN
       AND t.event_date < v_end_date
     GROUP BY t.event_date
   ),
+
+  -- Deposit Ideas
   daily_deposit_ideas AS (
     SELECT
       d.idea_date AS date_val,
       COUNT(DISTINCT d.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || d.title,
-        E'\n'
+        E'\n' ORDER BY d.title
       ) AS summary_val
     FROM (
       SELECT
@@ -163,7 +174,7 @@ BEGIN
         ) AS idea_date
       FROM "0008-ap-deposit-ideas" d
     ) d
-    INNER JOIN note_filter nf
+    JOIN note_filter nf
       ON nf.parent_type = 'depositIdea'
      AND nf.parent_id = d.id
     WHERE d.user_id = v_user_id
@@ -172,13 +183,15 @@ BEGIN
       AND d.idea_date < v_end_date
     GROUP BY d.idea_date
   ),
+
+  -- Withdrawals
   daily_withdrawals AS (
     SELECT
       w.withdrawal_date AS date_val,
       COUNT(DISTINCT w.id) AS count_val,
       STRING_AGG(
         DISTINCT '• ' || COALESCE(w.title, 'Withdrawal'),
-        E'\n'
+        E'\n' ORDER BY COALESCE(w.title, 'Withdrawal')
       ) AS summary_val
     FROM (
       SELECT
@@ -191,7 +204,7 @@ BEGIN
         ) AS withdrawal_date
       FROM "0008-ap-withdrawals" w
     ) w
-    INNER JOIN note_filter nf
+    JOIN note_filter nf
       ON nf.parent_type = 'withdrawal'
      AND nf.parent_id = w.id
     WHERE w.user_id = v_user_id
@@ -200,6 +213,8 @@ BEGIN
       AND w.withdrawal_date < v_end_date
     GROUP BY w.withdrawal_date
   ),
+
+  -- All dates that have at least one relevant item
   all_dates AS (
     SELECT DISTINCT date_val FROM daily_reflections
     UNION
@@ -211,6 +226,7 @@ BEGIN
     UNION
     SELECT DISTINCT date_val FROM daily_withdrawals
   )
+
   SELECT
     ad.date_val AS item_date,
     COALESCE(dr.count_val, 0) AS reflections_count,
@@ -250,5 +266,4 @@ $$;
 COMMENT ON FUNCTION get_month_dates_with_items IS
   'Returns dates with item counts limited to reflections and note-backed daily items.';
 
-GRANT EXECUTE ON FUNCTION get_monthly_item_counts TO authenticated;
 GRANT EXECUTE ON FUNCTION get_month_dates_with_items TO authenticated;
