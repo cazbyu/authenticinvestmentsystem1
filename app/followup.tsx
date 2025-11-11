@@ -14,7 +14,11 @@ import { Header } from '@/components/Header';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchReflectionById, ReflectionWithRelations } from '@/lib/reflectionUtils';
-import { fetchPendingReflectionFollowUps, FollowUpItem, markFollowUpDone } from '@/lib/followUpUtils'; // whatever file name you used
+import {
+  fetchPendingReflectionFollowUps,
+  FollowUpItem,
+  markFollowUpDone,
+} from '@/lib/followUpUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { useRouter } from 'expo-router';
 import { Calendar, Check } from 'lucide-react-native';
@@ -30,6 +34,37 @@ export default function FollowUpScreen() {
   const [followUps, setFollowUps] = useState<FollowUpWithReflection[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const fetchReflections = async () => {
+    setLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1) Get pending follow-ups for reflections from universal table
+      const pendingFollowUps = await fetchPendingReflectionFollowUps(user.id);
+
+      // 2) For each follow-up row, load the associated reflection with relations
+      const items: FollowUpWithReflection[] = [];
+
+      for (const fu of pendingFollowUps) {
+        const reflection = await fetchReflectionById(fu.parent_id);
+        if (reflection) {
+          items.push({ followUp: fu, reflection });
+        }
+      }
+
+      setFollowUps(items);
+    } catch (error) {
+      console.error('Error fetching follow-up reflections:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     fetchReflections();
@@ -48,39 +83,6 @@ export default function FollowUpScreen() {
       eventBus.off(EVENTS.REFLECTION_DELETED, handleReflectionChange);
     };
   }, []);
-
-  const fetchReflections = async () => {
-  setLoading(true);
-  try {
-    const supabase = getSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // 1) Get pending reflection follow-ups from the universal table
-    const pendingFollowUps = await fetchPendingReflectionFollowUps(user.id);
-
-    // 2) For each follow-up, load the associated reflection with relations
-    const items: FollowUpWithReflection[] = [];
-
-    for (const fu of pendingFollowUps) {
-      const reflection = await fetchReflectionById(fu.parent_id);
-      if (reflection) {
-        items.push({ followUp: fu, reflection });
-      }
-      // if reflection is null (deleted / archived), we just skip it
-    }
-
-    setFollowUps(items);
-  } catch (error) {
-    console.error('Error fetching follow-up reflections:', error);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
-
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -111,136 +113,131 @@ export default function FollowUpScreen() {
   };
 
   const handleReflectionPress = (reflection: ReflectionWithRelations) => {
+    // You can later navigate with params if you want a specific reflection
     router.push('/reflections' as any);
   };
 
   const handleMarkComplete = (followUpId: string) => {
-  Alert.alert(
-    'Mark as Complete',
-    'Do you want to clear the follow-up for this item?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Complete',
-        onPress: async () => {
-          try {
-            const supabase = getSupabaseClient();
-            const {
-              data: { user },
-            } = await supabase.auth.getUser();
-            if (!user) return;
+    Alert.alert(
+      'Mark as Complete',
+      'Do you want to clear the follow-up for this item?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Complete',
+          onPress: async () => {
+            try {
+              const supabase = getSupabaseClient();
+              const {
+                data: { user },
+              } = await supabase.auth.getUser();
+              if (!user) return;
 
-            const success = await markFollowUpDone(followUpId, user.id);
-            if (!success) throw new Error('Failed to mark follow-up done');
+              const success = await markFollowUpDone(followUpId, user.id);
+              if (!success) throw new Error('Failed to update follow-up');
 
-            await fetchReflections();
-            eventBus.emit(EVENTS.REFLECTION_UPDATED);
-            Alert.alert('Success', 'Follow-up marked as complete');
-          } catch (error) {
-            console.error('Error marking follow-up complete:', error);
-            Alert.alert('Error', 'Failed to update follow-up');
-          }
+              await fetchReflections();
+              eventBus.emit(EVENTS.REFLECTION_UPDATED);
+              Alert.alert('Success', 'Follow-up marked as complete');
+            } catch (error) {
+              console.error('Error marking follow-up complete:', error);
+              Alert.alert('Error', 'Failed to update follow-up');
+            }
+          },
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
 
-  const renderFollowUp = ({
-  item,
-}: {
-  item: FollowUpWithReflection;
-}) => {
-  const { followUp, reflection } = item;
-  const isOverdue = followUp.follow_up_date
-    ? new Date(followUp.follow_up_date) < new Date()
-    : false;
+  const renderFollowUp = ({ item }: { item: FollowUpWithReflection }) => {
+    const { followUp, reflection } = item;
+    const isOverdue = followUp.follow_up_date
+      ? new Date(followUp.follow_up_date) < new Date()
+      : false;
 
-  return (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.border },
-        isOverdue && { borderLeftColor: colors.warning, borderLeftWidth: 4 },
-      ]}
-      onPress={() => handleReflectionPress(reflection)}
-    >
-      <View className={styles.cardHeader}>
-        <View style={styles.dateContainer}>
-          <Calendar size={16} color={colors.primary} />
-          <Text
-            style={[
-              styles.followUpDate,
-              { color: isOverdue ? colors.warning : colors.primary },
-            ]}
-          >
-            {followUp.follow_up_date
-              ? formatFollowUpDate(followUp.follow_up_date)
-              : 'No date'}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.completeButton, { backgroundColor: colors.success }]}
-          onPress={() => handleMarkComplete(followUp.id)}
-        >
-          <Check size={16} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
-
-      <Text
-        style={[styles.contentPreview, { color: colors.text }]}
-        numberOfLines={3}
+    return (
+      <TouchableOpacity
+        style={[
+          styles.card,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+          isOverdue && { borderLeftColor: colors.warning, borderLeftWidth: 4 },
+        ]}
+        onPress={() => handleReflectionPress(reflection)}
       >
-        {truncateContent(reflection.content)}
-      </Text>
-
-      <View style={styles.metaRow}>
-        <Text style={[styles.originalDate, { color: colors.textSecondary }]}>
-          Created: {formatOriginalDate(reflection.date, reflection.created_at)}
-        </Text>
-        {isOverdue && (
-          <View
-            style={[styles.overdueTag, { backgroundColor: colors.warning }]}
-          >
-            <Text style={styles.overdueText}>Overdue</Text>
+        <View style={styles.cardHeader}>
+          <View style={styles.dateContainer}>
+            <Calendar size={16} color={colors.primary} />
+            <Text
+              style={[
+                styles.followUpDate,
+                { color: isOverdue ? colors.warning : colors.primary },
+              ]}
+            >
+              {followUp.follow_up_date
+                ? formatFollowUpDate(followUp.follow_up_date)
+                : 'No date'}
+            </Text>
           </View>
-        )}
-      </View>
-
-      {(reflection.roles && reflection.roles.length > 0) ||
-      (reflection.domains && reflection.domains.length > 0) ? (
-        <View style={styles.tagsRow}>
-          {reflection.roles?.slice(0, 2).map((role) => (
-            <View
-              key={role.id}
-              style={[styles.tag, { backgroundColor: colors.background }]}
-            >
-              <Text
-                style={[styles.tagText, { color: colors.textSecondary }]}
-                numberOfLines={1}
-              >
-                {role.label}
-              </Text>
-            </View>
-          ))}
-          {reflection.domains?.slice(0, 2).map((domain) => (
-            <View
-              key={domain.id}
-              style={[styles.tag, { backgroundColor: colors.background }]}
-            >
-              <Text
-                style={[styles.tagText, { color: colors.textSecondary }]}
-                numberOfLines={1}
-              >
-                {domain.name}
-              </Text>
-            </View>
-          ))}
+          <TouchableOpacity
+            style={[styles.completeButton, { backgroundColor: colors.success }]}
+            onPress={() => handleMarkComplete(followUp.id)}
+          >
+            <Check size={16} color="#ffffff" />
+          </TouchableOpacity>
         </View>
-      ) : null}
-    </TouchableOpacity>
-  );
-};
+
+        <Text
+          style={[styles.contentPreview, { color: colors.text }]}
+          numberOfLines={3}
+        >
+          {truncateContent(reflection.content)}
+        </Text>
+
+        <View style={styles.metaRow}>
+          <Text style={[styles.originalDate, { color: colors.textSecondary }]}>
+            Created: {formatOriginalDate(reflection.date, reflection.created_at)}
+          </Text>
+          {isOverdue && (
+            <View style={[styles.overdueTag, { backgroundColor: colors.warning }]}>
+              <Text style={styles.overdueText}>Overdue</Text>
+            </View>
+          )}
+        </View>
+
+        {(reflection.roles && reflection.roles.length > 0) ||
+        (reflection.domains && reflection.domains.length > 0) ? (
+          <View style={styles.tagsRow}>
+            {reflection.roles?.slice(0, 2).map((role) => (
+              <View
+                key={role.id}
+                style={[styles.tag, { backgroundColor: colors.background }]}
+              >
+                <Text
+                  style={[styles.tagText, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {role.label}
+                </Text>
+              </View>
+            ))}
+            {reflection.domains?.slice(0, 2).map((domain) => (
+              <View
+                key={domain.id}
+                style={[styles.tag, { backgroundColor: colors.background }]}
+              >
+                <Text
+                  style={[styles.tagText, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {domain.name}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -254,7 +251,9 @@ export default function FollowUpScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <Header title="Follow Up" />
 
       {loading && !refreshing ? (
@@ -263,12 +262,16 @@ export default function FollowUpScreen() {
         </View>
       ) : (
         <FlatList
-  data={items}
-  renderItem={renderFollowUp}
-  keyExtractor={(item) => item.followUp.id}
-  ListEmptyComponent={renderEmpty}
+          data={followUps}
+          renderItem={renderFollowUp}
+          keyExtractor={(item) => item.followUp.id}
+          ListEmptyComponent={renderEmpty}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
           }
           contentContainerStyle={styles.listContent}
         />
