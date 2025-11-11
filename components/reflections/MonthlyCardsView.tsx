@@ -114,7 +114,9 @@ export default function MonthlyCardsView({ onMonthPress }: MonthlyCardsViewProps
                 <TooltipRow label="Events" count={item.eventsCount} colors={colors} />
                 <TooltipRow label="Deposit Ideas" count={item.depositIdeasCount} colors={colors} />
                 <TooltipRow label="Withdrawals" count={item.withdrawalsCount} colors={colors} />
-                <TooltipRow label="Follow Up Items" count={item.followUpItemsCount} colors={colors} />
+                {item.followUpItemsCount > 0 && (
+                  <TooltipRow label="Follow Up Items" count={item.followUpItemsCount} colors={colors} />
+                )}
               </View>
             </View>
           </View>

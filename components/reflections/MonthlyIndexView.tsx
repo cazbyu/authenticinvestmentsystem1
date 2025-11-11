@@ -60,7 +60,26 @@ export default function MonthlyIndexView({
     });
   };
 
+  const formatContentSummary = (summary: string) => {
+    if (!summary) {
+      return '';
+    }
+
+    const normalizedEntries = summary
+      .split('\n')
+      .map((entry) => entry.replace(/^•\s*/, '').trim())
+      .filter((entry) => entry.length > 0);
+
+    if (normalizedEntries.length === 0) {
+      return '';
+    }
+
+    return `• ${normalizedEntries.join(' • ')}`;
+  };
+
   const renderDateRow = ({ item }: { item: DateWithContent }) => {
+    const formattedSummary = formatContentSummary(item.contentSummary);
+
     return (
       <TouchableOpacity
         style={[
@@ -79,9 +98,15 @@ export default function MonthlyIndexView({
           </Text>
         </View>
         <View style={styles.contentColumn}>
-          <Text style={[styles.contentText, { color: colors.textSecondary }]} numberOfLines={2}>
-            {item.contentSummary}
-          </Text>
+          {formattedSummary ? (
+            <Text style={[styles.contentText, { color: colors.textSecondary }]} numberOfLines={2}>
+              {formattedSummary}
+            </Text>
+          ) : (
+            <Text style={[styles.contentText, { color: colors.textSecondary }]} numberOfLines={2}>
+              No reflections or daily items with notes
+            </Text>
+          )}
         </View>
       </TouchableOpacity>
     );
