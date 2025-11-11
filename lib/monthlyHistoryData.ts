@@ -125,7 +125,6 @@ export function getTotalItemsForMonth(stats: MonthlyStatistics): number {
     stats.tasksCount +
     stats.eventsCount +
     stats.depositIdeasCount +
-    stats.withdrawalsCount +
-    stats.followUpItemsCount
+    stats.withdrawalsCount
   );
 }
