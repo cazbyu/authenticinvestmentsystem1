@@ -121,7 +121,7 @@ export async function fetchReflectionById(
 }
 
 /**
- * Fetches all follow-up reflections for a user
+ * Fetches all follow-up reflections for a user (legacy, using follow_up columns)
  */
 export async function fetchFollowUpReflections(
   userId: string
@@ -266,31 +266,34 @@ async function fetchReflectionNotes(
 
     if (directError) throw directError;
 
-    let notes = directNotes?.map((item: any) => ({
-      ...item.note,
-      parent_type: item.parent_type
-    })).filter((note: any) => note !== null && note.id) || [];
+    let notes =
+      directNotes
+        ?.map((item: any) => ({
+          ...item.note,
+          parent_type: item.parent_type,
+        }))
+        .filter((note: any) => note !== null && note.id) || [];
 
     // If we have a reflection date, also fetch notes from tasks/items completed on that date
     if (reflectionDate && userId) {
       console.log('[fetchReflectionNotes] Calling get_notes_for_reflection_date with:', {
         userId,
         reflectionDate,
-        reflectionId
+        reflectionId,
       });
 
       const { data: dateBasedNotes, error: dateError } = await supabase.rpc(
         'get_notes_for_reflection_date',
         {
           p_user_id: userId,
-          p_date: reflectionDate
+          p_date: reflectionDate,
         }
       );
 
       console.log('[fetchReflectionNotes] RPC result:', {
         notesCount: dateBasedNotes?.length || 0,
         error: dateError,
-        notes: dateBasedNotes
+        notes: dateBasedNotes,
       });
 
       if (!dateError && dateBasedNotes) {
@@ -377,7 +380,9 @@ export function calculateWeekRange(
 export function isOlderThan90Days(createdAt: string): boolean {
   const created = new Date(createdAt);
   const now = new Date();
-  const daysDiff = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+  const daysDiff = Math.floor(
+    (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
+  );
   return daysDiff > 90;
 }
 
@@ -414,7 +419,9 @@ async function generateReflectionTitle(
 ): Promise<void> {
   try {
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
     if (!session) {
       console.warn('No active session, skipping title generation');
@@ -426,7 +433,7 @@ async function generateReflectionTitle(
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -450,6 +457,7 @@ async function generateReflectionTitle(
 
 /**
  * Saves a reflection with its associations
+ * Also writes to 0008-ap-universal-follow-up-join when followUp + followUpDate are set.
  */
 export async function saveReflection(
   userId: string,
@@ -485,24 +493,24 @@ export async function saveReflection(
     const reflectionError = insertError;
 
     if (reflectionError) throw reflectionError;
-if (!reflection) throw new Error('Failed to create reflection');
+    if (!reflection) throw new Error('Failed to create reflection');
 
     // Create universal follow-up join row if needed
-if (followUp && followUpDate) {
-  const { error: followUpError } = await supabase
-    .from('0008-ap-universal-follow-up-join')
-    .insert({
-      user_id: userId,
-      parent_type: 'reflection',
-      parent_id: reflection.id,
-      follow_up_date: followUpDate,
-      status: 'pending',
-      reason_type: 'review', // or null if you prefer
-      reason: null,
-    });
+    if (followUp && followUpDate) {
+      const { error: followUpError } = await supabase
+        .from('0008-ap-universal-follow-up-join')
+        .insert({
+          user_id: userId,
+          parent_type: 'reflection',
+          parent_id: reflection.id,
+          follow_up_date: followUpDate,
+          status: 'pending',
+          reason_type: 'review', // or null if you prefer
+          reason: null,
+        });
 
-  if (followUpError) throw followUpError;
-}
+      if (followUpError) throw followUpError;
+    }
 
     // Insert role associations
     if (selectedRoleIds.length > 0) {
@@ -553,7 +561,6 @@ if (followUp && followUpDate) {
     }
 
     // Generate AI title asynchronously (non-blocking)
-    // This happens in the background and won't delay the user
     if (reflection.id && content) {
       generateReflectionTitle(reflection.id, content).catch((error) => {
         console.error('Background title generation failed:', error);
@@ -569,6 +576,7 @@ if (followUp && followUpDate) {
 
 /**
  * Updates an existing reflection
+ * Also keeps 0008-ap-universal-follow-up-join in sync.
  */
 export async function updateReflection(
   reflectionId: string,
@@ -597,31 +605,29 @@ export async function updateReflection(
 
     if (reflectionError) throw reflectionError;
 
-// Delete existing universal follow-up joins for this reflection
-await supabase
-  .from('0008-ap-universal-follow-up-join')
-  .delete()
-  .eq('parent_type', 'reflection')
-  .eq('parent_id', reflectionId);
+    // Keep universal follow-up join in sync
+    await supabase
+      .from('0008-ap-universal-follow-up-join')
+      .delete()
+      .eq('parent_type', 'reflection')
+      .eq('parent_id', reflectionId);
 
-// If follow-up is enabled, insert a fresh join row
-if (followUp && followUpDate) {
-  const { error: followUpError } = await supabase
-    .from('0008-ap-universal-follow-up-join')
-    .insert({
-      user_id: userId,
-      parent_type: 'reflection',
-      parent_id: reflectionId,
-      follow_up_date: followUpDate,
-      status: 'pending',
-      reason_type: 'review', // or null for now
-      reason: null,
-    });
+    if (followUp && followUpDate) {
+      const { error: followUpError } = await supabase
+        .from('0008-ap-universal-follow-up-join')
+        .insert({
+          user_id: userId,
+          parent_type: 'reflection',
+          parent_id: reflectionId,
+          follow_up_date: followUpDate,
+          status: 'pending',
+          reason_type: 'review', // or null if you prefer
+          reason: null,
+        });
 
-  if (followUpError) throw followUpError;
-}
+      if (followUpError) throw followUpError;
+    }
 
-    
     // Delete existing associations
     await Promise.all([
       supabase
@@ -693,31 +699,6 @@ if (followUp && followUpDate) {
   } catch (error) {
     console.error('Error updating reflection:', error);
     return false;
-
-    // Clear existing follow-up join(s) for this reflection
-await supabase
-  .from('0008-ap-universal-follow-up-join')
-  .delete()
-  .eq('parent_type', 'reflection')
-  .eq('parent_id', reflectionId);
-
-// If follow-up is enabled, insert a new join
-if (followUp && followUpDate) {
-  const { error: followUpError } = await supabase
-    .from('0008-ap-universal-follow-up-join')
-    .insert({
-      user_id: userId,
-      parent_type: 'reflection',
-      parent_id: reflectionId,
-      follow_up_date: followUpDate,
-      status: 'pending',
-      reason_type: 'review', // or null if you prefer
-      reason: null,
-    });
-
-  if (followUpError) throw followUpError;
-}
-
   }
 }
 
