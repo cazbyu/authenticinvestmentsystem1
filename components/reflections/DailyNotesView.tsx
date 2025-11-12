@@ -126,6 +126,14 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       const inputDate = selectedDate || formatLocalDate(new Date());
       const normalizedTargetDate = normalizeDateInput(inputDate);
       const range = getDayDateRangeForDate(normalizedTargetDate);
+
+      console.log('[DailyNotes] loadData called:', {
+        selectedDate,
+        inputDate,
+        normalizedTargetDate,
+        range,
+      });
+
       await Promise.all([
         fetchDailyData(normalizedTargetDate, range, inputDate),
         fetchTodayTimelineData(normalizedTargetDate, range),
@@ -215,11 +223,22 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
 
     const normalizedDate = targetDateString.split('T')[0];
 
+    console.log('[DailyNotes] fetchTodayTimelineData called:', {
+      targetDateString,
+      normalizedDate,
+      userId: user.id,
+    });
+
     const reflections = await fetchReflectionsByDateRange(user.id, normalizedDate, normalizedDate);
     const reflectionIds = reflections.map((r) => r.id);
     const reflectionAttachmentsMap = reflectionIds.length > 0
       ? await fetchAttachmentsForReflections(reflectionIds)
       : new Map<string, ReflectionAttachment[]>();
+
+    console.log('[DailyNotes] Reflections fetched:', {
+      count: reflections.length,
+      reflections: reflections.map(r => ({ id: r.id, title: r.reflection_title, content: r.content?.substring(0, 50) })),
+    });
 
     const { data: historyData, error: historyError } = await supabase.rpc('get_daily_history_items', {
       p_target_date: normalizedDate,
@@ -230,6 +249,15 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       console.error('Error fetching daily history items:', historyError);
       return;
     }
+
+    console.log('[DailyNotes] History items fetched:', {
+      count: historyData?.length || 0,
+      items: historyData?.map((item: any) => ({
+        type: item.item_type,
+        title: item.item_title,
+        content: item.item_content?.substring(0, 30),
+      })),
+    });
 
     const historyItems: DailyHistoryItemRow[] = (historyData || []) as DailyHistoryItemRow[];
     const noteBackedItems = historyItems.filter((item) => item.item_type !== 'reflection');
@@ -308,6 +336,18 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     const combined = [...reflectionItems, ...noteItems].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
+
+    console.log('[DailyNotes] Combined timeline items:', {
+      reflectionItemsCount: reflectionItems.length,
+      noteItemsCount: noteItems.length,
+      combinedCount: combined.length,
+      items: combined.map(item => ({
+        type: item.type,
+        title: item.title,
+        hasContent: !!item.content,
+        hasAttachments: (item.attachments?.length || 0) + (item.noteAttachments?.length || 0),
+      })),
+    });
 
     setTimelineItems(combined);
   };
@@ -524,7 +564,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
             </>
           )}
 
-        {timelineItems.length > 0 && (
+        {timelineItems.length > 0 ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>
               Today's Reflections and Notes ({timelineItems.length})
@@ -638,6 +678,15 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                 );
               })}
             </View>
+          </View>
+        ) : (
+          <View style={[styles.card, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              Today's Reflections and Notes
+            </Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No reflections or notes recorded for this date.
+            </Text>
           </View>
         )}
         </View>
