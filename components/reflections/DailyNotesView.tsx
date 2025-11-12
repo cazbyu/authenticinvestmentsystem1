@@ -37,6 +37,7 @@ interface ParentItemData {
   is_urgent?: boolean;
   is_important?: boolean;
   type?: string;
+  is_active?: boolean;
 }
 
 interface TimelineItem {
@@ -52,6 +53,23 @@ interface TimelineItem {
   parentItem?: ParentItemData;
   isActive?: boolean;
   priorityColor?: string;
+}
+
+interface DailyHistoryItemRow {
+  item_type: TimelineItemType;
+  parent_id: string;
+  item_title: string | null;
+  item_content: string | null;
+  item_created_at: string;
+  note_id: string | null;
+  parent_task_type: string | null;
+  parent_completed_at: string | null;
+  parent_is_urgent: boolean | null;
+  parent_is_important: boolean | null;
+  parent_archived: boolean | null;
+  parent_is_active: boolean | null;
+  parent_withdrawn_at: string | null;
+  notes_count: number | null;
 }
 
 interface DailyNotesViewProps {
@@ -190,7 +208,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     };
   };
 
-  const fetchTodayTimelineData = async (targetDateString: string, range: DailyRange) => {
+  const fetchTodayTimelineData = async (targetDateString: string, _range: DailyRange) => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -203,87 +221,27 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       ? await fetchAttachmentsForReflections(reflectionIds)
       : new Map<string, ReflectionAttachment[]>();
 
-    const todayStart = new Date(range.start);
-    const todayEnd = new Date(range.end);
-
-    console.log('[DailyNotes] Fetching notes for date:', {
-      targetDate: normalizedDate,
-      utcRangeStart: todayStart.toISOString(),
-      utcRangeEnd: todayEnd.toISOString(),
+    const { data: historyData, error: historyError } = await supabase.rpc('get_daily_history_items', {
+      p_target_date: normalizedDate,
+      p_user_id: user.id,
     });
 
-    const { data: notesData, error: notesError } = await supabase
-      .from('0008-ap-universal-notes-join')
-      .select(`
-        parent_id,
-        parent_type,
-        note:0008-ap-notes(
-          id,
-          content,
-          created_at
-        )
-      `)
-      .eq('user_id', user.id);
-
-    // Filter notes by the created_at timestamp from the notes table
-    // Use a wide range to ensure we don't miss notes due to timezone differences
-    const filteredNotesData = notesData?.filter((item: any) => {
-      if (!item.note || !item.note.created_at) return false;
-      const noteDate = new Date(item.note.created_at);
-      return noteDate >= todayStart && noteDate <= todayEnd;
-    });
-
-    if (notesError) {
-      console.error('Error fetching today notes:', notesError);
+    if (historyError) {
+      console.error('Error fetching daily history items:', historyError);
+      return;
     }
 
-    // Get unique parent IDs by type
-    const taskParentIds = filteredNotesData?.filter((n: any) => n.parent_type === 'task').map((n: any) => n.parent_id) || [];
-    const depositIdeaIds = filteredNotesData?.filter((n: any) => n.parent_type === 'depositIdea').map((n: any) => n.parent_id) || [];
-    const withdrawalIds = filteredNotesData?.filter((n: any) => n.parent_type === 'withdrawal').map((n: any) => n.parent_id) || [];
+    const historyItems: DailyHistoryItemRow[] = (historyData || []) as DailyHistoryItemRow[];
+    const noteBackedItems = historyItems.filter((item) => item.item_type !== 'reflection');
 
-    // Fetch parent item data
-    const parentItemsMap = new Map<string, ParentItemData>();
+    const noteIds = noteBackedItems
+      .map((item) => item.note_id)
+      .filter((noteId): noteId is string => Boolean(noteId));
 
-    if (taskParentIds.length > 0) {
-      const { data: tasksData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, title, completed_at, is_urgent, is_important, type')
-        .in('id', taskParentIds)
-        .is('deleted_at', null);
-      tasksData?.forEach((task: any) => {
-        parentItemsMap.set(task.id, task);
-      });
-    }
-
-    if (depositIdeaIds.length > 0) {
-      const { data: depositIdeasData } = await supabase
-        .from('0008-ap-deposit-ideas')
-        .select('id, title, archived')
-        .in('id', depositIdeaIds)
-        .eq('archived', false)
-        .eq('is_active', true);
-      depositIdeasData?.forEach((di: any) => {
-        parentItemsMap.set(di.id, di);
-      });
-    }
-
-    if (withdrawalIds.length > 0) {
-      const { data: withdrawalsData } = await supabase
-        .from('0008-ap-withdrawals')
-        .select('id, title')
-        .in('id', withdrawalIds);
-      withdrawalsData?.forEach((w: any) => {
-        parentItemsMap.set(w.id, { ...w, completed_at: new Date().toISOString() });
-      });
-    }
-
-    const noteIds = filteredNotesData?.filter((item: any) => item.note && item.note.id).map((item: any) => item.note.id) || [];
     const noteAttachmentsMap = noteIds.length > 0
       ? await fetchAttachmentsForNotes(noteIds)
       : new Map<string, NoteAttachment[]>();
 
-    // Transform reflections to timeline items
     const reflectionItems: TimelineItem[] = reflections.map((r) => ({
       id: r.id,
       type: 'reflection' as TimelineItemType,
@@ -294,74 +252,59 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       attachments: reflectionAttachmentsMap.get(r.id) || [],
     }));
 
-    // Transform notes to timeline items with parent item data
-    const noteItems: TimelineItem[] = filteredNotesData
-      ? filteredNotesData
-          .filter((item: any) => item.note && item.note.id)
-          .reduce((acc: TimelineItem[], item: any) => {
-            const parentItem = parentItemsMap.get(item.parent_id);
-            const requiresParent = ['task', 'event', 'depositIdea', 'withdrawal'].includes(item.parent_type);
+    const noteItems: TimelineItem[] = noteBackedItems.map((item) => {
+      const resolvedType: TimelineItemType = item.item_type === 'event'
+        ? 'event'
+        : (item.item_type as TimelineItemType);
 
-            if (requiresParent && !parentItem) {
-              // Drop orphaned cards completely so deleted parents never appear.
-              console.warn('[DailyNotes] Skipping orphaned note without active parent', {
-                noteId: item.note.id,
-                parentId: item.parent_id,
-                parentType: item.parent_type,
-              });
-              return acc;
-            }
+      const parentItem: ParentItemData = {
+        id: item.parent_id,
+        title: item.item_title ?? undefined,
+        completed_at: item.parent_completed_at ?? undefined,
+        archived: item.parent_archived ?? undefined,
+        is_urgent: item.parent_is_urgent ?? undefined,
+        is_important: item.parent_is_important ?? undefined,
+        type: item.parent_task_type ?? resolvedType,
+        is_active: item.parent_is_active ?? undefined,
+      };
 
-            let resolvedType: TimelineItemType = (item.parent_type || 'note') as TimelineItemType;
+      let isActive = false;
+      let priorityColor: string | undefined;
 
-            // If parent is a task, determine if it's task or event
-            if (item.parent_type === 'task' && parentItem?.type) {
-              resolvedType = parentItem.type as TimelineItemType;
-            }
+      if (resolvedType === 'task' || resolvedType === 'event') {
+        isActive = !item.parent_completed_at;
+        if (isActive) {
+          if (item.parent_is_urgent && item.parent_is_important) {
+            priorityColor = '#ef4444';
+          } else if (!item.parent_is_urgent && item.parent_is_important) {
+            priorityColor = '#10b981';
+          } else if (item.parent_is_urgent && !item.parent_is_important) {
+            priorityColor = '#f59e0b';
+          } else {
+            priorityColor = '#6b7280';
+          }
+        }
+      } else if (item.item_type === 'depositIdea') {
+        isActive = item.parent_is_active ?? false;
+        if (isActive) {
+          priorityColor = '#8b5cf6';
+        }
+      }
 
-            // Determine if item is active
-            let isActive = false;
-            let priorityColor = undefined;
+      return {
+        id: item.note_id || `${item.item_type}-${item.parent_id}`,
+        type: resolvedType,
+        content: item.item_content || undefined,
+        created_at: item.item_created_at,
+        parent_type: resolvedType === 'event' ? 'task' : item.item_type,
+        title: item.item_title || getItemTypeLabel(resolvedType),
+        noteAttachments: item.note_id ? (noteAttachmentsMap.get(item.note_id) || []) : [],
+        parentItem,
+        isActive,
+        priorityColor,
+      };
+    });
 
-            if (parentItem) {
-              if (item.parent_type === 'task') {
-                isActive = !parentItem.completed_at;
-                if (isActive) {
-                  // Calculate priority color
-                  if (parentItem.is_urgent && parentItem.is_important) {
-                    priorityColor = '#ef4444';
-                  } else if (!parentItem.is_urgent && parentItem.is_important) {
-                    priorityColor = '#10b981';
-                  } else if (parentItem.is_urgent && !parentItem.is_important) {
-                    priorityColor = '#f59e0b';
-                  } else {
-                    priorityColor = '#6b7280';
-                  }
-                }
-              } else if (item.parent_type === 'depositIdea') {
-                isActive = !parentItem.archived;
-                if (isActive) priorityColor = '#8b5cf6';
-              }
-            }
-
-            acc.push({
-              id: item.note.id,
-              type: resolvedType,
-              content: item.note.content,
-              created_at: item.note.created_at,
-              parent_type: item.parent_type,
-              title: parentItem?.title || getItemTypeLabel(resolvedType),
-              noteAttachments: noteAttachmentsMap.get(item.note.id) || [],
-              parentItem,
-              isActive,
-              priorityColor,
-            });
-
-            return acc;
-          }, [])
-      : [];
-
-    // Merge and sort by created_at
     const combined = [...reflectionItems, ...noteItems].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
