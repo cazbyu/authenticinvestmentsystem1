@@ -223,10 +223,10 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: 'absolute',
-    top: '100%',
+    top: '50%',
     left: '50%',
-    transform: [{ translateX: -120 }, { translateY: 10 }],
-    width: 240,
+    transform: [{ translateX: -100 }, { translateY: -85 }],
+    width: 200,
     borderRadius: 12,
     borderWidth: 1,
     shadowColor: '#000',
@@ -251,15 +251,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#fff',
   },
   tooltipContent: {
-    padding: 16,
+    padding: 12,
   },
   tooltipTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   tooltipStats: {
-    gap: 8,
+    gap: 6,
   },
   tooltipRow: {
     flexDirection: 'row',
@@ -267,11 +267,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tooltipLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
   },
   tooltipValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   emptyContainer: {
