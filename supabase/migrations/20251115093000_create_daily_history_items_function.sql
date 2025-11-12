@@ -55,6 +55,8 @@ BEGIN
 
   RETURN QUERY
   WITH note_candidates AS (
+    -- All notes that belong to this user and are "real" (have content or
+    -- attachments). We also compute the note's local calendar date.
     SELECT
       j.parent_type,
       j.parent_id,
@@ -73,6 +75,7 @@ BEGIN
       )
   ),
   filtered_notes AS (
+    -- Only notes whose local date matches the target date
     SELECT
       nc.parent_type,
       nc.parent_id,
@@ -84,6 +87,8 @@ BEGIN
     WHERE nc.note_local_date = v_target_date
   ),
   ranked_notes AS (
+    -- Rank notes per parent so we can pick the latest note for that day,
+    -- and also count how many notes that parent has on the target date.
     SELECT
       fn.*,
       ROW_NUMBER() OVER (
@@ -94,6 +99,7 @@ BEGIN
     FROM filtered_notes fn
   ),
   latest_notes AS (
+    -- One row per parent item (per day) with the latest note and a notes_that_day count
     SELECT
       parent_type,
       parent_id,
@@ -105,6 +111,7 @@ BEGIN
     WHERE rn = 1
   ),
   reflection_rows AS (
+    -- Reflections are already "daily items" without going through universal-notes-join
     SELECT
       'reflection'::text AS item_type,
       r.id AS parent_id,
@@ -126,6 +133,7 @@ BEGIN
       AND (r.created_at AT TIME ZONE v_user_timezone)::date = v_target_date
   ),
   task_rows AS (
+    -- Tasks & events (both live in 0008-ap-tasks; type distinguishes them)
     SELECT
       t.type AS item_type,
       t.id AS parent_id,
