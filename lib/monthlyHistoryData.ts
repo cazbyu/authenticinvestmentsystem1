@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './supabase';
 
 export interface MonthlyStatistics {
+  monthStart: string;
   monthYear: string;
   year: number;
   month: number;
@@ -25,25 +26,34 @@ export interface DateWithContent {
 
 let monthlyStatsCache: MonthlyStatistics[] | null = null;
 let cacheTimestamp: number | null = null;
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Promise<MonthlyStatistics[]> {
+export async function fetchMonthlyStatistics(
+  forceRefresh: boolean = false
+): Promise<MonthlyStatistics[]> {
   const now = Date.now();
 
-  if (!forceRefresh && monthlyStatsCache && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
+  if (
+    !forceRefresh &&
+    monthlyStatsCache &&
+    cacheTimestamp &&
+    now - cacheTimestamp < CACHE_DURATION
+  ) {
     return monthlyStatsCache;
   }
 
   try {
     const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       throw new Error('User not authenticated');
     }
 
-    const { data, error } = await supabase.rpc('get_monthly_item_counts', {
-      p_user_id: user.id
+    const { data, error } = await supabase.rpc('get_history_month_summaries', {
+      p_user_id: user.id,
     });
 
     if (error) {
@@ -52,15 +62,17 @@ export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Pro
     }
 
     const formattedData: MonthlyStatistics[] = (data || []).map((item: any) => ({
+      // keep monthStart from the 10Nov_1800 branch
+      monthStart: item.month_start,
       monthYear: formatMonthYear(item.year, item.month),
       year: item.year,
       month: item.month,
-      reflectionsCount: parseInt(item.reflections_count, 10),
-      tasksCount: parseInt(item.tasks_count, 10),
-      eventsCount: parseInt(item.events_count, 10),
-      depositIdeasCount: parseInt(item.deposit_ideas_count, 10),
-      withdrawalsCount: parseInt(item.withdrawals_count, 10),
-      totalItems: parseInt(item.total_items, 10),
+      reflectionsCount: Number(item.reflections_count) || 0,
+      tasksCount: Number(item.tasks_count) || 0,
+      eventsCount: Number(item.events_count) || 0,
+      depositIdeasCount: Number(item.deposit_ideas_count) || 0,
+      withdrawalsCount: Number(item.withdrawals_count) || 0,
+      totalItems: Number(item.total_items) || 0,
     }));
 
     monthlyStatsCache = formattedData;
@@ -73,10 +85,15 @@ export async function fetchMonthlyStatistics(forceRefresh: boolean = false): Pro
   }
 }
 
-export async function fetchMonthlyDates(year: number, month: number): Promise<DateWithContent[]> {
+export async function fetchMonthlyDates(
+  year: number,
+  month: number
+): Promise<DateWithContent[]> {
   try {
     const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       throw new Error('User not authenticated');
@@ -85,7 +102,7 @@ export async function fetchMonthlyDates(year: number, month: number): Promise<Da
     const { data, error } = await supabase.rpc('get_month_dates_with_items', {
       p_year: year,
       p_month: month,
-      p_user_id: user.id
+      p_user_id: user.id,
     });
 
     if (error) {
@@ -95,12 +112,12 @@ export async function fetchMonthlyDates(year: number, month: number): Promise<Da
 
     return (data || []).map((item: any) => ({
       itemDate: item.item_date,
-      reflectionsCount: parseInt(item.reflections_count, 10),
-      tasksCount: parseInt(item.tasks_count, 10),
-      eventsCount: parseInt(item.events_count, 10),
-      depositIdeasCount: parseInt(item.deposit_ideas_count, 10),
-      withdrawalsCount: parseInt(item.withdrawals_count, 10),
-      notesCount: parseInt(item.notes_count, 10),
+      reflectionsCount: Number(item.reflections_count) || 0,
+      tasksCount: Number(item.tasks_count) || 0,
+      eventsCount: Number(item.events_count) || 0,
+      depositIdeasCount: Number(item.deposit_ideas_count) || 0,
+      withdrawalsCount: Number(item.withdrawals_count) || 0,
+      notesCount: Number(item.notes_count) || 0,
       contentSummary: item.content_summary,
     }));
   } catch (error) {
@@ -120,11 +137,16 @@ export function formatMonthYear(year: number, month: number): string {
 }
 
 export function getTotalItemsForMonth(stats: MonthlyStatistics): number {
-  return stats.totalItems ?? (
-    stats.reflectionsCount +
-    stats.tasksCount +
-    stats.eventsCount +
-    stats.depositIdeasCount +
-    stats.withdrawalsCount
+  // Prefer the DB value; fall back to recomputing if for some reason it's 0/NaN
+  if (Number.isFinite(stats.totalItems) && stats.totalItems > 0) {
+    return stats.totalItems;
+  }
+
+  return (
+    (stats.reflectionsCount || 0) +
+    (stats.tasksCount || 0) +
+    (stats.eventsCount || 0) +
+    (stats.depositIdeasCount || 0) +
+    (stats.withdrawalsCount || 0)
   );
 }
