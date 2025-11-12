@@ -1,3 +1,4 @@
+-- 1) Month-level aggregate wrapper over get_month_dates_with_items
 CREATE OR REPLACE FUNCTION get_monthly_item_counts(
   p_year integer,
   p_month integer,
@@ -20,6 +21,7 @@ DECLARE
   v_start_date date;
 BEGIN
   v_user_id := COALESCE(p_user_id, auth.uid());
+
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'User ID is required';
   END IF;
@@ -56,7 +58,11 @@ $$;
 COMMENT ON FUNCTION get_monthly_item_counts(integer, integer, uuid) IS
   'Aggregates month-level item counts by summing get_month_dates_with_items results.';
 
-CREATE OR REPLACE FUNCTION get_history_month_summaries(p_user_id uuid DEFAULT NULL)
+
+-- 2) History month summaries – uses get_monthly_item_counts for each month
+CREATE OR REPLACE FUNCTION get_history_month_summaries(
+  p_user_id uuid DEFAULT NULL
+)
 RETURNS TABLE (
   month_start date,
   year integer,
@@ -90,6 +96,7 @@ BEGIN
 
   v_user_timezone := COALESCE(v_user_timezone, 'UTC');
 
+  -- find min/max dates from reflections + notes so we know which months exist
   SELECT
     MIN(item_date),
     MAX(item_date)
@@ -140,7 +147,7 @@ BEGIN
   )
   SELECT
     month_start,
-    EXTRACT(YEAR FROM month_start)::integer AS year,
+    EXTRACT(YEAR FROM month_start)::integer  AS year,
     EXTRACT(MONTH FROM month_start)::integer AS month,
     reflections_count,
     tasks_count,
@@ -156,9 +163,11 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION get_history_month_summaries IS
+COMMENT ON FUNCTION get_history_month_summaries(uuid) IS
   'Lists months with history data by reusing get_monthly_item_counts for each month.';
 
+
+-- 3) Daily items function (this is your current, note-filtered implementation)
 CREATE OR REPLACE FUNCTION get_month_dates_with_items(
   p_year integer,
   p_month integer,
@@ -224,8 +233,8 @@ BEGIN
         E'\n'
       ) AS summary_val
     FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-tasks" t ON t.id = unj.parent_id
+    INNER JOIN "0008-ap-notes" n   ON n.id   = unj.note_id
+    INNER JOIN "0008-ap-tasks" t   ON t.id   = unj.parent_id
     WHERE unj.user_id = v_user_id
       AND unj.parent_type = 'task'
       AND t.user_id = v_user_id
@@ -244,8 +253,8 @@ BEGIN
         E'\n'
       ) AS summary_val
     FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-tasks" t ON t.id = unj.parent_id
+    INNER JOIN "0008-ap-notes" n   ON n.id   = unj.note_id
+    INNER JOIN "0008-ap-tasks" t   ON t.id   = unj.parent_id
     WHERE unj.user_id = v_user_id
       AND unj.parent_type = 'task'
       AND t.user_id = v_user_id
@@ -264,7 +273,7 @@ BEGIN
         E'\n'
       ) AS summary_val
     FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
+    INNER JOIN "0008-ap-notes" n         ON n.id = unj.note_id
     INNER JOIN "0008-ap-deposit-ideas" d ON d.id = unj.parent_id
     WHERE unj.user_id = v_user_id
       AND unj.parent_type = 'depositIdea'
@@ -284,8 +293,8 @@ BEGIN
         E'\n'
       ) AS summary_val
     FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    INNER JOIN "0008-ap-withdrawals" w ON w.id = unj.parent_id
+    INNER JOIN "0008-ap-notes" n        ON n.id = unj.note_id
+    INNER JOIN "0008-ap-withdrawals" w  ON w.id = unj.parent_id
     WHERE unj.user_id = v_user_id
       AND unj.parent_type = 'withdrawal'
       AND w.user_id = v_user_id
@@ -306,11 +315,11 @@ BEGIN
   )
   SELECT
     ad.date_val AS item_date,
-    COALESCE(dr.count_val, 0) AS reflections_count,
-    COALESCE(dt.count_val, 0) AS tasks_count,
-    COALESCE(de.count_val, 0) AS events_count,
+    COALESCE(dr.count_val, 0)  AS reflections_count,
+    COALESCE(dt.count_val, 0)  AS tasks_count,
+    COALESCE(de.count_val, 0)  AS events_count,
     COALESCE(ddi.count_val, 0) AS deposit_ideas_count,
-    COALESCE(dw.count_val, 0) AS withdrawals_count,
+    COALESCE(dw.count_val, 0)  AS withdrawals_count,
     (
       COALESCE(dt.count_val, 0) +
       COALESCE(de.count_val, 0) +
@@ -331,11 +340,11 @@ BEGIN
       ''
     ) AS content_summary
   FROM all_dates ad
-  LEFT JOIN daily_reflections dr ON dr.date_val = ad.date_val
-  LEFT JOIN daily_tasks dt ON dt.date_val = ad.date_val
-  LEFT JOIN daily_events de ON de.date_val = ad.date_val
+  LEFT JOIN daily_reflections   dr  ON dr.date_val  = ad.date_val
+  LEFT JOIN daily_tasks         dt  ON dt.date_val  = ad.date_val
+  LEFT JOIN daily_events        de  ON de.date_val  = ad.date_val
   LEFT JOIN daily_deposit_ideas ddi ON ddi.date_val = ad.date_val
-  LEFT JOIN daily_withdrawals dw ON dw.date_val = ad.date_val
+  LEFT JOIN daily_withdrawals   dw  ON dw.date_val  = ad.date_val
   ORDER BY ad.date_val ASC;
 END;
 $$;
@@ -343,6 +352,8 @@ $$;
 COMMENT ON FUNCTION get_month_dates_with_items IS
   'Returns dates with item counts limited to reflections and note-backed daily items.';
 
+
+-- 4) Grants
 GRANT EXECUTE ON FUNCTION get_monthly_item_counts(integer, integer, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_history_month_summaries(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_month_dates_with_items(integer, integer, uuid) TO authenticated;
