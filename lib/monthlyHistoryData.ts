@@ -44,14 +44,13 @@ export async function fetchMonthlyStatistics(
 
   try {
     const supabase = getSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
       throw new Error('User not authenticated');
     }
 
+    // 🔹 This must call the new SQL function we just fixed
     const { data, error } = await supabase.rpc('get_history_month_summaries', {
       p_user_id: user.id,
     });
@@ -62,17 +61,16 @@ export async function fetchMonthlyStatistics(
     }
 
     const formattedData: MonthlyStatistics[] = (data || []).map((item: any) => ({
-      // keep monthStart from the 10Nov_1800 branch
       monthStart: item.month_start,
       monthYear: formatMonthYear(item.year, item.month),
       year: item.year,
       month: item.month,
-      reflectionsCount: Number(item.reflections_count) || 0,
-      tasksCount: Number(item.tasks_count) || 0,
-      eventsCount: Number(item.events_count) || 0,
-      depositIdeasCount: Number(item.deposit_ideas_count) || 0,
-      withdrawalsCount: Number(item.withdrawals_count) || 0,
-      totalItems: Number(item.total_items) || 0,
+      reflectionsCount: Number(item.reflections_count),
+      tasksCount: Number(item.tasks_count),
+      eventsCount: Number(item.events_count),
+      depositIdeasCount: Number(item.deposit_ideas_count),
+      withdrawalsCount: Number(item.withdrawals_count),
+      totalItems: Number(item.total_items),
     }));
 
     monthlyStatsCache = formattedData;
@@ -91,9 +89,7 @@ export async function fetchMonthlyDates(
 ): Promise<DateWithContent[]> {
   try {
     const supabase = getSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
       throw new Error('User not authenticated');
@@ -112,12 +108,12 @@ export async function fetchMonthlyDates(
 
     return (data || []).map((item: any) => ({
       itemDate: item.item_date,
-      reflectionsCount: Number(item.reflections_count) || 0,
-      tasksCount: Number(item.tasks_count) || 0,
-      eventsCount: Number(item.events_count) || 0,
-      depositIdeasCount: Number(item.deposit_ideas_count) || 0,
-      withdrawalsCount: Number(item.withdrawals_count) || 0,
-      notesCount: Number(item.notes_count) || 0,
+      reflectionsCount: Number(item.reflections_count),
+      tasksCount: Number(item.tasks_count),
+      eventsCount: Number(item.events_count),
+      depositIdeasCount: Number(item.deposit_ideas_count),
+      withdrawalsCount: Number(item.withdrawals_count),
+      notesCount: Number(item.notes_count),
       contentSummary: item.content_summary,
     }));
   } catch (error) {
@@ -136,17 +132,7 @@ export function formatMonthYear(year: number, month: number): string {
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
+// 🔹 This is what the card & hover should use
 export function getTotalItemsForMonth(stats: MonthlyStatistics): number {
-  // Prefer the DB value; fall back to recomputing if for some reason it's 0/NaN
-  if (Number.isFinite(stats.totalItems) && stats.totalItems > 0) {
-    return stats.totalItems;
-  }
-
-  return (
-    (stats.reflectionsCount || 0) +
-    (stats.tasksCount || 0) +
-    (stats.eventsCount || 0) +
-    (stats.depositIdeasCount || 0) +
-    (stats.withdrawalsCount || 0)
-  );
+  return stats.totalItems;
 }
