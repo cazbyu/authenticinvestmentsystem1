@@ -54,50 +54,64 @@ BEGIN
   v_target_date := p_target_date;
 
   RETURN QUERY
-  WITH qualified_notes AS (
-    -- Daily items are anchored to the note's local created_at date so the
-    -- History index, monthly summaries, and Daily view all reference the same
-    -- real notes.
+  WITH note_candidates AS (
+    -- All notes that belong to this user and are "real" (have content or
+    -- attachments). We also compute the note's local calendar date.
     SELECT
-      unj.parent_type,
-      unj.parent_id,
+      j.parent_type,
+      j.parent_id,
       n.id AS note_id,
       n.content,
       n.created_at,
       (n.created_at AT TIME ZONE v_user_timezone)::date AS note_local_date
-    FROM "0008-ap-universal-notes-join" unj
-    INNER JOIN "0008-ap-notes" n ON n.id = unj.note_id
-    WHERE unj.user_id = v_user_id
+    FROM "0008-ap-universal-notes-join" j
+    JOIN "0008-ap-notes" n ON n.id = j.note_id
+    LEFT JOIN "0008-ap-note-attachments" na ON na.note_id = n.id
+    WHERE j.user_id = v_user_id
       AND n.user_id = v_user_id
       AND (
         (n.content IS NOT NULL AND btrim(n.content) <> '')
-        OR EXISTS (
-          SELECT 1
-          FROM "0008-ap-note-attachments" na
-          WHERE na.note_id = n.id
-        )
+        OR na.id IS NOT NULL
       )
-      AND (n.created_at AT TIME ZONE v_user_timezone)::date = v_target_date
   ),
-  notes_per_parent AS (
+  filtered_notes AS (
+    -- Only notes whose local date matches the target date
     SELECT
-      qn.parent_type,
-      qn.parent_id,
-      COUNT(*) AS notes_that_day
-    FROM qualified_notes qn
-    GROUP BY qn.parent_type, qn.parent_id
+      nc.parent_type,
+      nc.parent_id,
+      nc.note_id,
+      nc.content,
+      nc.created_at,
+      nc.note_local_date
+    FROM note_candidates nc
+    WHERE nc.note_local_date = v_target_date
+  ),
+  ranked_notes AS (
+    -- Rank notes per parent so we can pick the latest note for that day,
+    -- and also count how many notes that parent has on the target date.
+    SELECT
+      fn.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY fn.parent_type, fn.parent_id
+        ORDER BY fn.created_at DESC, fn.note_id
+      ) AS rn,
+      COUNT(*) OVER (PARTITION BY fn.parent_type, fn.parent_id) AS notes_that_day
+    FROM filtered_notes fn
   ),
   latest_notes AS (
-    SELECT DISTINCT ON (qn.parent_type, qn.parent_id)
-      qn.parent_type,
-      qn.parent_id,
-      qn.note_id,
-      qn.content,
-      qn.created_at
-    FROM qualified_notes qn
-    ORDER BY qn.parent_type, qn.parent_id, qn.created_at DESC, qn.note_id
+    -- One row per parent item (per day) with the latest note and a notes_that_day count
+    SELECT
+      parent_type,
+      parent_id,
+      note_id,
+      content,
+      created_at,
+      notes_that_day
+    FROM ranked_notes
+    WHERE rn = 1
   ),
   reflection_rows AS (
+    -- Reflections are already "daily items" without going through universal-notes-join
     SELECT
       'reflection'::text AS item_type,
       r.id AS parent_id,
@@ -119,6 +133,7 @@ BEGIN
       AND (r.created_at AT TIME ZONE v_user_timezone)::date = v_target_date
   ),
   task_rows AS (
+    -- Tasks & events (both live in 0008-ap-tasks; type distinguishes them)
     SELECT
       t.type AS item_type,
       t.id AS parent_id,
@@ -133,14 +148,11 @@ BEGIN
       NULL::boolean AS parent_archived,
       NULL::boolean AS parent_is_active,
       NULL::timestamptz AS parent_withdrawn_at,
-      np.notes_that_day AS notes_count
+      ln.notes_that_day AS notes_count
     FROM "0008-ap-tasks" t
-    INNER JOIN latest_notes ln
+    JOIN latest_notes ln
       ON ln.parent_id = t.id
-     AND ln.parent_type = 'task'
-    INNER JOIN notes_per_parent np
-      ON np.parent_id = t.id
-     AND np.parent_type = 'task'
+     AND ln.parent_type IN ('task', 'event')
     WHERE t.user_id = v_user_id
       AND t.deleted_at IS NULL
   ),
@@ -159,14 +171,11 @@ BEGIN
       d.archived AS parent_archived,
       COALESCE(d.is_active, true) AS parent_is_active,
       NULL::timestamptz AS parent_withdrawn_at,
-      np.notes_that_day AS notes_count
+      ln.notes_that_day AS notes_count
     FROM "0008-ap-deposit-ideas" d
-    INNER JOIN latest_notes ln
+    JOIN latest_notes ln
       ON ln.parent_id = d.id
      AND ln.parent_type = 'depositIdea'
-    INNER JOIN notes_per_parent np
-      ON np.parent_id = d.id
-     AND np.parent_type = 'depositIdea'
     WHERE d.user_id = v_user_id
       AND d.archived = false
       AND COALESCE(d.is_active, true) = true
@@ -186,14 +195,11 @@ BEGIN
       NULL::boolean AS parent_archived,
       NULL::boolean AS parent_is_active,
       COALESCE(w.withdrawn_at, w.created_at) AS parent_withdrawn_at,
-      np.notes_that_day AS notes_count
+      ln.notes_that_day AS notes_count
     FROM "0008-ap-withdrawals" w
-    INNER JOIN latest_notes ln
+    JOIN latest_notes ln
       ON ln.parent_id = w.id
      AND ln.parent_type = 'withdrawal'
-    INNER JOIN notes_per_parent np
-      ON np.parent_id = w.id
-     AND np.parent_type = 'withdrawal'
     WHERE w.user_id = v_user_id
   )
   SELECT * FROM reflection_rows
