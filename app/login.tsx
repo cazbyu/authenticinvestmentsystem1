@@ -79,48 +79,96 @@ export default function LoginScreen() {
 
     console.log('[SignUp] Attempting sign up for:', email.trim());
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim()
-        },
-        emailRedirectTo: undefined
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim()
+          },
+          emailRedirectTo: undefined
+        }
+      });
+
+      if (authError) {
+        console.error('[SignUp] Auth error:', authError);
+        console.error('[SignUp] Error details:', {
+          message: authError.message,
+          status: authError.status,
+          name: authError.name
+        });
+
+        let errorMessage = authError.message;
+        if (authError.message.includes('Database error')) {
+          errorMessage = 'There was a problem creating your account. Please try again or contact support if the issue persists.';
+        }
+
+        Alert.alert('Sign Up Error', errorMessage);
+      } else if (authData.user) {
+        console.log('[SignUp] Success! User created:', authData.user.id);
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        try {
+          const { data: profile } = await supabase
+            .from('0008-ap-users')
+            .select('id')
+            .eq('user_id', authData.user.id)
+            .maybeSingle();
+
+          if (!profile) {
+            console.warn('[SignUp] Profile not created by trigger, attempting manual creation...');
+
+            const { error: profileError } = await supabase
+              .from('0008-ap-users')
+              .insert({
+                user_id: authData.user.id,
+                first_name: firstName.trim(),
+                last_name: lastName.trim(),
+                oauth_provider: 'email',
+                profile_image_source: 'default'
+              });
+
+            if (profileError) {
+              console.error('[SignUp] Manual profile creation failed:', profileError);
+            } else {
+              console.log('[SignUp] Manual profile creation succeeded');
+            }
+          }
+        } catch (profileCheckError) {
+          console.error('[SignUp] Error checking/creating profile:', profileCheckError);
+        }
+
+        if (authData.session) {
+          console.log('[SignUp] Auto-signed in with session');
+          Alert.alert(
+            'Success!',
+            'Your account has been created and you are now signed in.',
+            [{ text: 'OK', onPress: () => router.replace('/(tabs)/dashboard') }]
+          );
+        } else {
+          console.log('[SignUp] Email confirmation may be required');
+          Alert.alert(
+            'Success!',
+            'Your account has been created. You can now sign in.',
+            [{ text: 'OK', onPress: () => setIsSignUp(false) }]
+          );
+        }
+
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setFirstName('');
+        setLastName('');
       }
-    });
-
-    if (authError) {
-      console.error('[SignUp] Error:', authError);
-      Alert.alert('Sign Up Error', authError.message);
-    } else if (authData.user) {
-      console.log('[SignUp] Success! User created:', authData.user.id);
-
-      if (authData.session) {
-        console.log('[SignUp] Auto-signed in with session');
-        Alert.alert(
-          'Success!',
-          'Your account has been created and you are now signed in.',
-          [{ text: 'OK', onPress: () => router.replace('/(tabs)/dashboard') }]
-        );
-      } else {
-        console.log('[SignUp] Email confirmation may be required');
-        Alert.alert(
-          'Success!',
-          'Your account has been created. You can now sign in.',
-          [{ text: 'OK', onPress: () => setIsSignUp(false) }]
-        );
-      }
-
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
-      setFirstName('');
-      setLastName('');
+    } catch (err) {
+      console.error('[SignUp] Unexpected error:', err);
+      Alert.alert('Sign Up Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleGoogleSignIn = async () => {
