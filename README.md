@@ -1,6 +1,6 @@
 # Authentic Investment System
 
-An Expo-based mobile application for managing authentic investments in your life through tasks, goals, reflections, and wellness tracking. Built with React Native, Expo Router, and Supabase.
+An Expo-based mobile application for managing authentic intelligence in your life through tasks, goals, reflections, and wellness tracking. Built with React Native, Expo Router, and Supabase.
 
 ---
 

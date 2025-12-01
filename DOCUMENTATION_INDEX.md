@@ -1,6 +1,6 @@
 # Documentation Index
 
-Welcome to the Authentic Investments documentation. This index helps you find the right documentation for your needs.
+Welcome to the Authentic Intelligence documentation. This index helps you find the right documentation for your needs.
 
 ## Quick Start
 
