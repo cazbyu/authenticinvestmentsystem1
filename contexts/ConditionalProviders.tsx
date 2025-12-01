@@ -17,8 +17,6 @@ const AUTHENTICATED_ROUTES = [
   '/suggestions',
 ];
 
-const TAB_ROUTES = ['/(tabs)'];
-
 export function ConditionalProviders({ children }: ConditionalProvidersProps) {
   const pathname = usePathname();
 
@@ -26,26 +24,19 @@ export function ConditionalProviders({ children }: ConditionalProvidersProps) {
     return AUTHENTICATED_ROUTES.some(route => pathname?.startsWith(route));
   }, [pathname]);
 
-  const needsTabProvider = useMemo(() => {
-    return TAB_ROUTES.some(route => pathname?.startsWith(route));
-  }, [pathname]);
-
   if (needsAuthProvider) {
-    if (needsTabProvider) {
-      return (
-        <AuthenticScoreProvider>
-          <TabResetProvider>
-            {children}
-          </TabResetProvider>
-        </AuthenticScoreProvider>
-      );
-    }
     return (
-      <AuthenticScoreProvider>
-        {children}
-      </AuthenticScoreProvider>
+      <TabResetProvider>
+        <AuthenticScoreProvider>
+          {children}
+        </AuthenticScoreProvider>
+      </TabResetProvider>
     );
   }
 
-  return <>{children}</>;
+  return (
+    <TabResetProvider>
+      {children}
+    </TabResetProvider>
+  );
 }
