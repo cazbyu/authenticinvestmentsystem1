@@ -6,6 +6,7 @@ import { syncUserTimezone } from '@/lib/timezoneUtils';
 declare global {
   interface Window {
     frameworkReady?: () => void;
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
   }
 }
 
@@ -26,6 +27,18 @@ export function useFrameworkReady() {
       }
     };
 
-    syncTimezone();
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(() => {
+          syncTimezone();
+        }, { timeout: 5000 });
+      } else {
+        setTimeout(() => {
+          syncTimezone();
+        }, 3000);
+      }
+    } else {
+      syncTimezone();
+    }
   });
 }

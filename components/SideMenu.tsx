@@ -33,8 +33,10 @@ export function SideMenu() {
   const [followUpCount, setFollowUpCount] = useState(0);
 
   useEffect(() => {
-    fetchUserData();
-    fetchFollowUpCount();
+    const timer = setTimeout(() => {
+      fetchUserData();
+      fetchFollowUpCount();
+    }, 100);
 
     const handleReflectionChange = () => {
       fetchFollowUpCount();
@@ -45,6 +47,7 @@ export function SideMenu() {
     eventBus.on(EVENTS.REFLECTION_DELETED, handleReflectionChange);
 
     return () => {
+      clearTimeout(timer);
       eventBus.off(EVENTS.REFLECTION_CREATED, handleReflectionChange);
       eventBus.off(EVENTS.REFLECTION_UPDATED, handleReflectionChange);
       eventBus.off(EVENTS.REFLECTION_DELETED, handleReflectionChange);
@@ -122,7 +125,7 @@ export function SideMenu() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.primary }]}>
         <Text style={styles.headerTitle}>Authentic</Text>
-        <Text style={styles.headerSubtitle}>Investments</Text>
+        <Text style={styles.headerSubtitle}>Intelligence</Text>
       </View>
 
       <ScrollView style={[styles.menuContainer, { backgroundColor: colors.background }]}>
