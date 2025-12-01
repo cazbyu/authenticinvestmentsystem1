@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build:web"
+  publish = "build"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["expo-router"]
