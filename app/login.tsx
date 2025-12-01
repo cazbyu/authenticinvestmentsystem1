@@ -115,7 +115,7 @@ export default function LoginScreen() {
           const { data: profile } = await supabase
             .from('0008-ap-users')
             .select('id')
-            .eq('user_id', authData.user.id)
+            .eq('id', authData.user.id)
             .maybeSingle();
 
           if (!profile) {
@@ -124,7 +124,8 @@ export default function LoginScreen() {
             const { error: profileError } = await supabase
               .from('0008-ap-users')
               .insert({
-                user_id: authData.user.id,
+                id: authData.user.id,
+                email: authData.user.email || email.trim(),
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),
                 oauth_provider: 'email',

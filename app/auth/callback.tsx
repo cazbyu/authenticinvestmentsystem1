@@ -3,14 +3,14 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 
-async function ensureUserProfileExists(userId: string) {
+async function ensureUserProfileExists(userId: string, userEmail: string) {
   try {
     const supabase = getSupabaseClient();
 
     const { data: existingProfile, error: checkError } = await supabase
       .from('0008-ap-users')
       .select('id')
-      .eq('user_id', userId)
+      .eq('id', userId)
       .maybeSingle();
 
     if (checkError) {
@@ -31,11 +31,12 @@ async function ensureUserProfileExists(userId: string) {
     const { error: createError } = await supabase
       .from('0008-ap-users')
       .insert({
-        user_id: userId,
+        id: userId,
+        email: userEmail || '',
         first_name: metadata.first_name || metadata.given_name || '',
         last_name: metadata.last_name || metadata.family_name || '',
         profile_image: metadata.avatar_url || metadata.picture || null,
-        oauth_provider: 'email',
+        oauth_provider: metadata.provider || 'email',
         profile_image_source: metadata.avatar_url || metadata.picture ? 'oauth' : 'default',
       });
 
@@ -75,7 +76,7 @@ export default function AuthCallback() {
         if (session) {
           console.log('[Auth Callback] Session found, user ID:', session.user.id);
 
-          const profileExists = await ensureUserProfileExists(session.user.id);
+          const profileExists = await ensureUserProfileExists(session.user.id, session.user.email || '');
 
           if (!profileExists) {
             console.warn('[Auth Callback] Profile creation failed, but proceeding...');
