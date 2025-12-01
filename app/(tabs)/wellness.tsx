@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
@@ -24,6 +24,7 @@ import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -47,6 +48,7 @@ export default function Wellness() {
 
   // Main tab navigation state
   const [activeMainTab, setActiveMainTab] = useState<'domains' | 'balance'>('domains');
+  const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
 
   // Modal states
   const [taskFormVisible, setTaskFormVisible] = useState(false);
@@ -723,7 +725,13 @@ export default function Wellness() {
         <View style={styles.customHeaderTop}>
           <TouchableOpacity
             style={styles.customMenuButton}
-            onPress={() => navigation.openDrawer()}
+            onPress={() => {
+              if (Platform.OS === 'web') {
+                setIsWebMenuVisible(true);
+              } else if (typeof navigation.openDrawer === 'function') {
+                navigation.openDrawer();
+              }
+            }}
           >
             <Menu size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -954,6 +962,11 @@ export default function Wellness() {
             fetchDomainTasks(selectedDomain.id);
           }
         }}
+      />
+
+      <WebNavigationMenu
+        visible={isWebMenuVisible}
+        onClose={() => setIsWebMenuVisible(false)}
       />
     </SafeAreaView>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { DraggableFab } from '@/components/DraggableFab';
@@ -27,6 +27,7 @@ import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -89,6 +90,7 @@ export default function Roles() {
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
   const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
   const fetchAbortController = useRef<AbortController | null>(null);
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
   const previousRoleIdRef = useRef<string | null>(null);
@@ -1326,7 +1328,13 @@ export default function Roles() {
         <View style={styles.customHeaderTop}>
           <TouchableOpacity
             style={styles.customMenuButton}
-            onPress={() => navigation.openDrawer()}
+            onPress={() => {
+              if (Platform.OS === 'web') {
+                setIsWebMenuVisible(true);
+              } else if (typeof navigation.openDrawer === 'function') {
+                navigation.openDrawer();
+              }
+            }}
           >
             <Menu size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -1849,6 +1857,11 @@ export default function Roles() {
             fetchRoleTasks(selectedRole.id, activeView);
           }
         }}
+      />
+
+      <WebNavigationMenu
+        visible={isWebMenuVisible}
+        onClose={() => setIsWebMenuVisible(false)}
       />
     </SafeAreaView>
   );
