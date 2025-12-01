@@ -10,10 +10,10 @@ import { AuthenticScoreProvider } from '@/contexts/AuthenticScoreContext';
 import { TabResetProvider } from '@/contexts/TabResetContext';
 import React from 'react';
 
-console.log('[App] _layout.tsx loaded');
+console.log('[App] _layout.native.tsx loaded');
 
 export default function RootLayout() {
-  console.log('[App] RootLayout rendering');
+  console.log('[App] RootLayout rendering (native)');
   useFrameworkReady();
 
   return (

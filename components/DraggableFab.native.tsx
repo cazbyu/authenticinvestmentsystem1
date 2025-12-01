@@ -30,7 +30,6 @@ export function DraggableFab({
   const screenDimensions = useRef(Dimensions.get('window'));
   const hasInitialized = useRef(false);
 
-  // Initial position (bottom-right corner with padding)
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
@@ -38,7 +37,6 @@ export function DraggableFab({
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
 
-  // Initialize position on mount to right side
   useEffect(() => {
     if (!hasInitialized.current) {
       const { width, height } = screenDimensions.current;
@@ -59,15 +57,13 @@ export function DraggableFab({
       startY.value = translateY.value;
     })
     .onUpdate((event) => {
-      // Calculate new position
       const newX = startX.value + event.translationX;
       const newY = startY.value + event.translationY;
 
       const { width, height } = screenDimensions.current;
 
-      // Apply boundaries to keep the button on screen
       translateX.value = clamp(newX, 0, width - size);
-      translateY.value = clamp(newY, 0, height - size - 80); // Account for tab bar
+      translateY.value = clamp(newY, 0, height - size - 80);
     })
     .onEnd(() => {
       isPressed.value = false;
@@ -77,8 +73,6 @@ export function DraggableFab({
 
       const { width, height } = screenDimensions.current;
 
-      // Keep FAB at current position with smooth animation
-      // Apply boundaries to ensure it stays within screen bounds
       translateX.value = withSpring(
         clamp(currentX, 20, width - size - 20)
       );
