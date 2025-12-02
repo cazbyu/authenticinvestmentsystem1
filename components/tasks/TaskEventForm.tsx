@@ -1161,8 +1161,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         }
 
         // Success message and event broadcasting
-        const modeName = formData.reflectionMode === 'rose' ? 'Celebration' :
-                        formData.reflectionMode === 'thorn' ? 'Challenge' : 'Deposit Idea';
+        const modeName = formData.reflectionMode === 'rose' ? 'Rose' :
+                        formData.reflectionMode === 'thorn' ? 'Thorn' : 'Deposit Idea';
         Alert.alert('Success', `${modeName} ${mode === 'edit' ? 'updated' : 'saved'} successfully!`);
 
         if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') {
@@ -1614,8 +1614,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   value={formData.title}
                   onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
                   placeholder={
-                    formData.reflectionMode === 'rose' ? 'Celebration title...' :
-                    formData.reflectionMode === 'thorn' ? 'Challenge title...' :
+                    formData.reflectionMode === 'rose' ? 'Simple description . . .' :
+                    formData.reflectionMode === 'thorn' ? 'Simple description . . .' :
                     'Deposit idea title...'
                   }
                   placeholderTextColor={colors.textSecondary}
@@ -1630,15 +1630,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 <>
                   <View style={styles.field}>
                     <Text style={[styles.label, { color: colors.text }]}>{
-                      formData.reflectionMode === 'rose' ? 'Celebration *' : 'Challenge *'
+                      formData.reflectionMode === 'rose' ? 'Rose *' : 'Thorn *'
                     }</Text>
                     <RichTextInput
                       value={formData.content}
                       onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
                       placeholder={
                         formData.reflectionMode === 'rose'
-                          ? "What went well today?..."
-                          : "What needs attention?..."
+                          ? "Share a success, joy or meaningful moment you want to celebrate . . ."
+                          : "What didn't go smoothly or needs attention, care or improvement?"
                       }
                       minHeight={150}
                       onAttachmentPress={handlePickFile}
@@ -1682,7 +1682,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     <RichTextInput
                       value={formData.content}
                       onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
-                      placeholder="Describe your deposit idea..."
+                      placeholder="Describe your idea or thought that you may want to take future action on . . ."
                       minHeight={120}
                       onAttachmentPress={handlePickFile}
                     />
