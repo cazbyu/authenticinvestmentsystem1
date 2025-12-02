@@ -293,13 +293,12 @@ BEGIN
       ),
       ''
     ) AS content_summary,
-    COALESCE(
-      dr.details_val ||
+    (
+      COALESCE(dr.details_val, '[]'::jsonb) ||
       COALESCE(dt.details_val, '[]'::jsonb) ||
       COALESCE(de.details_val, '[]'::jsonb) ||
       COALESCE(ddi.details_val, '[]'::jsonb) ||
-      COALESCE(dw.details_val, '[]'::jsonb),
-      '[]'::jsonb
+      COALESCE(dw.details_val, '[]'::jsonb)
     ) AS item_details
   FROM all_dates ad
   LEFT JOIN daily_reflections dr ON dr.date_val = ad.date_val
