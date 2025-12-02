@@ -30,9 +30,14 @@ import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import AttachmentBadge from '../attachments/AttachmentBadge';
 import ImageViewerModal from '../reflections/ImageViewerModal';
 import { uploadNoteAttachment, saveNoteAttachmentMetadata, fetchNoteAttachments, deleteNoteAttachment, getNoteAttachmentSignedUrl } from '@/lib/noteAttachmentUtils';
+import ReflectionModePills from '../reflections/ReflectionModePills';
+import FollowUpToggleSection from '../reflections/FollowUpToggleSection';
+import ActivateReflectionButtons from '../reflections/ActivateReflectionButtons';
+import RichTextInput from '../reflections/RichTextInput';
 
 // ------------ Types & Models ------------
-type SchedulingType = 'task' | 'event' | 'depositIdea' | 'withdrawal';
+type SchedulingType = 'task' | 'event' | 'reflection';
+type ReflectionMode = 'reflection' | 'depositIdea' | 'withdrawal';
 
 interface Role { 
   id: string; 
@@ -83,6 +88,7 @@ interface Delegate {
 
 interface FormData {
   type: SchedulingType;
+  reflectionMode: ReflectionMode;
   title: string;
   dueDate: string;
   dueTime: string;
@@ -101,6 +107,7 @@ interface FormData {
   selectedKeyRelationshipIds: string[];
   selectedGoalIds: string[];
   notes: string;
+  content: string; // For reflection content
 
   // New fields for recurrence and goals
   recurrenceRule?: string;
@@ -110,6 +117,11 @@ interface FormData {
   // Delegate field
   isDelegated: boolean;
   selectedDelegateId?: string;
+
+  // Follow-up fields
+  followUpEnabled: boolean;
+  followUpDate: string;
+  followUpTime: string;
 }
 
 interface TaskEventFormProps {
@@ -143,6 +155,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   // Form state
   const [formData, setFormData] = useState<FormData>({
     type: 'task',
+    reflectionMode: 'reflection',
     title: '',
     dueDate: formatLocalDate(new Date()),
     dueTime: getInitialDefaultTime(),
@@ -161,9 +174,13 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     selectedKeyRelationshipIds: [],
     selectedGoalIds: [],
     notes: '',
+    content: '',
     recurrenceEndDate: null,
     isDelegated: false,
     selectedDelegateId: undefined,
+    followUpEnabled: false,
+    followUpDate: formatLocalDate(new Date()),
+    followUpTime: '',
   });
 
   // Data state
@@ -777,9 +794,21 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   };
 
   const handleSubmit = async () => {
-    if (!formData.title.trim()) {
+    // Validation based on type
+    if (formData.type !== 'reflection' && !formData.title.trim()) {
       Alert.alert('Error', 'Please enter a title');
       return;
+    }
+
+    if (formData.type === 'reflection') {
+      if (formData.reflectionMode === 'reflection' && !formData.content.trim()) {
+        Alert.alert('Error', 'Please enter reflection content');
+        return;
+      }
+      if (formData.reflectionMode === 'withdrawal' && (!formData.amount || parseFloat(formData.amount) <= 0)) {
+        Alert.alert('Error', 'Please enter a valid withdrawal amount');
+        return;
+      }
     }
 
     setSaving(true);
@@ -792,6 +821,309 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       let mainRecord;
       let mainRecordId;
 
+      // Handle reflection type with its three modes
+      if (formData.type === 'reflection') {
+        if (formData.reflectionMode === 'reflection') {
+          // Save to reflections table
+          const reflectionPayload = {
+            user_id: user.id,
+            content: formData.content.trim(),
+            reflection_title: formData.title.trim() || null,
+            reflection_type: 'daily',
+            date: formatLocalDate(new Date()),
+            archived: false,
+            follow_up: formData.followUpEnabled,
+            follow_up_date: formData.followUpEnabled ? formData.followUpDate : null,
+            ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
+          };
+
+          if (mode === 'edit' && initialData?.id) {
+            const { data, error } = await supabase
+              .from('0008-ap-reflections')
+              .update(reflectionPayload)
+              .eq('id', initialData.id)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          } else {
+            const { data, error } = await supabase
+              .from('0008-ap-reflections')
+              .insert(reflectionPayload)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          }
+          mainRecordId = mainRecord.id;
+
+          // Save follow-up if enabled
+          if (formData.followUpEnabled && formData.followUpDate && formData.followUpTime) {
+            // Parse time to create timestamp
+            const followUpDateTime = new Date(formData.followUpDate + 'T' + formData.followUpTime.replace(/\s*(am|pm)/i, '') + ':00');
+
+            const followUpPayload = {
+              user_id: user.id,
+              parent_type: 'reflection',
+              parent_id: mainRecordId,
+              follow_up_date: formData.followUpDate,
+              follow_up_time: followUpDateTime.toISOString(),
+              status: 'pending',
+            };
+
+            if (mode === 'edit' && initialData?.id) {
+              // Delete existing follow-up and insert new one
+              await supabase
+                .from('0008-ap-universal-follow-up-join')
+                .delete()
+                .eq('parent_id', mainRecordId)
+                .eq('parent_type', 'reflection');
+            }
+
+            const { error: followUpError } = await supabase
+              .from('0008-ap-universal-follow-up-join')
+              .insert(followUpPayload);
+
+            if (followUpError) throw followUpError;
+          }
+        } else if (formData.reflectionMode === 'depositIdea') {
+          // Save to deposit ideas table
+          const depositIdeaPayload = {
+            user_id: user.id,
+            title: formData.title.trim() || 'Untitled Idea',
+            is_active: true,
+            archived: false,
+            follow_up: formData.followUpEnabled,
+            ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
+          };
+
+          if (mode === 'edit' && initialData?.id) {
+            const { data, error } = await supabase
+              .from('0008-ap-deposit-ideas')
+              .update(depositIdeaPayload)
+              .eq('id', initialData.id)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          } else {
+            const { data, error } = await supabase
+              .from('0008-ap-deposit-ideas')
+              .insert(depositIdeaPayload)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          }
+          mainRecordId = mainRecord.id;
+
+          // Save content as note
+          if (formData.content.trim()) {
+            const { data: noteData, error: noteError } = await supabase
+              .from('0008-ap-notes')
+              .insert({
+                user_id: user.id,
+                content: formData.content.trim(),
+              })
+              .select()
+              .single();
+
+            if (noteError) throw noteError;
+
+            const { error: noteJoinError } = await supabase
+              .from('0008-ap-universal-notes-join')
+              .insert({
+                parent_id: mainRecordId,
+                parent_type: 'depositIdea',
+                note_id: noteData.id,
+                user_id: user.id,
+              });
+
+            if (noteJoinError) throw noteJoinError;
+          }
+
+          // Save follow-up if enabled
+          if (formData.followUpEnabled && formData.followUpDate && formData.followUpTime) {
+            const followUpDateTime = new Date(formData.followUpDate + 'T' + formData.followUpTime.replace(/\s*(am|pm)/i, '') + ':00');
+
+            const followUpPayload = {
+              user_id: user.id,
+              parent_type: 'depositIdea',
+              parent_id: mainRecordId,
+              follow_up_date: formData.followUpDate,
+              follow_up_time: followUpDateTime.toISOString(),
+              status: 'pending',
+            };
+
+            if (mode === 'edit' && initialData?.id) {
+              await supabase
+                .from('0008-ap-universal-follow-up-join')
+                .delete()
+                .eq('parent_id', mainRecordId)
+                .eq('parent_type', 'depositIdea');
+            }
+
+            const { error: followUpError } = await supabase
+              .from('0008-ap-universal-follow-up-join')
+              .insert(followUpPayload);
+
+            if (followUpError) throw followUpError;
+          }
+        } else if (formData.reflectionMode === 'withdrawal') {
+          // Save to withdrawals table
+          const withdrawalPayload = {
+            user_id: user.id,
+            title: formData.title.trim() || 'Withdrawal',
+            amount: parseFloat(formData.amount) || 0,
+            withdrawn_at: new Date(formData.withdrawalDate + 'T12:00:00').toISOString(),
+            ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
+          };
+
+          if (mode === 'edit' && initialData?.id) {
+            const { data, error } = await supabase
+              .from('0008-ap-withdrawals')
+              .update(withdrawalPayload)
+              .eq('id', initialData.id)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          } else {
+            const { data, error } = await supabase
+              .from('0008-ap-withdrawals')
+              .insert(withdrawalPayload)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          }
+          mainRecordId = mainRecord.id;
+
+          // Save notes if provided
+          if (formData.notes.trim()) {
+            const { data: noteData, error: noteError } = await supabase
+              .from('0008-ap-notes')
+              .insert({
+                user_id: user.id,
+                content: formData.notes.trim(),
+              })
+              .select()
+              .single();
+
+            if (noteError) throw noteError;
+
+            const { error: noteJoinError } = await supabase
+              .from('0008-ap-universal-notes-join')
+              .insert({
+                parent_id: mainRecordId,
+                parent_type: 'withdrawal',
+                note_id: noteData.id,
+                user_id: user.id,
+              });
+
+            if (noteJoinError) throw noteJoinError;
+          }
+
+          // Save follow-up if enabled
+          if (formData.followUpEnabled && formData.followUpDate && formData.followUpTime) {
+            const followUpDateTime = new Date(formData.followUpDate + 'T' + formData.followUpTime.replace(/\s*(am|pm)/i, '') + ':00');
+
+            const followUpPayload = {
+              user_id: user.id,
+              parent_type: 'withdrawal',
+              parent_id: mainRecordId,
+              follow_up_date: formData.followUpDate,
+              follow_up_time: followUpDateTime.toISOString(),
+              status: 'pending',
+            };
+
+            if (mode === 'edit' && initialData?.id) {
+              await supabase
+                .from('0008-ap-universal-follow-up-join')
+                .delete()
+                .eq('parent_id', mainRecordId)
+                .eq('parent_type', 'withdrawal');
+            }
+
+            const { error: followUpError } = await supabase
+              .from('0008-ap-universal-follow-up-join')
+              .insert(followUpPayload);
+
+            if (followUpError) throw followUpError;
+          }
+        }
+
+        // Handle joins for reflection types
+        const parentType = formData.reflectionMode === 'reflection' ? 'reflection' :
+                          formData.reflectionMode === 'depositIdea' ? 'depositIdea' : 'withdrawal';
+
+        // Clear existing joins if editing
+        if (mode === 'edit' && initialData?.id) {
+          await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+            supabase.from('0008-ap-universal-domains-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+            supabase.from('0008-ap-universal-key-relationships-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+          ]);
+        }
+
+        // Insert new joins
+        const joinPromises = [];
+
+        if (formData.selectedRoleIds.length > 0) {
+          const roleJoins = formData.selectedRoleIds.map(role_id => ({
+            parent_id: mainRecordId,
+            parent_type: parentType,
+            role_id,
+            user_id: user.id,
+          }));
+          joinPromises.push(supabase.from('0008-ap-universal-roles-join').insert(roleJoins));
+        }
+
+        if (formData.selectedDomainIds.length > 0) {
+          const domainJoins = formData.selectedDomainIds.map(domain_id => ({
+            parent_id: mainRecordId,
+            parent_type: parentType,
+            domain_id,
+            user_id: user.id,
+          }));
+          joinPromises.push(supabase.from('0008-ap-universal-domains-join').insert(domainJoins));
+        }
+
+        if (formData.selectedKeyRelationshipIds.length > 0) {
+          const krJoins = formData.selectedKeyRelationshipIds.map(key_relationship_id => ({
+            parent_id: mainRecordId,
+            parent_type: parentType,
+            key_relationship_id,
+            user_id: user.id,
+          }));
+          joinPromises.push(supabase.from('0008-ap-universal-key-relationships-join').insert(krJoins));
+        }
+
+        if (joinPromises.length > 0) {
+          const results = await Promise.all(joinPromises);
+          for (const result of results) {
+            if (result.error) throw result.error;
+          }
+        }
+
+        // Success message and event broadcasting
+        const modeName = formData.reflectionMode === 'reflection' ? 'Reflection' :
+                        formData.reflectionMode === 'depositIdea' ? 'Deposit Idea' : 'Withdrawal';
+        Alert.alert('Success', `${modeName} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
+
+        if (formData.reflectionMode === 'reflection') {
+          eventBus.emit(mode === 'edit' ? EVENTS.REFLECTION_UPDATED : EVENTS.REFLECTION_CREATED);
+        } else if (formData.reflectionMode === 'depositIdea') {
+          eventBus.emit(mode === 'edit' ? EVENTS.DEPOSIT_IDEA_UPDATED : EVENTS.DEPOSIT_IDEA_CREATED);
+        } else if (formData.reflectionMode === 'withdrawal') {
+          eventBus.emit(mode === 'edit' ? EVENTS.WITHDRAWAL_CREATED : EVENTS.WITHDRAWAL_CREATED);
+        }
+
+        onSubmitSuccess();
+        return; // Exit early for reflections
+      }
+
+      // Original code continues for task/event
       if (formData.type === 'withdrawal') {
         const withdrawalPayload = {
           user_id: user.id,
@@ -1104,7 +1436,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>Type</Text>
       <View style={styles.typeSelector}>
-        {(['task', 'event', 'depositIdea', 'withdrawal'] as const).map((type) => (
+        {(['task', 'event', 'reflection'] as const).map((type) => (
           <TouchableOpacity
             key={type}
             style={[
@@ -1122,6 +1454,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   updates.endTime = defaultStart;
                   updates.endDate = prev.startDate;
                 }
+                // When switching to reflection, ensure reflectionMode is set
+                if (type === 'reflection' && prev.type !== 'reflection') {
+                  updates.reflectionMode = 'reflection';
+                }
                 return { ...prev, ...updates };
               });
             }}
@@ -1130,7 +1466,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               styles.typeButtonText,
               { color: formData.type === type ? '#ffffff' : colors.text }
             ]}>
-              {type === 'depositIdea' ? 'Dep Idea' : type === 'withdrawal' ? 'Withdraw' : type.charAt(0).toUpperCase() + type.slice(1)}
+              {type.charAt(0).toUpperCase() + type.slice(1)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1254,10 +1590,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           style={[
             styles.saveButton,
             { backgroundColor: colors.primary },
-            (!formData.title.trim() || saving) && { backgroundColor: colors.textSecondary }
+            (formData.type !== 'reflection' && !formData.title.trim()) || saving ? { backgroundColor: colors.textSecondary } : null
           ]}
           onPress={handleSubmit}
-          disabled={!formData.title.trim() || saving}
+          disabled={(formData.type !== 'reflection' && !formData.title.trim()) || saving}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#ffffff" />
@@ -1283,6 +1619,211 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
           {/* Type Selector */}
           {renderTypeSelector()}
+
+          {/* REFLECTION FORM LAYOUT */}
+          {formData.type === 'reflection' && (
+            <View style={styles.reflectionContainer}>
+              {/* Reflection Mode Pills */}
+              <ReflectionModePills
+                selectedMode={formData.reflectionMode}
+                onModeChange={(mode) => setFormData(prev => ({ ...prev, reflectionMode: mode }))}
+              />
+
+              {/* Title Field (Optional for reflections) */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>Title (optional)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                  value={formData.title}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+                  placeholder={
+                    formData.reflectionMode === 'reflection' ? 'Reflection title...' :
+                    formData.reflectionMode === 'depositIdea' ? 'Deposit idea title...' :
+                    'Withdrawal title...'
+                  }
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              {/* Content Area - Varies by reflection mode */}
+              {formData.reflectionMode === 'reflection' && (
+                <View style={styles.field}>
+                  <Text style={[styles.label, { color: colors.text }]}>Reflection *</Text>
+                  <RichTextInput
+                    value={formData.content}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                    placeholder="What's on your mind? How are you feeling about your goals and progress?"
+                    minHeight={150}
+                  />
+                </View>
+              )}
+
+              {formData.reflectionMode === 'depositIdea' && (
+                <View style={styles.field}>
+                  <Text style={[styles.label, { color: colors.text }]}>Idea Notes</Text>
+                  <RichTextInput
+                    value={formData.content}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                    placeholder="Describe your deposit idea..."
+                    minHeight={120}
+                  />
+                </View>
+              )}
+
+              {formData.reflectionMode === 'withdrawal' && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>Withdrawal Date *</Text>
+                    <TouchableOpacity
+                      style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                      onPress={() => handleCalendarOpen('withdrawal')}
+                    >
+                      <CalendarIcon size={16} color={colors.textSecondary} />
+                      <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                        {formatDateForDisplay(formData.withdrawalDate)}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>Amount *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                      value={formData.amount}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, amount: text }))}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>Reason/Notes</Text>
+                    <TextInput
+                      style={[styles.textArea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                      value={formData.notes}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}
+                      placeholder="Why are you making this withdrawal?"
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+                </>
+              )}
+
+              {/* Associations Section */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Is this {formData.reflectionMode === 'reflection' ? 'Reflection' : formData.reflectionMode === 'depositIdea' ? 'Deposit Idea' : 'Withdrawal'} associated with any roles, wellness zones, or goals?
+                </Text>
+                {/* Roles */}
+                {roles.length > 0 && (
+                  <View style={styles.associationSection}>
+                    <Text style={[styles.associationLabel, { color: colors.textSecondary }]}>Roles</Text>
+                    <View style={styles.chipsContainer}>
+                      {roles.map(role => (
+                        <TouchableOpacity
+                          key={role.id}
+                          style={[
+                            styles.chip,
+                            { backgroundColor: colors.surface, borderColor: colors.border },
+                            formData.selectedRoleIds.includes(role.id) && { backgroundColor: colors.primary, borderColor: colors.primary }
+                          ]}
+                          onPress={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              selectedRoleIds: prev.selectedRoleIds.includes(role.id)
+                                ? prev.selectedRoleIds.filter(id => id !== role.id)
+                                : [...prev.selectedRoleIds, role.id]
+                            }));
+                          }}
+                        >
+                          <Text style={[
+                            styles.chipText,
+                            { color: formData.selectedRoleIds.includes(role.id) ? '#ffffff' : colors.text }
+                          ]}>
+                            {role.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Domains */}
+                {domains.length > 0 && (
+                  <View style={styles.associationSection}>
+                    <Text style={[styles.associationLabel, { color: colors.textSecondary }]}>Wellness Zones</Text>
+                    <View style={styles.chipsContainer}>
+                      {domains.map(domain => (
+                        <TouchableOpacity
+                          key={domain.id}
+                          style={[
+                            styles.chip,
+                            { backgroundColor: colors.surface, borderColor: colors.border },
+                            formData.selectedDomainIds.includes(domain.id) && { backgroundColor: colors.primary, borderColor: colors.primary }
+                          ]}
+                          onPress={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              selectedDomainIds: prev.selectedDomainIds.includes(domain.id)
+                                ? prev.selectedDomainIds.filter(id => id !== domain.id)
+                                : [...prev.selectedDomainIds, domain.id]
+                            }));
+                          }}
+                        >
+                          <Text style={[
+                            styles.chipText,
+                            { color: formData.selectedDomainIds.includes(domain.id) ? '#ffffff' : colors.text }
+                          ]}>
+                            {domain.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Activate Reflection Section - Only for reflection mode */}
+              {formData.reflectionMode === 'reflection' && (
+                <ActivateReflectionButtons
+                  onActivateTask={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      type: 'task',
+                      notes: prev.content,
+                      dueDate: formatLocalDate(new Date()),
+                      dueTime: getInitialDefaultTime(),
+                    }));
+                  }}
+                  onActivateEvent={() => {
+                    const defaultStart = getDefaultStartTime();
+                    setFormData(prev => ({
+                      ...prev,
+                      type: 'event',
+                      notes: prev.content,
+                      startDate: formatLocalDate(new Date()),
+                      startTime: defaultStart,
+                      endTime: defaultStart,
+                      endDate: formatLocalDate(new Date()),
+                    }));
+                  }}
+                />
+              )}
+
+              {/* Follow Up Section */}
+              <FollowUpToggleSection
+                enabled={formData.followUpEnabled}
+                date={formData.followUpDate}
+                time={formData.followUpTime}
+                onToggle={(enabled) => setFormData(prev => ({ ...prev, followUpEnabled: enabled }))}
+                onDateChange={(date) => setFormData(prev => ({ ...prev, followUpDate: date }))}
+                onTimeChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
+              />
+            </View>
+          )}
 
           {/* Switches Row - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
@@ -2638,5 +3179,31 @@ const styles = StyleSheet.create({
   moreAttachmentsText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  reflectionContainer: {
+    marginTop: 8,
+  },
+  associationSection: {
+    marginTop: 12,
+  },
+  associationLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
