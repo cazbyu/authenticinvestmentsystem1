@@ -36,7 +36,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     if (icon === 'rose') {
       return (
         <Image
-          source={require('@/assets/images/Rose-02.png')}
+          source={require('@/assets/images/rose.png')}
           style={[
             styles.iconImage,
             isSelected && { tintColor: '#ffffff' }
@@ -47,7 +47,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     } else if (icon === 'thorn') {
       return (
         <Image
-          source={require('@/assets/images/Cactus & Thorn-03.png')}
+          source={require('@/assets/images/cactus-thorn.png')}
           style={[
             styles.iconImage,
             isSelected && { tintColor: '#ffffff' }
