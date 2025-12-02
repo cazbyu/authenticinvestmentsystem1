@@ -33,7 +33,7 @@ interface JournalViewProps {
 export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore, onDateRangeChange, refreshKey }: JournalViewProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'deposits' | 'withdrawals'>('all');
+  const [filter, setFilter] = useState<'all' | 'deposits' | 'reflections'>('all');
   const [dateRange, setDateRange] = useState<'week' | 'month' | 'all'>('month');
   const [totalBalance, setTotalBalance] = useState(0);
   const abortControllerRef = React.useRef<AbortController | null>(null);
@@ -241,9 +241,9 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       }
 
       // ---------------------------------------------------------
-      // 2) Withdrawals
+      // 2) Withdrawals (only shown in 'all' filter)
       // ---------------------------------------------------------
-      if (filter === 'all' || filter === 'withdrawals') {
+      if (filter === 'all') {
         let withdrawalsQuery = supabase
           .from('0008-ap-withdrawals')
           .select('id, title, amount, withdrawn_at, user_id')
@@ -349,7 +349,8 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       // ---------------------------------------------------------
       // 3) Reflections (don't affect balance)
       // ---------------------------------------------------------
-      let reflectionsQuery = supabase
+      if (filter === 'all' || filter === 'reflections') {
+        let reflectionsQuery = supabase
         .from('0008-ap-reflections')
         .select('id, content, date, created_at, reflection_type, daily_rose, daily_thorn')
         .eq('user_id', user.id)
@@ -449,11 +450,13 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
           });
         }
       }
+      }
 
       // ---------------------------------------------------------
       // 4) Deposit Ideas (stored separately, appear as reflections)
       // ---------------------------------------------------------
-      let depositIdeasQuery = supabase
+      if (filter === 'all' || filter === 'reflections') {
+        let depositIdeasQuery = supabase
         .from('0008-ap-deposit-ideas')
         .select('id, title, created_at, user_id, is_active')
         .eq('user_id', user.id)
@@ -553,6 +556,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
             source_data: { ...d, roles, domains, keyRelationships, notes, is_deposit_idea: true },
           });
         }
+      }
       }
 
       // ---------------------------------------------------------
@@ -682,7 +686,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
         <View style={styles.filterRow}>
           <View style={styles.filterRowContent}>
             <View style={styles.filterGroup}>
-              {(['all', 'deposits', 'withdrawals'] as const).map((filterOption) => (
+              {(['all', 'deposits', 'reflections'] as const).map((filterOption) => (
                 <TouchableOpacity
                   key={filterOption}
                   style={[styles.filterButton, filter === filterOption && styles.activeFilterButton]}
