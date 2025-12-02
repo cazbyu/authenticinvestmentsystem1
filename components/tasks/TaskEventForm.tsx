@@ -677,6 +677,41 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     }
   };
 
+  const uploadFileToReflectionStorage = async (file: any, userId: string): Promise<string | null> => {
+    try {
+      const supabase = getSupabaseClient();
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      let fileData: any;
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      } else {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      }
+
+      const { data, error } = await supabase.storage
+        .from('0008-reflection-attachments')
+        .upload(filePath, fileData, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error('Upload error:', error);
+        return null;
+      }
+
+      return filePath;
+    } catch (error) {
+      console.error('Error uploading file to reflection storage:', error);
+      return null;
+    }
+  };
+
   const handleCalendarOpen = (mode: 'due' | 'start' | 'end' | 'withdrawal') => {
     setCalendarMode(mode);
     setShowCalendar(true);
@@ -886,6 +921,32 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
             if (followUpError) throw followUpError;
           }
+
+          // Handle reflection attachments
+          const newAttachments = attachedFiles.filter(file => !file.isExisting);
+          if (newAttachments.length > 0) {
+            const uploadPromises = newAttachments.map(async (file) => {
+              const filePath = await uploadFileToReflectionStorage(file, user.id);
+              if (filePath) {
+                const { error: attachmentError } = await supabase
+                  .from('0008-ap-reflection-attachments')
+                  .insert({
+                    reflection_id: mainRecordId,
+                    user_id: user.id,
+                    file_name: file.name,
+                    file_path: filePath,
+                    file_type: file.type,
+                    file_size: file.size,
+                  });
+
+                if (attachmentError) {
+                  console.error('Error saving reflection attachment metadata:', attachmentError);
+                }
+              }
+            });
+
+            await Promise.all(uploadPromises);
+          }
         } else if (formData.reflectionMode === 'depositIdea') {
           // Save to deposit ideas table
           const depositIdeaPayload = {
@@ -917,18 +978,20 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           }
           mainRecordId = mainRecord.id;
 
-          // Save content as note
-          if (formData.content.trim()) {
+          // Save content as note or create note for attachments
+          let noteId = null;
+          if (formData.content.trim() || attachedFiles.length > 0) {
             const { data: noteData, error: noteError } = await supabase
               .from('0008-ap-notes')
               .insert({
                 user_id: user.id,
-                content: formData.content.trim(),
+                content: formData.content.trim() || '',
               })
               .select()
               .single();
 
             if (noteError) throw noteError;
+            noteId = noteData.id;
 
             const { error: noteJoinError } = await supabase
               .from('0008-ap-universal-notes-join')
@@ -940,6 +1003,26 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               });
 
             if (noteJoinError) throw noteJoinError;
+
+            // Handle note attachments for deposit idea
+            const newAttachments = attachedFiles.filter(file => !file.isExisting);
+            if (newAttachments.length > 0 && noteId) {
+              const uploadPromises = newAttachments.map(async (file) => {
+                const filePath = await uploadFileToStorage(file, user.id);
+                if (filePath) {
+                  await saveNoteAttachmentMetadata(
+                    noteId!,
+                    user.id,
+                    file.name,
+                    filePath,
+                    file.type,
+                    file.size
+                  );
+                }
+              });
+
+              await Promise.all(uploadPromises);
+            }
           }
 
           // Save follow-up if enabled
@@ -999,18 +1082,20 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           }
           mainRecordId = mainRecord.id;
 
-          // Save notes if provided
-          if (formData.notes.trim()) {
+          // Save notes if provided or create note for attachments
+          let noteId = null;
+          if (formData.notes.trim() || attachedFiles.length > 0) {
             const { data: noteData, error: noteError } = await supabase
               .from('0008-ap-notes')
               .insert({
                 user_id: user.id,
-                content: formData.notes.trim(),
+                content: formData.notes.trim() || '',
               })
               .select()
               .single();
 
             if (noteError) throw noteError;
+            noteId = noteData.id;
 
             const { error: noteJoinError } = await supabase
               .from('0008-ap-universal-notes-join')
@@ -1022,6 +1107,26 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               });
 
             if (noteJoinError) throw noteJoinError;
+
+            // Handle note attachments for withdrawal
+            const newAttachments = attachedFiles.filter(file => !file.isExisting);
+            if (newAttachments.length > 0 && noteId) {
+              const uploadPromises = newAttachments.map(async (file) => {
+                const filePath = await uploadFileToStorage(file, user.id);
+                if (filePath) {
+                  await saveNoteAttachmentMetadata(
+                    noteId!,
+                    user.id,
+                    file.name,
+                    filePath,
+                    file.type,
+                    file.size
+                  );
+                }
+              });
+
+              await Promise.all(uploadPromises);
+            }
           }
 
           // Save follow-up if enabled
@@ -1605,17 +1710,19 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
       <ScrollView ref={scrollRef} style={styles.content}>
         <View style={styles.form}>
-          {/* Title */}
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>Title *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-              value={formData.title}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
-              placeholder="What do you want to do?"
-              placeholderTextColor={colors.textSecondary}
-            />
-          </View>
+          {/* Title - Only show for task/event types */}
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Title *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                value={formData.title}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+                placeholder="What do you want to do?"
+                placeholderTextColor={colors.textSecondary}
+              />
+            </View>
+          )}
 
           {/* Type Selector */}
           {renderTypeSelector()}
@@ -1711,6 +1818,64 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   </View>
                 </>
               )}
+
+              {/* Attachment Section */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Attachments (optional)
+                </Text>
+
+                {/* Attachment Buttons */}
+                <View style={styles.attachmentButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.attachmentButtonInline, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={handlePickImage}
+                  >
+                    <ImageIcon size={20} color={colors.text} />
+                    <Text style={[styles.attachmentButtonText, { color: colors.text }]}>
+                      Add Images
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.attachmentButtonInline, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={handlePickDocument}
+                  >
+                    <File size={20} color={colors.text} />
+                    <Text style={[styles.attachmentButtonText, { color: colors.text }]}>
+                      Add Files
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Attached Files Grid */}
+                {attachedFiles.length > 0 && (
+                  <View style={styles.attachmentsGrid}>
+                    {attachedFiles.map((file, index) => (
+                      <View key={index} style={styles.attachmentThumbnailWrapper}>
+                        <AttachmentThumbnail
+                          uri={file.uri}
+                          fileType={file.type}
+                          fileName={file.name}
+                          size="medium"
+                        />
+                        <TouchableOpacity
+                          style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                          onPress={() => handleRemoveAttachment(index)}
+                        >
+                          <X size={14} color="#ffffff" />
+                        </TouchableOpacity>
+                        <Text
+                          style={[styles.thumbnailFileName, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
+                          {file.name}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
 
               {/* Associations Section */}
               <View style={styles.field}>
@@ -3203,6 +3368,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  attachmentButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  attachmentButtonInline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  attachmentButtonText: {
     fontSize: 14,
     fontWeight: '500',
   },
