@@ -1587,9 +1587,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   : formData.reflectionMode === 'thorn'
                     ? 'Thorn'
                     : 'Deposit Idea'
-                : formData.type === 'depositIdea'
-                  ? 'Item'
-                  : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
+                : formData.type === 'withdrawal'
+                  ? initialData?.id ? 'Thorn' : 'Withdrawal'
+                  : formData.type === 'depositIdea'
+                    ? 'Item'
+                    : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
             }
           </Text>
           {isEditingCompletedTask && (

@@ -171,6 +171,15 @@ export default function Roles() {
       };
       setEditingTask(editData);
       setTaskFormVisible(true);
+    } else if (entry.source_type === 'depositIdea') {
+      // Open TaskEventForm in depositIdea reflection mode for editing
+      const editData = {
+        ...entry.source_data,
+        type: 'reflection',
+        reflectionMode: 'depositIdea'
+      };
+      setEditingTask(editData);
+      setTaskFormVisible(true);
     } else if (entry.source_type === 'reflection') {
       // Fetch full reflection data and open JournalForm
       const reflection = await fetchReflectionById(entry.source_id);

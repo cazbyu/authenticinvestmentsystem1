@@ -716,6 +716,15 @@ export default function Dashboard() {
       };
       setEditingTask(editData);
       setIsFormModalVisible(true);
+    } else if (entry.source_type === 'depositIdea') {
+      // Open TaskEventForm in depositIdea reflection mode for editing
+      const editData = {
+        ...entry.source_data,
+        type: 'reflection',
+        reflectionMode: 'depositIdea'
+      };
+      setEditingTask(editData);
+      setIsFormModalVisible(true);
     } else if (entry.source_type === 'reflection') {
       // Open JournalForm in edit mode for reflections
       setEditingReflection(entry.source_data);
