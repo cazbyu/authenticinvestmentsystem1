@@ -1939,74 +1939,31 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 <Text style={[styles.label, { color: colors.text }]}>
                   Is this {formData.reflectionMode === 'reflection' ? 'Reflection' : formData.reflectionMode === 'depositIdea' ? 'Deposit Idea' : 'Withdrawal'} associated with any roles, wellness zones, or goals?
                 </Text>
-                {/* Roles */}
-                {roles.length > 0 && (
-                  <View style={styles.associationSection}>
-                    <Text style={[styles.associationLabel, { color: colors.textSecondary }]}>Roles</Text>
-                    <View style={styles.chipsContainer}>
-                      {roles.map(role => (
-                        <TouchableOpacity
-                          key={role.id}
-                          style={[
-                            styles.chip,
-                            { backgroundColor: colors.surface, borderColor: colors.border },
-                            formData.selectedRoleIds.includes(role.id) && { backgroundColor: colors.primary, borderColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              selectedRoleIds: prev.selectedRoleIds.includes(role.id)
-                                ? prev.selectedRoleIds.filter(id => id !== role.id)
-                                : [...prev.selectedRoleIds, role.id]
-                            }));
-                          }}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            { color: formData.selectedRoleIds.includes(role.id) ? '#ffffff' : colors.text }
-                          ]}>
-                            {role.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Domains */}
-                {domains.length > 0 && (
-                  <View style={styles.associationSection}>
-                    <Text style={[styles.associationLabel, { color: colors.textSecondary }]}>Wellness Zones</Text>
-                    <View style={styles.chipsContainer}>
-                      {domains.map(domain => (
-                        <TouchableOpacity
-                          key={domain.id}
-                          style={[
-                            styles.chip,
-                            { backgroundColor: colors.surface, borderColor: colors.border },
-                            formData.selectedDomainIds.includes(domain.id) && { backgroundColor: colors.primary, borderColor: colors.primary }
-                          ]}
-                          onPress={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              selectedDomainIds: prev.selectedDomainIds.includes(domain.id)
-                                ? prev.selectedDomainIds.filter(id => id !== domain.id)
-                                : [...prev.selectedDomainIds, domain.id]
-                            }));
-                          }}
-                        >
-                          <Text style={[
-                            styles.chipText,
-                            { color: formData.selectedDomainIds.includes(domain.id) ? '#ffffff' : colors.text }
-                          ]}>
-                            {domain.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
               </View>
+
+              {/* Roles */}
+              {roles.length > 0 && renderCheckboxGrid(
+                'Roles',
+                roles,
+                formData.selectedRoleIds,
+                (id) => handleMultiSelect('selectedRoleIds', id)
+              )}
+
+              {/* Wellness Zones (Domains) */}
+              {domains.length > 0 && renderCheckboxGrid(
+                'Wellness Zones',
+                domains,
+                formData.selectedDomainIds,
+                (id) => handleMultiSelect('selectedDomainIds', id)
+              )}
+
+              {/* Goals */}
+              {availableGoals.length > 0 && renderCheckboxGrid(
+                'Goals:',
+                availableGoals,
+                formData.selectedGoalIds,
+                (id) => handleMultiSelect('selectedGoalIds', id)
+              )}
 
               {/* Activate Reflection Section - Only for reflection mode */}
               {formData.reflectionMode === 'reflection' && (
