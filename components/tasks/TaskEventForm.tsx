@@ -217,7 +217,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
   // Attachment state
   const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
-  const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImages, setSelectedImages] = useState<any[]>([]);
@@ -569,8 +568,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         if (validFiles.length > 0) {
           setAttachedFiles([...attachedFiles, ...validFiles]);
         }
-
-        setShowAttachmentPicker(false);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -617,12 +614,56 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         if (validFiles.length > 0) {
           setAttachedFiles([...attachedFiles, ...validFiles]);
         }
-
-        setShowAttachmentPicker(false);
       }
     } catch (error) {
       console.error('Error picking document:', error);
       Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const handlePickFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 5 * 1024 * 1024;
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.size || 0;
+          const fileName = asset.name;
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.mimeType || 'application/octet-stream',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 5 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking file:', error);
+      Alert.alert('Error', 'Failed to pick file');
     }
   };
 
@@ -1748,7 +1789,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                       onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
                       placeholder="What's on your mind? How are you feeling about your goals and progress?"
                       minHeight={150}
-                      onAttachmentPress={() => setShowAttachmentPicker(true)}
+                      onAttachmentPress={handlePickFile}
                     />
                   </View>
 
@@ -1791,7 +1832,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                       onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
                       placeholder="Describe your deposit idea..."
                       minHeight={120}
-                      onAttachmentPress={() => setShowAttachmentPicker(true)}
+                      onAttachmentPress={handlePickFile}
                     />
                   </View>
 
@@ -1859,7 +1900,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                       onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}
                       placeholder="Why are you making this withdrawal?"
                       minHeight={100}
-                      onAttachmentPress={() => setShowAttachmentPicker(true)}
+                      onAttachmentPress={handlePickFile}
                     />
                   </View>
 
@@ -2310,7 +2351,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
               <TouchableOpacity
                 style={styles.attachmentButton}
-                onPress={() => setShowAttachmentPicker(true)}
+                onPress={handlePickFile}
               >
                 <Paperclip size={20} color={colors.primary} />
               </TouchableOpacity>
@@ -2614,43 +2655,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         existingDelegates={delegates}
         userId={userId}
       />
-
-      {/* Attachment Picker Modal */}
-      <Modal
-        visible={showAttachmentPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAttachmentPicker(false)}
-      >
-        <View style={styles.attachmentPickerOverlay}>
-          <View style={[styles.attachmentPickerContent, { backgroundColor: colors.surface }]}>
-            <View style={styles.attachmentPickerHeader}>
-              <Text style={[styles.attachmentPickerTitle, { color: colors.text }]}>Add Attachment</Text>
-              <TouchableOpacity onPress={() => setShowAttachmentPicker(false)}>
-                <X size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={[styles.attachmentOption, { borderColor: colors.border }]}
-              onPress={handlePickImage}
-            >
-              <ImageIcon size={24} color={colors.primary} />
-              <Text style={[styles.attachmentOptionText, { color: colors.text }]}>
-                Choose Image
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.attachmentOption, { borderColor: colors.border }]}
-              onPress={handlePickDocument}
-            >
-              <File size={24} color={colors.primary} />
-              <Text style={[styles.attachmentOptionText, { color: colors.text }]}>
-                Choose Document
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Image Viewer Modal */}
       <ImageViewerModal
