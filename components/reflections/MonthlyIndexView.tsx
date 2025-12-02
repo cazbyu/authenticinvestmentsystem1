@@ -8,8 +8,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { fetchMonthlyDates, DateWithContent } from '@/lib/monthlyHistoryData';
-import { ChevronLeft } from 'lucide-react-native';
+import { fetchMonthlyDates, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
+import { ChevronLeft, Flower, AlertTriangle, FileText, BookOpen } from 'lucide-react-native';
 
 interface MonthlyIndexViewProps {
   year: number;
@@ -62,25 +62,42 @@ export default function MonthlyIndexView({
     });
   };
 
-  const formatContentSummary = (summary: string) => {
-    if (!summary) {
-      return '';
+  const getIconForItemType = (type: ItemDetail['type']) => {
+    const iconProps = { size: 14 };
+
+    switch (type) {
+      case 'rose':
+        return <Flower {...iconProps} color="#16a34a" />;
+      case 'thorn':
+        return <AlertTriangle {...iconProps} color="#f59e0b" />;
+      case 'note':
+        return <FileText {...iconProps} color="#0078d4" />;
+      case 'reflection':
+        return <BookOpen {...iconProps} color="#8b5cf6" />;
+      default:
+        return <FileText {...iconProps} color="#0078d4" />;
+    }
+  };
+
+  const renderItemDetails = (items: ItemDetail[]) => {
+    if (!items || items.length === 0) {
+      return null;
     }
 
-    const normalizedEntries = summary
-      .split('\n')
-      .map((entry) => entry.replace(/^•\s*/, '').trim())
-      .filter((entry) => entry.length > 0);
-
-    if (normalizedEntries.length === 0) {
-      return '';
-    }
-
-    return `• ${normalizedEntries.join(' • ')}`;
+    return items.map((item, index) => (
+      <View key={index} style={styles.itemRow}>
+        <View style={styles.iconContainer}>
+          {getIconForItemType(item.type)}
+        </View>
+        <Text style={[styles.itemText, { color: colors.textSecondary }]} numberOfLines={1}>
+          {item.title}
+        </Text>
+      </View>
+    ));
   };
 
   const renderDateRow = ({ item }: { item: DateWithContent }) => {
-    const formattedSummary = formatContentSummary(item.contentSummary);
+    const hasItems = item.itemDetails && item.itemDetails.length > 0;
 
     return (
       <TouchableOpacity
@@ -100,12 +117,12 @@ export default function MonthlyIndexView({
           </Text>
         </View>
         <View style={styles.contentColumn}>
-          {formattedSummary ? (
-            <Text style={[styles.contentText, { color: colors.textSecondary }]} numberOfLines={2}>
-              {formattedSummary}
-            </Text>
+          {hasItems ? (
+            <View style={styles.itemsContainer}>
+              {renderItemDetails(item.itemDetails)}
+            </View>
           ) : (
-            <Text style={[styles.contentText, { color: colors.textSecondary }]} numberOfLines={2}>
+            <Text style={[styles.contentText, { color: colors.textSecondary }]}>
               No reflections or daily items with notes
             </Text>
           )}
@@ -237,6 +254,24 @@ const styles = StyleSheet.create({
   contentText: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  itemsContainer: {
+    gap: 6,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconContainer: {
+    width: 14,
+    height: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemText: {
+    fontSize: 14,
+    flex: 1,
   },
   listContent: {
     paddingBottom: 32,

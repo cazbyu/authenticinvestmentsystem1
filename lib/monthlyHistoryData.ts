@@ -13,6 +13,11 @@ export interface MonthlyStatistics {
   totalItems: number;
 }
 
+export interface ItemDetail {
+  type: 'rose' | 'thorn' | 'reflection' | 'note';
+  title: string;
+}
+
 export interface DateWithContent {
   itemDate: string;
   reflectionsCount: number;
@@ -22,6 +27,7 @@ export interface DateWithContent {
   withdrawalsCount: number;
   notesCount: number;
   contentSummary: string;
+  itemDetails: ItemDetail[];
 }
 
 let monthlyStatsCache: MonthlyStatistics[] | null = null;
@@ -115,6 +121,7 @@ export async function fetchMonthlyDates(
       withdrawalsCount: Number(item.withdrawals_count),
       notesCount: Number(item.notes_count),
       contentSummary: item.content_summary,
+      itemDetails: item.item_details || [],
     }));
   } catch (error) {
     console.error('Error in fetchMonthlyDates:', error);

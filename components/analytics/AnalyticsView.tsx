@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, Award } from 'lucide-react-native';
+import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, Award, Flower, AlertTriangle, Lightbulb, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { eventBus } from '@/lib/eventBus';
 
 interface AnalyticsEntry {
   id: string;
   date: string;
-  type: 'deposit' | 'withdrawal';
+  type: 'deposit' | 'withdrawal' | 'reflection' | 'depositIdea';
   amount: number;
   is_urgent?: boolean;
   is_important?: boolean;
+  reflection_type?: string;
+  daily_rose?: string;
+  daily_thorn?: string;
   roles?: Array<{id: string; label: string}>;
   domains?: Array<{id: string; name: string}>;
   keyRelationships?: Array<{id: string; name: string}>;
@@ -33,6 +36,11 @@ interface AnalyticsMetrics {
     q4: number; // Neither
   };
   krDistribution: Array<{name: string; percentage: number; count: number}>;
+  totalReflections?: number;
+  rosesCount?: number;
+  thornsCount?: number;
+  depositIdeasCount?: number;
+  reflectionConsistency?: number;
 }
 
 interface AnalyticsViewProps {
@@ -48,7 +56,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
   const [metrics, setMetrics] = useState<AnalyticsMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<'4weeks' | '12weeks' | '26weeks'>('12weeks');
-  const [filter, setFilter] = useState<'all' | 'deposits' | 'withdrawals'>('all');
+  const [filter, setFilter] = useState<'all' | 'deposits' | 'reflections'>('all');
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const previousScopeRef = React.useRef<string>('');
@@ -174,8 +182,8 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
         }
       }
 
-      // Fetch withdrawals
-      if (filter === 'all' || filter === 'withdrawals') {
+      // Fetch withdrawals (only in 'all' view)
+      if (filter === 'all') {
         let withdrawalsQuery = supabase
           .from('0008-ap-withdrawals')
           .select('*')
@@ -238,6 +246,142 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
         }
       }
 
+      // Fetch reflections
+      if (filter === 'all' || filter === 'reflections') {
+        let reflectionsQuery = supabase
+          .from('0008-ap-reflections')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('archived', false)
+          .gte('created_at', dateFilter);
+
+        const { data: reflectionsData, error: reflectionsError } = await reflectionsQuery;
+        if (reflectionsError) throw reflectionsError;
+
+        if (reflectionsData && reflectionsData.length > 0) {
+          const reflectionIds = reflectionsData.map(r => r.id);
+
+          const [
+            { data: rolesData },
+            { data: domainsData },
+            { data: krData }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', reflectionIds).eq('parent_type', 'reflection'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', reflectionIds).eq('parent_type', 'reflection'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', reflectionIds).eq('parent_type', 'reflection')
+          ]);
+
+          // Apply scope filtering
+          let scopeFilteredReflectionIds = reflectionIds;
+          if (scope.type !== 'user' && scope.id) {
+            switch (scope.type) {
+              case 'role':
+                scopeFilteredReflectionIds = rolesData?.filter(r => r.role?.id === scope.id).map(r => r.parent_id) || [];
+                break;
+              case 'key_relationship':
+                scopeFilteredReflectionIds = krData?.filter(kr => kr.key_relationship?.id === scope.id).map(kr => kr.parent_id) || [];
+                break;
+              case 'domain':
+                scopeFilteredReflectionIds = domainsData?.filter(d => d.domain?.id === scope.id).map(d => d.parent_id) || [];
+                break;
+            }
+          }
+
+          const scopedReflections = reflectionsData.filter(reflection => scopeFilteredReflectionIds.includes(reflection.id));
+
+          for (const reflection of scopedReflections) {
+            const reflectionWithData = {
+              ...reflection,
+              roles: rolesData?.filter(r => r.parent_id === reflection.id).map(r => r.role).filter(Boolean) || [],
+              domains: domainsData?.filter(d => d.parent_id === reflection.id).map(d => d.domain).filter(Boolean) || [],
+              keyRelationships: krData?.filter(kr => kr.parent_id === reflection.id).map(kr => kr.key_relationship).filter(Boolean) || [],
+            };
+
+            analyticsEntries.push({
+              id: reflection.id,
+              date: reflection.created_at.split('T')[0],
+              type: 'reflection',
+              amount: 0,
+              reflection_type: reflection.reflection_type,
+              daily_rose: reflection.daily_rose,
+              daily_thorn: reflection.daily_thorn,
+              roles: reflectionWithData.roles,
+              domains: reflectionWithData.domains,
+              keyRelationships: reflectionWithData.keyRelationships,
+              source_data: reflectionWithData,
+            });
+          }
+        }
+      }
+
+      // Fetch deposit ideas
+      if (filter === 'all' || filter === 'reflections') {
+        let depositIdeasQuery = supabase
+          .from('0008-ap-deposit-ideas')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('archived', false)
+          .eq('is_active', true)
+          .gte('created_at', dateFilter);
+
+        const { data: depositIdeasData, error: depositIdeasError } = await depositIdeasQuery;
+        if (depositIdeasError) throw depositIdeasError;
+
+        if (depositIdeasData && depositIdeasData.length > 0) {
+          const depositIdeaIds = depositIdeasData.map(d => d.id);
+
+          const [
+            { data: rolesData },
+            { data: domainsData },
+            { data: krData }
+          ] = await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
+          ]);
+
+          // Apply scope filtering
+          let scopeFilteredDepositIdeaIds = depositIdeaIds;
+          if (scope.type !== 'user' && scope.id) {
+            switch (scope.type) {
+              case 'role':
+                scopeFilteredDepositIdeaIds = rolesData?.filter(r => r.role?.id === scope.id).map(r => r.parent_id) || [];
+                break;
+              case 'key_relationship':
+                scopeFilteredDepositIdeaIds = krData?.filter(kr => kr.key_relationship?.id === scope.id).map(kr => kr.parent_id) || [];
+                break;
+              case 'domain':
+                scopeFilteredDepositIdeaIds = domainsData?.filter(d => d.domain?.id === scope.id).map(d => d.parent_id) || [];
+                break;
+            }
+          }
+
+          const scopedDepositIdeas = depositIdeasData.filter(depositIdea => scopeFilteredDepositIdeaIds.includes(depositIdea.id));
+
+          for (const depositIdea of scopedDepositIdeas) {
+            const depositIdeaWithData = {
+              ...depositIdea,
+              roles: rolesData?.filter(r => r.parent_id === depositIdea.id).map(r => r.role).filter(Boolean) || [],
+              domains: domainsData?.filter(d => d.parent_id === depositIdea.id).map(d => d.domain).filter(Boolean) || [],
+              keyRelationships: krData?.filter(kr => kr.parent_id === depositIdea.id).map(kr => kr.key_relationship).filter(Boolean) || [],
+            };
+
+            const dateToUse = depositIdea.activated_at || depositIdea.created_at;
+
+            analyticsEntries.push({
+              id: depositIdea.id,
+              date: dateToUse.split('T')[0],
+              type: 'depositIdea',
+              amount: 0,
+              roles: depositIdeaWithData.roles,
+              domains: depositIdeaWithData.domains,
+              keyRelationships: depositIdeaWithData.keyRelationships,
+              source_data: depositIdeaWithData,
+            });
+          }
+        }
+      }
+
       // Check if aborted before final state updates
       if (controller.signal.aborted) {
         return;
@@ -267,9 +411,26 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
   const calculateMetrics = async (entries: AnalyticsEntry[], totalWeeks: number) => {
     const deposits = entries.filter(e => e.type === 'deposit');
     const withdrawals = entries.filter(e => e.type === 'withdrawal');
-    
+    const reflections = entries.filter(e => e.type === 'reflection');
+    const depositIdeas = entries.filter(e => e.type === 'depositIdea');
+
     const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0);
     const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
+
+    // Reflection-specific metrics
+    const totalReflections = reflections.length;
+    const rosesCount = reflections.filter(r => r.daily_rose || r.reflection_type === 'rose').length;
+    const thornsCount = reflections.filter(r => r.daily_thorn || r.reflection_type === 'thorn').length;
+    const depositIdeasCount = depositIdeas.length;
+
+    // Reflection consistency (weeks with at least one reflection)
+    const weeklyReflections = new Map<string, number>();
+    reflections.forEach(r => {
+      const weekStart = getWeekStart(new Date(r.date));
+      const weekKey = weekStart.toISOString().split('T')[0];
+      weeklyReflections.set(weekKey, (weeklyReflections.get(weekKey) || 0) + 1);
+    });
+    const reflectionConsistency = totalWeeks === 0 ? 0 : Math.round((weeklyReflections.size / totalWeeks) * 100);
     
     // 1. Net Balance %
     const netBalance = totalDeposits + totalWithdrawals === 0 ? 0 : 
@@ -368,6 +529,11 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
       weeklyStreak,
       quadrantBreakdown,
       krDistribution,
+      totalReflections,
+      rosesCount,
+      thornsCount,
+      depositIdeasCount,
+      reflectionConsistency,
     });
   };
 
@@ -527,7 +693,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
       {/* Filter Controls */}
       <View style={styles.filterContainer}>
         <View style={styles.filterGroup}>
-          {(['all', 'deposits', 'withdrawals'] as const).map((filterOption) => (
+          {(['all', 'deposits', 'reflections'] as const).map((filterOption) => (
             <TouchableOpacity
               key={filterOption}
               style={[
@@ -548,20 +714,95 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Composite Score */}
-        <View style={styles.compositeScoreCard}>
-          <View style={styles.compositeScoreHeader}>
-            <Award size={24} color={getScoreColor(metrics.compositeScore)} />
-            <Text style={styles.compositeScoreTitle}>Investment Score</Text>
-          </View>
-          <Text style={[styles.compositeScoreValue, { color: getScoreColor(metrics.compositeScore) }]}>
-            {metrics.compositeScore}
-          </Text>
-          <Text style={styles.compositeScoreSubtitle}>out of 100</Text>
-        </View>
+        {filter === 'reflections' ? (
+          <>
+            {/* Reflection Summary Card */}
+            <View style={styles.compositeScoreCard}>
+              <View style={styles.compositeScoreHeader}>
+                <BookOpen size={24} color="#8b5cf6" />
+                <Text style={styles.compositeScoreTitle}>Reflection Summary</Text>
+              </View>
+              <Text style={[styles.compositeScoreValue, { color: '#8b5cf6' }]}>
+                {metrics.totalReflections || 0}
+              </Text>
+              <Text style={styles.compositeScoreSubtitle}>Total Reflections</Text>
+            </View>
 
-        {/* Metrics Grid */}
-        <View style={styles.metricsGrid}>
+            {/* Reflection Metrics Grid */}
+            <View style={styles.metricsGrid}>
+              {/* Roses Count */}
+              <View style={styles.metricCard}>
+                <View style={styles.metricHeader}>
+                  <Flower size={16} color="#16a34a" />
+                  <Text style={styles.metricTitle}>Roses</Text>
+                </View>
+                <Text style={[styles.metricValue, { color: '#16a34a' }]}>
+                  {metrics.rosesCount || 0}
+                </Text>
+                <Text style={styles.metricDescription}>
+                  Wins & Gratitude
+                </Text>
+              </View>
+
+              {/* Thorns Count */}
+              <View style={styles.metricCard}>
+                <View style={styles.metricHeader}>
+                  <AlertTriangle size={16} color="#f59e0b" />
+                  <Text style={styles.metricTitle}>Thorns</Text>
+                </View>
+                <Text style={[styles.metricValue, { color: '#f59e0b' }]}>
+                  {metrics.thornsCount || 0}
+                </Text>
+                <Text style={styles.metricDescription}>
+                  Challenges
+                </Text>
+              </View>
+
+              {/* Deposit Ideas Count */}
+              <View style={styles.metricCard}>
+                <View style={styles.metricHeader}>
+                  <Lightbulb size={16} color="#eab308" />
+                  <Text style={styles.metricTitle}>Ideas</Text>
+                </View>
+                <Text style={[styles.metricValue, { color: '#eab308' }]}>
+                  {metrics.depositIdeasCount || 0}
+                </Text>
+                <Text style={styles.metricDescription}>
+                  Deposit Ideas
+                </Text>
+              </View>
+
+              {/* Reflection Consistency */}
+              <View style={styles.metricCard}>
+                <View style={styles.metricHeader}>
+                  <Calendar size={16} color={getScoreColor(metrics.reflectionConsistency || 0)} />
+                  <Text style={styles.metricTitle}>Consistency</Text>
+                </View>
+                <Text style={[styles.metricValue, { color: getScoreColor(metrics.reflectionConsistency || 0) }]}>
+                  {metrics.reflectionConsistency || 0}%
+                </Text>
+                <Text style={styles.metricDescription}>
+                  Weekly reflection rate
+                </Text>
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            {/* Investment Score (for deposits/all) */}
+            <View style={styles.compositeScoreCard}>
+              <View style={styles.compositeScoreHeader}>
+                <Award size={24} color={getScoreColor(metrics.compositeScore)} />
+                <Text style={styles.compositeScoreTitle}>Investment Score</Text>
+              </View>
+              <Text style={[styles.compositeScoreValue, { color: getScoreColor(metrics.compositeScore) }]}>
+                {metrics.compositeScore}
+              </Text>
+              <Text style={styles.compositeScoreSubtitle}>out of 100</Text>
+            </View>
+
+            {/* Metrics Grid */}
+            <View style={styles.metricsGrid}>
           {/* Net Balance */}
           <View style={styles.metricCard}>
             <View style={styles.metricHeader}>
@@ -620,47 +861,49 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
               </Text>
             </View>
           )}
-        </View>
+            </View>
 
-        {/* Quadrant Breakdown */}
-        <View style={styles.breakdownCard}>
-          <Text style={styles.breakdownTitle}>Priority Quadrants</Text>
-          <View style={styles.quadrantGrid}>
-            <View style={styles.quadrantItem}>
-              <Text style={styles.quadrantLabel}>Important & Urgent</Text>
-              <Text style={styles.quadrantValue}>{metrics.quadrantBreakdown.q1}%</Text>
-            </View>
-            <View style={styles.quadrantItem}>
-              <Text style={styles.quadrantLabel}>Important, Not Urgent</Text>
-              <Text style={[styles.quadrantValue, { color: '#16a34a' }]}>{metrics.quadrantBreakdown.q2}%</Text>
-            </View>
-            <View style={styles.quadrantItem}>
-              <Text style={styles.quadrantLabel}>Urgent, Not Important</Text>
-              <Text style={styles.quadrantValue}>{metrics.quadrantBreakdown.q3}%</Text>
-            </View>
-            <View style={styles.quadrantItem}>
-              <Text style={styles.quadrantLabel}>Neither</Text>
-              <Text style={styles.quadrantValue}>{metrics.quadrantBreakdown.q4}%</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* KR Distribution (if applicable) */}
-        {metrics.krDistribution.length > 0 && (
-          <View style={styles.breakdownCard}>
-            <Text style={styles.breakdownTitle}>Key Relationship Distribution</Text>
-            <View style={styles.krList}>
-              {metrics.krDistribution.map((kr, index) => (
-                <View key={index} style={styles.krItem}>
-                  <Text style={styles.krName}>{kr.name}</Text>
-                  <View style={styles.krStats}>
-                    <Text style={styles.krCount}>{kr.count}</Text>
-                    <Text style={styles.krPercentage}>{kr.percentage}%</Text>
-                  </View>
+            {/* Quadrant Breakdown */}
+            <View style={styles.breakdownCard}>
+              <Text style={styles.breakdownTitle}>Priority Quadrants</Text>
+              <View style={styles.quadrantGrid}>
+                <View style={styles.quadrantItem}>
+                  <Text style={styles.quadrantLabel}>Important & Urgent</Text>
+                  <Text style={styles.quadrantValue}>{metrics.quadrantBreakdown.q1}%</Text>
                 </View>
-              ))}
+                <View style={styles.quadrantItem}>
+                  <Text style={styles.quadrantLabel}>Important, Not Urgent</Text>
+                  <Text style={[styles.quadrantValue, { color: '#16a34a' }]}>{metrics.quadrantBreakdown.q2}%</Text>
+                </View>
+                <View style={styles.quadrantItem}>
+                  <Text style={styles.quadrantLabel}>Urgent, Not Important</Text>
+                  <Text style={styles.quadrantValue}>{metrics.quadrantBreakdown.q3}%</Text>
+                </View>
+                <View style={styles.quadrantItem}>
+                  <Text style={styles.quadrantLabel}>Neither</Text>
+                  <Text style={styles.quadrantValue}>{metrics.quadrantBreakdown.q4}%</Text>
+                </View>
+              </View>
             </View>
-          </View>
+
+            {/* KR Distribution (if applicable) */}
+            {metrics.krDistribution.length > 0 && (
+              <View style={styles.breakdownCard}>
+                <Text style={styles.breakdownTitle}>Key Relationship Distribution</Text>
+                <View style={styles.krList}>
+                  {metrics.krDistribution.map((kr, index) => (
+                    <View key={index} style={styles.krItem}>
+                      <Text style={styles.krName}>{kr.name}</Text>
+                      <View style={styles.krStats}>
+                        <Text style={styles.krCount}>{kr.count}</Text>
+                        <Text style={styles.krPercentage}>{kr.percentage}%</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
         )}
 
       </ScrollView>
