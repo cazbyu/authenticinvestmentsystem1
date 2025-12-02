@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
+import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform, Image, Linking } from 'react-native';
@@ -32,7 +32,6 @@ import ImageViewerModal from '../reflections/ImageViewerModal';
 import { uploadNoteAttachment, saveNoteAttachmentMetadata, fetchNoteAttachments, deleteNoteAttachment, getNoteAttachmentSignedUrl } from '@/lib/noteAttachmentUtils';
 import ReflectionModePills from '../reflections/ReflectionModePills';
 import FollowUpToggleSection from '../reflections/FollowUpToggleSection';
-import ActivateReflectionButtons from '../reflections/ActivateReflectionButtons';
 import RichTextInput from '../reflections/RichTextInput';
 
 // ------------ Types & Models ------------
@@ -221,6 +220,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImages, setSelectedImages] = useState<any[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
+  // Goals collapsible state
+  const [showGoalsSection, setShowGoalsSection] = useState(false);
 
 
   // Helper function to get next 15-minute interval + 15 min buffer
@@ -1439,6 +1441,17 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             onPress={() => {
               setFormData(prev => {
                 const updates: any = { type };
+
+                // Bidirectional content/notes flow when switching types
+                if (type === 'reflection' && (prev.type === 'task' || prev.type === 'event')) {
+                  // Moving from task/event to reflection: copy notes to content
+                  updates.content = prev.notes || prev.content;
+                  updates.reflectionMode = 'rose';
+                } else if ((type === 'task' || type === 'event') && prev.type === 'reflection') {
+                  // Moving from reflection to task/event: copy content to notes
+                  updates.notes = prev.content || prev.notes;
+                }
+
                 // Set smart defaults when switching to event type
                 if (type === 'event' && prev.type !== 'event' && mode !== 'edit') {
                   const defaultStart = getDefaultStartTime();
@@ -1446,10 +1459,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   updates.endTime = defaultStart;
                   updates.endDate = prev.startDate;
                 }
-                // When switching to reflection, ensure reflectionMode is set
-                if (type === 'reflection' && prev.type !== 'reflection') {
-                  updates.reflectionMode = 'rose';
-                }
+
                 return { ...prev, ...updates };
               });
             }}
@@ -1570,7 +1580,17 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {initialData?.id ? 'Edit' : 'New'} {formData.type === 'depositIdea' ? 'Item' : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)}
+            {initialData?.id ? 'Edit' : 'New'} {
+              formData.type === 'reflection'
+                ? formData.reflectionMode === 'rose'
+                  ? 'Rose'
+                  : formData.reflectionMode === 'thorn'
+                    ? 'Thorn'
+                    : 'Deposit Idea'
+                : formData.type === 'depositIdea'
+                  ? 'Item'
+                  : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
+            }
           </Text>
           {isEditingCompletedTask && (
             <View style={[styles.completedBadge, { backgroundColor: '#16a34a' }]}>
@@ -2016,16 +2036,50 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             (id) => handleMultiSelect('selectedDomainIds', id)
           )}
 
-          {/* Goals */}
-          {((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'depositIdea') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && renderCheckboxGrid(
-            'Goals:',
-            availableGoals,
-            formData.selectedGoalIds,
-            (id) => handleMultiSelect('selectedGoalIds', id)
+          {/* Goals - Collapsible chip-based section */}
+          {((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'depositIdea') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && (
+            <View style={styles.field}>
+              <TouchableOpacity
+                style={styles.collapsibleHeader}
+                onPress={() => setShowGoalsSection(!showGoalsSection)}
+              >
+                <Text style={[styles.label, { color: colors.text }]}>Goals</Text>
+                {showGoalsSection ? (
+                  <ChevronUp size={20} color={colors.text} />
+                ) : (
+                  <ChevronDown size={20} color={colors.text} />
+                )}
+              </TouchableOpacity>
+              {showGoalsSection && (
+                <View style={styles.goalPickerRow}>
+                  {availableGoals.map(g => {
+                    const active = formData.selectedGoalIds.includes(g.id);
+                    return (
+                      <TouchableOpacity
+                        key={`${g.goal_type}-${g.id}`}
+                        style={[
+                          styles.goalChip,
+                          { borderColor: colors.border, backgroundColor: colors.surface },
+                          active && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => handleMultiSelect('selectedGoalIds', g.id)}
+                      >
+                        <Text style={[
+                          styles.goalChipText,
+                          { color: active ? '#ffffff' : colors.text }
+                        ]}>
+                          {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           )}
 
           {/* Follow Up Section - Only for reflection mode */}
-          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && (
+          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'depositIdea') && (
             <FollowUpToggleSection
               enabled={formData.followUpEnabled}
               date={formData.followUpDate}
@@ -2036,32 +2090,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             />
           )}
 
-          {/* Activate Reflection Section - Only for reflection mode */}
-          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && (
-            <ActivateReflectionButtons
-              onActivateTask={() => {
-                setFormData(prev => ({
-                  ...prev,
-                  type: 'task',
-                  notes: prev.content,
-                  dueDate: formatLocalDate(new Date()),
-                  dueTime: getInitialDefaultTime(),
-                }));
-              }}
-              onActivateEvent={() => {
-                const defaultStart = getDefaultStartTime();
-                setFormData(prev => ({
-                  ...prev,
-                  type: 'event',
-                  notes: prev.content,
-                  startDate: formatLocalDate(new Date()),
-                  startTime: defaultStart,
-                  endTime: defaultStart,
-                  endDate: formatLocalDate(new Date()),
-                }));
-              }}
-            />
-          )}
 
           {/* Notes - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
@@ -2745,10 +2773,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   goalPickerRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginTop: 8,
   },
   goalChip: {
     paddingHorizontal: 12,
@@ -2935,27 +2970,6 @@ const styles = StyleSheet.create({
   },
   warningCheckboxRow: {
     alignItems: 'center',
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkmark: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  checkboxLabel: {
-    fontSize: 14,
   },
   warningFooter: {
     padding: 20,

@@ -66,9 +66,9 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: 'absolute',
-    bottom: '100%',
+    top: '100%',
     left: '50%',
-    transform: [{ translateX: -50 }, { translateY: -8 }],
+    transform: [{ translateX: -50 }, { translateY: 8 }],
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 6,

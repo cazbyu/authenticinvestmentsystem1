@@ -17,17 +17,17 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
   const modes: { value: ReflectionMode; tooltip: string; icon: 'rose' | 'thorn' | 'idea' }[] = [
     {
       value: 'rose',
-      tooltip: 'A success, joy, or meaningful moment to celebrate',
+      tooltip: 'Rose',
       icon: 'rose'
     },
     {
       value: 'thorn',
-      tooltip: 'A moment that needs attention, care or improvement',
+      tooltip: 'Thorn',
       icon: 'thorn'
     },
     {
       value: 'depositIdea',
-      tooltip: 'A helpful idea worth capturing for future action',
+      tooltip: 'Deposit Idea',
       icon: 'idea'
     },
   ];
