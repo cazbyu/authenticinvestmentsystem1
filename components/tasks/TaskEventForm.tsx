@@ -37,7 +37,7 @@ import RichTextInput from '../reflections/RichTextInput';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'reflection';
-type ReflectionMode = 'reflection' | 'depositIdea' | 'withdrawal';
+type ReflectionMode = 'rose' | 'thorn' | 'depositIdea';
 
 interface Role { 
   id: string; 
@@ -155,7 +155,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   // Form state
   const [formData, setFormData] = useState<FormData>({
     type: 'task',
-    reflectionMode: 'reflection',
+    reflectionMode: 'rose',
     title: '',
     dueDate: formatLocalDate(new Date()),
     dueTime: getInitialDefaultTime(),
@@ -462,10 +462,21 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       firstActiveGoal = initialData.goals[0];
     }
 
+    // Determine reflection mode from database flags
+    let reflectionMode: ReflectionMode = 'rose';
+    if (initialData.daily_rose) {
+      reflectionMode = 'rose';
+    } else if (initialData.daily_thorn) {
+      reflectionMode = 'thorn';
+    } else if (initialData.type === 'depositIdea') {
+      reflectionMode = 'depositIdea';
+    }
+
     // Build formData, handling both edit mode (with id) and create mode (pre-fill only)
     const newFormData: FormData = {
       type: initialData.type || 'task',
-      title: initialData.title || '',
+      reflectionMode,
+      title: initialData.title || initialData.reflection_title || '',
       dueDate: initialData.due_date || formatLocalDate(new Date()),
       dueTime: (initialData.type === 'task' ? initialData.end_time : '') || '',
       startDate: initialData.start_date || formatLocalDate(new Date()),
@@ -484,10 +495,14 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       selectedGoalIds: initialData.goals?.map((g: any) => g.id) || initialData.selectedGoalIds || [],
       selectedGoal: firstActiveGoal,
       notes: notesString,
+      content: initialData.content || '',
       recurrenceRule: initialData.recurrence_rule || undefined,
       recurrenceEndDate: initialData.recurrence_end_date || null,
       isDelegated: initialData.delegates && initialData.delegates.length > 0,
       selectedDelegateId: initialData.delegates && initialData.delegates.length > 0 ? initialData.delegates[0].id : undefined,
+      followUpEnabled: initialData.follow_up || false,
+      followUpDate: initialData.follow_up_date || formatLocalDate(new Date()),
+      followUpTime: '',
     };
 
     setFormData(newFormData);
@@ -877,12 +892,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     }
 
     if (formData.type === 'reflection') {
-      if (formData.reflectionMode === 'reflection' && !formData.content.trim()) {
+      if ((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && !formData.content.trim()) {
         Alert.alert('Error', 'Please enter reflection content');
-        return;
-      }
-      if (formData.reflectionMode === 'withdrawal' && (!formData.amount || parseFloat(formData.amount) <= 0)) {
-        Alert.alert('Error', 'Please enter a valid withdrawal amount');
         return;
       }
     }
@@ -899,7 +910,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
       // Handle reflection type with its three modes
       if (formData.type === 'reflection') {
-        if (formData.reflectionMode === 'reflection') {
+        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') {
           // Save to reflections table
           const reflectionPayload = {
             user_id: user.id,
@@ -910,6 +921,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             archived: false,
             follow_up: formData.followUpEnabled,
             follow_up_date: formData.followUpEnabled ? formData.followUpDate : null,
+            daily_rose: formData.reflectionMode === 'rose',
+            daily_thorn: formData.reflectionMode === 'thorn',
             ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
           };
 
@@ -1093,115 +1106,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
             if (followUpError) throw followUpError;
           }
-        } else if (formData.reflectionMode === 'withdrawal') {
-          // Save to withdrawals table
-          const withdrawalPayload = {
-            user_id: user.id,
-            title: formData.title.trim() || 'Withdrawal',
-            amount: parseFloat(formData.amount) || 0,
-            withdrawn_at: new Date(formData.withdrawalDate + 'T12:00:00').toISOString(),
-            ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
-          };
-
-          if (mode === 'edit' && initialData?.id) {
-            const { data, error } = await supabase
-              .from('0008-ap-withdrawals')
-              .update(withdrawalPayload)
-              .eq('id', initialData.id)
-              .select()
-              .single();
-            if (error) throw error;
-            mainRecord = data;
-          } else {
-            const { data, error } = await supabase
-              .from('0008-ap-withdrawals')
-              .insert(withdrawalPayload)
-              .select()
-              .single();
-            if (error) throw error;
-            mainRecord = data;
-          }
-          mainRecordId = mainRecord.id;
-
-          // Save notes if provided or create note for attachments
-          let noteId = null;
-          if (formData.notes.trim() || attachedFiles.length > 0) {
-            const { data: noteData, error: noteError } = await supabase
-              .from('0008-ap-notes')
-              .insert({
-                user_id: user.id,
-                content: formData.notes.trim() || '',
-              })
-              .select()
-              .single();
-
-            if (noteError) throw noteError;
-            noteId = noteData.id;
-
-            const { error: noteJoinError } = await supabase
-              .from('0008-ap-universal-notes-join')
-              .insert({
-                parent_id: mainRecordId,
-                parent_type: 'withdrawal',
-                note_id: noteData.id,
-                user_id: user.id,
-              });
-
-            if (noteJoinError) throw noteJoinError;
-
-            // Handle note attachments for withdrawal
-            const newAttachments = attachedFiles.filter(file => !file.isExisting);
-            if (newAttachments.length > 0 && noteId) {
-              const uploadPromises = newAttachments.map(async (file) => {
-                const filePath = await uploadFileToStorage(file, user.id);
-                if (filePath) {
-                  await saveNoteAttachmentMetadata(
-                    noteId!,
-                    user.id,
-                    file.name,
-                    filePath,
-                    file.type,
-                    file.size
-                  );
-                }
-              });
-
-              await Promise.all(uploadPromises);
-            }
-          }
-
-          // Save follow-up if enabled
-          if (formData.followUpEnabled && formData.followUpDate && formData.followUpTime) {
-            const followUpDateTime = new Date(formData.followUpDate + 'T' + formData.followUpTime.replace(/\s*(am|pm)/i, '') + ':00');
-
-            const followUpPayload = {
-              user_id: user.id,
-              parent_type: 'withdrawal',
-              parent_id: mainRecordId,
-              follow_up_date: formData.followUpDate,
-              follow_up_time: followUpDateTime.toISOString(),
-              status: 'pending',
-            };
-
-            if (mode === 'edit' && initialData?.id) {
-              await supabase
-                .from('0008-ap-universal-follow-up-join')
-                .delete()
-                .eq('parent_id', mainRecordId)
-                .eq('parent_type', 'withdrawal');
-            }
-
-            const { error: followUpError } = await supabase
-              .from('0008-ap-universal-follow-up-join')
-              .insert(followUpPayload);
-
-            if (followUpError) throw followUpError;
-          }
         }
 
         // Handle joins for reflection types
-        const parentType = formData.reflectionMode === 'reflection' ? 'reflection' :
-                          formData.reflectionMode === 'depositIdea' ? 'depositIdea' : 'withdrawal';
+        const parentType = (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') ? 'reflection' : 'depositIdea';
 
         // Clear existing joins if editing
         if (mode === 'edit' && initialData?.id) {
@@ -1253,16 +1161,14 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         }
 
         // Success message and event broadcasting
-        const modeName = formData.reflectionMode === 'reflection' ? 'Reflection' :
-                        formData.reflectionMode === 'depositIdea' ? 'Deposit Idea' : 'Withdrawal';
-        Alert.alert('Success', `${modeName} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
+        const modeName = formData.reflectionMode === 'rose' ? 'Celebration' :
+                        formData.reflectionMode === 'thorn' ? 'Challenge' : 'Deposit Idea';
+        Alert.alert('Success', `${modeName} ${mode === 'edit' ? 'updated' : 'saved'} successfully!`);
 
-        if (formData.reflectionMode === 'reflection') {
+        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') {
           eventBus.emit(mode === 'edit' ? EVENTS.REFLECTION_UPDATED : EVENTS.REFLECTION_CREATED);
         } else if (formData.reflectionMode === 'depositIdea') {
           eventBus.emit(mode === 'edit' ? EVENTS.DEPOSIT_IDEA_UPDATED : EVENTS.DEPOSIT_IDEA_CREATED);
-        } else if (formData.reflectionMode === 'withdrawal') {
-          eventBus.emit(mode === 'edit' ? EVENTS.WITHDRAWAL_CREATED : EVENTS.WITHDRAWAL_CREATED);
         }
 
         onSubmitSuccess();
@@ -1270,153 +1176,93 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       }
 
       // Original code continues for task/event
-      if (formData.type === 'withdrawal') {
-        const withdrawalPayload = {
-          user_id: user.id,
-          title: formData.title.trim(),
-          amount: parseFloat(formData.amount) || 0,
-          withdrawn_at: new Date(formData.withdrawalDate + 'T12:00:00').toISOString(),
-          ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
-        };
-
-        if (mode === 'edit' && initialData?.id) {
-          const { data, error } = await supabase
-            .from('0008-ap-withdrawals')
-            .update(withdrawalPayload)
-            .eq('id', initialData.id)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        } else {
-          const { data, error } = await supabase
-            .from('0008-ap-withdrawals')
-            .insert(withdrawalPayload)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        }
-        mainRecordId = mainRecord.id;
-      } else if (formData.type === 'depositIdea') {
-        const depositIdeaPayload = {
-          user_id: user.id,
-          title: formData.title.trim(),
-          is_active: true,
-          archived: false,
-          follow_up: formData.isGoal,
-          ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
-        };
-
-        if (mode === 'edit' && initialData?.id) {
-          const { data, error } = await supabase
-            .from('0008-ap-deposit-ideas')
-            .update(depositIdeaPayload)
-            .eq('id', initialData.id)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        } else {
-          const { data, error } = await supabase
-            .from('0008-ap-deposit-ideas')
-            .insert(depositIdeaPayload)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        }
-        mainRecordId = mainRecord.id;
-      } else {
-        // Task or Event
-        // Log to verify status preservation
-        if (mode === 'edit' && initialData?.id) {
-          console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
-        }
-
-        // For recurring tasks/events without a date, default to today
-        const effectiveDueDate = formData.type === 'task'
-          ? (formData.dueDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
-          : null;
-        const effectiveStartDate = formData.type === 'event'
-          ? (formData.startDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
-          : null;
-
-        // For tasks with a due time, we set both start_time and end_time to the same value
-        // so they display correctly on the calendar (not at midnight)
-        const dueTimeFormatted = formData.type === 'task' && formData.dueTime && !formData.isAnytime
-          ? formatTimeForDatabase(formData.dueTime, effectiveDueDate)
-          : null;
-
-        const taskPayload = {
-          user_id: user.id,
-          title: formData.title.trim(),
-          type: formData.type,
-          due_date: effectiveDueDate,
-          start_date: effectiveStartDate,
-          end_date: formData.type === 'event' ? formData.endDate : null,
-          start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.startTime, effectiveStartDate)
-            : dueTimeFormatted,
-          end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.endTime, formData.endDate || effectiveStartDate)
-            : dueTimeFormatted,
-          is_all_day: formData.isAnytime,
-          is_urgent: formData.isUrgent,
-          is_important: formData.isImportant,
-          is_twelve_week_goal: formData.isGoal,
-          recurrence_rule: formData.recurrenceRule || null,
-          recurrence_end_date: formData.recurrenceEndDate || null,
-          // Preserve completion status and timestamp when editing
-          ...(mode === 'edit' && initialData?.id ? {
-            // Explicitly preserve completed status - never change it back to pending
-            status: initialData.status === 'completed' ? 'completed' : (initialData.status || 'pending'),
-            completed_at: initialData.completed_at || null,
-            updated_at: new Date().toISOString()
-          } : {
-            status: 'pending'
-          })
-        };
-
-        // Sanitize: Convert any empty strings to null for timestamp fields
-        const sanitizeTimestamps = (payload: any) => {
-          const timestampFields = ['start_time', 'end_time', 'completed_at'];
-          timestampFields.forEach(field => {
-            if (payload[field] === '') {
-              console.warn(`[TaskEventForm] Converting empty string to null for field: ${field}`);
-              payload[field] = null;
-            }
-          });
-          return payload;
-        };
-
-        const sanitizedPayload = sanitizeTimestamps(taskPayload);
-        console.log('[TaskEventForm] Complete task payload:', JSON.stringify(sanitizedPayload, null, 2));
-
-        if (mode === 'edit' && initialData?.id) {
-          const { data, error } = await supabase
-            .from('0008-ap-tasks')
-            .update(sanitizedPayload)
-            .eq('id', initialData.id)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        } else {
-          const { data, error } = await supabase
-            .from('0008-ap-tasks')
-            .insert(sanitizedPayload)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        }
-        mainRecordId = mainRecord.id;
+      // Task or Event
+      // Log to verify status preservation
+      if (mode === 'edit' && initialData?.id) {
+        console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
       }
 
+      // For recurring tasks/events without a date, default to today
+      const effectiveDueDate = formData.type === 'task'
+        ? (formData.dueDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+        : null;
+      const effectiveStartDate = formData.type === 'event'
+        ? (formData.startDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+        : null;
+
+      // For tasks with a due time, we set both start_time and end_time to the same value
+      // so they display correctly on the calendar (not at midnight)
+      const dueTimeFormatted = formData.type === 'task' && formData.dueTime && !formData.isAnytime
+        ? formatTimeForDatabase(formData.dueTime, effectiveDueDate)
+        : null;
+
+      const taskPayload = {
+        user_id: user.id,
+        title: formData.title.trim(),
+        type: formData.type,
+        due_date: effectiveDueDate,
+        start_date: effectiveStartDate,
+        end_date: formData.type === 'event' ? formData.endDate : null,
+        start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
+          ? formatTimeForDatabase(formData.startTime, effectiveStartDate)
+          : dueTimeFormatted,
+        end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
+          ? formatTimeForDatabase(formData.endTime, formData.endDate || effectiveStartDate)
+          : dueTimeFormatted,
+        is_all_day: formData.isAnytime,
+        is_urgent: formData.isUrgent,
+        is_important: formData.isImportant,
+        is_twelve_week_goal: formData.isGoal,
+        recurrence_rule: formData.recurrenceRule || null,
+        recurrence_end_date: formData.recurrenceEndDate || null,
+        // Preserve completion status and timestamp when editing
+        ...(mode === 'edit' && initialData?.id ? {
+          // Explicitly preserve completed status - never change it back to pending
+          status: initialData.status === 'completed' ? 'completed' : (initialData.status || 'pending'),
+          completed_at: initialData.completed_at || null,
+          updated_at: new Date().toISOString()
+        } : {
+          status: 'pending'
+        })
+      };
+
+      // Sanitize: Convert any empty strings to null for timestamp fields
+      const sanitizeTimestamps = (payload: any) => {
+        const timestampFields = ['start_time', 'end_time', 'completed_at'];
+        timestampFields.forEach(field => {
+          if (payload[field] === '') {
+            console.warn(`[TaskEventForm] Converting empty string to null for field: ${field}`);
+            payload[field] = null;
+          }
+        });
+        return payload;
+      };
+
+      const sanitizedPayload = sanitizeTimestamps(taskPayload);
+      console.log('[TaskEventForm] Complete task payload:', JSON.stringify(sanitizedPayload, null, 2));
+
+      if (mode === 'edit' && initialData?.id) {
+        const { data, error } = await supabase
+          .from('0008-ap-tasks')
+          .update(sanitizedPayload)
+          .eq('id', initialData.id)
+          .select()
+          .single();
+        if (error) throw error;
+        mainRecord = data;
+      } else {
+        const { data, error } = await supabase
+          .from('0008-ap-tasks')
+          .insert(sanitizedPayload)
+          .select()
+          .single();
+        if (error) throw error;
+        mainRecord = data;
+      }
+      mainRecordId = mainRecord.id;
+
       // Handle joins for all types
-      const parentType = formData.type === 'depositIdea' ? 'depositIdea' : 
-                        formData.type === 'withdrawal' ? 'withdrawal' : 'task';
+      const parentType = 'task';
 
       // Clear existing joins if editing
       if (mode === 'edit' && initialData?.id) {
@@ -1602,7 +1448,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 }
                 // When switching to reflection, ensure reflectionMode is set
                 if (type === 'reflection' && prev.type !== 'reflection') {
-                  updates.reflectionMode = 'reflection';
+                  updates.reflectionMode = 'rose';
                 }
                 return { ...prev, ...updates };
               });
@@ -1762,15 +1608,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
               {/* Title Field (Optional for reflections) - SECOND */}
               <View style={styles.field}>
-                <Text style={[styles.label, { color: colors.text }]}>Title (optional)</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Title</Text>
                 <TextInput
                   style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                   value={formData.title}
                   onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
                   placeholder={
-                    formData.reflectionMode === 'reflection' ? 'Reflection title...' :
-                    formData.reflectionMode === 'depositIdea' ? 'Deposit idea title...' :
-                    'Withdrawal title...'
+                    formData.reflectionMode === 'rose' ? 'Celebration title...' :
+                    formData.reflectionMode === 'thorn' ? 'Challenge title...' :
+                    'Deposit idea title...'
                   }
                   placeholderTextColor={colors.textSecondary}
                 />
@@ -1780,14 +1626,20 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               {renderTypeSelector()}
 
               {/* Content Area - Varies by reflection mode */}
-              {formData.reflectionMode === 'reflection' && (
+              {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && (
                 <>
                   <View style={styles.field}>
-                    <Text style={[styles.label, { color: colors.text }]}>Reflection *</Text>
+                    <Text style={[styles.label, { color: colors.text }]}>{
+                      formData.reflectionMode === 'rose' ? 'Celebration *' : 'Challenge *'
+                    }</Text>
                     <RichTextInput
                       value={formData.content}
                       onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
-                      placeholder="What's on your mind? How are you feeling about your goals and progress?"
+                      placeholder={
+                        formData.reflectionMode === 'rose'
+                          ? "What went well today?..."
+                          : "What needs attention?..."
+                      }
                       minHeight={150}
                       onAttachmentPress={handlePickFile}
                     />
@@ -1866,78 +1718,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 </>
               )}
 
-              {formData.reflectionMode === 'withdrawal' && (
-                <>
-                  <View style={styles.field}>
-                    <Text style={[styles.label, { color: colors.text }]}>Withdrawal Date *</Text>
-                    <TouchableOpacity
-                      style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                      onPress={() => handleCalendarOpen('withdrawal')}
-                    >
-                      <CalendarIcon size={16} color={colors.textSecondary} />
-                      <Text style={[styles.dateButtonText, { color: colors.text }]}>
-                        {formatDateForDisplay(formData.withdrawalDate)}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.field}>
-                    <Text style={[styles.label, { color: colors.text }]}>Amount *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                      value={formData.amount}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, amount: text }))}
-                      placeholder="0.00"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.field}>
-                    <Text style={[styles.label, { color: colors.text }]}>Reason/Notes</Text>
-                    <RichTextInput
-                      value={formData.notes}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}
-                      placeholder="Why are you making this withdrawal?"
-                      minHeight={100}
-                      onAttachmentPress={handlePickFile}
-                    />
-                  </View>
-
-                  {/* Show attached files */}
-                  {attachedFiles.length > 0 && (
-                    <View style={styles.attachmentsGrid}>
-                      {attachedFiles.map((file, index) => (
-                        <View key={index} style={styles.attachmentThumbnailWrapper}>
-                          <AttachmentThumbnail
-                            uri={file.uri}
-                            fileType={file.type}
-                            fileName={file.name}
-                            size="medium"
-                          />
-                          <TouchableOpacity
-                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
-                            onPress={() => handleRemoveAttachment(index)}
-                          >
-                            <X size={14} color="#ffffff" />
-                          </TouchableOpacity>
-                          <Text
-                            style={[styles.thumbnailFileName, { color: colors.text }]}
-                            numberOfLines={1}
-                          >
-                            {file.name}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </>
-              )}
-
               {/* Associations Section */}
               <View style={styles.field}>
                 <Text style={[styles.label, { color: colors.text }]}>
-                  Is this {formData.reflectionMode === 'reflection' ? 'Reflection' : formData.reflectionMode === 'depositIdea' ? 'Deposit Idea' : 'Withdrawal'} associated with any roles, wellness zones, or goals?
+                  Is this {formData.reflectionMode === 'rose' ? 'celebration' : formData.reflectionMode === 'thorn' ? 'challenge' : 'idea'} associated with any roles, wellness zones, or goals?
                 </Text>
               </View>
             </View>
@@ -2233,7 +2017,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Goals */}
-          {((formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea' || formData.reflectionMode === 'withdrawal') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && renderCheckboxGrid(
+          {((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'depositIdea') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && renderCheckboxGrid(
             'Goals:',
             availableGoals,
             formData.selectedGoalIds,
@@ -2241,7 +2025,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Follow Up Section - Only for reflection mode */}
-          {formData.reflectionMode === 'reflection' && (
+          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && (
             <FollowUpToggleSection
               enabled={formData.followUpEnabled}
               date={formData.followUpDate}
@@ -2253,7 +2037,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Activate Reflection Section - Only for reflection mode */}
-          {formData.reflectionMode === 'reflection' && (
+          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && (
             <ActivateReflectionButtons
               onActivateTask={() => {
                 setFormData(prev => ({
