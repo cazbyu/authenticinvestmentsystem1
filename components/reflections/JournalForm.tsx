@@ -634,7 +634,13 @@ export default function JournalForm({
             <X size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {mode === 'edit' ? 'Edit Reflection' : 'New Reflection'}
+            {mode === 'edit'
+              ? initialData?.daily_rose
+                ? 'Edit Rose'
+                : initialData?.daily_thorn
+                  ? 'Edit Thorn'
+                  : 'Edit Deposit Idea'
+              : 'New Reflection'}
           </Text>
           <View style={styles.headerRight}>
             {mode === 'edit' && (
@@ -902,12 +908,6 @@ export default function JournalForm({
                   onPress={() => handleActionButton('depositIdea')}
                 >
                   <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Deposit Idea</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  onPress={() => handleActionButton('withdrawal')}
-                >
-                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Withdrawal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}

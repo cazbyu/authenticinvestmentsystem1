@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { FileText, Plus } from 'lucide-react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { FileText, Plus, Lightbulb } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 
@@ -351,7 +351,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       // ---------------------------------------------------------
       let reflectionsQuery = supabase
         .from('0008-ap-reflections')
-        .select('id, content, date, created_at, reflection_type')
+        .select('id, content, date, created_at, reflection_type, daily_rose, daily_thorn')
         .eq('user_id', user.id)
         .eq('archived', false);
 
@@ -451,7 +451,112 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       }
 
       // ---------------------------------------------------------
-      // 4) Sort & compute running balance
+      // 4) Deposit Ideas (stored separately, appear as reflections)
+      // ---------------------------------------------------------
+      let depositIdeasQuery = supabase
+        .from('0008-ap-deposit-ideas')
+        .select('id, title, created_at, user_id, is_active')
+        .eq('user_id', user.id)
+        .eq('archived', false)
+        .eq('is_active', true);
+
+      if (dateFilter) {
+        depositIdeasQuery = depositIdeasQuery.gte('created_at', dateFilter);
+      }
+
+      const { data: depositIdeasData, error: depositIdeasError } = await depositIdeasQuery;
+      if (depositIdeasError) {
+        console.error('Deposit ideas query error:', depositIdeasError);
+        throw depositIdeasError;
+      }
+
+      if (depositIdeasData && depositIdeasData.length) {
+        const dIds = depositIdeasData.map((d: any) => d.id);
+
+        const [dRolesRes, dDomainsRes, dKeyRelsRes, dNotesRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id, role_id, role:0008-ap-roles(id,label)')
+            .in('parent_id', dIds)
+            .eq('parent_type', 'depositIdea'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
+            .in('parent_id', dIds)
+            .eq('parent_type', 'depositIdea'),
+          supabase
+            .from('0008-ap-universal-key-relationships-join')
+            .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
+            .in('parent_id', dIds)
+            .eq('parent_type', 'depositIdea'),
+          supabase
+            .from('0008-ap-universal-notes-join')
+            .select('parent_id, note:0008-ap-notes(id,content,created_at)')
+            .in('parent_id', dIds)
+            .eq('parent_type', 'depositIdea'),
+        ]);
+
+        const dRoles = dRolesRes.data ?? [];
+        const dDomains = dDomainsRes.data ?? [];
+        const dKeyRels = dKeyRelsRes.data ?? [];
+        const dNotes = dNotesRes.data ?? [];
+
+        // scope filter for deposit ideas
+        let allowedDids = new Set(dIds);
+        if (scope.type !== 'user' && scope.id) {
+          if (scope.type === 'role') {
+            allowedDids = new Set(
+              dRoles
+                .filter((r: any) => r.role?.id === scope.id || r.role_id === scope.id)
+                .map((r: any) => r.parent_id)
+            );
+          } else if (scope.type === 'domain') {
+            allowedDids = new Set(
+              dDomains
+                .filter((d: any) => d.domain?.id === scope.id || d.domain_id === scope.id)
+                .map((d: any) => d.parent_id)
+            );
+          } else if (scope.type === 'key_relationship') {
+            allowedDids = new Set(
+              dKeyRels
+                .filter((k: any) => k.key_relationship?.id === scope.id || k.key_relationship_id === scope.id)
+                .map((k: any) => k.parent_id)
+            );
+          }
+        }
+
+        const rolesByD = groupByParentId(dRoles);
+        const domainsByD = groupByParentId(dDomains);
+        const keyRelsByD = groupByParentId(dKeyRels);
+        const notesByD = groupByParentId(dNotes);
+
+        for (const d of depositIdeasData) {
+          if (!allowedDids.has(d.id)) continue;
+
+          const roles = (rolesByD.get(d.id) ?? []).map((rl: any) => rl.role).filter(Boolean);
+          const domains = (domainsByD.get(d.id) ?? []).map((dm: any) => dm.domain).filter(Boolean);
+          const keyRelationships = (keyRelsByD.get(d.id) ?? [])
+            .map((k: any) => k.key_relationship)
+            .filter(Boolean);
+          const notes = (notesByD.get(d.id) ?? []).map((n: any) => n.note).filter(Boolean);
+
+          journalEntries.push({
+            id: d.id,
+            date: d.created_at,
+            description: d.title,
+            type: 'reflection', // Display as reflection type
+            amount: 0, // deposit ideas don't affect balance
+            balance: 0,
+            has_notes: notes.length > 0,
+            source_id: d.id,
+            source_type: 'depositIdea' as any, // Store actual type for icon display
+            source_data: { ...d, roles, domains, keyRelationships, notes, is_deposit_idea: true },
+          });
+        }
+      }
+
+      // ---------------------------------------------------------
+      // 5) Sort & compute running balance
       // ---------------------------------------------------------
       journalEntries.sort((a, b) => {
         const ta = new Date(a.date).getTime();
@@ -635,8 +740,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
         <Text style={styles.headerDate}>Date</Text>
         <Text style={styles.headerDescription}>Description</Text>
         <Text style={styles.headerNotes}>Notes</Text>
-        <Text style={styles.headerDeposit}>Deposit</Text>
-        <Text style={styles.headerWithdrawal}>Withdrawal</Text>
+        <Text style={styles.headerDeposit}>Impact</Text>
         <Text style={styles.headerBalance}>Balance</Text>
       </View>
 
@@ -663,18 +767,37 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
               </Text>
               <View style={styles.cellNotes}>
                 {entry.type === 'reflection' ? (
-                  <View style={styles.reflectionBadge}>
-                    <Text style={styles.reflectionBadgeText}>R</Text>
-                  </View>
+                  entry.source_type === 'depositIdea' ? (
+                    <Lightbulb size={16} color="#f59e0b" />
+                  ) : entry.source_data?.daily_rose ? (
+                    <Image
+                      source={require('@/assets/images/rose.png')}
+                      style={styles.iconImage}
+                      resizeMode="contain"
+                    />
+                  ) : entry.source_data?.daily_thorn ? (
+                    <Image
+                      source={require('@/assets/images/cactus-thorn.png')}
+                      style={styles.iconImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={styles.reflectionBadge}>
+                      <Text style={styles.reflectionBadgeText}>R</Text>
+                    </View>
+                  )
+                ) : entry.type === 'withdrawal' ? (
+                  <Image
+                    source={require('@/assets/images/cactus-thorn.png')}
+                    style={styles.iconImage}
+                    resizeMode="contain"
+                  />
                 ) : entry.has_notes ? (
                   <FileText size={14} color="#6b7280" />
                 ) : null}
               </View>
-              <Text style={styles.cellDeposit}>
-                {entry.type === 'deposit' ? `+${entry.amount.toFixed(1)}` : ''}
-              </Text>
-              <Text style={styles.cellWithdrawal}>
-                {entry.type === 'withdrawal' ? entry.amount.toFixed(1) : ''}
+              <Text style={[styles.cellImpact, entry.type === 'deposit' && { color: '#16a34a' }, entry.type === 'withdrawal' && { color: '#dc2626' }]}>
+                {entry.type === 'deposit' ? `+${entry.amount.toFixed(1)}` : entry.type === 'withdrawal' ? `-${entry.amount.toFixed(1)}` : '—'}
               </Text>
               <Text style={[styles.cellBalance, { color: getBalanceColor(entry.balance) }]}>
                 {entry.type === 'reflection' ? '—' : formatBalance(entry.balance)}
@@ -749,8 +872,7 @@ const styles = StyleSheet.create({
   headerDate: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
   headerDescription: { flex: 1, fontSize: 12, fontWeight: '600', color: '#374151', paddingHorizontal: 8 },
   headerNotes: { width: 40, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  headerDeposit: { width: 60, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
-  headerWithdrawal: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
+  headerDeposit: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
   headerBalance: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
   journalContent: { flex: 1 },
   journalRow: {
@@ -766,8 +888,7 @@ const styles = StyleSheet.create({
   cellDate: { width: 70, fontSize: 12, color: '#374151', textAlign: 'center' },
   cellDescription: { flex: 1, fontSize: 14, color: '#1f2937', paddingHorizontal: 8, lineHeight: 18 },
   cellNotes: { width: 40, alignItems: 'center', justifyContent: 'center' },
-  cellDeposit: { width: 60, fontSize: 14, fontWeight: '600', color: '#16a34a', textAlign: 'right' },
-  cellWithdrawal: { width: 70, fontSize: 14, fontWeight: '600', color: '#dc2626', textAlign: 'right' },
+  cellImpact: { width: 70, fontSize: 14, fontWeight: '600', textAlign: 'right' },
   cellBalance: { width: 70, fontSize: 14, fontWeight: '700', textAlign: 'right' },
   loadingContainer: { padding: 40, alignItems: 'center' },
   loadingText: { color: '#6b7280', fontSize: 16 },
@@ -787,5 +908,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
+  },
+  iconImage: {
+    width: 20,
+    height: 20,
   },
 });
