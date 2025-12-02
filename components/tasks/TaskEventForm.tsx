@@ -1710,33 +1710,16 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
       <ScrollView ref={scrollRef} style={styles.content}>
         <View style={styles.form}>
-          {/* Title - Only show for task/event types */}
-          {(formData.type === 'task' || formData.type === 'event') && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Title *</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                value={formData.title}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
-                placeholder="What do you want to do?"
-                placeholderTextColor={colors.textSecondary}
-              />
-            </View>
-          )}
-
-          {/* Type Selector */}
-          {renderTypeSelector()}
-
           {/* REFLECTION FORM LAYOUT */}
           {formData.type === 'reflection' && (
             <View style={styles.reflectionContainer}>
-              {/* Reflection Mode Pills */}
+              {/* Reflection Mode Pills - FIRST */}
               <ReflectionModePills
                 selectedMode={formData.reflectionMode}
                 onModeChange={(mode) => setFormData(prev => ({ ...prev, reflectionMode: mode }))}
               />
 
-              {/* Title Field (Optional for reflections) */}
+              {/* Title Field (Optional for reflections) - SECOND */}
               <View style={styles.field}>
                 <Text style={[styles.label, { color: colors.text }]}>Title (optional)</Text>
                 <TextInput
@@ -1752,29 +1735,94 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 />
               </View>
 
+              {/* Type Selector - THIRD */}
+              {renderTypeSelector()}
+
               {/* Content Area - Varies by reflection mode */}
               {formData.reflectionMode === 'reflection' && (
-                <View style={styles.field}>
-                  <Text style={[styles.label, { color: colors.text }]}>Reflection *</Text>
-                  <RichTextInput
-                    value={formData.content}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
-                    placeholder="What's on your mind? How are you feeling about your goals and progress?"
-                    minHeight={150}
-                  />
-                </View>
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>Reflection *</Text>
+                    <RichTextInput
+                      value={formData.content}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                      placeholder="What's on your mind? How are you feeling about your goals and progress?"
+                      minHeight={150}
+                      onAttachmentPress={() => setShowAttachmentPicker(true)}
+                    />
+                  </View>
+
+                  {/* Show attached files */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
 
               {formData.reflectionMode === 'depositIdea' && (
-                <View style={styles.field}>
-                  <Text style={[styles.label, { color: colors.text }]}>Idea Notes</Text>
-                  <RichTextInput
-                    value={formData.content}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
-                    placeholder="Describe your deposit idea..."
-                    minHeight={120}
-                  />
-                </View>
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>Idea Notes</Text>
+                    <RichTextInput
+                      value={formData.content}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                      placeholder="Describe your deposit idea..."
+                      minHeight={120}
+                      onAttachmentPress={() => setShowAttachmentPicker(true)}
+                    />
+                  </View>
+
+                  {/* Show attached files */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
 
               {formData.reflectionMode === 'withdrawal' && (
@@ -1806,76 +1854,44 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
                   <View style={styles.field}>
                     <Text style={[styles.label, { color: colors.text }]}>Reason/Notes</Text>
-                    <TextInput
-                      style={[styles.textArea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                    <RichTextInput
                       value={formData.notes}
                       onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}
                       placeholder="Why are you making this withdrawal?"
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      numberOfLines={3}
+                      minHeight={100}
+                      onAttachmentPress={() => setShowAttachmentPicker(true)}
                     />
                   </View>
+
+                  {/* Show attached files */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </>
               )}
-
-              {/* Attachment Section */}
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: colors.text }]}>
-                  Attachments (optional)
-                </Text>
-
-                {/* Attachment Buttons */}
-                <View style={styles.attachmentButtonsRow}>
-                  <TouchableOpacity
-                    style={[styles.attachmentButtonInline, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={handlePickImage}
-                  >
-                    <ImageIcon size={20} color={colors.text} />
-                    <Text style={[styles.attachmentButtonText, { color: colors.text }]}>
-                      Add Images
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.attachmentButtonInline, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={handlePickDocument}
-                  >
-                    <File size={20} color={colors.text} />
-                    <Text style={[styles.attachmentButtonText, { color: colors.text }]}>
-                      Add Files
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Attached Files Grid */}
-                {attachedFiles.length > 0 && (
-                  <View style={styles.attachmentsGrid}>
-                    {attachedFiles.map((file, index) => (
-                      <View key={index} style={styles.attachmentThumbnailWrapper}>
-                        <AttachmentThumbnail
-                          uri={file.uri}
-                          fileType={file.type}
-                          fileName={file.name}
-                          size="medium"
-                        />
-                        <TouchableOpacity
-                          style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
-                          onPress={() => handleRemoveAttachment(index)}
-                        >
-                          <X size={14} color="#ffffff" />
-                        </TouchableOpacity>
-                        <Text
-                          style={[styles.thumbnailFileName, { color: colors.text }]}
-                          numberOfLines={1}
-                        >
-                          {file.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
 
               {/* Associations Section */}
               <View style={styles.field}>
@@ -1988,6 +2004,26 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                 onTimeChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
               />
             </View>
+          )}
+
+          {/* TASK/EVENT FORM LAYOUT */}
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <>
+              {/* Title - for task/event types */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>Title *</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                  value={formData.title}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+                  placeholder="What do you want to do?"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              {/* Type Selector */}
+              {renderTypeSelector()}
+            </>
           )}
 
           {/* Switches Row - Only for task and event types */}
@@ -2267,7 +2303,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             (id) => handleMultiSelect('selectedGoalIds', id)
           )}
 
-          {/* Notes */}
+          {/* Notes - Only for task and event types */}
+          {(formData.type === 'task' || formData.type === 'event') && (
           <View style={styles.field}>
             <View style={styles.notesHeader}>
               <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
@@ -2408,6 +2445,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               </View>
             )}
           </View>
+          )}
         </View>
       </ScrollView>
 
