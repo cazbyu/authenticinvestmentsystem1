@@ -1940,67 +1940,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   Is this {formData.reflectionMode === 'reflection' ? 'Reflection' : formData.reflectionMode === 'depositIdea' ? 'Deposit Idea' : 'Withdrawal'} associated with any roles, wellness zones, or goals?
                 </Text>
               </View>
-
-              {/* Roles */}
-              {roles.length > 0 && renderCheckboxGrid(
-                'Roles',
-                roles,
-                formData.selectedRoleIds,
-                (id) => handleMultiSelect('selectedRoleIds', id)
-              )}
-
-              {/* Wellness Zones (Domains) */}
-              {domains.length > 0 && renderCheckboxGrid(
-                'Wellness Zones',
-                domains,
-                formData.selectedDomainIds,
-                (id) => handleMultiSelect('selectedDomainIds', id)
-              )}
-
-              {/* Goals */}
-              {availableGoals.length > 0 && renderCheckboxGrid(
-                'Goals:',
-                availableGoals,
-                formData.selectedGoalIds,
-                (id) => handleMultiSelect('selectedGoalIds', id)
-              )}
-
-              {/* Activate Reflection Section - Only for reflection mode */}
-              {formData.reflectionMode === 'reflection' && (
-                <ActivateReflectionButtons
-                  onActivateTask={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      type: 'task',
-                      notes: prev.content,
-                      dueDate: formatLocalDate(new Date()),
-                      dueTime: getInitialDefaultTime(),
-                    }));
-                  }}
-                  onActivateEvent={() => {
-                    const defaultStart = getDefaultStartTime();
-                    setFormData(prev => ({
-                      ...prev,
-                      type: 'event',
-                      notes: prev.content,
-                      startDate: formatLocalDate(new Date()),
-                      startTime: defaultStart,
-                      endTime: defaultStart,
-                      endDate: formatLocalDate(new Date()),
-                    }));
-                  }}
-                />
-              )}
-
-              {/* Follow Up Section */}
-              <FollowUpToggleSection
-                enabled={formData.followUpEnabled}
-                date={formData.followUpDate}
-                time={formData.followUpTime}
-                onToggle={(enabled) => setFormData(prev => ({ ...prev, followUpEnabled: enabled }))}
-                onDateChange={(date) => setFormData(prev => ({ ...prev, followUpDate: date }))}
-                onTimeChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
-              />
             </View>
           )}
 
@@ -2285,20 +2224,59 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             (id) => handleMultiSelect('selectedKeyRelationshipIds', id)
           )}
 
-          {/* Domains */}
+          {/* Wellness Zones */}
           {renderCheckboxGrid(
-            'Domains',
+            'Wellness Zones',
             domains,
             formData.selectedDomainIds,
             (id) => handleMultiSelect('selectedDomainIds', id)
           )}
 
-          {/* 12-Week Goals */}
-          {formData.type === 'task' && formData.isGoal && twelveWeekGoals.length > 0 && renderCheckboxGrid(
-            '12-Week Goals',
-            twelveWeekGoals,
+          {/* Goals */}
+          {((formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea' || formData.reflectionMode === 'withdrawal') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && renderCheckboxGrid(
+            'Goals:',
+            availableGoals,
             formData.selectedGoalIds,
             (id) => handleMultiSelect('selectedGoalIds', id)
+          )}
+
+          {/* Follow Up Section - Only for reflection mode */}
+          {formData.reflectionMode === 'reflection' && (
+            <FollowUpToggleSection
+              enabled={formData.followUpEnabled}
+              date={formData.followUpDate}
+              time={formData.followUpTime}
+              onToggle={(enabled) => setFormData(prev => ({ ...prev, followUpEnabled: enabled }))}
+              onDateChange={(date) => setFormData(prev => ({ ...prev, followUpDate: date }))}
+              onTimeChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
+            />
+          )}
+
+          {/* Activate Reflection Section - Only for reflection mode */}
+          {formData.reflectionMode === 'reflection' && (
+            <ActivateReflectionButtons
+              onActivateTask={() => {
+                setFormData(prev => ({
+                  ...prev,
+                  type: 'task',
+                  notes: prev.content,
+                  dueDate: formatLocalDate(new Date()),
+                  dueTime: getInitialDefaultTime(),
+                }));
+              }}
+              onActivateEvent={() => {
+                const defaultStart = getDefaultStartTime();
+                setFormData(prev => ({
+                  ...prev,
+                  type: 'event',
+                  notes: prev.content,
+                  startDate: formatLocalDate(new Date()),
+                  startTime: defaultStart,
+                  endTime: defaultStart,
+                  endDate: formatLocalDate(new Date()),
+                }));
+              }}
+            />
           )}
 
           {/* Notes - Only for task and event types */}
