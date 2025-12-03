@@ -900,6 +900,24 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       }
     }
 
+    // Validate Follow-Up date/time if enabled
+    if (formData.followUpEnabled) {
+      const now = new Date();
+      const followUpDate = new Date(formData.followUpDate);
+
+      if (formData.followUpTime) {
+        const [hours, minutes] = formData.followUpTime.split(':').map(Number);
+        followUpDate.setHours(hours, minutes, 0, 0);
+      } else {
+        followUpDate.setHours(23, 59, 59, 999);
+      }
+
+      if (followUpDate < now) {
+        Alert.alert('Error', 'Follow-up date and time cannot be in the past');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const supabase = getSupabaseClient();

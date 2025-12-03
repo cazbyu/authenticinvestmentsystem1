@@ -82,11 +82,12 @@ export function DraggableFab({
     });
 
   const tapGesture = Gesture.Tap()
+    .maxDuration(250)
     .onEnd(() => {
       runOnJS(handlePress)();
     });
 
-  const composedGesture = Gesture.Simultaneous(panGesture, tapGesture);
+  const composedGesture = Gesture.Race(tapGesture, panGesture);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {

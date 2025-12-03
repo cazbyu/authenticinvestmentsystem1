@@ -86,6 +86,7 @@ export default function FollowUpToggleSection({
             </View>
             <Calendar
               current={date}
+              minDate={formatLocalDate(new Date())}
               onDayPress={(day) => {
                 onDateChange(day.dateString);
                 setShowCalendar(false);
