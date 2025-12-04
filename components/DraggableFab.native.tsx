@@ -69,9 +69,10 @@ export function DraggableFab({
 
   const panGesture = Gesture.Pan()
     .minDistance(4)
+    .hitSlop({ horizontal: 24, vertical: 24 })
     .shouldCancelWhenOutside(false)
     .simultaneousWithExternalGesture(nativeGesture)
-    .onBegin(() => {
+    .onStart(() => {
       isPressed.value = true;
       startX.value = translateX.value;
       startY.value = translateY.value;
@@ -114,27 +115,26 @@ export function DraggableFab({
 
   const tapGesture = Gesture.Tap()
     .maxDuration(250)
+    .maxDistance(10)
     .simultaneousWithExternalGesture(nativeGesture)
-    .onBegin(() => {
+    .onStart(() => {
       isPressed.value = true;
       hasMoved.value = false;
     })
     .onFinalize((_, success) => {
+      const shouldHandlePress = success && !hasMoved.value;
       isPressed.value = false;
-      if (success && !hasMoved.value) {
+
+      if (shouldHandlePress) {
         runOnJS(handlePress)();
       }
-    })
-    .requireExternalGestureToFail(panGesture);
+    });
 
+  // Pan vs Tap: whichever recognizes first wins
   const composedGesture = Gesture.Simultaneous(
     nativeGesture,
     Gesture.Exclusive(panGesture, tapGesture)
   );
-  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
-    });
-
-  const composedGesture = Gesture.Race(tapGesture, panGesture);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
