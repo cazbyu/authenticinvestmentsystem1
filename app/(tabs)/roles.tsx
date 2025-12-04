@@ -1799,7 +1799,7 @@ export default function Roles() {
           setEditingTask(null);
         }
         setTaskFormVisible(true);
-      }} size={64}>
+      }} size={44}>
         <Plus size={28} color="#ffffff" />
       </DraggableFab>
 

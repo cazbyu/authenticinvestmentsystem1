@@ -965,7 +965,7 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <DraggableFab onPress={() => setIsFormModalVisible(true)} size={64}>
+      <DraggableFab onPress={() => setIsFormModalVisible(true)} size={44}>
         <Plus size={28} color="#ffffff" />
       </DraggableFab>
     </SafeAreaView>

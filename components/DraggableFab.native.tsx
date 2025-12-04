@@ -45,11 +45,11 @@ export function DraggableFab({
 
       // Clamp to keep the FAB on-screen when device rotates or window resizes
       translateX.value = clamp(translateX.value, 0, width - size);
-      translateY.value = clamp(translateY.value, 0, height - size - 100);
+      translateY.value = clamp(translateY.value, 0, height - size - 120);
 
       if (!hasInitialized.current) {
-        translateX.value = width - size;
-        translateY.value = height - size - 100;
+        translateX.value = width - size - 20;
+        translateY.value = height - size - 120;
         hasInitialized.current = true;
       }
     };
@@ -90,7 +90,7 @@ export function DraggableFab({
       const { width, height } = screenDimensions.current;
 
       translateX.value = clamp(newX, 0, width - size);
-      translateY.value = clamp(newY, 0, height - size - 80);
+      translateY.value = clamp(newY, 0, height - size - 120);
     })
     .onFinalize(() => {
       'worklet';

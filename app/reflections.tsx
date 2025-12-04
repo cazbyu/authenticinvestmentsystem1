@@ -254,7 +254,7 @@ export default function ReflectionsScreen() {
           setTaskEventFormInitialData(null);
           setIsTaskEventFormVisible(true);
         }}
-        size={64}
+        size={44}
         backgroundColor={colors.primary}
       >
         <Plus size={28} color="#ffffff" />
