@@ -121,6 +121,10 @@ export function DraggableFab({
       if (success && !hasMoved.value) {
         runOnJS(handlePress)();
       }
+    })
+    .requireExternalGestureToFail(panGesture);
+
+  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
     });
 
   const composedGesture = Gesture.Race(tapGesture, panGesture);
