@@ -22,7 +22,7 @@ export function DraggableFab({
   onPress,
   children,
   style,
-  size = 24,
+  size = 42,
   backgroundColor
 }: DraggableFabProps) {
   const { colors } = useTheme();
@@ -44,11 +44,11 @@ export function DraggableFab({
       screenDimensions.current = { width, height } as typeof screenDimensions.current;
 
       // Clamp to keep the FAB on-screen when device rotates or window resizes
-      translateX.value = clamp(translateX.value, 20, width - size - 20);
-      translateY.value = clamp(translateY.value, 20, height - size - 100);
+      translateX.value = clamp(translateX.value, 0, width - size);
+      translateY.value = clamp(translateY.value, 0, height - size - 100);
 
       if (!hasInitialized.current) {
-        translateX.value = width - size - 20;
+        translateX.value = width - size;
         translateY.value = height - size - 100;
         hasInitialized.current = true;
       }
@@ -104,11 +104,14 @@ export function DraggableFab({
 
         const { width, height } = screenDimensions.current;
 
-        translateX.value = withSpring(
-          clamp(currentX, 20, width - size - 20)
-        );
+        // Snap to left or right edge based on center position
+        const fabCenterX = currentX + size / 2;
+        const snapToRight = fabCenterX > width / 2;
+        const newX = snapToRight ? width - size : 0;
+
+        translateX.value = withSpring(newX);
         translateY.value = withSpring(
-          clamp(currentY, 20, height - size - 100)
+          clamp(currentY, 0, height - size - 100)
         );
       }
     });

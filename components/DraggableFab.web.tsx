@@ -14,13 +14,13 @@ export function DraggableFab({
   onPress,
   children,
   style,
-  size = 56,
+  size = 42,
   backgroundColor
 }: DraggableFabProps) {
   const { colors } = useTheme();
   const fabBackgroundColor = backgroundColor || colors.primary;
 
-  const [position, setPosition] = useState({ x: window.innerWidth - 76, y: window.innerHeight - 156 });
+  const [position, setPosition] = useState({ x: window.innerWidth - 42, y: window.innerHeight - 142 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -66,7 +66,7 @@ export function DraggableFab({
     const fabCenterX = position.x + size / 2;
 
     const snapToRight = fabCenterX > screenWidth / 2;
-    const newX = snapToRight ? screenWidth - size - 20 : 20;
+    const newX = snapToRight ? screenWidth - size : 0;
 
     setPosition({ x: newX, y: position.y });
   }, [isDragging, position, size, onPress]);
