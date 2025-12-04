@@ -131,6 +131,10 @@ export function DraggableFab({
     nativeGesture,
     Gesture.Exclusive(panGesture, tapGesture)
   );
+  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
+    });
+
+  const composedGesture = Gesture.Race(tapGesture, panGesture);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
