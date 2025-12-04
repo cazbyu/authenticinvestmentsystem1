@@ -68,7 +68,7 @@ export function DraggableFab({
   };
 
   const panGesture = Gesture.Pan()
-    .minDistance(0)
+    .minDistance(4)
     .hitSlop({ horizontal: 24, vertical: 24 })
     .shouldCancelWhenOutside(false)
     .simultaneousWithExternalGesture(nativeGesture)
@@ -83,7 +83,7 @@ export function DraggableFab({
         event.translationX ** 2 + event.translationY ** 2
       );
 
-      if (distance > 2) {
+      if (distance > 4) {
         hasMoved.value = true;
       }
 
@@ -130,10 +130,10 @@ export function DraggableFab({
       }
     });
 
+  // Pan vs Tap: whichever recognizes first wins
   const composedGesture = Gesture.Simultaneous(
     nativeGesture,
-    panGesture,
-    tapGesture
+    Gesture.Exclusive(panGesture, tapGesture)
   );
 
   const animatedStyle = useAnimatedStyle(() => {
