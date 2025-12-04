@@ -14,7 +14,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
 import { DailyAggregationData } from '@/types/reflections';
-import { Target, Users, Activity, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
 import {
   fetchReflectionsByDateRange,
   ReflectionWithRelations,
