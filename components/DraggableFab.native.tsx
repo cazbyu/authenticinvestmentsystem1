@@ -29,6 +29,7 @@ export function DraggableFab({
   const fabBackgroundColor = backgroundColor || colors.primary;
   const screenDimensions = useRef(Dimensions.get('window'));
   const hasInitialized = useRef(false);
+  const nativeGesture = Gesture.Native();
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -69,6 +70,7 @@ export function DraggableFab({
   const panGesture = Gesture.Pan()
     .minDistance(4)
     .shouldCancelWhenOutside(false)
+    .simultaneousWithExternalGesture(nativeGesture)
     .onBegin(() => {
       isPressed.value = true;
       startX.value = translateX.value;
@@ -112,6 +114,7 @@ export function DraggableFab({
 
   const tapGesture = Gesture.Tap()
     .maxDuration(250)
+    .simultaneousWithExternalGesture(nativeGesture)
     .onBegin(() => {
       isPressed.value = true;
       hasMoved.value = false;
@@ -124,6 +127,10 @@ export function DraggableFab({
     })
     .requireExternalGestureToFail(panGesture);
 
+  const composedGesture = Gesture.Simultaneous(
+    nativeGesture,
+    Gesture.Exclusive(panGesture, tapGesture)
+  );
   const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
     });
 
