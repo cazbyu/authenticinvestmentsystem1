@@ -839,11 +839,11 @@ export default function CalendarScreen() {
       />
 
       {viewMode === 'daily' ? (
-        <View style={styles.dailyViewContainer}>
+        <View style={styles.dailyViewContainer} pointerEvents="box-none">
           {renderDailyView()}
         </View>
       ) : viewMode === 'weekly' ? (
-        <View style={styles.weeklyContainer}>
+        <View style={styles.weeklyContainer} pointerEvents="box-none">
           {renderContent()}
         </View>
       ) : (

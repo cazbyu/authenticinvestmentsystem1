@@ -239,7 +239,7 @@ export default function ReflectionsScreen() {
         onViewChange={(view) => handleTabChange(view as TabType)}
       />
 
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
         {activeTab === 'daily' && <DailyNotesView onReflectionPress={handleReflectionPress} onNotePress={handleNoteCardPress} />}
         {activeTab === 'weekly' && <WeeklyReflectionView onNotePress={handleNoteCardPress} />}
         {activeTab === 'reflectionHistory' && (

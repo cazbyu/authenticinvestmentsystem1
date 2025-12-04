@@ -1393,7 +1393,7 @@ export default function Roles() {
     if (activeMainTab === 'manageRoles') {
       // Manage Roles view
       return (
-        <View style={styles.content}>
+        <View style={styles.content} pointerEvents="box-none">
           <ManageRolesContent
             onUpdate={handleManageRolesUpdate}
           />
@@ -1404,7 +1404,7 @@ export default function Roles() {
     if (selectedKR) {
       // Key Relationship view
       return (
-        <View style={styles.content}>
+        <View style={styles.content} pointerEvents="box-none">
 
           <ScrollView style={styles.taskList}>
             {krJournalView === 'journal' ? (
@@ -1471,7 +1471,7 @@ export default function Roles() {
     if (selectedRole) {
       // Role view
       return (
-        <View style={styles.content}>
+        <View style={styles.content} pointerEvents="box-none">
 
           {/* 12-Week Goals Strip - Only show when data is stable */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && fetchState === 'complete' && (
@@ -1627,7 +1627,7 @@ export default function Roles() {
 
     // Main Role Bank view with tabs
     return (
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'roles' && (
           <ScrollView style={styles.rolesList}>
             {roles.length === 0 ? (

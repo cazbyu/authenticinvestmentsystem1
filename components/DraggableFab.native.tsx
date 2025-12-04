@@ -93,7 +93,8 @@ export function DraggableFab({
           clamp(currentY, 20, height - size - 100)
         );
       }
-    });
+    })
+    .simultaneousWithExternalGesture();
 
   const animatedStyle = useAnimatedStyle(() => {
     return {

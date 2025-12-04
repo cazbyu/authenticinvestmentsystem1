@@ -1181,7 +1181,7 @@ export default function Goals() {
   };
 
   const renderTimelinesTab = () => (
-    <View style={styles.content}>
+    <View style={styles.content} pointerEvents="box-none">
       <View style={styles.sectionHeaderContainer}>
         <Text style={styles.sectionHeaderTitle}>Active Timelines</Text>
         <Text style={styles.sectionHeaderSubtitle}>
@@ -1259,7 +1259,7 @@ export default function Goals() {
   );
 
   const renderNorthStarTab = () => (
-    <View style={styles.content}>
+    <View style={styles.content} pointerEvents="box-none">
       <NorthStarQuickView
         data={northStarData}
         loading={loadingNorthStar}
@@ -1288,7 +1288,7 @@ export default function Goals() {
     const weekGoalActionsForWeek = weekGoalActions || {};
 
     return (
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
 
         {/* Week Navigation */}
         {timelineWeeks.length > 0 && (

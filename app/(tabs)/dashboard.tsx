@@ -741,7 +741,7 @@ export default function Dashboard() {
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Authentic Intelligence" activeView={activeView} onViewChange={setActiveView} onSortPress={() => setIsSortModalVisible(true)} authenticScore={authenticScore} forceShowMenu={true} />
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
         
         {activeView === 'journal' ? (
           <JournalView

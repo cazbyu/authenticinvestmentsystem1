@@ -812,7 +812,7 @@ export default function Wellness() {
     if (selectedDomain) {
       // Domain view
       return (
-        <View style={styles.content}>
+        <View style={styles.content} pointerEvents="box-none">
           {/* 12-Week Goals Section */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && (
             <View style={styles.goalsSection}>
@@ -900,7 +900,7 @@ export default function Wellness() {
 
     // Main Wellness Bank view with tabs
     return (
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'balance' && (
           <BalanceScoresView getDomainColor={getDomainColor} />
         )}
