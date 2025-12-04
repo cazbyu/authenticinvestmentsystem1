@@ -13,7 +13,6 @@ import JournalForm from '@/components/reflections/JournalForm';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import TaskDetailModal from '@/components/tasks/TaskDetailModal';
 import DepositIdeaDetailModal from '@/components/depositIdeas/DepositIdeaDetailModal';
-import ActionConfirmationDialog from '@/components/reflections/ActionConfirmationDialog';
 import ActionSelectionModal, { ActionType as ActionModalType } from '@/components/reflections/ActionSelectionModal';
 import { DraggableFab } from '@/components/DraggableFab';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
@@ -39,7 +38,6 @@ export default function ReflectionsScreen() {
   const [taskEventFormType, setTaskEventFormType] = useState<'task' | 'event' | 'depositIdea' | 'withdrawal'>('task');
   const [taskEventFormInitialData, setTaskEventFormInitialData] = useState<any>(null);
   const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
-  const [isActionConfirmationVisible, setIsActionConfirmationVisible] = useState(false);
   const [isActionSelectionVisible, setIsActionSelectionVisible] = useState(false);
   const [pendingReflection, setPendingReflection] = useState<ReflectionWithRelations | null>(null);
   const [isTaskDetailModalVisible, setIsTaskDetailModalVisible] = useState(false);
@@ -153,21 +151,7 @@ export default function ReflectionsScreen() {
 
   const handleReflectionPress = (reflection: ReflectionWithRelations) => {
     setPendingReflection(reflection);
-    setIsActionConfirmationVisible(true);
-  };
-
-  const handleActionConfirmationYes = () => {
-    setIsActionConfirmationVisible(false);
     setIsActionSelectionVisible(true);
-  };
-
-  const handleActionConfirmationNo = () => {
-    setIsActionConfirmationVisible(false);
-    if (pendingReflection) {
-      setSelectedReflection(pendingReflection);
-      setPendingReflection(null);
-      setIsJournalFormVisible(true);
-    }
   };
 
   const handleActionSelection = (action: ActionModalType) => {
@@ -291,16 +275,6 @@ export default function ReflectionsScreen() {
           onClose={handleTaskEventFormClose}
         />
       </Modal>
-
-      <ActionConfirmationDialog
-        visible={isActionConfirmationVisible}
-        onYes={handleActionConfirmationYes}
-        onNo={handleActionConfirmationNo}
-        onClose={() => {
-          setIsActionConfirmationVisible(false);
-          setPendingReflection(null);
-        }}
-      />
 
       <ActionSelectionModal
         visible={isActionSelectionVisible}
