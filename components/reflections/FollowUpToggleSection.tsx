@@ -3,7 +3,7 @@ import { View, Text, Switch, TouchableOpacity, StyleSheet, Modal } from 'react-n
 import { Calendar as CalendarIcon } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import { useTheme } from '@/contexts/ThemeContext';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { TimePickerDropdown } from '../tasks/TimePickerDropdown';
 
 interface FollowUpToggleSectionProps {
@@ -26,9 +26,30 @@ export default function FollowUpToggleSection({
   const { colors, isDarkMode } = useTheme();
   const [showCalendar, setShowCalendar] = useState(false);
 
+  const getInitialDefaultTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 15) * 15;
+    now.setMinutes(roundedMinutes + 15);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    const isPM = hours >= 12;
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${mins.toString().padStart(2, '0')} ${isPM ? 'pm' : 'am'}`;
+  };
+
   const formatDisplayDate = (dateString: string) => {
-    const d = new Date(dateString);
+    const d = parseLocalDate(dateString);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const handleToggle = (newEnabled: boolean) => {
+    onToggle(newEnabled);
+    if (newEnabled && !time) {
+      onTimeChange(getInitialDefaultTime());
+    }
   };
 
   return (
@@ -37,7 +58,7 @@ export default function FollowUpToggleSection({
         <Text style={[styles.label, { color: colors.text }]}>Follow Up</Text>
         <Switch
           value={enabled}
-          onValueChange={onToggle}
+          onValueChange={handleToggle}
           trackColor={{ false: colors.border, true: colors.primary }}
           thumbColor="#ffffff"
         />

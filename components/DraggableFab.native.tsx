@@ -52,7 +52,6 @@ export function DraggableFab({
   };
 
   const panGesture = Gesture.Pan()
-    .minDistance(10)
     .onStart(() => {
       isPressed.value = true;
       startX.value = translateX.value;
@@ -64,16 +63,17 @@ export function DraggableFab({
         event.translationX ** 2 + event.translationY ** 2
       );
 
-      if (distance > 10) {
+      if (distance > 5) {
         hasMoved.value = true;
-        const newX = startX.value + event.translationX;
-        const newY = startY.value + event.translationY;
-
-        const { width, height } = screenDimensions.current;
-
-        translateX.value = clamp(newX, 0, width - size);
-        translateY.value = clamp(newY, 0, height - size - 80);
       }
+
+      const newX = startX.value + event.translationX;
+      const newY = startY.value + event.translationY;
+
+      const { width, height } = screenDimensions.current;
+
+      translateX.value = clamp(newX, 0, width - size);
+      translateY.value = clamp(newY, 0, height - size - 80);
     })
     .onEnd(() => {
       isPressed.value = false;
