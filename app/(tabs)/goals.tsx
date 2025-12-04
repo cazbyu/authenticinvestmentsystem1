@@ -1456,8 +1456,8 @@ export default function Goals() {
 
       {/* FAB for creating goals - show when on timelines tab or viewing a timeline */}
       {(activeTab === 'timelines' || selectedTimeline) && (
-        <DraggableFab onPress={() => setCreateGoalModalVisible(true)} size={36}>
-          <Plus size={24} color="#ffffff" />
+        <DraggableFab onPress={() => setCreateGoalModalVisible(true)} size={64}>
+          <Plus size={28} color="#ffffff" />
         </DraggableFab>
       )}
 

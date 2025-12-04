@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -66,33 +66,24 @@ export function DraggableFab({
     onPress();
   };
 
-  const longPress = Gesture.LongPress()
-    .minDuration(0)
-    .onStart(() => {
-      'worklet';
-      isPressed.value = true;
-      hasMoved.value = false;
-    })
-    .onEnd(() => {
-      'worklet';
-      if (!hasMoved.value) {
-        runOnJS(handlePress)();
-      }
-      isPressed.value = false;
-    });
-
   const panGesture = Gesture.Pan()
-    .activeOffsetX([-3, 3])
-    .activeOffsetY([-3, 3])
-    .onStart(() => {
+    .onBegin(() => {
       'worklet';
       isPressed.value = true;
       startX.value = translateX.value;
       startY.value = translateY.value;
-      hasMoved.value = true;
+      hasMoved.value = false;
     })
-    .onUpdate((event) => {
+    .onChange((event) => {
       'worklet';
+      const distance = Math.sqrt(
+        event.translationX ** 2 + event.translationY ** 2
+      );
+
+      if (distance > 5) {
+        hasMoved.value = true;
+      }
+
       const newX = startX.value + event.translationX;
       const newY = startY.value + event.translationY;
 
@@ -101,24 +92,28 @@ export function DraggableFab({
       translateX.value = clamp(newX, 0, width - size);
       translateY.value = clamp(newY, 0, height - size - 80);
     })
-    .onEnd(() => {
+    .onFinalize(() => {
       'worklet';
       isPressed.value = false;
 
-      const currentX = translateX.value;
-      const currentY = translateY.value;
+      if (!hasMoved.value) {
+        runOnJS(handlePress)();
+      } else {
+        const currentX = translateX.value;
+        const currentY = translateY.value;
 
-      const { width, height } = screenDimensions.current;
+        const { width, height } = screenDimensions.current;
 
-      translateX.value = withSpring(
-        clamp(currentX, 20, width - size - 20)
-      );
-      translateY.value = withSpring(
-        clamp(currentY, 20, height - size - 100)
-      );
+        translateX.value = withSpring(
+          clamp(currentX, 20, width - size - 20)
+        );
+        translateY.value = withSpring(
+          clamp(currentY, 20, height - size - 100)
+        );
+      }
     });
 
-  const composedGesture = Gesture.Race(panGesture, longPress);
+  const composedGesture = panGesture;
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -135,7 +130,6 @@ export function DraggableFab({
       <GestureDetector gesture={composedGesture}>
         <Animated.View
           collapsable={false}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[
             styles.fab,
             {
@@ -148,7 +142,9 @@ export function DraggableFab({
             style,
           ]}
         >
-          {children}
+          <View style={styles.touchArea}>
+            {children}
+          </View>
         </Animated.View>
       </GestureDetector>
     </View>
@@ -173,5 +169,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+  },
+  touchArea: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

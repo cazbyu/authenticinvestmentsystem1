@@ -924,8 +924,8 @@ export default function Wellness() {
           setEditingTask(null);
           setTaskFormVisible(true);
         }
-      }} size={36}>
-        <Plus size={24} color="#ffffff" />
+      }} size={64}>
+        <Plus size={28} color="#ffffff" />
       </DraggableFab>
 
       {/* Modals */}

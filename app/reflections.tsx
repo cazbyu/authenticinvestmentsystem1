@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Plus } from 'lucide-react-native';
 import { Header } from '@/components/Header';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -253,10 +254,10 @@ export default function ReflectionsScreen() {
           setTaskEventFormInitialData(null);
           setIsTaskEventFormVisible(true);
         }}
-        size={36}
+        size={64}
         backgroundColor={colors.primary}
       >
-        <Text style={styles.fabText}>+</Text>
+        <Plus size={28} color="#ffffff" />
       </DraggableFab>
 
       <JournalForm
