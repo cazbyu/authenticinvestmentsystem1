@@ -66,24 +66,33 @@ export function DraggableFab({
     onPress();
   };
 
+  const longPress = Gesture.LongPress()
+    .minDuration(0)
+    .onStart(() => {
+      'worklet';
+      isPressed.value = true;
+      hasMoved.value = false;
+    })
+    .onEnd(() => {
+      'worklet';
+      if (!hasMoved.value) {
+        runOnJS(handlePress)();
+      }
+      isPressed.value = false;
+    });
+
   const panGesture = Gesture.Pan()
-    .minDistance(1)
-    .shouldCancelWhenOutside(false)
-    .onBegin(() => {
+    .activeOffsetX([-3, 3])
+    .activeOffsetY([-3, 3])
+    .onStart(() => {
+      'worklet';
       isPressed.value = true;
       startX.value = translateX.value;
       startY.value = translateY.value;
-      hasMoved.value = false;
+      hasMoved.value = true;
     })
     .onUpdate((event) => {
-      const distance = Math.sqrt(
-        event.translationX ** 2 + event.translationY ** 2
-      );
-
-      if (distance > 4) {
-        hasMoved.value = true;
-      }
-
+      'worklet';
       const newX = startX.value + event.translationX;
       const newY = startY.value + event.translationY;
 
@@ -93,41 +102,23 @@ export function DraggableFab({
       translateY.value = clamp(newY, 0, height - size - 80);
     })
     .onEnd(() => {
+      'worklet';
       isPressed.value = false;
 
-      if (hasMoved.value) {
-        const currentX = translateX.value;
-        const currentY = translateY.value;
+      const currentX = translateX.value;
+      const currentY = translateY.value;
 
-        const { width, height } = screenDimensions.current;
+      const { width, height } = screenDimensions.current;
 
-        translateX.value = withSpring(
-          clamp(currentX, 20, width - size - 20)
-        );
-        translateY.value = withSpring(
-          clamp(currentY, 20, height - size - 100)
-        );
-      }
+      translateX.value = withSpring(
+        clamp(currentX, 20, width - size - 20)
+      );
+      translateY.value = withSpring(
+        clamp(currentY, 20, height - size - 100)
+      );
     });
 
-  const tapGesture = Gesture.Tap()
-    .maxDuration(250)
-    .maxDistance(10)
-    .onStart(() => {
-      isPressed.value = true;
-      hasMoved.value = false;
-    })
-    .onFinalize((_, success) => {
-      const shouldHandlePress = success && !hasMoved.value;
-      isPressed.value = false;
-
-      if (shouldHandlePress) {
-        runOnJS(handlePress)();
-      }
-    });
-
-  // Pan vs Tap: whichever recognizes first wins
-  const composedGesture = Gesture.Race(panGesture, tapGesture);
+  const composedGesture = Gesture.Race(panGesture, longPress);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
