@@ -11,7 +11,7 @@ import WeeklyReflectionView from '@/components/reflections/WeeklyReflectionView'
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 import JournalForm from '@/components/reflections/JournalForm';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
-import TaskDetailModal from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import DepositIdeaDetailModal from '@/components/depositIdeas/DepositIdeaDetailModal';
 import ActionSelectionModal, { ActionType as ActionModalType } from '@/components/reflections/ActionSelectionModal';
 import { DraggableFab } from '@/components/DraggableFab';
@@ -286,7 +286,7 @@ export default function ReflectionsScreen() {
       />
 
       {isTaskDetailModalVisible && selectedTaskId && (
-        <TaskDetailModal
+        <ActionDetailsModal
           taskId={selectedTaskId}
           onClose={() => {
             setIsTaskDetailModalVisible(false);

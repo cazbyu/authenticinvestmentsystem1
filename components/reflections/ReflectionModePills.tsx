@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { Lightbulb } from 'lucide-react-native';
+import { Lightbulb, FileText } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import Tooltip from '@/components/common/Tooltip';
 
-type ReflectionMode = 'rose' | 'thorn' | 'depositIdea';
+type ReflectionMode = 'rose' | 'thorn' | 'depositIdea' | 'note';
 
 interface ReflectionModePillsProps {
   selectedMode: ReflectionMode;
@@ -14,7 +14,7 @@ interface ReflectionModePillsProps {
 export default function ReflectionModePills({ selectedMode, onModeChange }: ReflectionModePillsProps) {
   const { colors } = useTheme();
 
-  const modes: { value: ReflectionMode; tooltip: string; icon: 'rose' | 'thorn' | 'idea' }[] = [
+  const modes: { value: ReflectionMode; tooltip: string; icon: 'rose' | 'thorn' | 'idea' | 'note' }[] = [
     {
       value: 'rose',
       tooltip: 'Rose',
@@ -30,9 +30,14 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
       tooltip: 'Deposit Idea',
       icon: 'idea'
     },
+    {
+      value: 'note',
+      tooltip: 'Note',
+      icon: 'note'
+    },
   ];
 
-  const renderIcon = (icon: 'rose' | 'thorn' | 'idea', isSelected: boolean) => {
+  const renderIcon = (icon: 'rose' | 'thorn' | 'idea' | 'note', isSelected: boolean) => {
     if (icon === 'rose') {
       return (
         <Image
@@ -55,12 +60,19 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
           resizeMode="contain"
         />
       );
-    } else {
+    } else if (icon === 'idea') {
       return (
         <Lightbulb
           size={24}
           color={isSelected ? '#ffffff' : colors.text}
           fill={isSelected ? '#ffffff' : 'none'}
+        />
+      );
+    } else {
+      return (
+        <FileText
+          size={24}
+          color={isSelected ? '#ffffff' : colors.text}
         />
       );
     }
@@ -71,13 +83,24 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
       {modes.map((mode) => {
         const isSelected = selectedMode === mode.value;
 
+        // Use purple color for note mode
+        const backgroundColor = mode.value === 'note' && isSelected
+          ? '#9333ea'  // purple-600
+          : isSelected
+            ? colors.primary
+            : colors.surface;
+        const borderColor = mode.value === 'note' && isSelected
+          ? '#9333ea'  // purple-600
+          : isSelected
+            ? colors.primary
+            : colors.border;
+
         return (
           <Tooltip key={mode.value} content={mode.tooltip}>
             <TouchableOpacity
               style={[
                 styles.iconButton,
-                { borderColor: colors.border, backgroundColor: colors.surface },
-                isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
+                { borderColor, backgroundColor }
               ]}
               onPress={() => onModeChange(mode.value)}
               activeOpacity={0.7}

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
@@ -938,7 +938,7 @@ export default function Wellness() {
         />
       </Modal>
 
-      <TaskDetailModal
+      <ActionDetailsModal
         visible={taskDetailVisible}
         task={selectedTask}
         onClose={() => setTaskDetailVisible(false)}

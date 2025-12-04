@@ -10,7 +10,7 @@ import AttachmentBadge from '../attachments/AttachmentBadge';
 import ImageViewerModal from '../reflections/ImageViewerModal';
 import { Linking, Image } from 'react-native';
 
-interface TaskDetailModalProps {
+interface ActionDetailsModalProps {
   visible: boolean;
   task: Task | null;
   onClose: () => void;
@@ -25,7 +25,7 @@ interface Note {
   created_at: string;
 }
 
-export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, onCancel }: TaskDetailModalProps) {
+export function ActionDetailsModal({ visible, task, onClose, onUpdate, onDelegate, onCancel }: ActionDetailsModalProps) {
   const [taskNotes, setTaskNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -112,12 +112,12 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
   };
 
   if (!task) return null;
-  
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.detailContainer}>
         <View style={styles.detailHeader}>
-          <Text style={styles.detailTitle}>Task Details</Text>
+          <Text style={styles.detailTitle}>Action Details</Text>
           <TouchableOpacity onPress={onClose}>
             <X size={24} color="#1f2937" />
           </TouchableOpacity>
@@ -157,8 +157,8 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
           <View style={styles.detailSection}>
             <Text style={styles.detailLabel}>Priority:</Text>
             <Text style={styles.detailValue}>
-              {task.is_urgent && task.is_important ? 'Urgent & Important' : 
-               !task.is_urgent && task.is_important ? 'Important' : 
+              {task.is_urgent && task.is_important ? 'Urgent & Important' :
+               !task.is_urgent && task.is_important ? 'Important' :
                task.is_urgent && !task.is_important ? 'Urgent' : 'Normal'}
             </Text>
           </View>
@@ -315,15 +315,15 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
             <Edit size={16} color="#ffffff" />
             <Text style={styles.detailButtonText}>Update</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.detailButton, styles.delegateButton]} 
+          <TouchableOpacity
+            style={[styles.detailButton, styles.delegateButton]}
             onPress={() => onDelegate(task)}
           >
             <UserX size={16} color="#ffffff" />
             <Text style={styles.detailButtonText}>Delegate</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.detailButton, styles.cancelButton]} 
+          <TouchableOpacity
+            style={[styles.detailButton, styles.cancelButton]}
             onPress={() => onCancel(task)}
           >
             <Ban size={16} color="#ffffff" />
@@ -344,65 +344,65 @@ export function TaskDetailModal({ visible, task, onClose, onUpdate, onDelegate, 
 }
 
 const styles = StyleSheet.create({
-  detailContainer: { 
-    flex: 1, 
-    backgroundColor: '#f8fafc' 
+  detailContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc'
   },
-  detailHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 16, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#e5e7eb', 
-    backgroundColor: '#ffffff' 
+  detailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff'
   },
-  detailTitle: { 
-    fontSize: 18, 
-    fontWeight: '600', 
-    color: '#1f2937' 
+  detailTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937'
   },
   detailContentContainer: {
-    flex: 1, 
+    flex: 1,
   },
   detailContent: {
-    padding: 16 
+    padding: 16
   },
-  detailTaskTitle: { 
-    fontSize: 20, 
-    fontWeight: '700', 
-    color: '#1f2937', 
-    marginBottom: 20 
+  detailTaskTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 20
   },
-  detailSection: { 
-    marginBottom: 16 
+  detailSection: {
+    marginBottom: 16
   },
-  detailLabel: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: '#6b7280', 
-    marginBottom: 4 
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 4
   },
-  detailValue: { 
-    fontSize: 16, 
-    color: '#1f2937' 
+  detailValue: {
+    fontSize: 16,
+    color: '#1f2937'
   },
-  detailTagContainer: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
-    gap: 6, 
-    marginTop: 4 
+  detailTagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4
   },
-  tag: { 
-    paddingHorizontal: 8, 
-    paddingVertical: 2, 
-    borderRadius: 12 
+  tag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12
   },
-  roleTag: { 
-    backgroundColor: '#fce7f3' 
+  roleTag: {
+    backgroundColor: '#fce7f3'
   },
-  domainTag: { 
-    backgroundColor: '#fed7aa' 
+  domainTag: {
+    backgroundColor: '#fed7aa'
   },
   goalTag: {
     backgroundColor: '#bfdbfe'
@@ -501,35 +501,35 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 4,
   },
-  detailActions: { 
-    flexDirection: 'row', 
-    padding: 16, 
-    gap: 12, 
-    borderTopWidth: 1, 
-    borderTopColor: '#e5e7eb', 
-    backgroundColor: '#ffffff' 
+  detailActions: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    backgroundColor: '#ffffff'
   },
-  detailButton: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    paddingVertical: 12, 
-    borderRadius: 8, 
-    gap: 6 
+  detailButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6
   },
-  updateButton: { 
-    backgroundColor: '#0078d4' 
+  updateButton: {
+    backgroundColor: '#0078d4'
   },
-  delegateButton: { 
-    backgroundColor: '#6b7280' 
+  delegateButton: {
+    backgroundColor: '#6b7280'
   },
-  cancelButton: { 
-    backgroundColor: '#dc2626' 
+  cancelButton: {
+    backgroundColor: '#dc2626'
   },
-  detailButtonText: { 
-    color: '#ffffff', 
-    fontSize: 14, 
-    fontWeight: '600' 
+  detailButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600'
   },
 });

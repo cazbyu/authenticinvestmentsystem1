@@ -383,6 +383,8 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         return '#8b5cf6';
       case 'withdrawal':
         return '#f59e0b';
+      case 'note':
+        return '#9333ea'; // purple-600
       case 'reflection':
         return colors.primary;
       default:
@@ -400,6 +402,8 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         return 'Deposit Idea';
       case 'withdrawal':
         return 'Withdrawal';
+      case 'note':
+        return 'Note';
       case 'reflection':
         return 'Reflection';
       default:

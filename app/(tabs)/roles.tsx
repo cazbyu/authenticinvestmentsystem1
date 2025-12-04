@@ -5,7 +5,7 @@ import { Header } from '@/components/Header';
 import { DraggableFab } from '@/components/DraggableFab';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { ManageRolesModal } from '@/components/settings/ManageRolesModal';
@@ -1834,7 +1834,7 @@ export default function Roles() {
         />
       </Modal>
 
-      <TaskDetailModal
+      <ActionDetailsModal
         visible={taskDetailVisible}
         task={selectedTask}
         onClose={() => setTaskDetailVisible(false)}

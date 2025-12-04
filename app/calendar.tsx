@@ -5,7 +5,7 @@ import { Calendar } from 'react-native-calendars';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { PriorityQuadrant } from '@/components/calendar/PriorityQuadrant';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
 import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
@@ -853,7 +853,7 @@ export default function CalendarScreen() {
       )}
 
       {/* Modals */}
-      <TaskDetailModal
+      <ActionDetailsModal
         visible={isDetailModalVisible}
         task={selectedTask}
         onClose={() => setIsDetailModalVisible(false)}

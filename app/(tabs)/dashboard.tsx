@@ -6,7 +6,7 @@ import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { Header } from '@/components/Header';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import RecurringTaskActionModal from '@/components/tasks/RecurringTaskActionModal';
 import DelegateModal from '@/components/tasks/DelegateModal';
@@ -827,7 +827,7 @@ export default function Dashboard() {
           onClose={handleFormClose}
         />
       </Modal>
-      <TaskDetailModal visible={isDetailModalVisible} task={selectedTask} onClose={() => setIsDetailModalVisible(false)} onUpdate={handleUpdateTask} onDelegate={handleDelegateTask} onCancel={handleCancelTask} />
+      <ActionDetailsModal visible={isDetailModalVisible} task={selectedTask} onClose={() => setIsDetailModalVisible(false)} onUpdate={handleUpdateTask} onDelegate={handleDelegateTask} onCancel={handleCancelTask} />
       <DepositIdeaDetailModal 
         visible={isDepositIdeaDetailVisible} 
         depositIdea={selectedDepositIdea} 
