@@ -36,6 +36,7 @@ export function DraggableFab({
   const isPressed = useSharedValue(false);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
+  const hasMoved = useSharedValue(false);
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -51,43 +52,48 @@ export function DraggableFab({
   };
 
   const panGesture = Gesture.Pan()
+    .minDistance(10)
     .onStart(() => {
       isPressed.value = true;
       startX.value = translateX.value;
       startY.value = translateY.value;
+      hasMoved.value = false;
     })
     .onUpdate((event) => {
-      const newX = startX.value + event.translationX;
-      const newY = startY.value + event.translationY;
+      const distance = Math.sqrt(
+        event.translationX ** 2 + event.translationY ** 2
+      );
 
-      const { width, height } = screenDimensions.current;
+      if (distance > 10) {
+        hasMoved.value = true;
+        const newX = startX.value + event.translationX;
+        const newY = startY.value + event.translationY;
 
-      translateX.value = clamp(newX, 0, width - size);
-      translateY.value = clamp(newY, 0, height - size - 80);
+        const { width, height } = screenDimensions.current;
+
+        translateX.value = clamp(newX, 0, width - size);
+        translateY.value = clamp(newY, 0, height - size - 80);
+      }
     })
     .onEnd(() => {
       isPressed.value = false;
 
-      const currentX = translateX.value;
-      const currentY = translateY.value;
+      if (!hasMoved.value) {
+        runOnJS(handlePress)();
+      } else {
+        const currentX = translateX.value;
+        const currentY = translateY.value;
 
-      const { width, height } = screenDimensions.current;
+        const { width, height } = screenDimensions.current;
 
-      translateX.value = withSpring(
-        clamp(currentX, 20, width - size - 20)
-      );
-      translateY.value = withSpring(
-        clamp(currentY, 20, height - size - 100)
-      );
+        translateX.value = withSpring(
+          clamp(currentX, 20, width - size - 20)
+        );
+        translateY.value = withSpring(
+          clamp(currentY, 20, height - size - 100)
+        );
+      }
     });
-
-  const tapGesture = Gesture.Tap()
-    .maxDuration(250)
-    .onEnd(() => {
-      runOnJS(handlePress)();
-    });
-
-  const composedGesture = Gesture.Race(tapGesture, panGesture);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -100,7 +106,7 @@ export function DraggableFab({
   });
 
   return (
-    <GestureDetector gesture={composedGesture}>
+    <GestureDetector gesture={panGesture}>
       <Animated.View
         style={[
           styles.fab,
