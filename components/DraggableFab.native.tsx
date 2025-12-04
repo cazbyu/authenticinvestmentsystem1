@@ -125,6 +125,9 @@ export function DraggableFab({
     .requireExternalGestureToFail(panGesture);
 
   const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
+    });
+
+  const composedGesture = Gesture.Race(tapGesture, panGesture);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
