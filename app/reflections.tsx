@@ -248,11 +248,15 @@ export default function ReflectionsScreen() {
       </View>
 
       <DraggableFab
-        onPress={() => setIsJournalFormVisible(true)}
+        onPress={() => {
+          setTaskEventFormType('task');
+          setTaskEventFormInitialData(null);
+          setIsTaskEventFormVisible(true);
+        }}
         size={36}
         backgroundColor={colors.primary}
       >
-        <Text style={styles.fabText}>J</Text>
+        <Text style={styles.fabText}>+</Text>
       </DraggableFab>
 
       <JournalForm
@@ -337,7 +341,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fabText: {
-    fontSize: 12,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
   },
