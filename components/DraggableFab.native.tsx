@@ -52,7 +52,9 @@ export function DraggableFab({
   };
 
   const panGesture = Gesture.Pan()
-    .onStart(() => {
+    .minDistance(0)
+    .shouldCancelWhenOutside(false)
+    .onBegin(() => {
       isPressed.value = true;
       startX.value = translateX.value;
       startY.value = translateY.value;
@@ -93,8 +95,7 @@ export function DraggableFab({
           clamp(currentY, 20, height - size - 100)
         );
       }
-    })
-    .simultaneousWithExternalGesture();
+    });
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -107,27 +108,39 @@ export function DraggableFab({
   });
 
   return (
-    <GestureDetector gesture={panGesture}>
-      <Animated.View
-        style={[
-          styles.fab,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: fabBackgroundColor,
-          },
-          animatedStyle,
-          style,
-        ]}
-      >
-        {children}
-      </Animated.View>
-    </GestureDetector>
+    <View style={styles.fabContainer} pointerEvents="box-none">
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          collapsable={false}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={[
+            styles.fab,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: fabBackgroundColor,
+            },
+            animatedStyle,
+            style,
+          ]}
+        >
+          {children}
+        </Animated.View>
+      </GestureDetector>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fabContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
   fab: {
     position: 'absolute',
     justifyContent: 'center',
@@ -137,6 +150,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
-    zIndex: 1000,
   },
 });
