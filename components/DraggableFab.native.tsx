@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -39,20 +39,35 @@ export function DraggableFab({
   const hasMoved = useSharedValue(false);
 
   useEffect(() => {
-    if (!hasInitialized.current) {
-      const { width, height } = screenDimensions.current;
-      translateX.value = width - size - 20;
-      translateY.value = height - size - 100;
-      hasInitialized.current = true;
-    }
-  }, []);
+    const updatePosition = () => {
+      const { width, height } = Dimensions.get('window');
+      screenDimensions.current = { width, height } as typeof screenDimensions.current;
+
+      // Clamp to keep the FAB on-screen when device rotates or window resizes
+      translateX.value = clamp(translateX.value, 20, width - size - 20);
+      translateY.value = clamp(translateY.value, 20, height - size - 100);
+
+      if (!hasInitialized.current) {
+        translateX.value = width - size - 20;
+        translateY.value = height - size - 100;
+        hasInitialized.current = true;
+      }
+    };
+
+    updatePosition();
+    const subscription = Dimensions.addEventListener('change', updatePosition);
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [size, translateX, translateY]);
 
   const handlePress = () => {
     onPress();
   };
 
   const panGesture = Gesture.Pan()
-    .minDistance(0)
+    .minDistance(4)
     .shouldCancelWhenOutside(false)
     .onBegin(() => {
       isPressed.value = true;
@@ -65,7 +80,7 @@ export function DraggableFab({
         event.translationX ** 2 + event.translationY ** 2
       );
 
-      if (distance > 5) {
+      if (distance > 4) {
         hasMoved.value = true;
       }
 
@@ -80,9 +95,7 @@ export function DraggableFab({
     .onEnd(() => {
       isPressed.value = false;
 
-      if (!hasMoved.value) {
-        runOnJS(handlePress)();
-      } else {
+      if (hasMoved.value) {
         const currentX = translateX.value;
         const currentY = translateY.value;
 
@@ -97,6 +110,22 @@ export function DraggableFab({
       }
     });
 
+  const tapGesture = Gesture.Tap()
+    .maxDuration(250)
+    .onBegin(() => {
+      isPressed.value = true;
+      hasMoved.value = false;
+    })
+    .onFinalize((_, success) => {
+      isPressed.value = false;
+      if (success && !hasMoved.value) {
+        runOnJS(handlePress)();
+      }
+    })
+    .requireExternalGestureToFail(panGesture);
+
+  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
+
   const animatedStyle = useAnimatedStyle(() => {
     return {
       transform: [
@@ -109,7 +138,7 @@ export function DraggableFab({
 
   return (
     <View style={styles.fabContainer} pointerEvents="box-none">
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={composedGesture}>
         <Animated.View
           collapsable={false}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
