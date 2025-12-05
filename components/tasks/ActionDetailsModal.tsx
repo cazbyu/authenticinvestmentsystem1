@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
-import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
+import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File, Plus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -38,6 +38,7 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   const [newNoteAttachments, setNewNoteAttachments] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
+  const [showTextInput, setShowTextInput] = useState(false);
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -240,6 +241,7 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
       // Clear inputs
       setNewNoteContent('');
       setNewNoteAttachments([]);
+      setShowTextInput(false);
 
       // Refresh notes
       await fetchTaskNotes();
@@ -273,6 +275,20 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
 
   const removeAttachment = (index: number) => {
     setNewNoteAttachments(newNoteAttachments.filter((_, i) => i !== index));
+  };
+
+  const handleToggleTextInput = () => {
+    setShowTextInput(!showTextInput);
+  };
+
+  const handlePaperclipClick = async () => {
+    await handlePickDocument();
+  };
+
+  const handleCancelInput = () => {
+    setShowTextInput(false);
+    setNewNoteContent('');
+    setNewNoteAttachments([]);
   };
 
   const getModalTitle = () => {
@@ -394,99 +410,196 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
               </View>
             </View>
           )}
-          {taskNotes.length > 0 && (
-            <View style={styles.detailSection}>
+          {/* Notes Section - Always Visible */}
+          <View style={styles.detailSection}>
+            <View style={styles.notesHeaderRow}>
               <Text style={styles.detailLabel}>Notes:</Text>
-              {loadingNotes ? (
-                <Text style={styles.detailValue}>Loading notes...</Text>
-              ) : (
-                <View style={styles.notesContainer}>
-                  {taskNotes.map((note, index) => {
-                    const noteAttachments = noteAttachmentsMap.get(note.id) || [];
-                    const hasContent = note.content && note.content.trim();
-                    const hasAttachments = noteAttachments.length > 0;
-
-                    // Only show notes that have content or attachments
-                    if (!hasContent && !hasAttachments) return null;
-
-                    return (
-                    <View key={note.id} style={styles.noteItem}>
-                      {hasContent && (
-                        <Text style={styles.noteContent}>{note.content}</Text>
-                      )}
-                      <Text style={styles.noteDate}>
-                        {new Date(note.created_at).toLocaleDateString('en-US', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
-                        })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })})
-                      </Text>
-                      {hasAttachments && (
-                        <View style={styles.noteAttachmentsContainer}>
-                          <View style={styles.attachmentsHeader}>
-                            <AttachmentBadge count={noteAttachments.length} size="small" />
-                          </View>
-                          <View style={styles.attachmentsGrid}>
-                            {noteAttachments.slice(0, 4).map((file, idx) => {
-                              const isImage = file.file_type?.startsWith('image/');
-                              return (
-                                <TouchableOpacity
-                                  key={idx}
-                                  style={styles.attachmentThumbnailWrapper}
-                                  onPress={() => {
-                                    if (isImage) {
-                                      const imageAttachments = noteAttachments.filter(f => f.file_type?.startsWith('image/'));
-                                      const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
-                                      setSelectedImages(imageAttachments);
-                                      setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
-                                      setImageViewerVisible(true);
-                                    } else {
-                                      Linking.openURL(file.public_url || file.uri);
-                                    }
-                                  }}
-                                  activeOpacity={0.7}
-                                >
-                                  {isImage ? (
-                                    <Image
-                                      source={{ uri: file.public_url || file.uri }}
-                                      style={styles.thumbnailImage}
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <View style={styles.documentThumbnail}>
-                                      <AttachmentThumbnail
-                                        uri={file.public_url || file.uri}
-                                        fileType={file.file_type || file.type}
-                                        fileName={file.file_name || file.name}
-                                        size="small"
-                                      />
-                                    </View>
-                                  )}
-                                  <Text style={styles.thumbnailFileName} numberOfLines={1}>
-                                    {file.file_name || file.name}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                            {noteAttachments.length > 4 && (
-                              <View style={styles.moreAttachmentsIndicator}>
-                                <Text style={styles.moreAttachmentsText}>+{noteAttachments.length - 4}</Text>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-                      )}
+              <View style={styles.notesIconButtonsRow}>
+                <TouchableOpacity
+                  style={styles.squareIconButton}
+                  onPress={handleToggleTextInput}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={18} color="#0078d4" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.squareIconButton}
+                  onPress={handlePaperclipClick}
+                  activeOpacity={0.7}
+                >
+                  <Paperclip size={18} color="#0078d4" />
+                  {newNoteAttachments.length > 0 && (
+                    <View style={styles.attachmentBadge}>
+                      <Text style={styles.attachmentBadgeText}>{newNoteAttachments.length}</Text>
                     </View>
-                    );
-                  })}
-                </View>
-              )}
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          )}
+            {loadingNotes ? (
+              <Text style={styles.detailValue}>Loading notes...</Text>
+            ) : (
+              <>
+                {taskNotes.length > 0 && (
+                  <View style={styles.notesContainer}>
+                    {taskNotes.map((note, index) => {
+                      const noteAttachments = noteAttachmentsMap.get(note.id) || [];
+                      const hasContent = note.content && note.content.trim();
+                      const hasAttachments = noteAttachments.length > 0;
+
+                      // Only show notes that have content or attachments
+                      if (!hasContent && !hasAttachments) return null;
+
+                      return (
+                      <View key={note.id} style={styles.noteItem}>
+                        {hasContent && (
+                          <Text style={styles.noteContent}>{note.content}</Text>
+                        )}
+                        <Text style={styles.noteDate}>
+                          {new Date(note.created_at).toLocaleDateString('en-US', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })})
+                        </Text>
+                        {hasAttachments && (
+                          <View style={styles.noteAttachmentsContainer}>
+                            <View style={styles.attachmentsHeader}>
+                              <AttachmentBadge count={noteAttachments.length} size="small" />
+                            </View>
+                            <View style={styles.attachmentsGrid}>
+                              {noteAttachments.slice(0, 4).map((file, idx) => {
+                                const isImage = file.file_type?.startsWith('image/');
+                                return (
+                                  <TouchableOpacity
+                                    key={idx}
+                                    style={styles.attachmentThumbnailWrapper}
+                                    onPress={() => {
+                                      if (isImage) {
+                                        const imageAttachments = noteAttachments.filter(f => f.file_type?.startsWith('image/'));
+                                        const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                                        setSelectedImages(imageAttachments);
+                                        setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                                        setImageViewerVisible(true);
+                                      } else {
+                                        Linking.openURL(file.public_url || file.uri);
+                                      }
+                                    }}
+                                    activeOpacity={0.7}
+                                  >
+                                    {isImage ? (
+                                      <Image
+                                        source={{ uri: file.public_url || file.uri }}
+                                        style={styles.thumbnailImage}
+                                        resizeMode="cover"
+                                      />
+                                    ) : (
+                                      <View style={styles.documentThumbnail}>
+                                        <AttachmentThumbnail
+                                          uri={file.public_url || file.uri}
+                                          fileType={file.file_type || file.type}
+                                          fileName={file.file_name || file.name}
+                                          size="small"
+                                        />
+                                      </View>
+                                    )}
+                                    <Text style={styles.thumbnailFileName} numberOfLines={1}>
+                                      {file.file_name || file.name}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                              {noteAttachments.length > 4 && (
+                                <View style={styles.moreAttachmentsIndicator}>
+                                  <Text style={styles.moreAttachmentsText}>+{noteAttachments.length - 4}</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Conditional Text Input */}
+                {showTextInput && (
+                  <View style={styles.textInputContainer}>
+                    <TextInput
+                      style={styles.noteInput}
+                      multiline
+                      placeholder="Add a note or reflection..."
+                      value={newNoteContent}
+                      onChangeText={setNewNoteContent}
+                      placeholderTextColor="#9ca3af"
+                      autoFocus
+                    />
+                  </View>
+                )}
+
+                {/* Attachment Previews */}
+                {newNoteAttachments.length > 0 && (
+                  <View style={styles.attachmentPreviewContainer}>
+                    <Text style={styles.attachmentPreviewLabel}>Attachments ({newNoteAttachments.length})</Text>
+                    <View style={styles.attachmentPreviewGrid}>
+                      {newNoteAttachments.map((file, index) => (
+                        <View key={index} style={styles.attachmentPreviewItem}>
+                          {file.type?.startsWith('image/') ? (
+                            <Image
+                              source={{ uri: file.uri }}
+                              style={styles.previewThumbnail}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={styles.previewDocumentThumbnail}>
+                              <File size={24} color="#6b7280" />
+                            </View>
+                          )}
+                          <TouchableOpacity
+                            style={styles.removeAttachmentButton}
+                            onPress={() => removeAttachment(index)}
+                          >
+                            <X size={12} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text style={styles.previewFileName} numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Save/Cancel Buttons */}
+                {(showTextInput || newNoteAttachments.length > 0) && (
+                  <View style={styles.noteActionsRow}>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={handleCancelInput}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.saveNoteButton, saving && styles.saveNoteButtonDisabled]}
+                      onPress={handleSaveNote}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <Text style={styles.saveNoteButtonText}>Save Note</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
           {task.goals?.length > 0 && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Goals:</Text>
@@ -511,69 +624,6 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
               </View>
             </View>
           )}
-          {/* Add New Note Section */}
-          <View style={styles.addNoteSection}>
-            <Text style={styles.addNoteSectionTitle}>Add a Note</Text>
-            <TextInput
-              style={styles.noteInput}
-              multiline
-              placeholder="Add a note or reflection..."
-              value={newNoteContent}
-              onChangeText={setNewNoteContent}
-              placeholderTextColor="#9ca3af"
-            />
-
-            {/* Attachment Buttons */}
-            <View style={styles.attachmentButtonsRow}>
-              <TouchableOpacity
-                style={styles.attachmentButton}
-                onPress={handlePickImage}
-              >
-                <ImageIcon size={16} color="#0078d4" />
-                <Text style={styles.attachmentButtonText}>Add Image</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.attachmentButton}
-                onPress={handlePickDocument}
-              >
-                <File size={16} color="#0078d4" />
-                <Text style={styles.attachmentButtonText}>Add Document</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Attachment Previews */}
-            {newNoteAttachments.length > 0 && (
-              <View style={styles.attachmentPreviewContainer}>
-                <Text style={styles.attachmentPreviewLabel}>Attachments ({newNoteAttachments.length})</Text>
-                <View style={styles.attachmentPreviewGrid}>
-                  {newNoteAttachments.map((file, index) => (
-                    <View key={index} style={styles.attachmentPreviewItem}>
-                      {file.type?.startsWith('image/') ? (
-                        <Image
-                          source={{ uri: file.uri }}
-                          style={styles.previewThumbnail}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.previewDocumentThumbnail}>
-                          <File size={24} color="#6b7280" />
-                        </View>
-                      )}
-                      <TouchableOpacity
-                        style={styles.removeAttachmentButton}
-                        onPress={() => removeAttachment(index)}
-                      >
-                        <X size={12} color="#ffffff" />
-                      </TouchableOpacity>
-                      <Text style={styles.previewFileName} numberOfLines={1}>
-                        {file.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
         </ScrollView>
 
         {/* Action Buttons */}
@@ -685,8 +735,48 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#374151'
   },
+  notesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notesIconButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  squareIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  attachmentBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0078d4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
   notesContainer: {
     marginTop: 8,
+  },
+  textInputContainer: {
+    marginTop: 12,
   },
   noteItem: {
     backgroundColor: '#f8fafc',
@@ -799,20 +889,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600'
   },
-  addNoteSection: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  addNoteSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
   noteInput: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
@@ -824,32 +900,44 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     textAlignVertical: 'top',
   },
-  attachmentButtonsRow: {
+  noteActionsRow: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 12,
+    justifyContent: 'flex-end',
   },
-  attachmentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  cancelButton: {
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f0f9ff',
-    borderWidth: 1,
-    borderColor: '#bae6fd',
+    paddingHorizontal: 16,
     borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  attachmentButtonText: {
-    fontSize: 13,
+  cancelButtonText: {
+    fontSize: 14,
     fontWeight: '500',
-    color: '#0078d4',
+    color: '#6b7280',
+  },
+  saveNoteButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    backgroundColor: '#0078d4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  saveNoteButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveNoteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   attachmentPreviewContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    marginTop: 12,
   },
   attachmentPreviewLabel: {
     fontSize: 13,
