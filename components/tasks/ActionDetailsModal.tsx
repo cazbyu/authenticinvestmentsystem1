@@ -188,19 +188,32 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   };
 
   const handleSaveNote = async () => {
-    if (!task?.id) return;
+    console.log('[ActionDetailsModal] handleSaveNote called');
+    if (!task?.id) {
+      console.log('[ActionDetailsModal] No task ID, aborting');
+      return;
+    }
     if (!newNoteContent.trim() && newNoteAttachments.length === 0) {
+      console.log('[ActionDetailsModal] No content or attachments, showing alert');
       Alert.alert('Error', 'Please add note content or attachments');
       return;
     }
+
+    console.log('[ActionDetailsModal] Starting save process:', {
+      taskId: task.id,
+      contentLength: newNoteContent.length,
+      attachmentsCount: newNoteAttachments.length
+    });
 
     setSaving(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
+      console.log('[ActionDetailsModal] User authenticated:', user.id);
 
       // Create note
+      console.log('[ActionDetailsModal] Creating note...');
       const { data: noteData, error: noteError } = await supabase
         .from('0008-ap-notes')
         .insert({
@@ -210,9 +223,14 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
         .select()
         .single();
 
-      if (noteError) throw noteError;
+      if (noteError) {
+        console.error('[ActionDetailsModal] Note creation error:', noteError);
+        throw noteError;
+      }
+      console.log('[ActionDetailsModal] Note created:', noteData.id);
 
       // Link note to task
+      console.log('[ActionDetailsModal] Linking note to task...');
       const { error: joinError } = await supabase
         .from('0008-ap-universal-notes-join')
         .insert({
@@ -221,37 +239,56 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
           note_id: noteData.id,
         });
 
-      if (joinError) throw joinError;
+      if (joinError) {
+        console.error('[ActionDetailsModal] Join creation error:', joinError);
+        throw joinError;
+      }
+      console.log('[ActionDetailsModal] Note linked to task successfully');
 
       // Upload attachments
       for (const file of newNoteAttachments) {
-        let fileData: any;
-        if (Platform.OS === 'web') {
+        try {
+          console.log('[ActionDetailsModal] Uploading attachment:', file.name, file.type);
+          let fileData: any;
           const response = await fetch(file.uri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch file: ${response.statusText}`);
+          }
           fileData = await response.blob();
-        } else {
-          const response = await fetch(file.uri);
-          fileData = await response.blob();
-        }
+          console.log('[ActionDetailsModal] File blob created, size:', fileData.size);
 
-        const filePath = await uploadNoteAttachment(fileData, file.name, file.type, user.id);
-        if (filePath) {
-          await saveNoteAttachmentMetadata(noteData.id, user.id, file.name, filePath, file.type, file.size);
+          const filePath = await uploadNoteAttachment(fileData, file.name, file.type, user.id);
+          if (!filePath) {
+            throw new Error(`Failed to upload file: ${file.name}`);
+          }
+          console.log('[ActionDetailsModal] File uploaded to:', filePath);
+
+          const attachmentId = await saveNoteAttachmentMetadata(noteData.id, user.id, file.name, filePath, file.type, file.size);
+          if (!attachmentId) {
+            throw new Error(`Failed to save metadata for file: ${file.name}`);
+          }
+          console.log('[ActionDetailsModal] Attachment metadata saved, id:', attachmentId);
+        } catch (fileError) {
+          console.error('[ActionDetailsModal] Error uploading file:', file.name, fileError);
+          throw new Error(`Failed to upload ${file.name}: ${(fileError as Error).message}`);
         }
       }
 
       // Clear inputs
+      console.log('[ActionDetailsModal] Clearing inputs and refreshing...');
       setNewNoteContent('');
       setNewNoteAttachments([]);
       setShowTextInput(false);
 
       // Refresh notes
       await fetchTaskNotes();
+      console.log('[ActionDetailsModal] Note saved successfully, showing success message');
       Alert.alert('Success', 'Note saved successfully');
     } catch (error) {
-      console.error('Error saving note:', error);
+      console.error('[ActionDetailsModal] Error saving note:', error);
       Alert.alert('Error', (error as Error).message);
     } finally {
+      console.log('[ActionDetailsModal] Save process complete, resetting saving state');
       setSaving(false);
     }
   };
@@ -721,18 +758,6 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
               </>
             )}
           </View>
-          {task.goals?.length > 0 && (
-            <View style={styles.detailSection}>
-              <Text style={styles.detailLabel}>Goals:</Text>
-              <View style={styles.detailTagContainer}>
-                {task.goals.map(goal => (
-                  <View key={goal.id} style={[styles.tag, styles.goalTag]}>
-                    <Text style={styles.tagText}>{goal.title}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
           {task.delegates?.length > 0 && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Delegated To:</Text>

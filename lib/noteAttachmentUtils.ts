@@ -29,6 +29,14 @@ export async function uploadNoteAttachment(
     const sanitizedFileName = `${timestamp}_${randomStr}.${fileExt}`;
     const filePath = `${userId}/${sanitizedFileName}`;
 
+    console.log('[uploadNoteAttachment] Starting upload:', {
+      fileName,
+      fileType,
+      filePath,
+      fileSize: file.size,
+      bucket: '0008-note-attachments'
+    });
+
     const { data, error } = await supabase.storage
       .from('0008-note-attachments')
       .upload(filePath, file, {
@@ -37,13 +45,14 @@ export async function uploadNoteAttachment(
       });
 
     if (error) {
-      console.error('Error uploading note attachment:', error);
+      console.error('[uploadNoteAttachment] Upload error:', error);
       return null;
     }
 
+    console.log('[uploadNoteAttachment] Upload successful:', data.path);
     return data.path;
   } catch (error) {
-    console.error('Error in uploadNoteAttachment:', error);
+    console.error('[uploadNoteAttachment] Exception:', error);
     return null;
   }
 }
@@ -61,6 +70,15 @@ export async function saveNoteAttachmentMetadata(
 ): Promise<string | null> {
   try {
     const supabase = getSupabaseClient();
+    console.log('[saveNoteAttachmentMetadata] Saving metadata:', {
+      noteId,
+      userId,
+      fileName,
+      filePath,
+      fileType,
+      fileSize
+    });
+
     const { data, error } = await supabase
       .from('0008-ap-note-attachments')
       .insert({
@@ -75,13 +93,14 @@ export async function saveNoteAttachmentMetadata(
       .single();
 
     if (error) {
-      console.error('Error saving note attachment metadata:', error);
+      console.error('[saveNoteAttachmentMetadata] Insert error:', error);
       return null;
     }
 
+    console.log('[saveNoteAttachmentMetadata] Metadata saved successfully, id:', data.id);
     return data.id;
   } catch (error) {
-    console.error('Error in saveNoteAttachmentMetadata:', error);
+    console.error('[saveNoteAttachmentMetadata] Exception:', error);
     return null;
   }
 }
