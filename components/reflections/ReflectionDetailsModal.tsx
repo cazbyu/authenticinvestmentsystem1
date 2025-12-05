@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
-import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform, Image, Linking } from 'react-native';
+import { X, Save, Trash2, Image as ImageIcon, File } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { Task } from './TaskCard';
-import { describeRRule } from '@/lib/rruleUtils';
 import { fetchAttachmentsForNotes, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import AttachmentBadge from '../attachments/AttachmentBadge';
-import ImageViewerModal from '../reflections/ImageViewerModal';
-import { Linking, Image } from 'react-native';
+import ImageViewerModal from './ImageViewerModal';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { ReflectionWithRelations } from '@/lib/reflectionUtils';
 
-interface ActionDetailsModalProps {
+interface ReflectionDetailsModalProps {
   visible: boolean;
-  task: Task | null;
+  reflection: ReflectionWithRelations | null;
   onClose: () => void;
-  onDelete: (task: Task) => void;
+  onDelete: (reflection: ReflectionWithRelations) => void;
 }
 
 interface Note {
@@ -25,8 +23,8 @@ interface Note {
   created_at: string;
 }
 
-export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionDetailsModalProps) {
-  const [taskNotes, setTaskNotes] = useState<Note[]>([]);
+export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete }: ReflectionDetailsModalProps) {
+  const [reflectionNotes, setReflectionNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
@@ -37,16 +35,15 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   const [newNoteContent, setNewNoteContent] = useState('');
   const [newNoteAttachments, setNewNoteAttachments] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
 
   useEffect(() => {
-    if (visible && task?.id) {
-      fetchTaskNotes();
+    if (visible && reflection?.id) {
+      fetchReflectionNotes();
     }
-  }, [visible, task?.id]);
+  }, [visible, reflection?.id]);
 
-  const fetchTaskNotes = async () => {
-    if (!task?.id) return;
+  const fetchReflectionNotes = async () => {
+    if (!reflection?.id) return;
 
     setLoadingNotes(true);
     try {
@@ -60,13 +57,13 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
             created_at
           )
         `)
-        .eq('parent_id', task.id)
-        .eq('parent_type', 'task');
+        .eq('parent_id', reflection.id)
+        .eq('parent_type', 'reflection');
 
       if (error) throw error;
 
       const notes = data?.map(item => item.note).filter(Boolean) || [];
-      setTaskNotes(notes);
+      setReflectionNotes(notes);
 
       // Fetch attachments for all notes
       if (notes.length > 0) {
@@ -75,7 +72,7 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
         setNoteAttachmentsMap(attachmentsMap);
       }
     } catch (error) {
-      console.error('Error fetching task notes:', error);
+      console.error('Error fetching reflection notes:', error);
       Alert.alert('Error', (error as Error).message);
     } finally {
       setLoadingNotes(false);
@@ -129,7 +126,6 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
         if (validFiles.length > 0) {
           setNewNoteAttachments([...newNoteAttachments, ...validFiles]);
         }
-        setShowAttachmentPicker(false);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -176,7 +172,6 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
         if (validFiles.length > 0) {
           setNewNoteAttachments([...newNoteAttachments, ...validFiles]);
         }
-        setShowAttachmentPicker(false);
       }
     } catch (error) {
       console.error('Error picking document:', error);
@@ -185,7 +180,7 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   };
 
   const handleSaveNote = async () => {
-    if (!task?.id) return;
+    if (!reflection?.id) return;
     if (!newNoteContent.trim() && newNoteAttachments.length === 0) {
       Alert.alert('Error', 'Please add note content or attachments');
       return;
@@ -209,12 +204,12 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
 
       if (noteError) throw noteError;
 
-      // Link note to task
+      // Link note to reflection
       const { error: joinError } = await supabase
         .from('0008-ap-universal-notes-join')
         .insert({
-          parent_id: task.id,
-          parent_type: 'task',
+          parent_id: reflection.id,
+          parent_type: 'reflection',
           note_id: noteData.id,
         });
 
@@ -242,7 +237,7 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
       setNewNoteAttachments([]);
 
       // Refresh notes
-      await fetchTaskNotes();
+      await fetchReflectionNotes();
       Alert.alert('Success', 'Note saved successfully');
     } catch (error) {
       console.error('Error saving note:', error);
@@ -253,17 +248,17 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   };
 
   const handleDelete = () => {
-    if (!task) return;
+    if (!reflection) return;
     Alert.alert(
-      'Delete Task',
-      'Are you sure you want to delete this task?',
+      'Delete Reflection',
+      'Are you sure you want to delete this reflection?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            onDelete(task);
+            onDelete(reflection);
             onClose();
           },
         },
@@ -276,50 +271,30 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   };
 
   const getModalTitle = () => {
-    if (!task) return 'Action Details';
-    // Check if it's an event (has start_time and end_time)
-    if (task.start_time && task.end_time) {
-      return 'Event Details';
-    }
-    return 'Task Details';
+    if (!reflection) return 'Reflection Details';
+
+    // Check for specific reflection types
+    if (reflection.daily_rose) return 'Rose Details';
+    if (reflection.daily_thorn) return 'Thorn Details';
+
+    // Default to general reflection
+    return 'Reflection Details';
   };
 
-  const formatDateTime = (dateTime, isDateOnly = false) => {
+  const formatDateTime = (dateTime) => {
     if (!dateTime) return 'Not set';
-
-    if (isDateOnly) {
-      // For date-only strings (YYYY-MM-DD), parse as local date to avoid timezone shifts
-      const [year, month, day] = dateTime.split('T')[0].split('-').map(Number);
-      const localDate = new Date(year, month - 1, day);
-      return localDate.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } else {
-      // For datetime strings with timezone info, use normal parsing
-      return new Date(dateTime).toLocaleString();
-    }
+    return new Date(dateTime).toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
   };
 
-  const formatTime = (timeString) => {
-    if (!timeString) return 'Not set';
-
-    // Handle HH:MM:SS format (time-only from database)
-    const timeParts = timeString.split(':');
-    if (timeParts.length >= 2) {
-      const hours = parseInt(timeParts[0], 10);
-      const minutes = timeParts[1];
-      const isPM = hours >= 12;
-      const displayHours = hours % 12 || 12;
-      return `${displayHours}:${minutes} ${isPM ? 'PM' : 'AM'}`;
-    }
-
-    return timeString;
-  };
-
-  if (!task) return null;
+  if (!reflection) return null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -331,50 +306,46 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.detailContent}>
-          <Text style={styles.detailTaskTitle}>{task.title}</Text>
+          {/* Reflection Title */}
+          {reflection.reflection_title && (
+            <Text style={styles.reflectionTitle}>{reflection.reflection_title}</Text>
+          )}
+
+          {/* Reflection Content */}
+          {reflection.content && (
+            <View style={styles.detailSection}>
+              <Text style={styles.reflectionContent}>{reflection.content}</Text>
+            </View>
+          )}
+
+          {/* Reflection Type */}
           <View style={styles.detailSection}>
-            <Text style={styles.detailLabel}>Due Date:</Text>
-            <Text style={styles.detailValue}>{formatDateTime(task.due_date, true)}</Text>
-          </View>
-          {task.start_time && (
-            <View style={styles.detailSection}>
-              <Text style={styles.detailLabel}>Start Time:</Text>
-              <Text style={styles.detailValue}>{formatTime(task.start_time)}</Text>
-            </View>
-          )}
-          {task.end_time && (
-            <View style={styles.detailSection}>
-              <Text style={styles.detailLabel}>End Time:</Text>
-              <Text style={styles.detailValue}>{formatTime(task.end_time)}</Text>
-            </View>
-          )}
-          {task.recurrence_rule && (
-            <View style={styles.detailSection}>
-              <View style={styles.recurrenceHeader}>
-                <Repeat size={16} color="#6b7280" />
-                <Text style={styles.detailLabel}>Recurrence:</Text>
-              </View>
-              <Text style={styles.detailValue}>{describeRRule(task.recurrence_rule)}</Text>
-              {task.recurrence_end_date && (
-                <Text style={styles.detailValue}>
-                  Until {formatDateTime(task.recurrence_end_date, true)}
-                </Text>
-              )}
-            </View>
-          )}
-          <View style={styles.detailSection}>
-            <Text style={styles.detailLabel}>Priority:</Text>
+            <Text style={styles.detailLabel}>Type:</Text>
             <Text style={styles.detailValue}>
-              {task.is_urgent && task.is_important ? 'Urgent & Important' :
-               !task.is_urgent && task.is_important ? 'Important' :
-               task.is_urgent && !task.is_important ? 'Urgent' : 'Normal'}
+              {reflection.daily_rose || reflection.daily_thorn ? 'Daily Reflection' : 'Weekly Reflection'}
             </Text>
           </View>
-          {task.roles?.length > 0 && (
+
+          {/* Date */}
+          <View style={styles.detailSection}>
+            <Text style={styles.detailLabel}>Date:</Text>
+            <Text style={styles.detailValue}>{formatDateTime(reflection.created_at)}</Text>
+          </View>
+
+          {/* Follow-up Status */}
+          {reflection.follow_up && (
+            <View style={styles.detailSection}>
+              <Text style={styles.detailLabel}>Follow-up:</Text>
+              <Text style={styles.detailValue}>Yes</Text>
+            </View>
+          )}
+
+          {/* Roles */}
+          {reflection.roles?.length > 0 && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Roles:</Text>
               <View style={styles.detailTagContainer}>
-                {task.roles.map(role => (
+                {reflection.roles.map(role => (
                   <View key={role.id} style={[styles.tag, styles.roleTag]}>
                     <Text style={styles.tagText}>{role.label}</Text>
                   </View>
@@ -382,11 +353,13 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
               </View>
             </View>
           )}
-          {task.domains?.length > 0 && (
+
+          {/* Domains */}
+          {reflection.domains?.length > 0 && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Domains:</Text>
               <View style={styles.detailTagContainer}>
-                {task.domains.map(domain => (
+                {reflection.domains.map(domain => (
                   <View key={domain.id} style={[styles.tag, styles.domainTag]}>
                     <Text style={styles.tagText}>{domain.name}</Text>
                   </View>
@@ -394,123 +367,115 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
               </View>
             </View>
           )}
-          {taskNotes.length > 0 && (
+
+          {/* Key Relationships */}
+          {reflection.keyRelationships?.length > 0 && (
+            <View style={styles.detailSection}>
+              <Text style={styles.detailLabel}>Key Relationships:</Text>
+              <View style={styles.detailTagContainer}>
+                {reflection.keyRelationships.map(kr => (
+                  <View key={kr.id} style={[styles.tag, styles.krTag]}>
+                    <Text style={styles.tagText}>{kr.name}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Notes */}
+          {reflectionNotes.length > 0 && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Notes:</Text>
               {loadingNotes ? (
                 <Text style={styles.detailValue}>Loading notes...</Text>
               ) : (
                 <View style={styles.notesContainer}>
-                  {taskNotes.map((note, index) => {
+                  {reflectionNotes.map((note) => {
                     const noteAttachments = noteAttachmentsMap.get(note.id) || [];
                     const hasContent = note.content && note.content.trim();
                     const hasAttachments = noteAttachments.length > 0;
 
-                    // Only show notes that have content or attachments
                     if (!hasContent && !hasAttachments) return null;
 
                     return (
-                    <View key={note.id} style={styles.noteItem}>
-                      {hasContent && (
-                        <Text style={styles.noteContent}>{note.content}</Text>
-                      )}
-                      <Text style={styles.noteDate}>
-                        {new Date(note.created_at).toLocaleDateString('en-US', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
-                        })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })})
-                      </Text>
-                      {hasAttachments && (
-                        <View style={styles.noteAttachmentsContainer}>
-                          <View style={styles.attachmentsHeader}>
-                            <AttachmentBadge count={noteAttachments.length} size="small" />
-                          </View>
-                          <View style={styles.attachmentsGrid}>
-                            {noteAttachments.slice(0, 4).map((file, idx) => {
-                              const isImage = file.file_type?.startsWith('image/');
-                              return (
-                                <TouchableOpacity
-                                  key={idx}
-                                  style={styles.attachmentThumbnailWrapper}
-                                  onPress={() => {
-                                    if (isImage) {
-                                      const imageAttachments = noteAttachments.filter(f => f.file_type?.startsWith('image/'));
-                                      const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
-                                      setSelectedImages(imageAttachments);
-                                      setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
-                                      setImageViewerVisible(true);
-                                    } else {
-                                      Linking.openURL(file.public_url || file.uri);
-                                    }
-                                  }}
-                                  activeOpacity={0.7}
-                                >
-                                  {isImage ? (
-                                    <Image
-                                      source={{ uri: file.public_url || file.uri }}
-                                      style={styles.thumbnailImage}
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <View style={styles.documentThumbnail}>
-                                      <AttachmentThumbnail
-                                        uri={file.public_url || file.uri}
-                                        fileType={file.file_type || file.type}
-                                        fileName={file.file_name || file.name}
-                                        size="small"
+                      <View key={note.id} style={styles.noteItem}>
+                        {hasContent && (
+                          <Text style={styles.noteContent}>{note.content}</Text>
+                        )}
+                        <Text style={styles.noteDate}>
+                          {new Date(note.created_at).toLocaleDateString('en-US', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })})
+                        </Text>
+                        {hasAttachments && (
+                          <View style={styles.noteAttachmentsContainer}>
+                            <View style={styles.attachmentsHeader}>
+                              <AttachmentBadge count={noteAttachments.length} size="small" />
+                            </View>
+                            <View style={styles.attachmentsGrid}>
+                              {noteAttachments.slice(0, 4).map((file, idx) => {
+                                const isImage = file.file_type?.startsWith('image/');
+                                return (
+                                  <TouchableOpacity
+                                    key={idx}
+                                    style={styles.attachmentThumbnailWrapper}
+                                    onPress={() => {
+                                      if (isImage) {
+                                        const imageAttachments = noteAttachments.filter(f => f.file_type?.startsWith('image/'));
+                                        const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                                        setSelectedImages(imageAttachments);
+                                        setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                                        setImageViewerVisible(true);
+                                      } else {
+                                        Linking.openURL(file.public_url || file.uri);
+                                      }
+                                    }}
+                                    activeOpacity={0.7}
+                                  >
+                                    {isImage ? (
+                                      <Image
+                                        source={{ uri: file.public_url || file.uri }}
+                                        style={styles.thumbnailImage}
+                                        resizeMode="cover"
                                       />
-                                    </View>
-                                  )}
-                                  <Text style={styles.thumbnailFileName} numberOfLines={1}>
-                                    {file.file_name || file.name}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                            {noteAttachments.length > 4 && (
-                              <View style={styles.moreAttachmentsIndicator}>
-                                <Text style={styles.moreAttachmentsText}>+{noteAttachments.length - 4}</Text>
-                              </View>
-                            )}
+                                    ) : (
+                                      <View style={styles.documentThumbnail}>
+                                        <AttachmentThumbnail
+                                          uri={file.public_url || file.uri}
+                                          fileType={file.file_type || file.type}
+                                          fileName={file.file_name || file.name}
+                                          size="small"
+                                        />
+                                      </View>
+                                    )}
+                                    <Text style={styles.thumbnailFileName} numberOfLines={1}>
+                                      {file.file_name || file.name}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                              {noteAttachments.length > 4 && (
+                                <View style={styles.moreAttachmentsIndicator}>
+                                  <Text style={styles.moreAttachmentsText}>+{noteAttachments.length - 4}</Text>
+                                </View>
+                              )}
+                            </View>
                           </View>
-                        </View>
-                      )}
-                    </View>
+                        )}
+                      </View>
                     );
                   })}
                 </View>
               )}
             </View>
           )}
-          {task.goals?.length > 0 && (
-            <View style={styles.detailSection}>
-              <Text style={styles.detailLabel}>Goals:</Text>
-              <View style={styles.detailTagContainer}>
-                {task.goals.map(goal => (
-                  <View key={goal.id} style={[styles.tag, styles.goalTag]}>
-                    <Text style={styles.tagText}>{goal.title}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-          {task.delegates?.length > 0 && (
-            <View style={styles.detailSection}>
-              <Text style={styles.detailLabel}>Delegated To:</Text>
-              <View style={styles.detailTagContainer}>
-                {task.delegates.map(delegate => (
-                  <View key={delegate.id} style={[styles.tag, styles.delegateTag]}>
-                    <Text style={styles.tagText}>{delegate.name}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
+
           {/* Add New Note Section */}
           <View style={styles.addNoteSection}>
             <Text style={styles.addNoteSectionTitle}>Add a Note</Text>
@@ -632,17 +597,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937'
   },
-  detailContentContainer: {
-    flex: 1,
-  },
   detailContent: {
     padding: 16
   },
-  detailTaskTitle: {
-    fontSize: 20,
+  reflectionTitle: {
+    fontSize: 22,
     fontWeight: '700',
     color: '#1f2937',
-    marginBottom: 20
+    marginBottom: 16,
+  },
+  reflectionContent: {
+    fontSize: 16,
+    color: '#374151',
+    lineHeight: 24,
+    marginBottom: 8,
   },
   detailSection: {
     marginBottom: 16
@@ -674,11 +642,8 @@ const styles = StyleSheet.create({
   domainTag: {
     backgroundColor: '#fed7aa'
   },
-  goalTag: {
-    backgroundColor: '#bfdbfe'
-  },
-  delegateTag: {
-    backgroundColor: '#d1fae5'
+  krTag: {
+    backgroundColor: '#e0f2fe'
   },
   tagText: {
     fontSize: 10,
@@ -714,12 +679,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#e5e7eb',
   },
   attachmentsHeader: {
-    marginBottom: 8,
-  },
-  attachmentsLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
     marginBottom: 8,
   },
   attachmentsGrid: {
@@ -764,12 +723,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#6b7280',
-  },
-  recurrenceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
   },
   detailActions: {
     flexDirection: 'row',

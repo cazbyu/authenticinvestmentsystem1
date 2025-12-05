@@ -459,27 +459,16 @@ export default function CalendarScreen() {
     setIsDayTasksModalVisible(true);
   }, []);
 
-  const handleUpdateTask = (task: Task) => {
-    setEditingTask(task);
-    setIsDetailModalVisible(false);
-    setTimeout(() => setIsFormModalVisible(true), 100);
-  };
-
-  const handleDelegateTask = (task: Task) => {
-    Alert.alert('Delegate', 'Delegation functionality coming soon!');
-    setIsDetailModalVisible(false);
-  };
-
-  const handleCancelTask = async (task: Task) => {
+  const handleDeleteTask = async (task: Task) => {
     try {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ status: 'cancelled' })
+        .update({ is_active: false })
         .eq('id', task.id);
 
       if (error) throw error;
-      Alert.alert('Success', 'Task has been cancelled');
+      Alert.alert('Success', 'Task has been deleted');
       setIsDetailModalVisible(false);
       fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
@@ -857,9 +846,7 @@ export default function CalendarScreen() {
         visible={isDetailModalVisible}
         task={selectedTask}
         onClose={() => setIsDetailModalVisible(false)}
-        onUpdate={handleUpdateTask}
-        onDelegate={handleDelegateTask}
-        onCancel={handleCancelTask}
+        onDelete={handleDeleteTask}
       />
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
