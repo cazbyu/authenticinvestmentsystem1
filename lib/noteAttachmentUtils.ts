@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabaseClient } from './supabase';
 
 export interface NoteAttachment {
   id: string;
@@ -22,6 +22,7 @@ export async function uploadNoteAttachment(
   userId: string
 ): Promise<string | null> {
   try {
+    const supabase = getSupabaseClient();
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(7);
     const fileExt = fileName.split('.').pop() || '';
@@ -59,6 +60,7 @@ export async function saveNoteAttachmentMetadata(
   fileSize: number
 ): Promise<string | null> {
   try {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('0008-ap-note-attachments')
       .insert({
@@ -91,6 +93,7 @@ export async function fetchNoteAttachments(
   noteId: string
 ): Promise<NoteAttachment[]> {
   try {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('0008-ap-note-attachments')
       .select('*')
@@ -137,6 +140,7 @@ export async function fetchNoteImageAttachments(
  */
 export async function getNoteAttachmentSignedUrl(filePath: string): Promise<string> {
   try {
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase.storage
       .from('0008-note-attachments')
       .createSignedUrl(filePath, 3600);
@@ -155,6 +159,7 @@ export async function getNoteAttachmentSignedUrl(filePath: string): Promise<stri
  * @deprecated Use getNoteAttachmentSignedUrl for authenticated access
  */
 export function getNoteAttachmentPublicUrl(filePath: string): string {
+  const supabase = getSupabaseClient();
   const { data } = supabase.storage
     .from('0008-note-attachments')
     .getPublicUrl(filePath);
@@ -170,6 +175,7 @@ export async function deleteNoteAttachment(
   filePath: string
 ): Promise<boolean> {
   try {
+    const supabase = getSupabaseClient();
     // Delete from storage
     const { error: storageError } = await supabase.storage
       .from('0008-note-attachments')
@@ -207,6 +213,7 @@ export async function fetchAttachmentsForNotes(
   try {
     if (noteIds.length === 0) return new Map();
 
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('0008-ap-note-attachments')
       .select('*')
@@ -246,6 +253,7 @@ export async function fetchAttachmentsForNotes(
  */
 export async function deleteAllNoteAttachments(noteId: string): Promise<boolean> {
   try {
+    const supabase = getSupabaseClient();
     // First, get all attachments for the note
     const attachments = await fetchNoteAttachments(noteId);
 

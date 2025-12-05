@@ -475,6 +475,21 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
               </View>
             </View>
           )}
+          {/* Goals Section */}
+          <View style={styles.detailSection}>
+            <Text style={styles.detailLabel}>Goals:</Text>
+            {task.goals?.length > 0 ? (
+              <View style={styles.detailTagContainer}>
+                {task.goals.map(goal => (
+                  <View key={goal.id} style={[styles.tag, styles.goalTag]}>
+                    <Text style={styles.tagText}>{goal.label}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.detailValue}>None</Text>
+            )}
+          </View>
           {/* Notes Section - Always Visible */}
           <View style={styles.detailSection}>
             <View style={styles.notesHeaderRow}>
