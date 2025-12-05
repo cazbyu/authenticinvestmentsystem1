@@ -9,12 +9,15 @@ import {
   RefreshControl,
   Image,
   Linking,
+  TextInput,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
 import { DailyAggregationData } from '@/types/reflections';
-import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp, Plus, Paperclip, X, Send } from 'lucide-react-native';
 import {
   fetchReflectionsByDateRange,
   ReflectionWithRelations,
@@ -23,9 +26,10 @@ import {
 } from '@/lib/reflectionUtils';
 import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { fetchAttachmentsForNotes, NoteAttachment } from '@/lib/noteAttachmentUtils';
+import { fetchAttachmentsForNotes, NoteAttachment, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import ImageViewerModal, { ImageAttachment } from './ImageViewerModal';
+import * as DocumentPicker from 'expo-document-picker';
 
 type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
 
@@ -106,6 +110,11 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     domainBalance: true,
     lessons: true,
   });
+
+  const [showNoteInput, setShowNoteInput] = useState(false);
+  const [noteContent, setNoteContent] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
+  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
 
   const normalizeDateInput = (value: string) => value.split('T')[0];
 
@@ -438,6 +447,138 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     }));
   };
 
+  const handleAddNote = () => {
+    setShowNoteInput(true);
+  };
+
+  const handlePickFiles = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      setSelectedFiles(prev => [...prev, ...result.assets]);
+    } catch (error) {
+      console.error('Error picking files:', error);
+      Alert.alert('Error', 'Failed to pick files');
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmitNote = async () => {
+    if (!noteContent.trim() && selectedFiles.length === 0) {
+      Alert.alert('Error', 'Please enter a note or attach files');
+      return;
+    }
+
+    setIsSubmittingNote(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'User not authenticated');
+        return;
+      }
+
+      const inputDate = selectedDate || formatLocalDate(new Date());
+      const normalizedTargetDate = normalizeDateInput(inputDate);
+
+      const { data: reflectionData, error: reflectionError } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: user.id,
+          date: normalizedTargetDate,
+          reflection_title: 'Daily Note',
+          content: noteContent.trim() || undefined,
+        })
+        .select()
+        .single();
+
+      if (reflectionError) throw reflectionError;
+
+      if (selectedFiles.length > 0) {
+        const { data: noteData, error: noteError } = await supabase
+          .from('0008-ap-notes')
+          .insert({ user_id: user.id, content: noteContent.trim() || 'Attached files' })
+          .select()
+          .single();
+
+        if (noteError) throw noteError;
+
+        await supabase
+          .from('0008-ap-universal-notes-join')
+          .insert({
+            parent_id: reflectionData.id,
+            parent_type: 'reflection',
+            note_id: noteData.id,
+            user_id: user.id,
+          });
+
+        for (const file of selectedFiles) {
+          if (Platform.OS === 'web') {
+            const response = await fetch(file.uri);
+            const blob = await response.blob();
+            const filePath = await uploadNoteAttachment(blob, file.name, file.mimeType || 'application/octet-stream', user.id);
+
+            if (filePath) {
+              await saveNoteAttachmentMetadata(
+                noteData.id,
+                user.id,
+                file.name,
+                filePath,
+                file.mimeType || 'application/octet-stream',
+                file.size || 0
+              );
+            }
+          } else {
+            const response = await fetch(file.uri);
+            const blob = await response.blob();
+            const filePath = await uploadNoteAttachment(blob, file.name, file.mimeType || 'application/octet-stream', user.id);
+
+            if (filePath) {
+              await saveNoteAttachmentMetadata(
+                noteData.id,
+                user.id,
+                file.name,
+                filePath,
+                file.mimeType || 'application/octet-stream',
+                file.size || 0
+              );
+            }
+          }
+        }
+      }
+
+      setNoteContent('');
+      setSelectedFiles([]);
+      setShowNoteInput(false);
+
+      await loadData();
+
+      Alert.alert('Success', 'Note added successfully');
+    } catch (error) {
+      console.error('Error submitting note:', error);
+      Alert.alert('Error', 'Failed to submit note');
+    } finally {
+      setIsSubmittingNote(false);
+    }
+  };
+
+  const handleCancelNote = () => {
+    setShowNoteInput(false);
+    setNoteContent('');
+    setSelectedFiles([]);
+  };
+
 
   if (loading) {
     return (
@@ -634,11 +775,86 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
             </>
           )}
 
-        {timelineItems.length > 0 ? (
+        {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              Today's Reflections and Notes ({timelineItems.length})
-            </Text>
+            <View style={styles.notesHeader}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                Today's Reflections and Notes {timelineItems.length > 0 && `(${timelineItems.length})`}
+              </Text>
+              <View style={styles.notesActions}>
+                <TouchableOpacity
+                  onPress={handleAddNote}
+                  style={[styles.iconButton, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={20} color="#ffffff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handlePickFiles}
+                  style={[styles.iconButton, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.7}
+                >
+                  <Paperclip size={20} color="#ffffff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {showNoteInput && (
+              <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <TextInput
+                  style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
+                  placeholder="Write a note..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  value={noteContent}
+                  onChangeText={setNoteContent}
+                  autoFocus
+                />
+
+                {selectedFiles.length > 0 && (
+                  <View style={styles.selectedFilesContainer}>
+                    <Text style={[styles.selectedFilesLabel, { color: colors.textSecondary }]}>
+                      Attachments ({selectedFiles.length}):
+                    </Text>
+                    {selectedFiles.map((file, index) => (
+                      <View key={index} style={[styles.selectedFileItem, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.selectedFileName, { color: colors.text }]} numberOfLines={1}>
+                          {file.name}
+                        </Text>
+                        <TouchableOpacity onPress={() => handleRemoveFile(index)}>
+                          <X size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <View style={styles.noteInputActions}>
+                  <TouchableOpacity
+                    onPress={handleCancelNote}
+                    style={[styles.noteActionButton, { backgroundColor: colors.surface }]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.noteActionButtonText, { color: colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSubmitNote}
+                    style={[styles.noteActionButton, { backgroundColor: colors.primary }]}
+                    activeOpacity={0.7}
+                    disabled={isSubmittingNote}
+                  >
+                    {isSubmittingNote ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <Send size={16} color="#ffffff" />
+                        <Text style={[styles.noteActionButtonText, { color: '#ffffff' }]}>Send</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             <View style={styles.notesList}>
               {timelineItems.map((item) => {
@@ -751,12 +967,88 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
           </View>
         ) : (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              Today's Reflections and Notes
-            </Text>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              No reflections or notes recorded for this date.
-            </Text>
+            <View style={styles.notesHeader}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                Today's Reflections and Notes
+              </Text>
+              <View style={styles.notesActions}>
+                <TouchableOpacity
+                  onPress={handleAddNote}
+                  style={[styles.iconButton, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={20} color="#ffffff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handlePickFiles}
+                  style={[styles.iconButton, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.7}
+                >
+                  <Paperclip size={20} color="#ffffff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {!showNoteInput && (
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                No reflections or notes recorded for this date.
+              </Text>
+            )}
+            {showNoteInput && (
+              <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <TextInput
+                  style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
+                  placeholder="Write a note..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  value={noteContent}
+                  onChangeText={setNoteContent}
+                  autoFocus
+                />
+
+                {selectedFiles.length > 0 && (
+                  <View style={styles.selectedFilesContainer}>
+                    <Text style={[styles.selectedFilesLabel, { color: colors.textSecondary }]}>
+                      Attachments ({selectedFiles.length}):
+                    </Text>
+                    {selectedFiles.map((file, index) => (
+                      <View key={index} style={[styles.selectedFileItem, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.selectedFileName, { color: colors.text }]} numberOfLines={1}>
+                          {file.name}
+                        </Text>
+                        <TouchableOpacity onPress={() => handleRemoveFile(index)}>
+                          <X size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <View style={styles.noteInputActions}>
+                  <TouchableOpacity
+                    onPress={handleCancelNote}
+                    style={[styles.noteActionButton, { backgroundColor: colors.surface }]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.noteActionButtonText, { color: colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSubmitNote}
+                    style={[styles.noteActionButton, { backgroundColor: colors.primary }]}
+                    activeOpacity={0.7}
+                    disabled={isSubmittingNote}
+                  >
+                    {isSubmittingNote ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <Send size={16} color="#ffffff" />
+                        <Text style={[styles.noteActionButtonText, { color: '#ffffff' }]}>Send</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         )}
         </View>
@@ -1132,5 +1424,73 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
+  },
+  notesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  notesActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noteInputContainer: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 12,
+  },
+  noteInput: {
+    minHeight: 80,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    fontSize: 14,
+    textAlignVertical: 'top',
+  },
+  selectedFilesContainer: {
+    gap: 8,
+  },
+  selectedFilesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  selectedFileItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 8,
+    borderRadius: 6,
+  },
+  selectedFileName: {
+    flex: 1,
+    fontSize: 12,
+    marginRight: 8,
+  },
+  noteInputActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  noteActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  noteActionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
