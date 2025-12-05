@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
-import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File, Plus } from 'lucide-react-native';
+import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File, Plus, Bold, Italic, List, ListOrdered } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -39,6 +39,8 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   const [saving, setSaving] = useState(false);
   const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
   const [showTextInput, setShowTextInput] = useState(false);
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const textInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -281,14 +283,77 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
     setShowTextInput(!showTextInput);
   };
 
-  const handlePaperclipClick = async () => {
-    await handlePickDocument();
-  };
-
   const handleCancelInput = () => {
     setShowTextInput(false);
     setNewNoteContent('');
     setNewNoteAttachments([]);
+  };
+
+  const insertMarkdown = (prefix: string, suffix: string = '') => {
+    const start = selection.start;
+    const end = selection.end;
+    const selectedText = newNoteContent.substring(start, end);
+
+    let newText: string;
+    let newCursorPos: number;
+
+    if (selectedText) {
+      // Wrap selected text
+      newText = newNoteContent.substring(0, start) + prefix + selectedText + suffix + newNoteContent.substring(end);
+      newCursorPos = end + prefix.length + suffix.length;
+    } else {
+      // Insert at cursor
+      newText = newNoteContent.substring(0, start) + prefix + suffix + newNoteContent.substring(end);
+      newCursorPos = start + prefix.length;
+    }
+
+    setNewNoteContent(newText);
+
+    // Set focus back to input
+    setTimeout(() => {
+      textInputRef.current?.focus();
+      setSelection({ start: newCursorPos, end: newCursorPos });
+    }, 10);
+  };
+
+  const handleBoldPress = () => {
+    insertMarkdown('**', '**');
+  };
+
+  const handleItalicPress = () => {
+    insertMarkdown('*', '*');
+  };
+
+  const handleBulletListPress = () => {
+    const start = selection.start;
+    const beforeCursor = newNoteContent.substring(0, start);
+    const afterCursor = newNoteContent.substring(start);
+
+    // Check if we're at the start of a line
+    const lastNewline = beforeCursor.lastIndexOf('\n');
+    const isStartOfLine = lastNewline === beforeCursor.length - 1 || beforeCursor.length === 0;
+
+    if (isStartOfLine) {
+      insertMarkdown('- ');
+    } else {
+      insertMarkdown('\n- ');
+    }
+  };
+
+  const handleNumberedListPress = () => {
+    const start = selection.start;
+    const beforeCursor = newNoteContent.substring(0, start);
+    const afterCursor = newNoteContent.substring(start);
+
+    // Check if we're at the start of a line
+    const lastNewline = beforeCursor.lastIndexOf('\n');
+    const isStartOfLine = lastNewline === beforeCursor.length - 1 || beforeCursor.length === 0;
+
+    if (isStartOfLine) {
+      insertMarkdown('1. ');
+    } else {
+      insertMarkdown('\n1. ');
+    }
   };
 
   const getModalTitle = () => {
@@ -414,27 +479,13 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
           <View style={styles.detailSection}>
             <View style={styles.notesHeaderRow}>
               <Text style={styles.detailLabel}>Notes:</Text>
-              <View style={styles.notesIconButtonsRow}>
-                <TouchableOpacity
-                  style={styles.squareIconButton}
-                  onPress={handleToggleTextInput}
-                  activeOpacity={0.7}
-                >
-                  <Plus size={18} color="#0078d4" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.squareIconButton}
-                  onPress={handlePaperclipClick}
-                  activeOpacity={0.7}
-                >
-                  <Paperclip size={18} color="#0078d4" />
-                  {newNoteAttachments.length > 0 && (
-                    <View style={styles.attachmentBadge}>
-                      <Text style={styles.attachmentBadgeText}>{newNoteAttachments.length}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.squareIconButton}
+                onPress={handleToggleTextInput}
+                activeOpacity={0.7}
+              >
+                <Plus size={18} color="#0078d4" />
+              </TouchableOpacity>
             </View>
             {loadingNotes ? (
               <Text style={styles.detailValue}>Loading notes...</Text>
@@ -529,17 +580,67 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
 
                 {/* Conditional Text Input */}
                 {showTextInput && (
-                  <View style={styles.textInputContainer}>
-                    <TextInput
-                      style={styles.noteInput}
-                      multiline
-                      placeholder="Add a note or reflection..."
-                      value={newNoteContent}
-                      onChangeText={setNewNoteContent}
-                      placeholderTextColor="#9ca3af"
-                      autoFocus
-                    />
-                  </View>
+                  <>
+                    <View style={styles.textInputContainer}>
+                      <TextInput
+                        ref={textInputRef}
+                        style={styles.noteInput}
+                        multiline
+                        placeholder="Share a success, joy or meaningful moment you want to celebrate . . ."
+                        value={newNoteContent}
+                        onChangeText={setNewNoteContent}
+                        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+                        placeholderTextColor="#9ca3af"
+                        autoFocus
+                      />
+                    </View>
+                    {/* Formatting Toolbar */}
+                    <View style={styles.toolbarContainer}>
+                      <View style={styles.toolbarButtonsRow}>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleBoldPress}
+                          activeOpacity={0.7}
+                        >
+                          <Bold size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleItalicPress}
+                          activeOpacity={0.7}
+                        >
+                          <Italic size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleBulletListPress}
+                          activeOpacity={0.7}
+                        >
+                          <List size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleNumberedListPress}
+                          activeOpacity={0.7}
+                        >
+                          <ListOrdered size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handlePickDocument}
+                          activeOpacity={0.7}
+                        >
+                          <Paperclip size={18} color="#6b7280" />
+                          {newNoteAttachments.length > 0 && (
+                            <View style={styles.toolbarAttachmentBadge}>
+                              <Text style={styles.attachmentBadgeText}>{newNoteAttachments.length}</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.toolbarText}>Markdown supported</Text>
+                    </View>
+                  </>
                 )}
 
                 {/* Attachment Previews */}
@@ -741,10 +842,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  notesIconButtonsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
   squareIconButton: {
     width: 32,
     height: 32,
@@ -893,7 +990,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 8,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomWidth: 0,
     padding: 12,
     minHeight: 100,
     fontSize: 14,
@@ -986,5 +1085,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     width: '100%',
+  },
+  toolbarContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    marginTop: -8,
+  },
+  toolbarButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  toolbarButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  toolbarAttachmentBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0078d4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  toolbarText: {
+    fontSize: 12,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
 });
