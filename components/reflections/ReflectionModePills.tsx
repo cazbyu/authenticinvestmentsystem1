@@ -4,7 +4,7 @@ import { Lightbulb, FileText } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import Tooltip from '@/components/common/Tooltip';
 
-type ReflectionMode = 'rose' | 'thorn' | 'depositIdea' | 'note';
+type ReflectionMode = 'rose' | 'thorn' | 'depositIdea' | 'reflection';
 
 interface ReflectionModePillsProps {
   selectedMode: ReflectionMode;
@@ -31,8 +31,8 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
       icon: 'idea'
     },
     {
-      value: 'note',
-      tooltip: 'Note',
+      value: 'reflection',
+      tooltip: 'Reflection',
       icon: 'note'
     },
   ];
@@ -83,13 +83,13 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
       {modes.map((mode) => {
         const isSelected = selectedMode === mode.value;
 
-        // Use purple color for note mode
-        const backgroundColor = mode.value === 'note' && isSelected
+        // Use purple color for reflection mode
+        const backgroundColor = mode.value === 'reflection' && isSelected
           ? '#9333ea'  // purple-600
           : isSelected
             ? colors.primary
             : colors.surface;
-        const borderColor = mode.value === 'note' && isSelected
+        const borderColor = mode.value === 'reflection' && isSelected
           ? '#9333ea'  // purple-600
           : isSelected
             ? colors.primary

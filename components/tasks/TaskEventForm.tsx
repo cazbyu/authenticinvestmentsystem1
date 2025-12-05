@@ -36,7 +36,7 @@ import RichTextInput from '../reflections/RichTextInput';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'reflection';
-type ReflectionMode = 'rose' | 'thorn' | 'depositIdea';
+type ReflectionMode = 'rose' | 'thorn' | 'depositIdea' | 'reflection';
 
 interface Role { 
   id: string; 
@@ -931,7 +931,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     }
 
     if (formData.type === 'reflection') {
-      if ((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && !formData.content.trim()) {
+      if ((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') && !formData.content.trim()) {
         Alert.alert('Error', 'Please enter reflection content');
         return;
       }
@@ -965,9 +965,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       let mainRecord;
       let mainRecordId;
 
-      // Handle reflection type with its three modes
+      // Handle reflection type with its four modes
       if (formData.type === 'reflection') {
-        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') {
+        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') {
           // Save to reflections table
           const reflectionPayload = {
             user_id: user.id,
@@ -1169,7 +1169,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         }
 
         // Handle joins for reflection types
-        const parentType = (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') ? 'reflection' : 'depositIdea';
+        const parentType = (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') ? 'reflection' : 'depositIdea';
 
         // Clear existing joins if editing
         if (mode === 'edit' && initialData?.id) {
@@ -1222,10 +1222,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
         // Success message and event broadcasting
         const modeName = formData.reflectionMode === 'rose' ? 'Rose' :
-                        formData.reflectionMode === 'thorn' ? 'Thorn' : 'Deposit Idea';
+                        formData.reflectionMode === 'thorn' ? 'Thorn' :
+                        formData.reflectionMode === 'reflection' ? 'Reflection' : 'Deposit Idea';
         Alert.alert('Success', `${modeName} ${mode === 'edit' ? 'updated' : 'saved'} successfully!`);
 
-        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') {
+        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') {
           eventBus.emit(mode === 'edit' ? EVENTS.REFLECTION_UPDATED : EVENTS.REFLECTION_CREATED);
         } else if (formData.reflectionMode === 'depositIdea') {
           eventBus.emit(mode === 'edit' ? EVENTS.DEPOSIT_IDEA_UPDATED : EVENTS.DEPOSIT_IDEA_CREATED);
@@ -1647,7 +1648,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   ? 'Rose'
                   : formData.reflectionMode === 'thorn'
                     ? 'Thorn'
-                    : 'Deposit Idea'
+                    : formData.reflectionMode === 'reflection'
+                      ? 'Reflection'
+                      : 'Deposit Idea'
                 : formData.type === 'withdrawal'
                   ? initialData?.id ? 'Thorn' : 'Withdrawal'
                   : formData.type === 'depositIdea'
@@ -1699,6 +1702,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   placeholder={
                     formData.reflectionMode === 'rose' ? 'Simple description . . .' :
                     formData.reflectionMode === 'thorn' ? 'Simple description . . .' :
+                    formData.reflectionMode === 'reflection' ? 'Simple description . . .' :
                     'Deposit idea title...'
                   }
                   placeholderTextColor={colors.textSecondary}
@@ -1723,6 +1727,49 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                           ? "Share a success, joy or meaningful moment you want to celebrate . . ."
                           : "What didn't go smoothly or needs attention, care or improvement?"
                       }
+                      minHeight={150}
+                      onAttachmentPress={handlePickFile}
+                    />
+                  </View>
+
+                  {/* Show attached files */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+
+              {formData.reflectionMode === 'reflection' && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: '#9333ea' }]}>Reflection *</Text>
+                    <RichTextInput
+                      value={formData.content}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                      placeholder="Capture a thought or idea that is important to you..."
                       minHeight={150}
                       onAttachmentPress={handlePickFile}
                     />
@@ -2100,7 +2147,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Goals - Collapsible chip-based section */}
-          {((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'depositIdea') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && (
+          {((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && (
             <View style={styles.field}>
               <TouchableOpacity
                 style={styles.collapsibleHeader}
@@ -2142,7 +2189,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Follow Up Section - Only for reflection mode */}
-          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'depositIdea') && (
+          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea') && (
             <FollowUpToggleSection
               enabled={formData.followUpEnabled}
               date={formData.followUpDate}
