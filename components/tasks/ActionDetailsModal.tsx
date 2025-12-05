@@ -478,14 +478,16 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
           {/* Notes Section - Always Visible */}
           <View style={styles.detailSection}>
             <View style={styles.notesHeaderRow}>
-              <Text style={styles.detailLabel}>Notes:</Text>
-              <TouchableOpacity
-                style={styles.squareIconButton}
-                onPress={handleToggleTextInput}
-                activeOpacity={0.7}
-              >
-                <Plus size={18} color="#0078d4" />
-              </TouchableOpacity>
+              <View style={styles.notesHeaderLeft}>
+                <Text style={styles.detailLabel}>Notes:</Text>
+                <TouchableOpacity
+                  style={styles.squareIconButton}
+                  onPress={handleToggleTextInput}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={18} color="#0078d4" />
+                </TouchableOpacity>
+              </View>
             </View>
             {loadingNotes ? (
               <Text style={styles.detailValue}>Loading notes...</Text>
@@ -686,9 +688,12 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
                       <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.saveNoteButton, saving && styles.saveNoteButtonDisabled]}
+                      style={[
+                        styles.saveNoteButton,
+                        (saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)) && styles.saveNoteButtonDisabled
+                      ]}
                       onPress={handleSaveNote}
-                      disabled={saving}
+                      disabled={saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)}
                     >
                       {saving ? (
                         <ActivityIndicator size="small" color="#ffffff" />
@@ -730,9 +735,13 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
         {/* Action Buttons */}
         <View style={styles.detailActions}>
           <TouchableOpacity
-            style={[styles.detailButton, styles.saveButton]}
+            style={[
+              styles.detailButton,
+              styles.saveButton,
+              (saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)) && styles.saveButtonDisabled
+            ]}
             onPress={handleSaveNote}
-            disabled={saving}
+            disabled={saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)}
           >
             {saving ? (
               <ActivityIndicator size="small" color="#ffffff" />
@@ -838,9 +847,13 @@ const styles = StyleSheet.create({
   },
   notesHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  notesHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   squareIconButton: {
     width: 32,
@@ -967,16 +980,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff'
   },
   detailButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 8,
     gap: 6
   },
   saveButton: {
     backgroundColor: '#0078d4'
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.5,
   },
   deleteButton: {
     backgroundColor: '#dc2626'
