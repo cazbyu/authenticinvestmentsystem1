@@ -234,6 +234,7 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
       const { error: joinError } = await supabase
         .from('0008-ap-universal-notes-join')
         .insert({
+          user_id: user.id,
           parent_id: task.id,
           parent_type: 'task',
           note_id: noteData.id,
