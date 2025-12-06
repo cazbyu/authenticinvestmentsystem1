@@ -9,6 +9,10 @@ import ImageViewerModal from './ImageViewerModal';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
+import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
+import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
+import { fetchAssociatedItems, determineParentType } from '@/lib/followThroughUtils';
+import TaskEventForm from '../tasks/TaskEventForm';
 
 interface ReflectionDetailsModalProps {
   visible: boolean;
@@ -36,9 +40,16 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete 
   const [newNoteAttachments, setNewNoteAttachments] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Follow-through state
+  const [associatedItems, setAssociatedItems] = useState<AssociatedItem[]>([]);
+  const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
+  const [taskEventFormVisible, setTaskEventFormVisible] = useState(false);
+  const [taskEventPreSelectedType, setTaskEventPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+
   useEffect(() => {
     if (visible && reflection?.id) {
       fetchReflectionNotes();
+      loadAssociatedItems();
     }
   }, [visible, reflection?.id]);
 
@@ -77,6 +88,39 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete 
     } finally {
       setLoadingNotes(false);
     }
+  };
+
+  const loadAssociatedItems = async () => {
+    if (!reflection?.id) return;
+
+    setLoadingAssociatedItems(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const parentType = determineParentType(reflection, 'reflection');
+      const items = await fetchAssociatedItems(reflection.id, parentType, user.id);
+      setAssociatedItems(items);
+    } catch (error) {
+      console.error('Error fetching associated items:', error);
+    } finally {
+      setLoadingAssociatedItems(false);
+    }
+  };
+
+  const handleOpenTaskEventForm = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
+    setTaskEventPreSelectedType(type);
+    setTaskEventFormVisible(true);
+  };
+
+  const handleTaskEventFormClose = () => {
+    setTaskEventFormVisible(false);
+    loadAssociatedItems();
+  };
+
+  const handleAssociatedItemPress = (item: AssociatedItem) => {
+    console.log('Associated item pressed:', item);
   };
 
   const handlePickImage = async () => {
@@ -539,6 +583,27 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete 
               </View>
             )}
           </View>
+
+          {/* Follow Through Actions or Thoughts */}
+          <View style={styles.detailSection}>
+            <Text style={styles.detailLabel}>Follow Through Actions or Thoughts:</Text>
+
+            <FollowThroughButtonBar
+              onPressTask={() => handleOpenTaskEventForm('task')}
+              onPressEvent={() => handleOpenTaskEventForm('event')}
+              onPressRose={() => handleOpenTaskEventForm('rose')}
+              onPressThorn={() => handleOpenTaskEventForm('thorn')}
+              onPressReflection={() => handleOpenTaskEventForm('reflection')}
+              onPressDepositIdea={() => handleOpenTaskEventForm('depositIdea')}
+            />
+
+            <AssociatedItemsList
+              items={associatedItems}
+              loading={loadingAssociatedItems}
+              onItemPress={handleAssociatedItemPress}
+              emptyMessage="No associated actions or thoughts yet"
+            />
+          </View>
         </ScrollView>
 
         {/* Action Buttons */}
@@ -574,6 +639,18 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete 
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
+
+      {/* TaskEventForm Modal for creating follow-through items */}
+      {taskEventFormVisible && reflection && (
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleTaskEventFormClose}
+          onClose={() => setTaskEventFormVisible(false)}
+          parentId={reflection.id}
+          parentType={determineParentType(reflection, 'reflection')}
+          preSelectedType={taskEventPreSelectedType}
+        />
+      )}
     </Modal>
   );
 }

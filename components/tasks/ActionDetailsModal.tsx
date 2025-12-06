@@ -11,6 +11,10 @@ import ImageViewerModal from '../reflections/ImageViewerModal';
 import { Linking, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
+import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
+import { fetchAssociatedItems, determineParentType } from '@/lib/followThroughUtils';
+import TaskEventForm from './TaskEventForm';
 
 interface ActionDetailsModalProps {
   visible: boolean;
@@ -42,9 +46,16 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const textInputRef = useRef<TextInput>(null);
 
+  // Follow-through state
+  const [associatedItems, setAssociatedItems] = useState<AssociatedItem[]>([]);
+  const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
+  const [taskEventFormVisible, setTaskEventFormVisible] = useState(false);
+  const [taskEventPreSelectedType, setTaskEventPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+
   useEffect(() => {
     if (visible && task?.id) {
       fetchTaskNotes();
+      loadAssociatedItems();
     }
   }, [visible, task?.id]);
 
@@ -82,6 +93,25 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
       Alert.alert('Error', (error as Error).message);
     } finally {
       setLoadingNotes(false);
+    }
+  };
+
+  const loadAssociatedItems = async () => {
+    if (!task?.id) return;
+
+    setLoadingAssociatedItems(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const parentType = determineParentType(task, 'task');
+      const items = await fetchAssociatedItems(task.id, parentType, user.id);
+      setAssociatedItems(items);
+    } catch (error) {
+      console.error('Error fetching associated items:', error);
+    } finally {
+      setLoadingAssociatedItems(false);
     }
   };
 
@@ -315,6 +345,20 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
 
   const removeAttachment = (index: number) => {
     setNewNoteAttachments(newNoteAttachments.filter((_, i) => i !== index));
+  };
+
+  const handleOpenTaskEventForm = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
+    setTaskEventPreSelectedType(type);
+    setTaskEventFormVisible(true);
+  };
+
+  const handleTaskEventFormClose = () => {
+    setTaskEventFormVisible(false);
+    loadAssociatedItems();
+  };
+
+  const handleAssociatedItemPress = (item: AssociatedItem) => {
+    console.log('Associated item pressed:', item);
   };
 
   const handleToggleTextInput = () => {
@@ -759,6 +803,28 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
               </>
             )}
           </View>
+
+          {/* Follow Through Actions or Thoughts */}
+          <View style={styles.detailSection}>
+            <Text style={styles.detailLabel}>Follow Through Actions or Thoughts:</Text>
+
+            <FollowThroughButtonBar
+              onPressTask={() => handleOpenTaskEventForm('task')}
+              onPressEvent={() => handleOpenTaskEventForm('event')}
+              onPressRose={() => handleOpenTaskEventForm('rose')}
+              onPressThorn={() => handleOpenTaskEventForm('thorn')}
+              onPressReflection={() => handleOpenTaskEventForm('reflection')}
+              onPressDepositIdea={() => handleOpenTaskEventForm('depositIdea')}
+            />
+
+            <AssociatedItemsList
+              items={associatedItems}
+              loading={loadingAssociatedItems}
+              onItemPress={handleAssociatedItemPress}
+              emptyMessage="No associated actions or thoughts yet"
+            />
+          </View>
+
           {task.delegates?.length > 0 && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Delegated To:</Text>
@@ -810,6 +876,18 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
+
+      {/* TaskEventForm Modal for creating follow-through items */}
+      {taskEventFormVisible && task && (
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleTaskEventFormClose}
+          onClose={() => setTaskEventFormVisible(false)}
+          parentId={task.id}
+          parentType={determineParentType(task, 'task')}
+          preSelectedType={taskEventPreSelectedType}
+        />
+      )}
     </Modal>
   );
 }
