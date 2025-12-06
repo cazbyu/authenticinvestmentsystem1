@@ -150,7 +150,8 @@ export function ActionDetailsModal({
       if (!tasksError && childTasks) {
         children.push(...childTasks.map(t => {
           const isActive = t.status !== 'completed' && !t.completed_at;
-          const displayTitle = isActive ? `${t.title} (active)` : t.title;
+          const baseTitle = t.title || 'Untitled';
+          const displayTitle = isActive ? `${baseTitle} (active)` : baseTitle;
 
           return {
             id: t.id,
@@ -194,7 +195,7 @@ export function ActionDetailsModal({
 
           return {
             id: r.id,
-            title: r.content.substring(0, 60),
+            title: (r.content || 'No content').substring(0, 60),
             type,
             date: r.date || r.created_at,
             icon,

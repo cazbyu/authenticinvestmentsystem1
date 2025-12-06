@@ -29,7 +29,7 @@ export async function fetchAssociatedItems(
         const type = getItemTypeFromTask(task);
         items.push({
           id: task.id,
-          title: task.title,
+          title: task.title || 'Untitled',
           type,
           created_at: task.created_at,
           due_date: task.due_date,

@@ -94,11 +94,12 @@ export default function AssociatedItemsList({
   const formatItemTitle = (item: AssociatedItem) => {
     const isTaskOrEvent = item.type === 'task' || item.type === 'event';
     const isActive = isTaskOrEvent && item.status !== 'completed' && !item.completed_at;
+    const title = item.title || 'Untitled';
 
     if (isActive) {
-      return `${item.title} (active)`;
+      return `${title} (active)`;
     }
-    return item.title;
+    return title;
   };
 
   if (loading) {
