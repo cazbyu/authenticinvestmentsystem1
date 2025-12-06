@@ -127,3 +127,38 @@ export function getIconColorForType(type: ItemType): string {
   };
   return colors[type] || colors.task;
 }
+
+export async function fetchLinkedItemsCount(
+  parentId: string,
+  parentType: ParentType,
+  userId: string
+): Promise<number> {
+  const supabase = getSupabaseClient();
+
+  try {
+    // Count tasks linked to this parent
+    const { count: tasksCount, error: tasksError } = await supabase
+      .from('0008-ap-tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('parent_id', parentId)
+      .eq('parent_type', parentType);
+
+    if (tasksError) throw tasksError;
+
+    // Count reflections linked to this parent
+    const { count: reflectionsCount, error: reflectionsError } = await supabase
+      .from('0008-ap-reflections')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_id', userId)
+      .eq('parent_id', parentId)
+      .eq('parent_type', parentType);
+
+    if (reflectionsError) throw reflectionsError;
+
+    return (tasksCount || 0) + (reflectionsCount || 0);
+  } catch (error) {
+    console.error('Error fetching linked items count:', error);
+    return 0;
+  }
+}

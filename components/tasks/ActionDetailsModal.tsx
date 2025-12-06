@@ -14,13 +14,14 @@ import * as DocumentPicker from 'expo-document-picker';
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems, determineParentType } from '@/lib/followThroughUtils';
-import TaskEventForm from './TaskEventForm';
 
 interface ActionDetailsModalProps {
   visible: boolean;
   task: Task | null;
   onClose: () => void;
   onDelete: (task: Task) => void;
+  onOpenFollowThrough?: (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => void;
+  onRefreshAssociatedItems?: () => void;
 }
 
 interface Note {
@@ -29,7 +30,7 @@ interface Note {
   created_at: string;
 }
 
-export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionDetailsModalProps) {
+export function ActionDetailsModal({ visible, task, onClose, onDelete, onOpenFollowThrough, onRefreshAssociatedItems }: ActionDetailsModalProps) {
   const [taskNotes, setTaskNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -49,8 +50,6 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   // Follow-through state
   const [associatedItems, setAssociatedItems] = useState<AssociatedItem[]>([]);
   const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
-  const [taskEventFormVisible, setTaskEventFormVisible] = useState(false);
-  const [taskEventPreSelectedType, setTaskEventPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -348,14 +347,17 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
   };
 
   const handleOpenTaskEventForm = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
-    setTaskEventPreSelectedType(type);
-    setTaskEventFormVisible(true);
+    if (!task?.id || !onOpenFollowThrough) return;
+    const parentType = determineParentType(task, 'task');
+    onOpenFollowThrough(type, task.id, parentType);
   };
 
-  const handleTaskEventFormClose = () => {
-    setTaskEventFormVisible(false);
-    loadAssociatedItems();
-  };
+  // Expose method to refresh associated items when called from parent
+  useEffect(() => {
+    if (onRefreshAssociatedItems && visible && task?.id) {
+      loadAssociatedItems();
+    }
+  }, [onRefreshAssociatedItems, visible, task?.id]);
 
   const handleAssociatedItemPress = (item: AssociatedItem) => {
     console.log('Associated item pressed:', item);
@@ -876,18 +878,6 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete }: ActionD
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
-
-      {/* TaskEventForm Modal for creating follow-through items */}
-      {taskEventFormVisible && task && (
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={handleTaskEventFormClose}
-          onClose={() => setTaskEventFormVisible(false)}
-          parentId={task.id}
-          parentType={determineParentType(task, 'task')}
-          preSelectedType={taskEventPreSelectedType}
-        />
-      )}
     </Modal>
   );
 }

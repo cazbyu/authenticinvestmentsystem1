@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { CheckCircle, Calendar, TrendingUp, TrendingDown, BookOpen, Lightbulb } from 'lucide-react-native';
+import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { CheckCircle, Calendar, BookOpen, Lightbulb } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface FollowThroughButtonBarProps {
@@ -23,18 +23,17 @@ export default function FollowThroughButtonBar({
   const { colors } = useTheme();
 
   const buttonItems = [
-    { icon: CheckCircle, onPress: onPressTask, color: colors.primary },
-    { icon: Calendar, onPress: onPressEvent, color: colors.secondary },
-    { icon: TrendingUp, onPress: onPressRose, color: '#10b981' },
-    { icon: TrendingDown, onPress: onPressThorn, color: '#ef4444' },
-    { icon: BookOpen, onPress: onPressReflection, color: '#8b5cf6' },
-    { icon: Lightbulb, onPress: onPressDepositIdea, color: '#f59e0b' },
+    { type: 'icon', icon: CheckCircle, onPress: onPressTask, color: colors.primary },
+    { type: 'icon', icon: Calendar, onPress: onPressEvent, color: colors.secondary },
+    { type: 'image', image: require('@/assets/images/rose.png'), onPress: onPressRose, color: '#10b981' },
+    { type: 'image', image: require('@/assets/images/cactus-thorn.png'), onPress: onPressThorn, color: '#ef4444' },
+    { type: 'icon', icon: BookOpen, onPress: onPressReflection, color: '#8b5cf6' },
+    { type: 'icon', icon: Lightbulb, onPress: onPressDepositIdea, color: '#f59e0b' },
   ];
 
   return (
     <View style={styles.container}>
       {buttonItems.map((item, index) => {
-        const Icon = item.icon;
         return (
           <TouchableOpacity
             key={index}
@@ -42,7 +41,15 @@ export default function FollowThroughButtonBar({
             onPress={item.onPress}
             activeOpacity={0.7}
           >
-            <Icon size={24} color={item.color} strokeWidth={2} />
+            {item.type === 'icon' ? (
+              <item.icon size={24} color={item.color} strokeWidth={2} />
+            ) : (
+              <Image
+                source={item.image}
+                style={styles.iconImage}
+                resizeMode="contain"
+              />
+            )}
           </TouchableOpacity>
         );
       })}
@@ -68,5 +75,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  iconImage: {
+    width: 24,
+    height: 24,
   },
 });

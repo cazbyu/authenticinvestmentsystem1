@@ -12,13 +12,14 @@ import { ReflectionWithRelations } from '@/lib/reflectionUtils';
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems, determineParentType } from '@/lib/followThroughUtils';
-import TaskEventForm from '../tasks/TaskEventForm';
 
 interface ReflectionDetailsModalProps {
   visible: boolean;
   reflection: ReflectionWithRelations | null;
   onClose: () => void;
   onDelete: (reflection: ReflectionWithRelations) => void;
+  onOpenFollowThrough?: (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => void;
+  onRefreshAssociatedItems?: () => void;
 }
 
 interface Note {
@@ -27,7 +28,7 @@ interface Note {
   created_at: string;
 }
 
-export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete }: ReflectionDetailsModalProps) {
+export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete, onOpenFollowThrough, onRefreshAssociatedItems }: ReflectionDetailsModalProps) {
   const [reflectionNotes, setReflectionNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -43,8 +44,6 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete 
   // Follow-through state
   const [associatedItems, setAssociatedItems] = useState<AssociatedItem[]>([]);
   const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
-  const [taskEventFormVisible, setTaskEventFormVisible] = useState(false);
-  const [taskEventPreSelectedType, setTaskEventPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
 
   useEffect(() => {
     if (visible && reflection?.id) {
@@ -110,14 +109,17 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete 
   };
 
   const handleOpenTaskEventForm = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
-    setTaskEventPreSelectedType(type);
-    setTaskEventFormVisible(true);
+    if (!reflection?.id || !onOpenFollowThrough) return;
+    const parentType = determineParentType(reflection, 'reflection');
+    onOpenFollowThrough(type, reflection.id, parentType);
   };
 
-  const handleTaskEventFormClose = () => {
-    setTaskEventFormVisible(false);
-    loadAssociatedItems();
-  };
+  // Expose method to refresh associated items when called from parent
+  useEffect(() => {
+    if (onRefreshAssociatedItems && visible && reflection?.id) {
+      loadAssociatedItems();
+    }
+  }, [onRefreshAssociatedItems, visible, reflection?.id]);
 
   const handleAssociatedItemPress = (item: AssociatedItem) => {
     console.log('Associated item pressed:', item);
@@ -639,18 +641,6 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete 
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
-
-      {/* TaskEventForm Modal for creating follow-through items */}
-      {taskEventFormVisible && reflection && (
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={handleTaskEventFormClose}
-          onClose={() => setTaskEventFormVisible(false)}
-          parentId={reflection.id}
-          parentType={determineParentType(reflection, 'reflection')}
-          preSelectedType={taskEventPreSelectedType}
-        />
-      )}
     </Modal>
   );
 }

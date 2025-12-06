@@ -11,7 +11,6 @@ import * as DocumentPicker from 'expo-document-picker';
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems, determineParentType } from '@/lib/followThroughUtils';
-import TaskEventForm from '../tasks/TaskEventForm';
 
 interface DepositIdea {
   id: string;
@@ -35,6 +34,8 @@ interface DepositIdeaDetailModalProps {
   onClose: () => void;
   onDelete: (depositIdea: DepositIdea) => void;
   onActivate: (depositIdea: DepositIdea) => void;
+  onOpenFollowThrough?: (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => void;
+  onRefreshAssociatedItems?: () => void;
 }
 
 export function DepositIdeaDetailModal({
@@ -42,7 +43,9 @@ export function DepositIdeaDetailModal({
   depositIdea,
   onClose,
   onDelete,
-  onActivate
+  onActivate,
+  onOpenFollowThrough,
+  onRefreshAssociatedItems
 }: DepositIdeaDetailModalProps) {
   const [notes, setNotes] = useState([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
@@ -59,8 +62,6 @@ export function DepositIdeaDetailModal({
   // Follow-through state
   const [associatedItems, setAssociatedItems] = useState<AssociatedItem[]>([]);
   const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
-  const [taskEventFormVisible, setTaskEventFormVisible] = useState(false);
-  const [taskEventPreSelectedType, setTaskEventPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
 
   useEffect(() => {
     if (visible && depositIdea?.id) {
@@ -125,14 +126,16 @@ export function DepositIdeaDetailModal({
   };
 
   const handleOpenTaskEventForm = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
-    setTaskEventPreSelectedType(type);
-    setTaskEventFormVisible(true);
+    if (!depositIdea?.id || !onOpenFollowThrough) return;
+    onOpenFollowThrough(type, depositIdea.id, 'depositIdea');
   };
 
-  const handleTaskEventFormClose = () => {
-    setTaskEventFormVisible(false);
-    loadAssociatedItems();
-  };
+  // Expose method to refresh associated items when called from parent
+  useEffect(() => {
+    if (onRefreshAssociatedItems && visible && depositIdea?.id) {
+      loadAssociatedItems();
+    }
+  }, [onRefreshAssociatedItems, visible, depositIdea?.id]);
 
   const handleAssociatedItemPress = (item: AssociatedItem) => {
     console.log('Associated item pressed:', item);
@@ -651,18 +654,6 @@ export function DepositIdeaDetailModal({
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
-
-      {/* TaskEventForm Modal for creating follow-through items */}
-      {taskEventFormVisible && depositIdea && (
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={handleTaskEventFormClose}
-          onClose={() => setTaskEventFormVisible(false)}
-          parentId={depositIdea.id}
-          parentType="depositIdea"
-          preSelectedType={taskEventPreSelectedType}
-        />
-      )}
     </Modal>
   );
 }

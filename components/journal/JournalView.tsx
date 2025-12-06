@@ -3,6 +3,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } fr
 import { FileText, Plus, Lightbulb } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
+import { fetchLinkedItemsCount } from '@/lib/followThroughUtils';
 
 interface JournalEntry {
   id: string;
@@ -15,6 +16,7 @@ interface JournalEntry {
   source_id: string; // task_id or withdrawal_id or reflection_id
   source_type: 'task' | 'withdrawal' | 'reflection';
   source_data?: any;
+  linked_count?: number; // count of linked actions/reflections
 }
 
 interface JournalViewProps {
@@ -586,6 +588,21 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
         // reflections don't affect balance
       });
 
+      // ---------------------------------------------------------
+      // 6) Fetch linked items count for each entry
+      // ---------------------------------------------------------
+      await Promise.all(
+        journalEntries.map(async (entry) => {
+          if (entry.source_type !== 'withdrawal') {
+            const parentType = entry.source_type === 'task' ? 'task' :
+                              entry.source_type === 'depositIdea' ? 'depositIdea' : 'reflection';
+            entry.linked_count = await fetchLinkedItemsCount(entry.source_id, parentType as any, user.id);
+          } else {
+            entry.linked_count = 0;
+          }
+        })
+      );
+
       // Final abort check before setting state
       if (controller.signal.aborted) {
         return;
@@ -743,6 +760,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       <View style={styles.journalHeader}>
         <Text style={styles.headerDate}>Date</Text>
         <Text style={styles.headerDescription}>Description</Text>
+        <Text style={styles.headerLinked}>Linked</Text>
         <Text style={styles.headerNotes}>Notes</Text>
         <Text style={styles.headerDeposit}>Impact</Text>
         <Text style={styles.headerBalance}>Balance</Text>
@@ -768,6 +786,9 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
               <Text style={styles.cellDate}>{formatDate(entry.date)}</Text>
               <Text style={styles.cellDescription} numberOfLines={2}>
                 {entry.description}
+              </Text>
+              <Text style={styles.cellLinked}>
+                {entry.linked_count !== undefined && entry.linked_count > 0 ? entry.linked_count : '—'}
               </Text>
               <View style={styles.cellNotes}>
                 {entry.type === 'reflection' ? (
@@ -875,6 +896,7 @@ const styles = StyleSheet.create({
   },
   headerDate: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
   headerDescription: { flex: 1, fontSize: 12, fontWeight: '600', color: '#374151', paddingHorizontal: 8 },
+  headerLinked: { width: 50, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
   headerNotes: { width: 40, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
   headerDeposit: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
   headerBalance: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
@@ -891,6 +913,7 @@ const styles = StyleSheet.create({
   oddRow: { backgroundColor: '#f1f5f9' },
   cellDate: { width: 70, fontSize: 12, color: '#374151', textAlign: 'center' },
   cellDescription: { flex: 1, fontSize: 14, color: '#1f2937', paddingHorizontal: 8, lineHeight: 18 },
+  cellLinked: { width: 50, fontSize: 14, color: '#6b7280', textAlign: 'center', fontWeight: '500' },
   cellNotes: { width: 40, alignItems: 'center', justifyContent: 'center' },
   cellImpact: { width: 70, fontSize: 14, fontWeight: '600', textAlign: 'right' },
   cellBalance: { width: 70, fontSize: 14, fontWeight: '700', textAlign: 'right' },

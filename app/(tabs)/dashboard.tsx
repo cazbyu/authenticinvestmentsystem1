@@ -58,6 +58,13 @@ export default function Dashboard() {
   const [isReflectionModalVisible, setIsReflectionModalVisible] = useState(false);
   const [editingReflection, setEditingReflection] = useState<any>(null);
 
+  // Follow-through TaskEventForm state
+  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
+  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
+  const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
   // Import functions from useGoalProgress hook
   const {
     deleteTask,
@@ -698,6 +705,19 @@ export default function Dashboard() {
     setEditingTask(null);
   };
 
+  const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
+    setFollowThroughPreSelectedType(type);
+    setFollowThroughParentId(parentId);
+    setFollowThroughParentType(parentType);
+    setFollowThroughFormVisible(true);
+  };
+
+  const handleFollowThroughFormClose = () => {
+    setFollowThroughFormVisible(false);
+    // Trigger refresh of associated items in the detail modal
+    setRefreshAssociatedItemsKey(prev => prev + 1);
+  };
+
   const handleJournalEntryPress = (entry: any) => {
     if (entry.source_type === 'task') {
       console.log('[Dashboard] Journal entry pressed - Task data:', {
@@ -827,14 +847,22 @@ export default function Dashboard() {
           onClose={handleFormClose}
         />
       </Modal>
-      <ActionDetailsModal visible={isDetailModalVisible} task={selectedTask} onClose={() => setIsDetailModalVisible(false)} onUpdate={handleUpdateTask} onDelegate={handleDelegateTask} onCancel={handleCancelTask} />
-      <DepositIdeaDetailModal 
-        visible={isDepositIdeaDetailVisible} 
-        depositIdea={selectedDepositIdea} 
-        onClose={() => setIsDepositIdeaDetailVisible(false)} 
-        onUpdate={handleUpdateDepositIdea}
-        onCancel={handleCancelDepositIdea}
+      <ActionDetailsModal
+        visible={isDetailModalVisible}
+        task={selectedTask}
+        onClose={() => setIsDetailModalVisible(false)}
+        onDelete={handleDeleteTask}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+      />
+      <DepositIdeaDetailModal
+        visible={isDepositIdeaDetailVisible}
+        depositIdea={selectedDepositIdea}
+        onClose={() => setIsDepositIdeaDetailVisible(false)}
+        onDelete={handleCancelDepositIdea}
         onActivate={handleActivateDepositIdea}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
       <Modal visible={isSortModalVisible} transparent animationType="fade" onRequestClose={() => setIsSortModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -942,6 +970,18 @@ export default function Dashboard() {
         existingDelegates={delegates}
         userId={userId}
       />
+
+      {/* Follow-through TaskEventForm Modal */}
+      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="pageSheet">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleFollowThroughFormClose}
+          onClose={() => setFollowThroughFormVisible(false)}
+          parentId={followThroughParentId}
+          parentType={followThroughParentType as any}
+          preSelectedType={followThroughPreSelectedType}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }
