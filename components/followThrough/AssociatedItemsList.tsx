@@ -14,6 +14,8 @@ export interface AssociatedItem {
   due_date?: string;
   start_date?: string;
   has_notes: boolean;
+  status?: string;
+  completed_at?: string;
 }
 
 interface AssociatedItemsListProps {
@@ -87,6 +89,16 @@ export default function AssociatedItemsList({
   const getItemDate = (item: AssociatedItem) => {
     const date = item.due_date || item.start_date || item.created_at;
     return formatLocalDate(new Date(date));
+  };
+
+  const formatItemTitle = (item: AssociatedItem) => {
+    const isTaskOrEvent = item.type === 'task' || item.type === 'event';
+    const isActive = isTaskOrEvent && item.status !== 'completed' && !item.completed_at;
+
+    if (isActive) {
+      return `${item.title} (active)`;
+    }
+    return item.title;
   };
 
   if (loading) {
@@ -186,7 +198,7 @@ export default function AssociatedItemsList({
             </Text>
             <View style={[styles.titleCell, styles.titleColumn]}>
               <Text style={[styles.cellText, { color: colors.text }]} numberOfLines={1}>
-                {item.title}
+                {formatItemTitle(item)}
               </Text>
               <View
                 style={[

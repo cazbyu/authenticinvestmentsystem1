@@ -21,6 +21,7 @@ interface ActionDetailsModalProps {
   onDelegate?: (item: any) => void;
   onCancel?: (item: any) => void;
   onCreateChild?: (parentId: string, parentType: string, childType: string) => void;
+  refreshKey?: number;
 }
 
 interface Note {
@@ -57,7 +58,8 @@ export function ActionDetailsModal({
   onUpdate,
   onDelegate,
   onCancel,
-  onCreateChild
+  onCreateChild,
+  refreshKey
 }: ActionDetailsModalProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
@@ -84,7 +86,7 @@ export function ActionDetailsModal({
       setNewNoteContent('');
       setNewNoteAttachments([]);
     }
-  }, [visible, item?.id]);
+  }, [visible, item?.id, refreshKey]);
 
   const fetchNotes = async () => {
     if (!item?.id) return;
@@ -138,21 +140,27 @@ export function ActionDetailsModal({
       // Fetch child tasks/events
       const { data: childTasks, error: tasksError } = await supabase
         .from('0008-ap-tasks')
-        .select('id, title, type, due_date, completed_at')
+        .select('id, title, type, due_date, completed_at, status, deleted_at')
         .eq('user_id', user.id)
         .eq('parent_id', item.id)
         .eq('parent_type', parentType)
+        .is('deleted_at', null)
         .order('due_date', { ascending: false });
 
       if (!tasksError && childTasks) {
-        children.push(...childTasks.map(t => ({
-          id: t.id,
-          title: t.title,
-          type: t.type === 'event' ? 'event' : 'task' as 'task' | 'event',
-          date: t.due_date || t.completed_at,
-          icon: t.type === 'event' ? Calendar : CheckSquare,
-          iconColor: t.type === 'event' ? '#0078d4' : '#16a34a'
-        })));
+        children.push(...childTasks.map(t => {
+          const isActive = t.status !== 'completed' && !t.completed_at;
+          const displayTitle = isActive ? `${t.title} (active)` : t.title;
+
+          return {
+            id: t.id,
+            title: displayTitle,
+            type: t.type === 'event' ? 'event' : 'task' as 'task' | 'event',
+            date: t.due_date || t.completed_at,
+            icon: t.type === 'event' ? Calendar : CheckSquare,
+            iconColor: t.type === 'event' ? '#0078d4' : '#16a34a'
+          };
+        }));
       }
 
       // Fetch child reflections

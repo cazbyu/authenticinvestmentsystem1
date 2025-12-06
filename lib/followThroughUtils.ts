@@ -15,10 +15,11 @@ export async function fetchAssociatedItems(
   try {
     const { data: tasks, error: tasksError } = await supabase
       .from('0008-ap-tasks')
-      .select('id, title, created_at, due_date, start_time, end_time, notes')
+      .select('id, title, created_at, due_date, start_time, end_time, notes, status, completed_at, deleted_at')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
       .eq('parent_type', parentType)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
     if (tasksError) throw tasksError;
@@ -34,6 +35,8 @@ export async function fetchAssociatedItems(
           due_date: task.due_date,
           start_date: task.due_date,
           has_notes: !!task.notes,
+          status: task.status,
+          completed_at: task.completed_at,
         });
       }
     }
@@ -41,7 +44,7 @@ export async function fetchAssociatedItems(
     const { data: reflections, error: reflectionsError } = await supabase
       .from('0008-ap-reflections')
       .select('id, title, content, created_at, daily_rose, daily_thorn, is_deposit_idea')
-      .eq('profile_id', userId)
+      .eq('user_id', userId)
       .eq('parent_id', parentId)
       .eq('parent_type', parentType)
       .order('created_at', { ascending: false });
@@ -150,7 +153,7 @@ export async function fetchLinkedItemsCount(
     const { count: reflectionsCount, error: reflectionsError } = await supabase
       .from('0008-ap-reflections')
       .select('id', { count: 'exact', head: true })
-      .eq('profile_id', userId)
+      .eq('user_id', userId)
       .eq('parent_id', parentId)
       .eq('parent_type', parentType);
 
