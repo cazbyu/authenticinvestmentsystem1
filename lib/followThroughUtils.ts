@@ -43,7 +43,7 @@ export async function fetchAssociatedItems(
 
     const { data: reflections, error: reflectionsError } = await supabase
       .from('0008-ap-reflections')
-      .select('id, title, content, created_at, daily_rose, daily_thorn, is_deposit_idea')
+      .select('id, reflection_title, content, created_at, daily_rose, daily_thorn, is_deposit_idea')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
       .eq('parent_type', parentType)
@@ -56,7 +56,7 @@ export async function fetchAssociatedItems(
         const type = getItemTypeFromReflection(reflection);
         items.push({
           id: reflection.id,
-          title: reflection.title || 'Untitled',
+          title: reflection.reflection_title || 'Untitled',
           type,
           created_at: reflection.created_at,
           has_notes: !!reflection.content,
