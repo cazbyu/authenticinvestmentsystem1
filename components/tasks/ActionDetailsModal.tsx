@@ -22,6 +22,7 @@ interface ActionDetailsModalProps {
   onDelete: (task: Task) => void;
   onOpenFollowThrough?: (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => void;
   onRefreshAssociatedItems?: () => void;
+  onItemPress?: (item: AssociatedItem) => void;
 }
 
 interface Note {
@@ -30,7 +31,7 @@ interface Note {
   created_at: string;
 }
 
-export function ActionDetailsModal({ visible, task, onClose, onDelete, onOpenFollowThrough, onRefreshAssociatedItems }: ActionDetailsModalProps) {
+export function ActionDetailsModal({ visible, task, onClose, onDelete, onOpenFollowThrough, onRefreshAssociatedItems, onItemPress }: ActionDetailsModalProps) {
   const [taskNotes, setTaskNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -361,6 +362,9 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onOpenFol
 
   const handleAssociatedItemPress = (item: AssociatedItem) => {
     console.log('Associated item pressed:', item);
+    if (onItemPress) {
+      onItemPress(item);
+    }
   };
 
   const handleToggleTextInput = () => {

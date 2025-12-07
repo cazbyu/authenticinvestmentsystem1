@@ -751,6 +751,65 @@ export default function Dashboard() {
       setIsReflectionModalVisible(true);
     }
   };
+
+  const handleAssociatedItemPress = async (item: any) => {
+    console.log('[Dashboard] Associated item pressed:', item);
+
+    // Close all modals first
+    setIsDetailModalVisible(false);
+    setIsReflectionModalVisible(false);
+    setIsDepositIdeaDetailVisible(false);
+
+    // Wait a bit for the modal to close before opening the new one
+    setTimeout(async () => {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      if (item.type === 'task' || item.type === 'event') {
+        // Fetch full task data
+        const { data: taskData } = await supabase
+          .from('0008-ap-tasks')
+          .select('*')
+          .eq('id', item.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (taskData) {
+          setSelectedTask(taskData);
+          setIsDetailModalVisible(true);
+        }
+      } else if (item.type === 'rose' || item.type === 'thorn' || item.type === 'reflection') {
+        // Fetch full reflection data
+        const { data: reflectionData } = await supabase
+          .from('0008-ap-reflections')
+          .select('*')
+          .eq('id', item.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (reflectionData) {
+          setEditingReflection(reflectionData);
+          setIsReflectionModalVisible(true);
+        }
+      } else if (item.type === 'depositIdea') {
+        // Fetch full deposit idea data
+        const { data: depositIdeaData } = await supabase
+          .from('0008-ap-deposit-ideas')
+          .select('*')
+          .eq('id', item.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (depositIdeaData) {
+          setSelectedDepositIdea(depositIdeaData);
+          setIsDepositIdeaDetailVisible(true);
+        }
+      }
+    }, 300);
+  };
+
   const handleDragEnd = ({ data }: { data: Task[] }) => setTasks(data);
   const sortOptions = [
     { value: 'due_date', label: 'Due Date' },
@@ -854,6 +913,7 @@ export default function Dashboard() {
         onDelete={handleDeleteTask}
         onOpenFollowThrough={handleOpenFollowThrough}
         onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+        onItemPress={handleAssociatedItemPress}
       />
       <DepositIdeaDetailModal
         visible={isDepositIdeaDetailVisible}
@@ -863,6 +923,7 @@ export default function Dashboard() {
         onActivate={handleActivateDepositIdea}
         onOpenFollowThrough={handleOpenFollowThrough}
         onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+        onItemPress={handleAssociatedItemPress}
       />
       <Modal visible={isSortModalVisible} transparent animationType="fade" onRequestClose={() => setIsSortModalVisible(false)}>
         <View style={styles.modalOverlay}>

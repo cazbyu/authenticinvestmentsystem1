@@ -36,6 +36,7 @@ interface DepositIdeaDetailModalProps {
   onActivate: (depositIdea: DepositIdea) => void;
   onOpenFollowThrough?: (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => void;
   onRefreshAssociatedItems?: () => void;
+  onItemPress?: (item: AssociatedItem) => void;
 }
 
 export function DepositIdeaDetailModal({
@@ -45,7 +46,8 @@ export function DepositIdeaDetailModal({
   onDelete,
   onActivate,
   onOpenFollowThrough,
-  onRefreshAssociatedItems
+  onRefreshAssociatedItems,
+  onItemPress
 }: DepositIdeaDetailModalProps) {
   const [notes, setNotes] = useState([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
@@ -139,6 +141,9 @@ export function DepositIdeaDetailModal({
 
   const handleAssociatedItemPress = (item: AssociatedItem) => {
     console.log('Associated item pressed:', item);
+    if (onItemPress) {
+      onItemPress(item);
+    }
   };
 
   const handleActivate = () => {

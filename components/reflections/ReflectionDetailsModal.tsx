@@ -20,6 +20,7 @@ interface ReflectionDetailsModalProps {
   onDelete: (reflection: ReflectionWithRelations) => void;
   onOpenFollowThrough?: (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => void;
   onRefreshAssociatedItems?: () => void;
+  onItemPress?: (item: AssociatedItem) => void;
 }
 
 interface Note {
@@ -28,7 +29,7 @@ interface Note {
   created_at: string;
 }
 
-export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete, onOpenFollowThrough, onRefreshAssociatedItems }: ReflectionDetailsModalProps) {
+export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete, onOpenFollowThrough, onRefreshAssociatedItems, onItemPress }: ReflectionDetailsModalProps) {
   const [reflectionNotes, setReflectionNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -123,6 +124,9 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
 
   const handleAssociatedItemPress = (item: AssociatedItem) => {
     console.log('Associated item pressed:', item);
+    if (onItemPress) {
+      onItemPress(item);
+    }
   };
 
   const handlePickImage = async () => {
