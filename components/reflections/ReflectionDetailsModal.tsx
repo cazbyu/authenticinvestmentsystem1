@@ -659,6 +659,8 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
           onSubmitSuccess={handleFollowThroughFormClose}
           onClose={() => setFollowThroughFormVisible(false)}
           preSelectedType={followThroughPreSelectedType}
+          parentId={reflection?.id}
+          parentType="reflection"
         />
       </Modal>
     </Modal>

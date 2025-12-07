@@ -121,6 +121,10 @@ interface FormData {
   followUpEnabled: boolean;
   followUpDate: string;
   followUpTime: string;
+
+  // Parent relationship fields (for follow-through items)
+  parentId?: string;
+  parentType?: 'task' | 'depositIdea' | 'reflection';
 }
 
 interface TaskEventFormProps {
@@ -129,9 +133,11 @@ interface TaskEventFormProps {
   onSubmitSuccess: () => void;
   onClose: () => void;
   preSelectedType?: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection';
+  parentId?: string;
+  parentType?: 'task' | 'depositIdea' | 'reflection';
 }
 
-export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, preSelectedType }: TaskEventFormProps) {
+export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, preSelectedType, parentId, parentType }: TaskEventFormProps) {
   const { colors, isDarkMode } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
@@ -323,6 +329,17 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       });
     }
   }, [mode, preSelectedType]);
+
+  // Handle parent relationship fields for follow-through items
+  useEffect(() => {
+    if (mode === 'create' && parentId && parentType) {
+      setFormData(prev => ({
+        ...prev,
+        parentId,
+        parentType,
+      }));
+    }
+  }, [mode, parentId, parentType]);
 
   // Check if editing a completed task and show warning
   useEffect(() => {
@@ -966,6 +983,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             follow_up_date: formData.followUpEnabled ? formData.followUpDate : null,
             daily_rose: formData.reflectionMode === 'rose',
             daily_thorn: formData.reflectionMode === 'thorn',
+            // Parent relationship for follow-through items
+            parent_id: formData.parentId || null,
+            parent_type: formData.parentType || null,
             ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
           };
 
@@ -1052,6 +1072,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             is_active: true,
             archived: false,
             follow_up: formData.followUpEnabled,
+            // Parent relationship for follow-through items
+            parent_id: formData.parentId || null,
+            parent_type: formData.parentType || null,
             ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
           };
 
@@ -1259,6 +1282,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         is_twelve_week_goal: formData.isGoal,
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
+        // Parent relationship for follow-through items
+        parent_id: formData.parentId || null,
+        parent_type: formData.parentType || null,
         // Preserve completion status and timestamp when editing
         ...(mode === 'edit' && initialData?.id ? {
           // Explicitly preserve completed status - never change it back to pending

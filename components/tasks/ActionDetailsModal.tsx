@@ -896,6 +896,8 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onRefresh
           onSubmitSuccess={handleFollowThroughFormClose}
           onClose={() => setFollowThroughFormVisible(false)}
           preSelectedType={followThroughPreSelectedType}
+          parentId={task?.id}
+          parentType="task"
         />
       </Modal>
     </Modal>

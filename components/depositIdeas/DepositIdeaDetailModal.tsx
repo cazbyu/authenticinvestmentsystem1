@@ -674,6 +674,8 @@ export function DepositIdeaDetailModal({
           onSubmitSuccess={handleFollowThroughFormClose}
           onClose={() => setFollowThroughFormVisible(false)}
           preSelectedType={followThroughPreSelectedType}
+          parentId={depositIdea?.id}
+          parentType="depositIdea"
         />
       </Modal>
     </Modal>
