@@ -7,7 +7,7 @@ import { fetchLinkedItemsCount } from '@/lib/followThroughUtils';
 
 interface JournalEntry {
   id: string;
-  date: string; // completed_at (task) or withdrawn_at (withdrawal) or created_at (reflection)
+  date: string; // created_at (pending task) or completed_at (completed task) or withdrawn_at (withdrawal) or created_at (reflection)
   description: string;
   type: 'deposit' | 'withdrawal' | 'reflection';
   amount: number; // deposit points or withdrawal amount
@@ -256,7 +256,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
           .is('deleted_at', null);
 
         if (dateFilter) {
-          pendingTasksQuery = pendingTasksQuery.gte('due_date', dateFilter);
+          pendingTasksQuery = pendingTasksQuery.gte('created_at', dateFilter);
         }
 
         const { data: pendingTasksData, error: pendingTasksError } = await pendingTasksQuery;
@@ -376,7 +376,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
 
             journalEntries.push({
               id: t.id,
-              date: t.due_date || t.created_at, // use due_date or created_at for sorting
+              date: t.created_at, // use created_at for pending tasks
               description: `${t.title} (active)`,
               type: 'deposit',
               amount: 0, // no points until completion
