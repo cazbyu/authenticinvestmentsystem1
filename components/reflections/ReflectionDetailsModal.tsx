@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform, Image, Linking } from 'react-native';
-import { X, Save, Trash2, Image as ImageIcon, File } from 'lucide-react-native';
+import { X, Save, Trash2, Image as ImageIcon, File, Edit } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchAttachmentsForNotes, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
@@ -19,6 +19,7 @@ interface ReflectionDetailsModalProps {
   reflection: ReflectionWithRelations | null;
   onClose: () => void;
   onDelete: (reflection: ReflectionWithRelations) => void;
+  onEdit?: (reflection: ReflectionWithRelations) => void;
   onRefreshAssociatedItems?: () => void;
   onItemPress?: (item: AssociatedItem) => void;
 }
@@ -29,7 +30,7 @@ interface Note {
   created_at: string;
 }
 
-export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete, onRefreshAssociatedItems, onItemPress }: ReflectionDetailsModalProps) {
+export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete, onEdit, onRefreshAssociatedItems, onItemPress }: ReflectionDetailsModalProps) {
   const [reflectionNotes, setReflectionNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -320,6 +321,12 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
         },
       ]
     );
+  };
+
+  const handleEdit = () => {
+    if (!reflection || !onEdit) return;
+    onEdit(reflection);
+    onClose();
   };
 
   const removeAttachment = (index: number) => {
@@ -634,6 +641,15 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
               </>
             )}
           </TouchableOpacity>
+          {onEdit && (
+            <TouchableOpacity
+              style={[styles.detailButton, styles.editButton]}
+              onPress={handleEdit}
+            >
+              <Edit size={16} color="#ffffff" />
+              <Text style={styles.detailButtonText}>Edit</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.detailButton, styles.deleteButton]}
             onPress={handleDelete}
@@ -832,6 +848,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#0078d4'
+  },
+  editButton: {
+    backgroundColor: '#f59e0b'
   },
   deleteButton: {
     backgroundColor: '#dc2626'

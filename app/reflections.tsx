@@ -12,7 +12,8 @@ import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryVie
 import JournalForm from '@/components/reflections/JournalForm';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
-import DepositIdeaDetailModal from '@/components/depositIdeas/DepositIdeaDetailModal';
+import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
+import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import ActionSelectionModal, { ActionType as ActionModalType } from '@/components/reflections/ActionSelectionModal';
 import { DraggableFab } from '@/components/DraggableFab';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
@@ -41,9 +42,11 @@ export default function ReflectionsScreen() {
   const [isActionSelectionVisible, setIsActionSelectionVisible] = useState(false);
   const [pendingReflection, setPendingReflection] = useState<ReflectionWithRelations | null>(null);
   const [isTaskDetailModalVisible, setIsTaskDetailModalVisible] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<any | null>(null);
   const [isDepositIdeaModalVisible, setIsDepositIdeaModalVisible] = useState(false);
-  const [selectedDepositIdeaId, setSelectedDepositIdeaId] = useState<string | null>(null);
+  const [selectedDepositIdea, setSelectedDepositIdea] = useState<any | null>(null);
+  const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
+  const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<ReflectionWithRelations | null>(null);
 
   // Follow-through TaskEventForm state
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
@@ -153,8 +156,8 @@ export default function ReflectionsScreen() {
   };
 
   const handleReflectionPress = (reflection: ReflectionWithRelations) => {
-    setPendingReflection(reflection);
-    setIsActionSelectionVisible(true);
+    setSelectedReflectionDetail(reflection);
+    setIsReflectionDetailModalVisible(true);
   };
 
   const handleActionSelection = (action: ActionModalType) => {
@@ -189,12 +192,15 @@ export default function ReflectionsScreen() {
   const handleNoteCardPress = (item: any) => {
     if (item.type === 'reflection') {
       handleReflectionPress(item as ReflectionWithRelations);
+    } else if (item.type === 'depositIdea' && item.parentItem) {
+      setSelectedDepositIdea(item.parentItem);
+      setIsDepositIdeaModalVisible(true);
     } else if (item.isActive && item.parentItem) {
       if (item.parent_type === 'task') {
-        setSelectedTaskId(item.parentItem.id);
+        setSelectedTask(item.parentItem);
         setIsTaskDetailModalVisible(true);
       } else if (item.parent_type === 'depositIdea') {
-        setSelectedDepositIdeaId(item.parentItem.id);
+        setSelectedDepositIdea(item.parentItem);
         setIsDepositIdeaModalVisible(true);
       }
     } else if (!item.isActive || item.type === 'withdrawal') {
@@ -289,23 +295,62 @@ export default function ReflectionsScreen() {
         }}
       />
 
-      {isTaskDetailModalVisible && selectedTaskId && (
+      {isTaskDetailModalVisible && selectedTask && (
         <ActionDetailsModal
-          taskId={selectedTaskId}
+          visible={isTaskDetailModalVisible}
+          task={selectedTask}
           onClose={() => {
             setIsTaskDetailModalVisible(false);
-            setSelectedTaskId(null);
+            setSelectedTask(null);
+          }}
+          onDelete={(task) => {
+            console.log('Delete task:', task.id);
+            setIsTaskDetailModalVisible(false);
+            setSelectedTask(null);
           }}
           onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         />
       )}
 
-      {isDepositIdeaModalVisible && selectedDepositIdeaId && (
+      {isDepositIdeaModalVisible && selectedDepositIdea && (
         <DepositIdeaDetailModal
-          depositIdeaId={selectedDepositIdeaId}
+          visible={isDepositIdeaModalVisible}
+          depositIdea={selectedDepositIdea}
           onClose={() => {
             setIsDepositIdeaModalVisible(false);
-            setSelectedDepositIdeaId(null);
+            setSelectedDepositIdea(null);
+          }}
+          onDelete={(depositIdea) => {
+            console.log('Delete deposit idea:', depositIdea.id);
+            setIsDepositIdeaModalVisible(false);
+            setSelectedDepositIdea(null);
+          }}
+          onActivate={(depositIdea) => {
+            console.log('Activate deposit idea:', depositIdea.id);
+            setIsDepositIdeaModalVisible(false);
+            setSelectedDepositIdea(null);
+          }}
+          onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+        />
+      )}
+
+      {isReflectionDetailModalVisible && selectedReflectionDetail && (
+        <ReflectionDetailsModal
+          visible={isReflectionDetailModalVisible}
+          reflection={selectedReflectionDetail}
+          onClose={() => {
+            setIsReflectionDetailModalVisible(false);
+            setSelectedReflectionDetail(null);
+          }}
+          onDelete={(reflection) => {
+            console.log('Delete reflection:', reflection.id);
+            setIsReflectionDetailModalVisible(false);
+            setSelectedReflectionDetail(null);
+          }}
+          onEdit={(reflection) => {
+            setIsReflectionDetailModalVisible(false);
+            setSelectedReflection(reflection);
+            setIsJournalFormVisible(true);
           }}
           onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         />
