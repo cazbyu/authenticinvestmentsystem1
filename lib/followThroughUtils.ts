@@ -15,7 +15,7 @@ export async function fetchAssociatedItems(
   try {
     const { data: tasks, error: tasksError } = await supabase
       .from('0008-ap-tasks')
-      .select('id, title, created_at, due_date, start_time, end_time, notes, status, completed_at, deleted_at')
+      .select('id, title, created_at, due_date, start_time, end_time, description, status, completed_at, deleted_at')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
       .eq('parent_type', parentType)
@@ -34,7 +34,7 @@ export async function fetchAssociatedItems(
           created_at: task.created_at,
           due_date: task.due_date,
           start_date: task.due_date,
-          has_notes: !!task.notes,
+          has_notes: !!task.description,
           status: task.status,
           completed_at: task.completed_at,
         });
