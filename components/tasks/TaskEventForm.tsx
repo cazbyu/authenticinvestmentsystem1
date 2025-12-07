@@ -121,10 +121,6 @@ interface FormData {
   followUpEnabled: boolean;
   followUpDate: string;
   followUpTime: string;
-
-  // Parent-child relationship fields
-  parentId?: string;
-  parentType?: 'task' | 'reflection';
 }
 
 interface TaskEventFormProps {
@@ -132,12 +128,10 @@ interface TaskEventFormProps {
   initialData?: any;
   onSubmitSuccess: () => void;
   onClose: () => void;
-  parentId?: string;
-  parentType?: 'task' | 'reflection';
   preSelectedType?: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection';
 }
 
-export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, parentId, parentType, preSelectedType }: TaskEventFormProps) {
+export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, preSelectedType }: TaskEventFormProps) {
   const { colors, isDarkMode } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
@@ -307,36 +301,28 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     }
   }, [mode, initialData]);
 
-  // Handle parent data and pre-selections
+  // Handle pre-selected type
   useEffect(() => {
-    if (mode === 'create' && (parentId || preSelectedType)) {
+    if (mode === 'create' && preSelectedType) {
       setFormData(prev => {
         const updates: Partial<FormData> = {};
 
-        // Set parent relationship
-        if (parentId && parentType) {
-          updates.parentId = parentId;
-          updates.parentType = parentType;
-        }
-
         // Set pre-selected type
-        if (preSelectedType) {
-          if (preSelectedType === 'task' || preSelectedType === 'event') {
-            updates.type = preSelectedType;
-          } else if (preSelectedType === 'reflection') {
-            updates.type = 'reflection';
-            updates.reflectionMode = 'rose'; // Default to rose, can be changed
-          } else {
-            // Handle reflection modes: rose, thorn, depositIdea
-            updates.type = 'reflection';
-            updates.reflectionMode = preSelectedType as ReflectionMode;
-          }
+        if (preSelectedType === 'task' || preSelectedType === 'event') {
+          updates.type = preSelectedType;
+        } else if (preSelectedType === 'reflection') {
+          updates.type = 'reflection';
+          updates.reflectionMode = 'rose'; // Default to rose, can be changed
+        } else {
+          // Handle reflection modes: rose, thorn, depositIdea
+          updates.type = 'reflection';
+          updates.reflectionMode = preSelectedType as ReflectionMode;
         }
 
         return { ...prev, ...updates };
       });
     }
-  }, [mode, parentId, parentType, preSelectedType]);
+  }, [mode, preSelectedType]);
 
   // Check if editing a completed task and show warning
   useEffect(() => {
@@ -980,9 +966,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             follow_up_date: formData.followUpEnabled ? formData.followUpDate : null,
             daily_rose: formData.reflectionMode === 'rose',
             daily_thorn: formData.reflectionMode === 'thorn',
-            // Parent-child relationship
-            parent_id: formData.parentId || null,
-            parent_type: formData.parentType || null,
             ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
           };
 
@@ -1276,9 +1259,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         is_twelve_week_goal: formData.isGoal,
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
-        // Parent-child relationship
-        parent_id: formData.parentId || null,
-        parent_type: formData.parentType || null,
         // Preserve completion status and timestamp when editing
         ...(mode === 'edit' && initialData?.id ? {
           // Explicitly preserve completed status - never change it back to pending

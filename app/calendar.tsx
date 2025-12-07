@@ -89,10 +89,6 @@ export default function CalendarScreen() {
   const [selectedDayTasks, setSelectedDayTasks] = useState<Task[]>([]);
 
   // Follow-through TaskEventForm state
-  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
-  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
-  const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
-  const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
 
   // Layout measurements for proper centering
@@ -496,18 +492,6 @@ export default function CalendarScreen() {
     setEditingTask(null);
   };
 
-  const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
-    setFollowThroughPreSelectedType(type);
-    setFollowThroughParentId(parentId);
-    setFollowThroughParentType(parentType);
-    setFollowThroughFormVisible(true);
-  };
-
-  const handleFollowThroughFormClose = () => {
-    setFollowThroughFormVisible(false);
-    setRefreshAssociatedItemsKey(prev => prev + 1);
-    fetchTasksAndEvents(currentDate, viewMode);
-  };
 
   const formatTime = (timeString: string) => {
     // Use the time-only string formatter from dateUtils
@@ -867,21 +851,8 @@ export default function CalendarScreen() {
         task={selectedTask}
         onClose={() => setIsDetailModalVisible(false)}
         onDelete={handleDeleteTask}
-        onOpenFollowThrough={handleOpenFollowThrough}
         onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
-
-      {/* Follow-through TaskEventForm Modal */}
-      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={handleFollowThroughFormClose}
-          onClose={() => setFollowThroughFormVisible(false)}
-          parentId={followThroughParentId}
-          parentType={followThroughParentType as any}
-          preSelectedType={followThroughPreSelectedType}
-        />
-      </Modal>
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
         <TaskEventForm

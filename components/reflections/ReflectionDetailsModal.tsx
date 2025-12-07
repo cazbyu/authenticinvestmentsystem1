@@ -11,14 +11,14 @@ import * as DocumentPicker from 'expo-document-picker';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
-import { fetchAssociatedItems, determineParentType } from '@/lib/followThroughUtils';
+import { fetchAssociatedItems } from '@/lib/followThroughUtils';
+import TaskEventForm from '../tasks/TaskEventForm';
 
 interface ReflectionDetailsModalProps {
   visible: boolean;
   reflection: ReflectionWithRelations | null;
   onClose: () => void;
   onDelete: (reflection: ReflectionWithRelations) => void;
-  onOpenFollowThrough?: (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => void;
   onRefreshAssociatedItems?: () => void;
   onItemPress?: (item: AssociatedItem) => void;
 }
@@ -29,7 +29,7 @@ interface Note {
   created_at: string;
 }
 
-export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete, onOpenFollowThrough, onRefreshAssociatedItems, onItemPress }: ReflectionDetailsModalProps) {
+export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete, onRefreshAssociatedItems, onItemPress }: ReflectionDetailsModalProps) {
   const [reflectionNotes, setReflectionNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -45,6 +45,8 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
   // Follow-through state
   const [associatedItems, setAssociatedItems] = useState<AssociatedItem[]>([]);
   const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
+  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
+  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
 
   useEffect(() => {
     if (visible && reflection?.id) {
@@ -99,8 +101,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const parentType = determineParentType(reflection, 'reflection');
-      const items = await fetchAssociatedItems(reflection.id, parentType, user.id);
+      const items = await fetchAssociatedItems(reflection.id, 'reflection', user.id);
       setAssociatedItems(items);
     } catch (error) {
       console.error('Error fetching associated items:', error);
@@ -110,9 +111,14 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
   };
 
   const handleOpenTaskEventForm = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
-    if (!reflection?.id || !onOpenFollowThrough) return;
-    const parentType = determineParentType(reflection, 'reflection');
-    onOpenFollowThrough(type, reflection.id, parentType);
+    if (!reflection?.id) return;
+    setFollowThroughPreSelectedType(type);
+    setFollowThroughFormVisible(true);
+  };
+
+  const handleFollowThroughFormClose = () => {
+    setFollowThroughFormVisible(false);
+    loadAssociatedItems();
   };
 
   // Expose method to refresh associated items when called from parent
@@ -645,6 +651,16 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
+
+      {/* Follow-through TaskEventForm Modal */}
+      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleFollowThroughFormClose}
+          onClose={() => setFollowThroughFormVisible(false)}
+          preSelectedType={followThroughPreSelectedType}
+        />
+      </Modal>
     </Modal>
   );
 }
