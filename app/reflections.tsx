@@ -45,6 +45,13 @@ export default function ReflectionsScreen() {
   const [isDepositIdeaModalVisible, setIsDepositIdeaModalVisible] = useState(false);
   const [selectedDepositIdeaId, setSelectedDepositIdeaId] = useState<string | null>(null);
 
+  // Follow-through TaskEventForm state
+  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
+  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
+  const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
   useEffect(() => {
     loadActiveTab();
     calculateAuthenticScore();
@@ -215,6 +222,18 @@ export default function ReflectionsScreen() {
     setTaskEventFormInitialData(null);
   };
 
+  const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
+    setFollowThroughPreSelectedType(type);
+    setFollowThroughParentId(parentId);
+    setFollowThroughParentType(parentType);
+    setFollowThroughFormVisible(true);
+  };
+
+  const handleFollowThroughFormClose = () => {
+    setFollowThroughFormVisible(false);
+    setRefreshAssociatedItemsKey(prev => prev + 1);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Header
@@ -292,6 +311,8 @@ export default function ReflectionsScreen() {
             setIsTaskDetailModalVisible(false);
             setSelectedTaskId(null);
           }}
+          onOpenFollowThrough={handleOpenFollowThrough}
+          onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         />
       )}
 
@@ -302,8 +323,22 @@ export default function ReflectionsScreen() {
             setIsDepositIdeaModalVisible(false);
             setSelectedDepositIdeaId(null);
           }}
+          onOpenFollowThrough={handleOpenFollowThrough}
+          onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         />
       )}
+
+      {/* Follow-through TaskEventForm Modal */}
+      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleFollowThroughFormClose}
+          onClose={() => setFollowThroughFormVisible(false)}
+          parentId={followThroughParentId}
+          parentType={followThroughParentType as any}
+          preSelectedType={followThroughPreSelectedType}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }

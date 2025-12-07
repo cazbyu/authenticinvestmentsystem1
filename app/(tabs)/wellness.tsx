@@ -68,6 +68,13 @@ export default function Wellness() {
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
   const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
 
+  // Follow-through TaskEventForm state
+  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
+  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
+  const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
   // 12-Week Goals for selected domain (only fetch when domain is selected)
   const goalProgressScope = useMemo(() =>
     selectedDomain ? { type: 'domain' as const, id: selectedDomain.id } : undefined,
@@ -630,6 +637,23 @@ export default function Wellness() {
     setEditingTask(null);
   }, []);
 
+  const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
+    setFollowThroughPreSelectedType(type);
+    setFollowThroughParentId(parentId);
+    setFollowThroughParentType(parentType);
+    setFollowThroughFormVisible(true);
+  };
+
+  const handleFollowThroughFormClose = () => {
+    setFollowThroughFormVisible(false);
+    setRefreshAssociatedItemsKey(prev => prev + 1);
+    if (selectedDomain) {
+      fetchDomainTasks(selectedDomain.id, activeView);
+    }
+    refreshGoals();
+    fetchAuthenticScoreLocal(true);
+  };
+
   const handleDomainPress = useCallback((domain: Domain) => {
     setSelectedDomain(domain);
   }, []);
@@ -945,6 +969,8 @@ export default function Wellness() {
         onUpdate={handleUpdateTask}
         onDelegate={handleDelegateTask}
         onCancel={handleCancelTask}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
 
       <DepositIdeaDetailModal
@@ -953,7 +979,21 @@ export default function Wellness() {
         onClose={() => setDepositIdeaDetailVisible(false)}
         onUpdate={handleUpdateDepositIdea}
         onCancel={handleCancelDepositIdea}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
+
+      {/* Follow-through TaskEventForm Modal */}
+      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleFollowThroughFormClose}
+          onClose={() => setFollowThroughFormVisible(false)}
+          parentId={followThroughParentId}
+          parentType={followThroughParentType as any}
+          preSelectedType={followThroughPreSelectedType}
+        />
+      </Modal>
 
       <JournalForm
         visible={reflectionFormVisible}

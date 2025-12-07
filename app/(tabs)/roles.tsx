@@ -96,6 +96,13 @@ export default function Roles() {
   const previousRoleIdRef = useRef<string | null>(null);
   const fetchInProgressRef = useRef<boolean>(false);
 
+  // Follow-through TaskEventForm state
+  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
+  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
+  const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
   // Memoize the scope object to prevent unnecessary re-renders
   const goalsScope = useMemo(() => {
     if (!selectedRole) return undefined;
@@ -1083,6 +1090,25 @@ export default function Roles() {
     setEditingTask(null);
   };
 
+  const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
+    setFollowThroughPreSelectedType(type);
+    setFollowThroughParentId(parentId);
+    setFollowThroughParentType(parentType);
+    setFollowThroughFormVisible(true);
+  };
+
+  const handleFollowThroughFormClose = () => {
+    setFollowThroughFormVisible(false);
+    setRefreshAssociatedItemsKey(prev => prev + 1);
+    if (selectedRole) {
+      fetchDataForRole(selectedRole.id);
+    }
+    if (selectedKR) {
+      fetchDataForKR(selectedKR.id);
+    }
+    refreshGoals();
+  };
+
   const handleRolePress = useCallback((role: Role) => {
     // Cancel any pending role selection
     if (roleClickTimeout.current) {
@@ -1841,6 +1867,8 @@ export default function Roles() {
         onUpdate={handleUpdateTask}
         onDelegate={handleDelegateTask}
         onCancel={handleCancelTask}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
 
       <DepositIdeaDetailModal
@@ -1849,7 +1877,21 @@ export default function Roles() {
         onClose={() => setDepositIdeaDetailVisible(false)}
         onUpdate={handleUpdateDepositIdea}
         onCancel={handleCancelDepositIdea}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
+
+      {/* Follow-through TaskEventForm Modal */}
+      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleFollowThroughFormClose}
+          onClose={() => setFollowThroughFormVisible(false)}
+          parentId={followThroughParentId}
+          parentType={followThroughParentType as any}
+          preSelectedType={followThroughPreSelectedType}
+        />
+      </Modal>
       <JournalForm
         visible={reflectionFormVisible}
         mode={selectedReflection ? 'edit' : 'create'}
