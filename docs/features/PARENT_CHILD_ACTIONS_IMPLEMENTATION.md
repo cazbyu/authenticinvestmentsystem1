@@ -25,7 +25,7 @@ This document describes the implementation of a hierarchical parent-child relati
 ### 2. Unified ActionDetails Modal
 
 #### Location
-`/components/actions/ActionDetailsModal.tsx`
+`/components/tasks/ActionDetailsModal.tsx`
 
 #### Features
 - **Dynamic Title**: Shows "Task Details" or "Event Details" based on item type

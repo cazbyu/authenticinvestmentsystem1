@@ -55,7 +55,7 @@ HEAD https://...0008-ap-reflections?...profile_id=eq.ba790ccc... 400 (Bad Reques
    - Created formatItemTitle() helper
    - Display "(active)" for incomplete tasks/events
 
-3. **components/actions/ActionDetailsModal.tsx**
+3. **components/tasks/ActionDetailsModal.tsx**
    - Added refreshKey prop and dependency
    - Updated child fetch to include status fields
    - Filter deleted items
