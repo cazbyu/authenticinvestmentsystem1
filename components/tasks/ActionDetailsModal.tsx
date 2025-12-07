@@ -21,6 +21,7 @@ interface ActionDetailsModalProps {
   task: Task | null;
   onClose: () => void;
   onDelete: (task: Task) => void;
+  onEdit?: (task: Task) => void;
   onRefreshAssociatedItems?: () => void;
   onItemPress?: (item: AssociatedItem) => void;
 }
@@ -31,7 +32,7 @@ interface Note {
   created_at: string;
 }
 
-export function ActionDetailsModal({ visible, task, onClose, onDelete, onRefreshAssociatedItems, onItemPress }: ActionDetailsModalProps) {
+export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, onRefreshAssociatedItems, onItemPress }: ActionDetailsModalProps) {
   const [taskNotes, setTaskNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -450,6 +451,12 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onRefresh
     }
   };
 
+  const handleEdit = () => {
+    if (!task || !onEdit) return;
+    onEdit(task);
+    onClose();
+  };
+
   const getModalTitle = () => {
     if (!task) return 'Action Details';
     // Check if it's an event (has start_time and end_time)
@@ -500,10 +507,24 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onRefresh
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.detailContainer}>
         <View style={styles.detailHeader}>
-          <Text style={styles.detailTitle}>{getModalTitle()}</Text>
-          <TouchableOpacity onPress={onClose}>
-            <X size={24} color="#1f2937" />
-          </TouchableOpacity>
+          <View style={styles.detailHeaderContent}>
+            <Text style={styles.detailTitle}>{getModalTitle()}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color="#1f2937" />
+            </TouchableOpacity>
+          </View>
+          {onEdit && (
+            <View style={styles.editButtonContainer}>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={handleEdit}
+                activeOpacity={0.7}
+              >
+                <Edit size={14} color="#ffffff" />
+                <Text style={styles.editButtonText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
         <ScrollView style={styles.detailContent}>
           <Text style={styles.detailTaskTitle}>{task.title}</Text>
@@ -910,18 +931,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc'
   },
   detailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#ffffff'
   },
+  detailHeaderContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   detailTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1f2937'
+  },
+  editButtonContainer: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    backgroundColor: '#0078d4',
+    borderRadius: 6,
+    gap: 6,
+    width: 80,
+    height: 30,
+  },
+  editButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   detailContentContainer: {
     flex: 1,

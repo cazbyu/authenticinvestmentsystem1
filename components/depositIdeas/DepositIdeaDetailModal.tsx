@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform, Image, Linking } from 'react-native';
-import { X, Play, Save, Trash2, Image as ImageIcon, File } from 'lucide-react-native';
+import { X, Play, Save, Trash2, Image as ImageIcon, File, Plus, Bold, Italic, List, ListOrdered, Paperclip, Edit } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchAttachmentsForNotes, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
@@ -35,6 +35,7 @@ interface DepositIdeaDetailModalProps {
   onClose: () => void;
   onDelete: (depositIdea: DepositIdea) => void;
   onActivate: (depositIdea: DepositIdea) => void;
+  onEdit?: (depositIdea: DepositIdea) => void;
   onRefreshAssociatedItems?: () => void;
   onItemPress?: (item: AssociatedItem) => void;
 }
@@ -45,6 +46,7 @@ export function DepositIdeaDetailModal({
   onClose,
   onDelete,
   onActivate,
+  onEdit,
   onRefreshAssociatedItems,
   onItemPress
 }: DepositIdeaDetailModalProps) {
@@ -59,6 +61,9 @@ export function DepositIdeaDetailModal({
   const [newNoteContent, setNewNoteContent] = useState('');
   const [newNoteAttachments, setNewNoteAttachments] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [showTextInput, setShowTextInput] = useState(false);
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const textInputRef = useRef<TextInput>(null);
 
   // Follow-through state
   const [associatedItems, setAssociatedItems] = useState<AssociatedItem[]>([]);
@@ -179,6 +184,12 @@ export function DepositIdeaDetailModal({
         },
       ]
     );
+  };
+
+  const handleEdit = () => {
+    if (!depositIdea || !onEdit) return;
+    onEdit(depositIdea);
+    onClose();
   };
 
   const handlePickImage = async () => {
@@ -337,6 +348,7 @@ export function DepositIdeaDetailModal({
       // Clear inputs
       setNewNoteContent('');
       setNewNoteAttachments([]);
+      setShowTextInput(false);
 
       // Refresh notes
       await fetchNotes();
@@ -353,6 +365,81 @@ export function DepositIdeaDetailModal({
     setNewNoteAttachments(newNoteAttachments.filter((_, i) => i !== index));
   };
 
+  const handleToggleTextInput = () => {
+    setShowTextInput(!showTextInput);
+  };
+
+  const handleCancelInput = () => {
+    setShowTextInput(false);
+    setNewNoteContent('');
+    setNewNoteAttachments([]);
+  };
+
+  const insertMarkdown = (prefix: string, suffix: string = '') => {
+    const start = selection.start;
+    const end = selection.end;
+    const selectedText = newNoteContent.substring(start, end);
+
+    let newText: string;
+    let newCursorPos: number;
+
+    if (selectedText) {
+      // Wrap selected text
+      newText = newNoteContent.substring(0, start) + prefix + selectedText + suffix + newNoteContent.substring(end);
+      newCursorPos = end + prefix.length + suffix.length;
+    } else {
+      // Insert at cursor
+      newText = newNoteContent.substring(0, start) + prefix + suffix + newNoteContent.substring(end);
+      newCursorPos = start + prefix.length;
+    }
+
+    setNewNoteContent(newText);
+
+    // Set focus back to input
+    setTimeout(() => {
+      textInputRef.current?.focus();
+      setSelection({ start: newCursorPos, end: newCursorPos });
+    }, 10);
+  };
+
+  const handleBoldPress = () => {
+    insertMarkdown('**', '**');
+  };
+
+  const handleItalicPress = () => {
+    insertMarkdown('*', '*');
+  };
+
+  const handleBulletListPress = () => {
+    const start = selection.start;
+    const beforeCursor = newNoteContent.substring(0, start);
+
+    // Check if we're at the start of a line
+    const lastNewline = beforeCursor.lastIndexOf('\n');
+    const isStartOfLine = lastNewline === beforeCursor.length - 1 || beforeCursor.length === 0;
+
+    if (isStartOfLine) {
+      insertMarkdown('- ');
+    } else {
+      insertMarkdown('\n- ');
+    }
+  };
+
+  const handleNumberedListPress = () => {
+    const start = selection.start;
+    const beforeCursor = newNoteContent.substring(0, start);
+
+    // Check if we're at the start of a line
+    const lastNewline = beforeCursor.lastIndexOf('\n');
+    const isStartOfLine = lastNewline === beforeCursor.length - 1 || beforeCursor.length === 0;
+
+    if (isStartOfLine) {
+      insertMarkdown('1. ');
+    } else {
+      insertMarkdown('\n1. ');
+    }
+  };
+
   const formatDateTime = (dateTime) => dateTime ? new Date(dateTime).toLocaleString() : 'Not set';
 
   if (!depositIdea) return null;
@@ -361,12 +448,26 @@ export function DepositIdeaDetailModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Deposit Idea Details</Text>
-          <TouchableOpacity onPress={onClose}>
-            <X size={24} color="#1f2937" />
-          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>Deposit Idea Details</Text>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color="#1f2937" />
+            </TouchableOpacity>
+          </View>
+          {onEdit && (
+            <View style={styles.editButtonContainer}>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={handleEdit}
+                activeOpacity={0.7}
+              >
+                <Edit size={14} color="#ffffff" />
+                <Text style={styles.editButtonText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-        
+
         <ScrollView style={styles.content}>
           <Text style={styles.ideaTitle}>{depositIdea.title}</Text>
           
@@ -446,21 +547,35 @@ export function DepositIdeaDetailModal({
             </View>
           )}
 
-          {notes.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.label}>Notes:</Text>
-              {loadingNotes ? (
-                <Text style={styles.value}>Loading notes...</Text>
-              ) : (
-                <View style={styles.notesContainer}>
-                  {notes.map((note, index) => {
-                    const noteAttachments = noteAttachmentsMap.get(note.id) || [];
-                    const hasContent = note.content && note.content.trim();
-                    const hasAttachments = noteAttachments.length > 0;
+          {/* Notes Section - Always Visible */}
+          <View style={styles.section}>
+            <View style={styles.notesHeaderRow}>
+              <View style={styles.notesHeaderLeft}>
+                <Text style={styles.label}>Notes:</Text>
+                <TouchableOpacity
+                  style={styles.squareIconButton}
+                  onPress={handleToggleTextInput}
+                  activeOpacity={0.7}
+                >
+                  <Plus size={18} color="#0078d4" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {loadingNotes ? (
+              <Text style={styles.value}>Loading notes...</Text>
+            ) : (
+              <>
+                {notes.length > 0 && (
+                  <View style={styles.notesContainer}>
+                    {notes.map((note) => {
+                      const noteAttachments = noteAttachmentsMap.get(note.id) || [];
+                      const hasContent = note.content && note.content.trim();
+                      const hasAttachments = noteAttachments.length > 0;
 
-                    if (!hasContent && !hasAttachments) return null;
+                      // Only show notes that have content or attachments
+                      if (!hasContent && !hasAttachments) return null;
 
-                    return (
+                      return (
                       <View key={note.id} style={styles.noteItem}>
                         {hasContent && (
                           <Text style={styles.noteContent}>{note.content}</Text>
@@ -532,73 +647,135 @@ export function DepositIdeaDetailModal({
                           </View>
                         )}
                       </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          )}
-          {/* Add New Note Section */}
-          <View style={styles.addNoteSection}>
-            <Text style={styles.addNoteSectionTitle}>Add a Note</Text>
-            <TextInput
-              style={styles.noteInput}
-              multiline
-              placeholder="Add a note or reflection..."
-              value={newNoteContent}
-              onChangeText={setNewNoteContent}
-              placeholderTextColor="#9ca3af"
-            />
+                      );
+                    })}
+                  </View>
+                )}
 
-            {/* Attachment Buttons */}
-            <View style={styles.attachmentButtonsRow}>
-              <TouchableOpacity
-                style={styles.attachmentButton}
-                onPress={handlePickImage}
-              >
-                <ImageIcon size={16} color="#0078d4" />
-                <Text style={styles.attachmentButtonText}>Add Image</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.attachmentButton}
-                onPress={handlePickDocument}
-              >
-                <File size={16} color="#0078d4" />
-                <Text style={styles.attachmentButtonText}>Add Document</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Attachment Previews */}
-            {newNoteAttachments.length > 0 && (
-              <View style={styles.attachmentPreviewContainer}>
-                <Text style={styles.attachmentPreviewLabel}>Attachments ({newNoteAttachments.length})</Text>
-                <View style={styles.attachmentPreviewGrid}>
-                  {newNoteAttachments.map((file, index) => (
-                    <View key={index} style={styles.attachmentPreviewItem}>
-                      {file.type?.startsWith('image/') ? (
-                        <Image
-                          source={{ uri: file.uri }}
-                          style={styles.previewThumbnail}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.previewDocumentThumbnail}>
-                          <File size={24} color="#6b7280" />
-                        </View>
-                      )}
-                      <TouchableOpacity
-                        style={styles.removeAttachmentButton}
-                        onPress={() => removeAttachment(index)}
-                      >
-                        <X size={12} color="#ffffff" />
-                      </TouchableOpacity>
-                      <Text style={styles.previewFileName} numberOfLines={1}>
-                        {file.name}
-                      </Text>
+                {/* Conditional Text Input */}
+                {showTextInput && (
+                  <>
+                    <View style={styles.textInputContainer}>
+                      <TextInput
+                        ref={textInputRef}
+                        style={styles.noteInput}
+                        multiline
+                        placeholder="Share a success, joy or meaningful moment you want to celebrate . . ."
+                        value={newNoteContent}
+                        onChangeText={setNewNoteContent}
+                        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+                        placeholderTextColor="#9ca3af"
+                        autoFocus
+                      />
                     </View>
-                  ))}
-                </View>
-              </View>
+                    {/* Formatting Toolbar */}
+                    <View style={styles.toolbarContainer}>
+                      <View style={styles.toolbarButtonsRow}>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleBoldPress}
+                          activeOpacity={0.7}
+                        >
+                          <Bold size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleItalicPress}
+                          activeOpacity={0.7}
+                        >
+                          <Italic size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleBulletListPress}
+                          activeOpacity={0.7}
+                        >
+                          <List size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handleNumberedListPress}
+                          activeOpacity={0.7}
+                        >
+                          <ListOrdered size={18} color="#6b7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.toolbarButton}
+                          onPress={handlePickDocument}
+                          activeOpacity={0.7}
+                        >
+                          <Paperclip size={18} color="#6b7280" />
+                          {newNoteAttachments.length > 0 && (
+                            <View style={styles.toolbarAttachmentBadge}>
+                              <Text style={styles.attachmentBadgeText}>{newNoteAttachments.length}</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.toolbarText}>Markdown supported</Text>
+                    </View>
+                  </>
+                )}
+
+                {/* Attachment Previews */}
+                {newNoteAttachments.length > 0 && (
+                  <View style={styles.attachmentPreviewContainer}>
+                    <Text style={styles.attachmentPreviewLabel}>Attachments ({newNoteAttachments.length})</Text>
+                    <View style={styles.attachmentPreviewGrid}>
+                      {newNoteAttachments.map((file, index) => (
+                        <View key={index} style={styles.attachmentPreviewItem}>
+                          {file.type?.startsWith('image/') ? (
+                            <Image
+                              source={{ uri: file.uri }}
+                              style={styles.previewThumbnail}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={styles.previewDocumentThumbnail}>
+                              <File size={24} color="#6b7280" />
+                            </View>
+                          )}
+                          <TouchableOpacity
+                            style={styles.removeAttachmentButton}
+                            onPress={() => removeAttachment(index)}
+                          >
+                            <X size={12} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text style={styles.previewFileName} numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Save/Cancel Buttons */}
+                {(showTextInput || newNoteAttachments.length > 0) && (
+                  <View style={styles.noteActionsRow}>
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      onPress={handleCancelInput}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.saveNoteButton,
+                        (saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)) && styles.saveNoteButtonDisabled
+                      ]}
+                      onPress={handleSaveNote}
+                      disabled={saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)}
+                    >
+                      {saving ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <Text style={styles.saveNoteButtonText}>Save Note</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
             )}
           </View>
 
@@ -687,19 +864,42 @@ const styles = StyleSheet.create({
     flex: 1, 
     backgroundColor: '#f8fafc' 
   },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 16, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#e5e7eb', 
-    backgroundColor: '#ffffff' 
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff'
   },
-  title: { 
-    fontSize: 18, 
-    fontWeight: '600', 
-    color: '#1f2937' 
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  editButtonContainer: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    backgroundColor: '#0078d4',
+    borderRadius: 6,
+    gap: 6,
+    width: 80,
+    height: 30,
+  },
+  editButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   contentContainer: {
     flex: 1, 
@@ -749,13 +949,37 @@ const styles = StyleSheet.create({
   krTag: { 
     backgroundColor: '#e0f2fe' 
   },
-  tagText: { 
-    fontSize: 10, 
-    fontWeight: '500', 
-    color: '#374151' 
+  tagText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#374151'
+  },
+  notesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notesHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  squareIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
   },
   notesContainer: {
     marginTop: 8,
+  },
+  textInputContainer: {
+    marginTop: 12,
   },
   noteItem: {
     backgroundColor: '#f8fafc',
@@ -859,57 +1083,107 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600'
   },
-  addNoteSection: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  addNoteSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
   noteInput: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 8,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomWidth: 0,
     padding: 12,
     minHeight: 100,
     fontSize: 14,
     color: '#1f2937',
     textAlignVertical: 'top',
   },
-  attachmentButtonsRow: {
+  toolbarContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    marginTop: -8,
+  },
+  toolbarButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  toolbarButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  toolbarAttachmentBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0078d4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  toolbarText: {
+    fontSize: 12,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
+  noteActionsRow: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 12,
+    justifyContent: 'flex-end',
   },
-  attachmentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  cancelButton: {
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f0f9ff',
-    borderWidth: 1,
-    borderColor: '#bae6fd',
+    paddingHorizontal: 16,
     borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  attachmentButtonText: {
-    fontSize: 13,
+  cancelButtonText: {
+    fontSize: 14,
     fontWeight: '500',
-    color: '#0078d4',
+    color: '#6b7280',
+  },
+  saveNoteButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    backgroundColor: '#0078d4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  saveNoteButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveNoteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   attachmentPreviewContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    marginTop: 12,
   },
   attachmentPreviewLabel: {
     fontSize: 13,
