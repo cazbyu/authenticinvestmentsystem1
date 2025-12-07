@@ -43,7 +43,7 @@ export async function fetchAssociatedItems(
 
     const { data: reflections, error: reflectionsError } = await supabase
       .from('0008-ap-reflections')
-      .select('id, reflection_title, content, created_at, daily_rose, daily_thorn, is_deposit_idea')
+      .select('id, reflection_title, content, created_at, daily_rose, daily_thorn')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
       .eq('parent_type', parentType)
@@ -79,9 +79,6 @@ export function getItemTypeFromTask(task: any): ItemType {
 }
 
 export function getItemTypeFromReflection(reflection: any): ItemType {
-  if (reflection.is_deposit_idea) {
-    return 'depositIdea';
-  }
   if (reflection.daily_rose) {
     return 'rose';
   }
@@ -97,9 +94,6 @@ export function determineParentType(item: any, itemSource: 'task' | 'reflection'
   }
 
   if (itemSource === 'reflection') {
-    if (item.is_deposit_idea) {
-      return 'depositIdea';
-    }
     if (item.daily_rose) {
       return 'rose';
     }
