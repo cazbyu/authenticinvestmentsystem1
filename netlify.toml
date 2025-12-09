@@ -1,0 +1,33 @@
+# Netlify configuration for Expo Router SPA
+# This ensures proper routing and asset serving
+
+[build]
+  publish = "build"
+  command = "npm run build:web"
+
+# Redirect rules for SPA routing
+[[redirects]]
+  from = "/_expo/*"
+  to = "/_expo/:splat"
+  status = 200
+  force = false
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false
+
+# Headers for security and performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/_expo/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

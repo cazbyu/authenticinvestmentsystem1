@@ -1,1 +1,8 @@
+# Expo Router SPA fallback - serve index.html for all routes
+# This ensures client-side routing works on page refresh
+
+# Serve static assets directly
+/_expo/*  /_expo/:splat  200
+
+# Fallback to index.html for all other routes (SPA)
 /*    /index.html   200
