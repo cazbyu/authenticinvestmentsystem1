@@ -24,23 +24,6 @@ export async function fetchAssociatedItems(
 
     if (tasksError) throw tasksError;
 
-    if (tasks) {
-      for (const task of tasks) {
-        const type = getItemTypeFromTask(task);
-        items.push({
-          id: task.id,
-          title: task.title || 'Untitled',
-          type,
-          created_at: task.created_at,
-          due_date: task.due_date,
-          start_date: task.start_date || task.due_date,
-          has_notes: false,
-          status: task.status,
-          completed_at: task.completed_at,
-        });
-      }
-    }
-
     const { data: reflections, error: reflectionsError } = await supabase
       .from('0008-ap-reflections')
       .select('id, reflection_title, content, created_at, daily_rose, daily_thorn')
@@ -51,6 +34,57 @@ export async function fetchAssociatedItems(
 
     if (reflectionsError) throw reflectionsError;
 
+    const { data: depositIdeas, error: depositIdeasError } = await supabase
+      .from('0008-ap-deposit-ideas')
+      .select('id, title, content, created_at')
+      .eq('user_id', userId)
+      .eq('parent_id', parentId)
+      .eq('parent_type', parentType)
+      .order('created_at', { ascending: false });
+
+    if (depositIdeasError) throw depositIdeasError;
+
+    // Collect all item IDs to fetch notes in bulk
+    const allItemIds = [
+      ...(tasks || []).map(t => t.id),
+      ...(reflections || []).map(r => r.id),
+      ...(depositIdeas || []).map(d => d.id)
+    ];
+
+    // Fetch notes for all items
+    const notesMap = new Map<string, boolean>();
+    if (allItemIds.length > 0) {
+      const { data: notesData } = await supabase
+        .from('0008-ap-universal-notes-join')
+        .select('parent_id')
+        .in('parent_id', allItemIds);
+
+      if (notesData) {
+        notesData.forEach(note => {
+          notesMap.set(note.parent_id, true);
+        });
+      }
+    }
+
+    // Process tasks
+    if (tasks) {
+      for (const task of tasks) {
+        const type = getItemTypeFromTask(task);
+        items.push({
+          id: task.id,
+          title: task.title || 'Untitled',
+          type,
+          created_at: task.created_at,
+          due_date: task.due_date,
+          start_date: task.start_date || task.due_date,
+          has_notes: notesMap.has(task.id),
+          status: task.status,
+          completed_at: task.completed_at,
+        });
+      }
+    }
+
+    // Process reflections
     if (reflections) {
       for (const reflection of reflections) {
         const type = getItemTypeFromReflection(reflection);
@@ -59,7 +93,20 @@ export async function fetchAssociatedItems(
           title: reflection.reflection_title || 'Untitled',
           type,
           created_at: reflection.created_at,
-          has_notes: !!reflection.content,
+          has_notes: !!reflection.content || notesMap.has(reflection.id),
+        });
+      }
+    }
+
+    // Process deposit ideas
+    if (depositIdeas) {
+      for (const depositIdea of depositIdeas) {
+        items.push({
+          id: depositIdea.id,
+          title: depositIdea.title || 'Untitled',
+          type: 'depositIdea',
+          created_at: depositIdea.created_at,
+          has_notes: !!depositIdea.content || notesMap.has(depositIdea.id),
         });
       }
     }
@@ -155,7 +202,17 @@ export async function fetchLinkedItemsCount(
 
     if (reflectionsError) throw reflectionsError;
 
-    return (tasksCount || 0) + (reflectionsCount || 0);
+    // Count deposit ideas linked to this parent
+    const { count: depositIdeasCount, error: depositIdeasError } = await supabase
+      .from('0008-ap-deposit-ideas')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('parent_id', parentId)
+      .eq('parent_type', parentType);
+
+    if (depositIdeasError) throw depositIdeasError;
+
+    return (tasksCount || 0) + (reflectionsCount || 0) + (depositIdeasCount || 0);
   } catch (error) {
     console.error('Error fetching linked items count:', error);
     return 0;
@@ -188,7 +245,7 @@ export async function fetchBulkLinkedItemsCounts(
 
     const allParentIds = parentEntries.map(entry => entry.id);
 
-    const [tasksData, reflectionsData] = await Promise.all([
+    const [tasksData, reflectionsData, depositIdeasData] = await Promise.all([
       supabase
         .from('0008-ap-tasks')
         .select('parent_id')
@@ -198,6 +255,12 @@ export async function fetchBulkLinkedItemsCounts(
 
       supabase
         .from('0008-ap-reflections')
+        .select('parent_id')
+        .eq('user_id', userId)
+        .in('parent_id', allParentIds),
+
+      supabase
+        .from('0008-ap-deposit-ideas')
         .select('parent_id')
         .eq('user_id', userId)
         .in('parent_id', allParentIds)
@@ -211,6 +274,10 @@ export async function fetchBulkLinkedItemsCounts(
       console.error('Error fetching bulk reflections:', reflectionsData.error);
     }
 
+    if (depositIdeasData.error) {
+      console.error('Error fetching bulk deposit ideas:', depositIdeasData.error);
+    }
+
     const taskCounts = new Map<string, number>();
     (tasksData.data || []).forEach(task => {
       taskCounts.set(task.parent_id, (taskCounts.get(task.parent_id) || 0) + 1);
@@ -221,10 +288,16 @@ export async function fetchBulkLinkedItemsCounts(
       reflectionCounts.set(reflection.parent_id, (reflectionCounts.get(reflection.parent_id) || 0) + 1);
     });
 
+    const depositIdeaCounts = new Map<string, number>();
+    (depositIdeasData.data || []).forEach(depositIdea => {
+      depositIdeaCounts.set(depositIdea.parent_id, (depositIdeaCounts.get(depositIdea.parent_id) || 0) + 1);
+    });
+
     allParentIds.forEach(parentId => {
       const taskCount = taskCounts.get(parentId) || 0;
       const reflectionCount = reflectionCounts.get(parentId) || 0;
-      countsMap.set(parentId, taskCount + reflectionCount);
+      const depositIdeaCount = depositIdeaCounts.get(parentId) || 0;
+      countsMap.set(parentId, taskCount + reflectionCount + depositIdeaCount);
     });
 
     return countsMap;

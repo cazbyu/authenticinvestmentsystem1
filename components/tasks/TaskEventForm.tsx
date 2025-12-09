@@ -318,7 +318,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           updates.type = preSelectedType;
         } else if (preSelectedType === 'reflection') {
           updates.type = 'reflection';
-          updates.reflectionMode = 'rose'; // Default to rose, can be changed
+          updates.reflectionMode = 'reflection';
         } else {
           // Handle reflection modes: rose, thorn, depositIdea
           updates.type = 'reflection';
