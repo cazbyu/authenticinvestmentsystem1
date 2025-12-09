@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -10,11 +10,13 @@ import {
   BookOpen,
   Bell,
   Lightbulb,
+  User,
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchPendingFollowUps } from '@/lib/followUpUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { getAppVersionDisplay } from '@/lib/appVersion';
 
 const menuItems = [
   { id: 'calendar', title: 'Calendar View', icon: Calendar, route: '/calendar' },
@@ -30,6 +32,7 @@ export function SideMenu() {
   const { colors } = useTheme();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [followUpCount, setFollowUpCount] = useState(0);
 
   useEffect(() => {
@@ -61,11 +64,11 @@ export function SideMenu() {
         setUserEmail(user.email);
       }
 
-      // Fetch user profile to get name
+      // Fetch user profile to get name and profile image
       if (user) {
         const { data: profile } = await supabase
           .from('0008-ap-users')
-          .select('first_name, last_name')
+          .select('first_name, last_name, profile_image')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -76,6 +79,23 @@ export function SideMenu() {
             .trim();
           if (fullName) {
             setUserName(fullName);
+          }
+        }
+
+        // Fetch profile image if available
+        if (profile?.profile_image) {
+          try {
+            const { data: publicUrlData } = supabase
+              .storage
+              .from('0008-ap-profile-images')
+              .getPublicUrl(profile.profile_image);
+
+            if (publicUrlData?.publicUrl) {
+              setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
+            }
+          } catch (imageError) {
+            console.error('Error loading profile image in sidebar:', imageError);
+            setProfileImageUrl(null);
           }
         }
       }
@@ -121,6 +141,16 @@ export function SideMenu() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.primary }]}>
+        {profileImageUrl ? (
+          <Image
+            source={{ uri: profileImageUrl }}
+            style={styles.profileImage}
+          />
+        ) : (
+          <View style={styles.profileImagePlaceholder}>
+            <User size={32} color="#ffffff" />
+          </View>
+        )}
         <Text style={styles.headerTitle}>Authentic</Text>
         <Text style={styles.headerSubtitle}>Investments</Text>
       </View>
@@ -150,7 +180,9 @@ export function SideMenu() {
         })}
 
         <View style={styles.versionContainer}>
-          <Text style={[styles.versionText, { color: colors.textSecondary }]}>v 0.01</Text>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>
+            {getAppVersionDisplay()}
+          </Text>
         </View>
       </ScrollView>
 
@@ -184,6 +216,25 @@ const styles = StyleSheet.create({
   header: {
     padding: 20,
     alignItems: 'center',
+  },
+  profileImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  profileImagePlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   headerTitle: {
     color: '#ffffff',

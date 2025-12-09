@@ -1,9 +1,10 @@
-import { Stack } from 'expo-router';
+import { Drawer } from 'expo-router/drawer';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthenticScoreProvider } from '@/contexts/AuthenticScoreContext';
 import { TabResetProvider } from '@/contexts/TabResetContext';
+import { SideMenu } from '@/components/SideMenu';
 import React from 'react';
 
 console.log('[App] _layout.web.tsx loaded');
@@ -16,28 +17,32 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthenticScoreProvider>
         <TabResetProvider>
-          <Stack
+          <Drawer
+            drawerContent={() => <SideMenu />}
             screenOptions={{
               headerShown: false,
+              drawerStyle: {
+                width: 280,
+              },
             }}
           >
-            <Stack.Screen name="index" />
-            <Stack.Screen name="landing" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="calendar" />
-            <Stack.Screen name="followup" />
-            <Stack.Screen name="reflections" />
-            <Stack.Screen name="settings" />
-            <Stack.Screen name="coach" />
-            <Stack.Screen name="terms" />
-            <Stack.Screen name="privacy" />
-            <Stack.Screen name="about" />
-            <Stack.Screen name="contact" />
-            <Stack.Screen name="suggestions" />
-            <Stack.Screen name="auth/callback" />
-            <Stack.Screen name="+not-found" />
-          </Stack>
+            <Drawer.Screen name="index" />
+            <Drawer.Screen name="landing" />
+            <Drawer.Screen name="login" />
+            <Drawer.Screen name="(tabs)" />
+            <Drawer.Screen name="calendar" />
+            <Drawer.Screen name="followup" />
+            <Drawer.Screen name="reflections" />
+            <Drawer.Screen name="settings" />
+            <Drawer.Screen name="coach" />
+            <Drawer.Screen name="terms" />
+            <Drawer.Screen name="privacy" />
+            <Drawer.Screen name="about" />
+            <Drawer.Screen name="contact" />
+            <Drawer.Screen name="suggestions" />
+            <Drawer.Screen name="auth/callback" />
+            <Drawer.Screen name="+not-found" />
+          </Drawer>
           <StatusBar style="auto" />
         </TabResetProvider>
       </AuthenticScoreProvider>

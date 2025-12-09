@@ -474,6 +474,42 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.settingButton}>
             <Text style={[styles.settingButtonText, { color: colors.primary }]}>Export Data</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingButton}
+            onPress={async () => {
+              Alert.alert(
+                'Sign Out',
+                'Are you sure you want to sign out?',
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel',
+                  },
+                  {
+                    text: 'Sign Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        const supabase = getSupabaseClient();
+                        const { error } = await supabase.auth.signOut();
+                        if (error) {
+                          Alert.alert('Error', error.message);
+                        } else {
+                          router.replace('/login');
+                        }
+                      } catch (error) {
+                        console.error('Error signing out:', error);
+                        Alert.alert('Error', 'Failed to sign out');
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+          >
+            <Text style={[styles.settingButtonText, { color: '#dc2626' }]}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Linked Accounts Section */}
