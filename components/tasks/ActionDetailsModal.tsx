@@ -109,7 +109,9 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const items = await fetchAssociatedItems(task.id, 'task', user.id);
+      // Determine the correct parent type based on task type
+      const parentType = task.type === 'event' ? 'event' : 'task';
+      const items = await fetchAssociatedItems(task.id, parentType, user.id);
       setAssociatedItems(items);
     } catch (error) {
       console.error('Error fetching associated items:', error);

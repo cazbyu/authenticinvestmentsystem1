@@ -106,7 +106,15 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const items = await fetchAssociatedItems(reflection.id, 'reflection', user.id);
+      // Determine the correct parent type based on reflection type
+      let parentType: 'rose' | 'thorn' | 'reflection' = 'reflection';
+      if (reflection.daily_rose) {
+        parentType = 'rose';
+      } else if (reflection.daily_thorn) {
+        parentType = 'thorn';
+      }
+
+      const items = await fetchAssociatedItems(reflection.id, parentType, user.id);
       setAssociatedItems(items);
     } catch (error) {
       console.error('Error fetching associated items:', error);
