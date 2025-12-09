@@ -3,7 +3,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } fr
 import { FileText, Plus, Lightbulb } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
-import { fetchLinkedItemsCount } from '@/lib/followThroughUtils';
+import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
 
 interface JournalEntry {
   id: string;
@@ -36,12 +36,24 @@ interface JournalViewProps {
 export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore, onDateRangeChange, refreshKey }: JournalViewProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<'all' | 'deposits' | 'reflections'>('all');
   const [dateRange, setDateRange] = useState<'week' | 'month' | 'all'>('month');
   const [totalBalance, setTotalBalance] = useState(0);
+  const [pageSize] = useState(30);
+  const [displayedCount, setDisplayedCount] = useState(30);
+  const [allEntries, setAllEntries] = useState<JournalEntry[]>([]);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const previousScopeRef = React.useRef<string>('');
+  const cacheRef = React.useRef<{
+    data: JournalEntry[];
+    timestamp: number;
+    scope: string;
+    filter: string;
+    dateRange: string;
+  } | null>(null);
+  const CACHE_TTL = 30000;
 
   // helper to group records by parent_id for fast lookup
   const groupByParentId = <T extends { parent_id: string }>(rows: T[] | null | undefined) => {
@@ -63,7 +75,33 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
     return since.toISOString().split('T')[0];
   };
 
-  const fetchJournalEntries = async () => {
+  const fetchJournalEntries = async (forceRefresh: boolean = false) => {
+    const scopeKey = JSON.stringify(scope);
+    const cacheKey = `${scopeKey}-${filter}-${dateRange}`;
+
+    if (!forceRefresh && cacheRef.current) {
+      const cacheAge = Date.now() - cacheRef.current.timestamp;
+      const cacheMatch =
+        cacheRef.current.scope === scopeKey &&
+        cacheRef.current.filter === filter &&
+        cacheRef.current.dateRange === dateRange;
+
+      if (cacheMatch && cacheAge < CACHE_TTL) {
+        console.log('[JournalView] Using cached data, age:', Math.round(cacheAge / 1000), 'seconds');
+        setAllEntries(cacheRef.current.data);
+        setEntries(cacheRef.current.data.slice(0, Math.min(displayedCount, cacheRef.current.data.length)));
+
+        let runningBalance = 0;
+        const chronological = [...cacheRef.current.data].reverse();
+        chronological.forEach((e) => {
+          if (e.type === 'deposit' && e.status !== 'pending') runningBalance += e.amount;
+          else if (e.type === 'withdrawal') runningBalance -= e.amount;
+        });
+        setTotalBalance(runningBalance);
+        return;
+      }
+    }
+
     // Create new AbortController for this fetch
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -80,8 +118,10 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       if (!user) {
         console.log('[JournalView] No user found, showing empty journal');
         setEntries([]);
+        setAllEntries([]);
         setTotalBalance(0);
         setLoading(false);
+        cacheRef.current = null;
         return;
       }
 
@@ -738,19 +778,25 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       });
 
       // ---------------------------------------------------------
-      // 6) Fetch linked items count for each entry
+      // 6) Fetch linked items count for all entries in bulk
       // ---------------------------------------------------------
-      await Promise.all(
-        journalEntries.map(async (entry) => {
-          if (entry.source_type !== 'withdrawal') {
-            const parentType = entry.source_type === 'task' ? 'task' :
-                              entry.source_type === 'depositIdea' ? 'depositIdea' : 'reflection';
-            entry.linked_count = await fetchLinkedItemsCount(entry.source_id, parentType as any, user.id);
-          } else {
-            entry.linked_count = 0;
-          }
-        })
-      );
+      const parentEntries = journalEntries
+        .filter(entry => entry.source_type !== 'withdrawal')
+        .map(entry => ({
+          id: entry.source_id,
+          type: (entry.source_type === 'task' ? 'task' :
+                entry.source_type === 'depositIdea' ? 'depositIdea' : 'reflection') as any
+        }));
+
+      const linkedCountsMap = await fetchBulkLinkedItemsCounts(parentEntries, user.id);
+
+      journalEntries.forEach(entry => {
+        if (entry.source_type !== 'withdrawal') {
+          entry.linked_count = linkedCountsMap.get(entry.source_id) || 0;
+        } else {
+          entry.linked_count = 0;
+        }
+      });
 
       // Final abort check before setting state
       if (controller.signal.aborted) {
@@ -758,7 +804,18 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       }
 
       console.log('[JournalView] Setting', journalEntries.length, 'journal entries, total balance:', runningBalance);
-      setEntries(journalEntries);
+
+      cacheRef.current = {
+        data: journalEntries,
+        timestamp: Date.now(),
+        scope: scopeKey,
+        filter,
+        dateRange,
+      };
+
+      setAllEntries(journalEntries);
+      setEntries(journalEntries.slice(0, pageSize));
+      setDisplayedCount(Math.min(pageSize, journalEntries.length));
       setTotalBalance(runningBalance);
     } catch (err: any) {
       // Don't show errors if request was aborted
@@ -768,6 +825,8 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       console.error('Error fetching journal entries:', err);
       Alert.alert('Error loading journal', err?.message ?? String(err));
       setEntries([]);
+      setAllEntries([]);
+      setDisplayedCount(0);
       setTotalBalance(0);
     } finally {
       if (!controller.signal.aborted) {
@@ -775,6 +834,26 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       }
     }
   };
+
+  const loadMore = () => {
+    if (loadingMore || displayedCount >= allEntries.length) {
+      return;
+    }
+
+    setLoadingMore(true);
+
+    setTimeout(() => {
+      const newCount = Math.min(displayedCount + pageSize, allEntries.length);
+      setEntries(allEntries.slice(0, newCount));
+      setDisplayedCount(newCount);
+      setLoadingMore(false);
+    }, 100);
+  };
+
+  useEffect(() => {
+    setDisplayedCount(pageSize);
+    cacheRef.current = null;
+  }, [filter, dateRange, pageSize]);
 
   useEffect(() => {
     // Create a stable scope key for comparison
@@ -799,7 +878,11 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
 
     // Debounce the fetch to prevent rapid consecutive calls
     fetchTimeoutRef.current = setTimeout(() => {
-      fetchJournalEntries();
+      const forceRefresh = refreshKey !== undefined;
+      if (forceRefresh) {
+        cacheRef.current = null;
+      }
+      fetchJournalEntries(forceRefresh);
     }, 300);
 
     return () => {
@@ -837,8 +920,8 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
           },
           (payload) => {
             console.log('[JournalView] Task change detected:', payload);
-            // Refresh journal entries when tasks are created, updated, or deleted
-            fetchJournalEntries();
+            cacheRef.current = null;
+            fetchJournalEntries(true);
           }
         )
         .subscribe();
@@ -992,7 +1075,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
                     />
                   ) : entry.source_data?.daily_thorn ? (
                     <Image
-                      source={require('@/assets/images/cactus-thorn.png')}
+                      source={require('@/assets/images/thorn.png')}
                       style={styles.iconImage}
                       resizeMode="contain"
                     />
@@ -1003,7 +1086,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
                   )
                 ) : entry.type === 'withdrawal' ? (
                   <Image
-                    source={require('@/assets/images/cactus-thorn.png')}
+                    source={require('@/assets/images/thorn.png')}
                     style={styles.iconImage}
                     resizeMode="contain"
                   />
@@ -1019,6 +1102,20 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
               </Text>
             </TouchableOpacity>
           ))
+        )}
+
+        {!loading && entries.length > 0 && displayedCount < allEntries.length && (
+          <View style={styles.loadMoreContainer}>
+            <TouchableOpacity
+              style={styles.loadMoreButton}
+              onPress={loadMore}
+              disabled={loadingMore}
+            >
+              <Text style={styles.loadMoreText}>
+                {loadingMore ? 'Loading...' : `Load More (${allEntries.length - displayedCount} remaining)`}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
       </ScrollView>
     </View>
@@ -1129,5 +1226,23 @@ const styles = StyleSheet.create({
   iconImage: {
     width: 20,
     height: 20,
+  },
+  loadMoreContainer: {
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  loadMoreButton: {
+    backgroundColor: '#0078d4',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  loadMoreText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

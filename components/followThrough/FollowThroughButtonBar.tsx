@@ -26,7 +26,7 @@ export default function FollowThroughButtonBar({
     { type: 'icon', icon: CheckCircle, onPress: onPressTask, color: colors.primary },
     { type: 'icon', icon: Calendar, onPress: onPressEvent, color: colors.secondary },
     { type: 'image', image: require('@/assets/images/rose.png'), onPress: onPressRose, color: '#10b981' },
-    { type: 'image', image: require('@/assets/images/cactus-thorn.png'), onPress: onPressThorn, color: '#ef4444' },
+    { type: 'image', image: require('@/assets/images/thorn.png'), onPress: onPressThorn, color: '#ef4444' },
     { type: 'icon', icon: BookOpen, onPress: onPressReflection, color: '#8b5cf6' },
     { type: 'icon', icon: Lightbulb, onPress: onPressDepositIdea, color: '#f59e0b' },
   ];

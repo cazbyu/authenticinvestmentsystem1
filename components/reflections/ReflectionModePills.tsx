@@ -52,7 +52,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     } else if (icon === 'thorn') {
       return (
         <Image
-          source={require('@/assets/images/cactus-thorn.png')}
+          source={require('@/assets/images/thorn.png')}
           style={[
             styles.iconImage,
             isSelected && { tintColor: '#ffffff' }
