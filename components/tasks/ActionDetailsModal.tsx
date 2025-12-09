@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
-import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File, Plus, Bold, Italic, List, ListOrdered } from 'lucide-react-native';
+import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File, Plus, Bold, Italic, List, ListOrdered, Edit } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -15,6 +15,7 @@ import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from './TaskEventForm';
+import ParentItemInfo from '../followThrough/ParentItemInfo';
 
 interface ActionDetailsModalProps {
   visible: boolean;
@@ -528,6 +529,22 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
         </View>
         <ScrollView style={styles.detailContent}>
           <Text style={styles.detailTaskTitle}>{task.title}</Text>
+          {task.parent_id && task.parent_type && (
+            <ParentItemInfo
+              parentId={task.parent_id}
+              parentType={task.parent_type as any}
+              onPress={() => {
+                if (onItemPress) {
+                  onItemPress({
+                    id: task.parent_id!,
+                    type: task.parent_type as any,
+                    title: '',
+                    date: '',
+                  });
+                }
+              }}
+            />
+          )}
           <View style={styles.detailSection}>
             <Text style={styles.detailLabel}>Due Date:</Text>
             <Text style={styles.detailValue}>{formatDateTime(task.due_date, true)}</Text>

@@ -12,6 +12,7 @@ import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from '../tasks/TaskEventForm';
+import ParentItemInfo from '../followThrough/ParentItemInfo';
 
 interface DepositIdea {
   id: string;
@@ -22,6 +23,8 @@ interface DepositIdea {
   archived?: boolean;
   follow_up?: boolean;
   activated_task_id?: string;
+  parent_id?: string;
+  parent_type?: string;
   roles?: Array<{id: string; label: string}>;
   domains?: Array<{id: string; name: string}>;
   goals?: Array<{id: string; title: string}>;
@@ -470,7 +473,24 @@ export function DepositIdeaDetailModal({
 
         <ScrollView style={styles.content}>
           <Text style={styles.ideaTitle}>{depositIdea.title}</Text>
-          
+
+          {depositIdea.parent_id && depositIdea.parent_type && (
+            <ParentItemInfo
+              parentId={depositIdea.parent_id}
+              parentType={depositIdea.parent_type as any}
+              onPress={() => {
+                if (onItemPress) {
+                  onItemPress({
+                    id: depositIdea.parent_id!,
+                    type: depositIdea.parent_type as any,
+                    title: '',
+                    date: '',
+                  });
+                }
+              }}
+            />
+          )}
+
           <View style={styles.section}>
             <Text style={styles.label}>Status:</Text>
             <Text style={styles.value}>

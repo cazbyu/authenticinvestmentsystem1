@@ -13,6 +13,7 @@ import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from '../tasks/TaskEventForm';
+import ParentItemInfo from '../followThrough/ParentItemInfo';
 
 interface ReflectionDetailsModalProps {
   visible: boolean;
@@ -465,6 +466,24 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
           {/* Reflection Title */}
           {reflection.reflection_title && (
             <Text style={styles.reflectionTitle}>{reflection.reflection_title}</Text>
+          )}
+
+          {/* Parent Item Info */}
+          {reflection.parent_id && reflection.parent_type && (
+            <ParentItemInfo
+              parentId={reflection.parent_id}
+              parentType={reflection.parent_type as any}
+              onPress={() => {
+                if (onItemPress) {
+                  onItemPress({
+                    id: reflection.parent_id!,
+                    type: reflection.parent_type as any,
+                    title: '',
+                    date: '',
+                  });
+                }
+              }}
+            />
           )}
 
           {/* Reflection Content */}

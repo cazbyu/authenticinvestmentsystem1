@@ -30,6 +30,8 @@ export interface ReflectionWithRelations {
   updated_at: string;
   daily_rose?: boolean;
   daily_thorn?: boolean;
+  parent_id?: string;
+  parent_type?: string;
   roles?: Array<{ id: string; label: string; color?: string }>;
   domains?: Array<{ id: string; name: string; color?: string }>;
   keyRelationships?: Array<{ id: string; name: string }>;

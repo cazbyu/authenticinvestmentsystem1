@@ -11,6 +11,8 @@ export interface DepositIdea {
   activated_at?: string;
   archived?: boolean;
   follow_up?: boolean;
+  parent_id?: string;
+  parent_type?: string;
   roles?: Array<{id: string; label: string}>;
   domains?: Array<{id: string; name: string}>;
   goals?: Array<{id: string; title: string}>;
