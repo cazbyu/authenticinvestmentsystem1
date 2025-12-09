@@ -87,8 +87,19 @@ export default function AssociatedItemsList({
   };
 
   const getItemDate = (item: AssociatedItem) => {
-    const date = item.due_date || item.start_date || item.created_at;
-    return formatLocalDate(new Date(date));
+    // Prefer due_date or start_date (which are date-only strings)
+    if (item.due_date) {
+      return item.due_date;
+    }
+    if (item.start_date) {
+      return item.start_date;
+    }
+    // For created_at (which is a timestamp), extract just the date portion
+    // This avoids timezone conversion issues
+    if (item.created_at) {
+      return item.created_at.split('T')[0];
+    }
+    return formatLocalDate(new Date());
   };
 
   const formatItemTitle = (item: AssociatedItem) => {

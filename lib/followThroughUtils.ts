@@ -15,7 +15,7 @@ export async function fetchAssociatedItems(
   try {
     const { data: tasks, error: tasksError } = await supabase
       .from('0008-ap-tasks')
-      .select('id, title, created_at, due_date, start_time, end_time, status, completed_at, deleted_at')
+      .select('id, title, type, created_at, due_date, start_date, start_time, end_time, status, completed_at, deleted_at')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
       .eq('parent_type', parentType)
@@ -33,7 +33,7 @@ export async function fetchAssociatedItems(
           type,
           created_at: task.created_at,
           due_date: task.due_date,
-          start_date: task.due_date,
+          start_date: task.start_date || task.due_date,
           has_notes: false,
           status: task.status,
           completed_at: task.completed_at,
@@ -72,7 +72,8 @@ export async function fetchAssociatedItems(
 }
 
 export function getItemTypeFromTask(task: any): ItemType {
-  if (task.start_time || task.end_time) {
+  // Use the actual type field from the database as the source of truth
+  if (task.type === 'event') {
     return 'event';
   }
   return 'task';
@@ -104,7 +105,8 @@ export function determineParentType(item: any, itemSource: 'task' | 'reflection'
   }
 
   if (itemSource === 'task') {
-    if (item.start_time || item.end_time) {
+    // Use the actual type field from the database as the source of truth
+    if (item.type === 'event') {
       return 'event';
     }
     return 'task';
@@ -157,5 +159,77 @@ export async function fetchLinkedItemsCount(
   } catch (error) {
     console.error('Error fetching linked items count:', error);
     return 0;
+  }
+}
+
+export async function fetchBulkLinkedItemsCounts(
+  parentEntries: Array<{ id: string; type: ParentType }>,
+  userId: string
+): Promise<Map<string, number>> {
+  const supabase = getSupabaseClient();
+  const countsMap = new Map<string, number>();
+
+  if (!parentEntries || parentEntries.length === 0) {
+    return countsMap;
+  }
+
+  try {
+    const taskParentIds = parentEntries
+      .filter(entry => entry.type === 'task')
+      .map(entry => entry.id);
+
+    const reflectionParentIds = parentEntries
+      .filter(entry => entry.type === 'reflection')
+      .map(entry => entry.id);
+
+    const depositIdeaParentIds = parentEntries
+      .filter(entry => entry.type === 'depositIdea')
+      .map(entry => entry.id);
+
+    const allParentIds = parentEntries.map(entry => entry.id);
+
+    const [tasksData, reflectionsData] = await Promise.all([
+      supabase
+        .from('0008-ap-tasks')
+        .select('parent_id')
+        .eq('user_id', userId)
+        .in('parent_id', allParentIds)
+        .is('deleted_at', null),
+
+      supabase
+        .from('0008-ap-reflections')
+        .select('parent_id')
+        .eq('user_id', userId)
+        .in('parent_id', allParentIds)
+    ]);
+
+    if (tasksData.error) {
+      console.error('Error fetching bulk tasks:', tasksData.error);
+    }
+
+    if (reflectionsData.error) {
+      console.error('Error fetching bulk reflections:', reflectionsData.error);
+    }
+
+    const taskCounts = new Map<string, number>();
+    (tasksData.data || []).forEach(task => {
+      taskCounts.set(task.parent_id, (taskCounts.get(task.parent_id) || 0) + 1);
+    });
+
+    const reflectionCounts = new Map<string, number>();
+    (reflectionsData.data || []).forEach(reflection => {
+      reflectionCounts.set(reflection.parent_id, (reflectionCounts.get(reflection.parent_id) || 0) + 1);
+    });
+
+    allParentIds.forEach(parentId => {
+      const taskCount = taskCounts.get(parentId) || 0;
+      const reflectionCount = reflectionCounts.get(parentId) || 0;
+      countsMap.set(parentId, taskCount + reflectionCount);
+    });
+
+    return countsMap;
+  } catch (error) {
+    console.error('Error fetching bulk linked items counts:', error);
+    return countsMap;
   }
 }
