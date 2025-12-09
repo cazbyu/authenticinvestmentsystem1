@@ -16,7 +16,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getTimezonesByRegion, getTimezoneDisplayName, detectUserTimezone } from '@/lib/timezoneUtils';
-import { Camera, Upload, User } from 'lucide-react-native';
+import { calculateStorageUsage, formatBytes, StorageUsage } from '@/lib/storageUtils';
+import { Camera, Upload, User, HardDrive, RefreshCw } from 'lucide-react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -51,6 +52,8 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showTimezonePicker, setShowTimezonePicker] = useState(false);
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+  const [loadingStorage, setLoadingStorage] = useState(false);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -143,6 +146,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     fetchProfile();
     refreshScore();
+    loadStorageUsage();
   }, []);
 
   useEffect(() => {
@@ -223,6 +227,16 @@ export default function SettingsScreen() {
       const response = await fetch(uri);
       const blob = await response.blob();
 
+      // Validate file size (5MB limit for profile images)
+      const MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+      if (blob.size > MAX_PROFILE_IMAGE_SIZE) {
+        Alert.alert(
+          'File Size Limit Exceeded',
+          `Profile images must be under 5 MB. This image is ${(blob.size / (1024 * 1024)).toFixed(2)} MB.`
+        );
+        return;
+      }
+
       const fileName = `${user.id}/profile_${Date.now()}.${fileExt}`;
 
       if (profile.profile_image) {
@@ -248,6 +262,22 @@ export default function SettingsScreen() {
       Alert.alert('Error', 'Failed to upload image');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const loadStorageUsage = async () => {
+    try {
+      setLoadingStorage(true);
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const usage = await calculateStorageUsage(user.id);
+      setStorageUsage(usage);
+    } catch (error) {
+      console.error('Error loading storage usage:', error);
+    } finally {
+      setLoadingStorage(false);
     }
   };
 
@@ -510,6 +540,65 @@ export default function SettingsScreen() {
           >
             <Text style={[styles.settingButtonText, { color: '#dc2626' }]}>Sign Out</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Storage Section */}
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <View style={styles.settingRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Storage</Text>
+            <TouchableOpacity
+              onPress={loadStorageUsage}
+              disabled={loadingStorage}
+              style={styles.refreshButton}
+            >
+              {loadingStorage ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <RefreshCw size={20} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {storageUsage ? (
+            <>
+              <View style={styles.storageInfoRow}>
+                <HardDrive size={20} color={colors.textSecondary} />
+                <Text style={[styles.storageTotalText, { color: colors.text }]}>
+                  Total Used: {formatBytes(storageUsage.totalSize)}
+                </Text>
+              </View>
+
+              <View style={styles.storageBreakdown}>
+                {storageUsage.breakdown.map((item, index) => (
+                  <View key={index} style={styles.storageItem}>
+                    <View style={styles.storageItemHeader}>
+                      <Text style={[styles.storageCategory, { color: colors.text }]}>{item.category}</Text>
+                      <Text style={[styles.storageSize, { color: colors.textSecondary }]}>
+                        {formatBytes(item.size)}
+                      </Text>
+                    </View>
+                    <Text style={[styles.storageFileCount, { color: colors.textSecondary }]}>
+                      {item.fileCount} {item.fileCount === 1 ? 'file' : 'files'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <Text style={[styles.storageLastUpdated, { color: colors.textSecondary }]}>
+                Last updated: {new Date(storageUsage.lastUpdated).toLocaleString()}
+              </Text>
+            </>
+          ) : (
+            <View style={styles.storageLoadingContainer}>
+              {loadingStorage ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.storageEmptyText, { color: colors.textSecondary }]}>
+                  Tap refresh to load storage usage
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Linked Accounts Section */}
@@ -945,4 +1034,16 @@ const styles = StyleSheet.create({
   timezoneOption: { paddingVertical: 12, borderBottomWidth: 1 },
   timezoneOptionSelected: { backgroundColor: 'rgba(0, 120, 212, 0.1)' },
   timezoneOptionText: { fontSize: 16 },
+  refreshButton: { padding: 8 },
+  storageInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  storageTotalText: { fontSize: 16, fontWeight: '600' },
+  storageBreakdown: { marginTop: 8 },
+  storageItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  storageItemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  storageCategory: { fontSize: 15, fontWeight: '500' },
+  storageSize: { fontSize: 14 },
+  storageFileCount: { fontSize: 13, marginTop: 2 },
+  storageLastUpdated: { fontSize: 12, marginTop: 16, fontStyle: 'italic' },
+  storageLoadingContainer: { paddingVertical: 32, alignItems: 'center', justifyContent: 'center' },
+  storageEmptyText: { fontSize: 14 },
 });

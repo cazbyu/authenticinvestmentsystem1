@@ -253,7 +253,7 @@ export default function JournalForm({
       });
 
       if (!result.canceled && result.assets) {
-        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB in bytes
         const validFiles: any[] = [];
         const oversizedFiles: string[] = [];
 
@@ -286,7 +286,7 @@ export default function JournalForm({
         if (oversizedFiles.length > 0) {
           Alert.alert(
             'File Size Limit Exceeded',
-            `The following files exceed the 5 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
+            `The following files exceed the 10 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
           );
         }
 
@@ -311,7 +311,7 @@ export default function JournalForm({
       });
 
       if (!result.canceled && result.assets) {
-        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB in bytes
         const validFiles: any[] = [];
         const oversizedFiles: string[] = [];
 
@@ -334,7 +334,7 @@ export default function JournalForm({
         if (oversizedFiles.length > 0) {
           Alert.alert(
             'File Size Limit Exceeded',
-            `The following files exceed the 5 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
+            `The following files exceed the 10 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
           );
         }
 

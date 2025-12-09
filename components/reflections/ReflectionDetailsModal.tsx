@@ -148,7 +148,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
       });
 
       if (!result.canceled && result.assets) {
-        const MAX_FILE_SIZE = 5 * 1024 * 1024;
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
         const validFiles: any[] = [];
         const oversizedFiles: string[] = [];
 
@@ -179,7 +179,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
         if (oversizedFiles.length > 0) {
           Alert.alert(
             'File Size Limit Exceeded',
-            `The following files exceed the 5 MB limit:\n\n${oversizedFiles.join('\n')}`
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
           );
         }
 
@@ -202,7 +202,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
       });
 
       if (!result.canceled && result.assets) {
-        const MAX_FILE_SIZE = 5 * 1024 * 1024;
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
         const validFiles: any[] = [];
         const oversizedFiles: string[] = [];
 
@@ -225,7 +225,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
         if (oversizedFiles.length > 0) {
           Alert.alert(
             'File Size Limit Exceeded',
-            `The following files exceed the 5 MB limit:\n\n${oversizedFiles.join('\n')}`
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
           );
         }
 
