@@ -721,14 +721,9 @@ export default function Dashboard() {
       setEditingTask(editData);
       setIsFormModalVisible(true);
     } else if (entry.source_type === 'depositIdea') {
-      // Open TaskEventForm in depositIdea reflection mode for editing
-      const editData = {
-        ...entry.source_data,
-        type: 'reflection',
-        reflectionMode: 'depositIdea'
-      };
-      setEditingTask(editData);
-      setIsFormModalVisible(true);
+      // Open DepositIdeaDetailModal for deposit ideas
+      setSelectedDepositIdea(entry.source_data);
+      setIsDepositIdeaDetailVisible(true);
     } else if (entry.source_type === 'reflection') {
       // Open JournalForm in edit mode for reflections
       setEditingReflection(entry.source_data);
@@ -904,6 +899,7 @@ export default function Dashboard() {
         onClose={() => setIsDepositIdeaDetailVisible(false)}
         onDelete={handleCancelDepositIdea}
         onActivate={handleActivateDepositIdea}
+        onEdit={handleUpdateDepositIdea}
         onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         onItemPress={handleAssociatedItemPress}
       />
