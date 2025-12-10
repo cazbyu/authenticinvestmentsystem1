@@ -18,7 +18,6 @@ export async function fetchAssociatedItems(
       .select('id, title, type, created_at, due_date, start_date, start_time, end_time, status, completed_at, deleted_at')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
-      .eq('parent_type', parentType)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
@@ -29,7 +28,6 @@ export async function fetchAssociatedItems(
       .select('id, reflection_title, content, created_at, daily_rose, daily_thorn')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
-      .eq('parent_type', parentType)
       .order('created_at', { ascending: false });
 
     if (reflectionsError) throw reflectionsError;
@@ -39,7 +37,6 @@ export async function fetchAssociatedItems(
       .select('id, title, content, created_at')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
-      .eq('parent_type', parentType)
       .order('created_at', { ascending: false });
 
     if (depositIdeasError) throw depositIdeasError;
@@ -187,8 +184,7 @@ export async function fetchLinkedItemsCount(
       .from('0008-ap-tasks')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('parent_id', parentId)
-      .eq('parent_type', parentType);
+      .eq('parent_id', parentId);
 
     if (tasksError) throw tasksError;
 
@@ -197,8 +193,7 @@ export async function fetchLinkedItemsCount(
       .from('0008-ap-reflections')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('parent_id', parentId)
-      .eq('parent_type', parentType);
+      .eq('parent_id', parentId);
 
     if (reflectionsError) throw reflectionsError;
 
@@ -207,8 +202,7 @@ export async function fetchLinkedItemsCount(
       .from('0008-ap-deposit-ideas')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('parent_id', parentId)
-      .eq('parent_type', parentType);
+      .eq('parent_id', parentId);
 
     if (depositIdeasError) throw depositIdeasError;
 
