@@ -870,7 +870,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
           onClose={() => setFollowThroughFormVisible(false)}
           preSelectedType={followThroughPreSelectedType}
           parentId={reflection?.id}
-          parentType="reflection"
+          parentType={reflection?.daily_rose ? 'rose' : reflection?.daily_thorn ? 'thorn' : 'reflection'}
         />
       </Modal>
     </Modal>
