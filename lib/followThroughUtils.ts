@@ -34,7 +34,7 @@ export async function fetchAssociatedItems(
 
     const { data: depositIdeas, error: depositIdeasError } = await supabase
       .from('0008-ap-deposit-ideas')
-      .select('id, title, content, created_at')
+      .select('id, title, created_at')
       .eq('user_id', userId)
       .eq('parent_id', parentId)
       .order('created_at', { ascending: false });
@@ -103,7 +103,7 @@ export async function fetchAssociatedItems(
           title: depositIdea.title || 'Untitled',
           type: 'depositIdea',
           created_at: depositIdea.created_at,
-          has_notes: !!depositIdea.content || notesMap.has(depositIdea.id),
+          has_notes: notesMap.has(depositIdea.id),
         });
       }
     }
