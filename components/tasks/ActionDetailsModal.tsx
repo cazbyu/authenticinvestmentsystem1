@@ -462,8 +462,8 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
 
   const getModalTitle = () => {
     if (!task) return 'Action Details';
-    // Check if it's an event (has start_time and end_time)
-    if (task.start_time && task.end_time) {
+    // Check if it's an event using the type field
+    if (task.type === 'event') {
       return 'Event Details';
     }
     return 'Task Details';
