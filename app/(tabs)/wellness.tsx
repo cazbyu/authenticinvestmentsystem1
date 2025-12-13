@@ -9,6 +9,7 @@ import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDet
 import { JournalView } from '@/components/journal/JournalView';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import JournalForm from '@/components/reflections/JournalForm';
+import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { BalanceScoresView } from '@/components/wellness/BalanceScoresView';
@@ -56,6 +57,8 @@ export default function Wellness() {
   const [depositIdeaDetailVisible, setDepositIdeaDetailVisible] = useState(false);
   const [reflectionFormVisible, setReflectionFormVisible] = useState(false);
   const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
+  const [reflectionDetailVisible, setReflectionDetailVisible] = useState(false);
+  const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<ReflectionWithRelations | null>(null);
 
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -531,6 +534,25 @@ export default function Wellness() {
     }
   }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
 
+  const handleDeleteReflection = useCallback(async (reflection: ReflectionWithRelations) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .delete()
+        .eq('id', reflection.id);
+
+      if (error) throw error;
+
+      if (selectedDomain) {
+        fetchDomainTasks(selectedDomain.id, activeView);
+      }
+      fetchAuthenticScoreLocal(true);
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
+    }
+  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
+
   const handleUpdateDepositIdea = useCallback((depositIdea: any) => {
     const editData = {
       ...depositIdea,
@@ -680,11 +702,11 @@ export default function Wellness() {
       setEditingTask(editData);
       setTaskFormVisible(true);
     } else if (entry.source_type === 'reflection') {
-      // Fetch full reflection data and open JournalForm
+      // Fetch full reflection data and open ReflectionDetailsModal
       const reflection = await fetchReflectionById(entry.source_id);
       if (reflection) {
-        setSelectedReflection(reflection);
-        setReflectionFormVisible(true);
+        setSelectedReflectionDetail(reflection);
+        setReflectionDetailVisible(true);
       }
     }
   }, []);
@@ -1010,6 +1032,25 @@ export default function Wellness() {
           if (selectedDomain) {
             fetchDomainTasks(selectedDomain.id);
           }
+        }}
+      />
+
+      <ReflectionDetailsModal
+        visible={reflectionDetailVisible}
+        reflection={selectedReflectionDetail}
+        onClose={() => {
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onEdit={(reflection) => {
+          setReflectionDetailVisible(false);
+          setSelectedReflection(reflection);
+          setReflectionFormVisible(true);
+        }}
+        onDelete={(reflection) => {
+          handleDeleteReflection(reflection);
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
         }}
       />
 

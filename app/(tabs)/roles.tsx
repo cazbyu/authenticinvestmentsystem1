@@ -14,6 +14,7 @@ import { EditRoleModal } from '@/components/settings/EditRoleModal';
 import { EditKRModal } from '@/components/settings/EditKRModal';
 import { JournalView } from '@/components/journal/JournalView';
 import JournalForm from '@/components/reflections/JournalForm';
+import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
 import { getSupabaseClient } from '@/lib/supabase';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
@@ -77,6 +78,8 @@ export default function Roles() {
   const [depositIdeaDetailVisible, setDepositIdeaDetailVisible] = useState(false);
   const [reflectionFormVisible, setReflectionFormVisible] = useState(false);
   const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
+  const [reflectionDetailVisible, setReflectionDetailVisible] = useState(false);
+  const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<ReflectionWithRelations | null>(null);
 
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -188,11 +191,11 @@ export default function Roles() {
       setEditingTask(editData);
       setTaskFormVisible(true);
     } else if (entry.source_type === 'reflection') {
-      // Fetch full reflection data and open JournalForm
+      // Fetch full reflection data and open ReflectionDetailsModal
       const reflection = await fetchReflectionById(entry.source_id);
       if (reflection) {
-        setSelectedReflection(reflection);
-        setReflectionFormVisible(true);
+        setSelectedReflectionDetail(reflection);
+        setReflectionDetailVisible(true);
       }
     }
   };
@@ -974,6 +977,27 @@ export default function Roles() {
       }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
+    }
+  };
+
+  const handleDeleteReflection = async (reflection: ReflectionWithRelations) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .delete()
+        .eq('id', reflection.id);
+
+      if (error) throw error;
+
+      if (selectedRole) {
+        fetchRoleTasks(selectedRole.id, activeView);
+      }
+      if (selectedKR) {
+        fetchKRTasks(selectedKR.id, krJournalView);
+      }
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
     }
   };
 
@@ -1907,6 +1931,25 @@ export default function Roles() {
           if (selectedRole) {
             fetchRoleTasks(selectedRole.id, activeView);
           }
+        }}
+      />
+
+      <ReflectionDetailsModal
+        visible={reflectionDetailVisible}
+        reflection={selectedReflectionDetail}
+        onClose={() => {
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onEdit={(reflection) => {
+          setReflectionDetailVisible(false);
+          setSelectedReflection(reflection);
+          setReflectionFormVisible(true);
+        }}
+        onDelete={(reflection) => {
+          handleDeleteReflection(reflection);
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
         }}
       />
 

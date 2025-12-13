@@ -13,6 +13,7 @@ import DelegateModal from '@/components/tasks/DelegateModal';
 import JournalForm from '@/components/reflections/JournalForm';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
+import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
@@ -57,6 +58,8 @@ export default function Dashboard() {
   const [journalRefreshKey, setJournalRefreshKey] = useState(0);
   const [isReflectionModalVisible, setIsReflectionModalVisible] = useState(false);
   const [editingReflection, setEditingReflection] = useState<any>(null);
+  const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
+  const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
 
   // Follow-through TaskEventForm state
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
@@ -545,6 +548,21 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteReflection = async (reflection: any) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .delete()
+        .eq('id', reflection.id);
+
+      if (error) throw error;
+      setJournalRefreshKey(prev => prev + 1);
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
+    }
+  };
+
   const handleActivateDepositIdea = async (depositIdea: any) => {
     try {
       setIsDepositIdeaDetailVisible(false); // Close modal immediately
@@ -725,9 +743,9 @@ export default function Dashboard() {
       setSelectedDepositIdea(entry.source_data);
       setIsDepositIdeaDetailVisible(true);
     } else if (entry.source_type === 'reflection') {
-      // Open JournalForm in edit mode for reflections
-      setEditingReflection(entry.source_data);
-      setIsReflectionModalVisible(true);
+      // Open ReflectionDetailsModal for reflections
+      setSelectedReflectionDetail(entry.source_data);
+      setIsReflectionDetailModalVisible(true);
     }
   };
 
@@ -956,6 +974,26 @@ export default function Dashboard() {
           setJournalRefreshKey(prev => prev + 1);
         }}
         openedFromJournal={true}
+      />
+
+      <ReflectionDetailsModal
+        visible={isReflectionDetailModalVisible}
+        reflection={selectedReflectionDetail}
+        onClose={() => {
+          setIsReflectionDetailModalVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onEdit={(reflection) => {
+          setIsReflectionDetailModalVisible(false);
+          setEditingReflection(reflection);
+          setIsReflectionModalVisible(true);
+        }}
+        onDelete={(reflection) => {
+          handleDeleteReflection(reflection);
+          setIsReflectionDetailModalVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onItemPress={handleAssociatedItemPress}
       />
 
       <DelegateModal

@@ -820,9 +820,13 @@ export function DepositIdeaDetailModal({
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.button, styles.saveButton]}
+            style={[
+              styles.button,
+              styles.saveButton,
+              (saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)) && styles.saveButtonDisabled
+            ]}
             onPress={handleSaveNote}
-            disabled={saving}
+            disabled={saving || (!newNoteContent.trim() && newNoteAttachments.length === 0)}
           >
             {saving ? (
               <ActivityIndicator size="small" color="#ffffff" />
@@ -1092,6 +1096,10 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#0078d4'
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.5,
   },
   editButton: {
     backgroundColor: '#f59e0b'
