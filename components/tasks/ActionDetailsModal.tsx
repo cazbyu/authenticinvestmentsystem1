@@ -516,18 +516,6 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
               <X size={24} color="#1f2937" />
             </TouchableOpacity>
           </View>
-          {onEdit && (
-            <View style={styles.editButtonContainer}>
-              <TouchableOpacity
-                style={styles.editButton}
-                onPress={handleEdit}
-                activeOpacity={0.7}
-              >
-                <Edit size={14} color="#ffffff" />
-                <Text style={styles.editButtonText}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
         <ScrollView style={styles.detailContent}>
           <Text style={styles.detailTaskTitle}>{task.title}</Text>
@@ -911,6 +899,15 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
               </>
             )}
           </TouchableOpacity>
+          {onEdit && (
+            <TouchableOpacity
+              style={[styles.detailButton, styles.editButton]}
+              onPress={handleEdit}
+            >
+              <Edit size={16} color="#ffffff" />
+              <Text style={styles.detailButtonText}>Edit</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.detailButton, styles.deleteButton]}
             onPress={handleDelete}
@@ -1188,6 +1185,9 @@ const styles = StyleSheet.create({
   saveButtonDisabled: {
     backgroundColor: '#9ca3af',
     opacity: 0.5,
+  },
+  editButton: {
+    backgroundColor: '#f59e0b'
   },
   deleteButton: {
     backgroundColor: '#dc2626'

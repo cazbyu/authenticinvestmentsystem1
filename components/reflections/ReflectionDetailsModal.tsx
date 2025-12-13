@@ -457,18 +457,6 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
               <X size={24} color="#1f2937" />
             </TouchableOpacity>
           </View>
-          {onEdit && (
-            <View style={styles.editButtonContainer}>
-              <TouchableOpacity
-                style={styles.editButton}
-                onPress={handleEdit}
-                activeOpacity={0.7}
-              >
-                <Edit size={14} color="#ffffff" />
-                <Text style={styles.editButtonText}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
         <ScrollView style={styles.detailContent}>
           {/* Reflection Title */}
