@@ -43,6 +43,8 @@ export default function ReflectionsScreen() {
   const [pendingReflection, setPendingReflection] = useState<ReflectionWithRelations | null>(null);
   const [isTaskDetailModalVisible, setIsTaskDetailModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [taskFormMode, setTaskFormMode] = useState<'create' | 'edit'>('create');
   const [isDepositIdeaModalVisible, setIsDepositIdeaModalVisible] = useState(false);
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any | null>(null);
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
@@ -217,11 +219,22 @@ export default function ReflectionsScreen() {
   const handleTaskEventFormClose = () => {
     setIsTaskEventFormVisible(false);
     setTaskEventFormInitialData(null);
+    setEditingTask(null);
+    setTaskFormMode('create');
   };
 
   const handleTaskEventFormSuccess = () => {
     setIsTaskEventFormVisible(false);
     setTaskEventFormInitialData(null);
+    setEditingTask(null);
+    setTaskFormMode('create');
+  };
+
+  const handleUpdateTask = (task: any) => {
+    setEditingTask(task);
+    setTaskFormMode('edit');
+    setIsTaskDetailModalVisible(false);
+    setTimeout(() => setIsTaskEventFormVisible(true), 100);
   };
 
 
@@ -273,8 +286,8 @@ export default function ReflectionsScreen() {
         onRequestClose={handleTaskEventFormClose}
       >
         <TaskEventForm
-          mode="create"
-          initialData={{
+          mode={taskFormMode}
+          initialData={editingTask || {
             type: taskEventFormType,
             notes: taskEventFormInitialData?.notes || '',
             selectedRoleIds: taskEventFormInitialData?.selectedRoleIds || [],
@@ -308,6 +321,7 @@ export default function ReflectionsScreen() {
             setIsTaskDetailModalVisible(false);
             setSelectedTask(null);
           }}
+          onEdit={handleUpdateTask}
           onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         />
       )}

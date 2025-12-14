@@ -1888,7 +1888,7 @@ export default function Roles() {
         visible={taskDetailVisible}
         task={selectedTask}
         onClose={() => setTaskDetailVisible(false)}
-        onUpdate={handleUpdateTask}
+        onEdit={handleUpdateTask}
         onDelegate={handleDelegateTask}
         onCancel={handleCancelTask}
         onOpenFollowThrough={handleOpenFollowThrough}

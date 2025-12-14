@@ -492,6 +492,12 @@ export default function CalendarScreen() {
     setEditingTask(null);
   };
 
+  const handleUpdateTask = (task: Task) => {
+    setEditingTask(task);
+    setIsDetailModalVisible(false);
+    setTimeout(() => setIsFormModalVisible(true), 100);
+  };
+
 
   const formatTime = (timeString: string) => {
     // Use the time-only string formatter from dateUtils
@@ -851,6 +857,7 @@ export default function CalendarScreen() {
         task={selectedTask}
         onClose={() => setIsDetailModalVisible(false)}
         onDelete={handleDeleteTask}
+        onEdit={handleUpdateTask}
         onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
 

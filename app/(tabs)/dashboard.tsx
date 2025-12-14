@@ -908,6 +908,7 @@ export default function Dashboard() {
         task={selectedTask}
         onClose={() => setIsDetailModalVisible(false)}
         onDelete={handleDeleteTask}
+        onEdit={handleUpdateTask}
         onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         onItemPress={handleAssociatedItemPress}
       />
