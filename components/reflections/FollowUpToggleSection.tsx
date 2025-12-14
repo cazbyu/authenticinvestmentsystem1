@@ -10,18 +10,22 @@ interface FollowUpToggleSectionProps {
   enabled: boolean;
   date: string;
   time: string;
+  isAnytime: boolean;
   onToggle: (enabled: boolean) => void;
   onDateChange: (date: string) => void;
   onTimeChange: (time: string) => void;
+  onAnytimeChange: (isAnytime: boolean) => void;
 }
 
 export default function FollowUpToggleSection({
   enabled,
   date,
   time,
+  isAnytime,
   onToggle,
   onDateChange,
   onTimeChange,
+  onAnytimeChange,
 }: FollowUpToggleSectionProps) {
   const { colors, isDarkMode } = useTheme();
   const [showCalendar, setShowCalendar] = useState(false);
@@ -47,8 +51,14 @@ export default function FollowUpToggleSection({
 
   const handleToggle = (newEnabled: boolean) => {
     onToggle(newEnabled);
-    if (newEnabled && !time) {
+  };
+
+  const handleAnytimeToggle = (newIsAnytime: boolean) => {
+    onAnytimeChange(newIsAnytime);
+    if (!newIsAnytime && !time) {
       onTimeChange(getInitialDefaultTime());
+    } else if (newIsAnytime) {
+      onTimeChange('');
     }
   };
 
@@ -66,33 +76,45 @@ export default function FollowUpToggleSection({
 
       {enabled && (
         <View style={styles.pickerContainer}>
-          <View style={styles.field}>
-            <Text style={[styles.fieldLabel, { color: colors.text }]}>Date</Text>
-            <TouchableOpacity
-              style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => setShowCalendar(true)}
-            >
-              <CalendarIcon size={18} color={colors.text} />
-              <Text style={[styles.dateText, { color: colors.text }]}>
-                {formatDisplayDate(date)}
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.dateTimeRow}>
+            <View style={styles.dateField}>
+              <Text style={[styles.fieldLabel, { color: colors.text }]}>Date</Text>
+              <TouchableOpacity
+                style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => setShowCalendar(true)}
+              >
+                <CalendarIcon size={18} color={colors.text} />
+                <Text style={[styles.dateText, { color: colors.text }]}>
+                  {formatDisplayDate(date)}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.anytimeField}>
+              <Text style={[styles.fieldLabel, { color: colors.text }]}>Anytime</Text>
+              <Switch
+                value={isAnytime}
+                onValueChange={handleAnytimeToggle}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#ffffff"
+              />
+            </View>
           </View>
 
-          <View style={styles.field}>
-            <Text style={[styles.fieldLabel, { color: colors.text }]}>Time</Text>
-            <TimePickerDropdown
-              value={time}
-              onChange={onTimeChange}
-              colors={colors}
-            />
-          </View>
-
-          {time && (
-            <Text style={[styles.selectedInfo, { color: colors.textSecondary }]}>
-              Follow up on {formatDisplayDate(date)} at {time}
-            </Text>
+          {!isAnytime && (
+            <View style={styles.field}>
+              <Text style={[styles.fieldLabel, { color: colors.text }]}>Time</Text>
+              <TimePickerDropdown
+                value={time}
+                onChange={onTimeChange}
+                colors={colors}
+              />
+            </View>
           )}
+
+          <Text style={[styles.selectedInfo, { color: colors.textSecondary }]}>
+            Follow up on {formatDisplayDate(date)}{!isAnytime && time ? ` at ${time}` : ''}
+          </Text>
         </View>
       )}
 
@@ -159,6 +181,20 @@ const styles = StyleSheet.create({
   pickerContainer: {
     marginTop: 12,
     gap: 12,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateField: {
+    flex: 1,
+    gap: 6,
+  },
+  anytimeField: {
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 4,
   },
   field: {
     gap: 6,

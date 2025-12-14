@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Platform, Image, Linking } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
+import { formatLocalDate, parseLocalDate, formatTimeString, convert12HourTo24Hour } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
 import { RecurrenceDropdown } from './RecurrenceDropdown';
@@ -121,6 +121,7 @@ interface FormData {
   followUpEnabled: boolean;
   followUpDate: string;
   followUpTime: string;
+  isAnytimeFollowUp: boolean;
 
   // Parent relationship fields (for follow-through items)
   parentId?: string;
@@ -187,6 +188,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     followUpEnabled: false,
     followUpDate: formatLocalDate(new Date()),
     followUpTime: '',
+    isAnytimeFollowUp: true,
   });
 
   // Data state
@@ -941,20 +943,23 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     }
 
     // Validate Follow-Up date/time if enabled
-    if (formData.followUpEnabled) {
+    if (formData.followUpEnabled && !formData.isAnytimeFollowUp) {
       const now = new Date();
       const followUpDate = new Date(formData.followUpDate);
 
       if (formData.followUpTime) {
-        const [hours, minutes] = formData.followUpTime.split(':').map(Number);
+        const time24h = convert12HourTo24Hour(formData.followUpTime);
+        if (!time24h) {
+          Alert.alert('Error', 'Invalid follow-up time format');
+          return;
+        }
+        const [hours, minutes] = time24h.split(':').map(Number);
         followUpDate.setHours(hours, minutes, 0, 0);
-      } else {
-        followUpDate.setHours(23, 59, 59, 999);
-      }
 
-      if (followUpDate < now) {
-        Alert.alert('Error', 'Follow-up date and time cannot be in the past');
-        return;
+        if (followUpDate < now) {
+          Alert.alert('Error', 'Follow-up date and time cannot be in the past');
+          return;
+        }
       }
     }
 
@@ -1010,16 +1015,24 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           mainRecordId = mainRecord.id;
 
           // Save follow-up if enabled
-          if (formData.followUpEnabled && formData.followUpDate && formData.followUpTime) {
-            // Parse time to create timestamp
-            const followUpDateTime = new Date(formData.followUpDate + 'T' + formData.followUpTime.replace(/\s*(am|pm)/i, '') + ':00');
+          if (formData.followUpEnabled && formData.followUpDate) {
+            let followUpTimeISO = null;
+
+            // Only create timestamp if not "Anytime"
+            if (!formData.isAnytimeFollowUp && formData.followUpTime) {
+              const time24h = convert12HourTo24Hour(formData.followUpTime);
+              if (time24h) {
+                const followUpDateTime = new Date(formData.followUpDate + 'T' + time24h + ':00');
+                followUpTimeISO = followUpDateTime.toISOString();
+              }
+            }
 
             const followUpPayload = {
               user_id: user.id,
               parent_type: 'reflection',
               parent_id: mainRecordId,
               follow_up_date: formData.followUpDate,
-              follow_up_time: followUpDateTime.toISOString(),
+              follow_up_time: followUpTimeISO,
               status: 'pending',
             };
 
@@ -1146,15 +1159,24 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           }
 
           // Save follow-up if enabled
-          if (formData.followUpEnabled && formData.followUpDate && formData.followUpTime) {
-            const followUpDateTime = new Date(formData.followUpDate + 'T' + formData.followUpTime.replace(/\s*(am|pm)/i, '') + ':00');
+          if (formData.followUpEnabled && formData.followUpDate) {
+            let followUpTimeISO = null;
+
+            // Only create timestamp if not "Anytime"
+            if (!formData.isAnytimeFollowUp && formData.followUpTime) {
+              const time24h = convert12HourTo24Hour(formData.followUpTime);
+              if (time24h) {
+                const followUpDateTime = new Date(formData.followUpDate + 'T' + time24h + ':00');
+                followUpTimeISO = followUpDateTime.toISOString();
+              }
+            }
 
             const followUpPayload = {
               user_id: user.id,
               parent_type: 'depositIdea',
               parent_id: mainRecordId,
               follow_up_date: formData.followUpDate,
-              follow_up_time: followUpDateTime.toISOString(),
+              follow_up_time: followUpTimeISO,
               status: 'pending',
             };
 
@@ -2200,9 +2222,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               enabled={formData.followUpEnabled}
               date={formData.followUpDate}
               time={formData.followUpTime}
+              isAnytime={formData.isAnytimeFollowUp}
               onToggle={(enabled) => setFormData(prev => ({ ...prev, followUpEnabled: enabled }))}
               onDateChange={(date) => setFormData(prev => ({ ...prev, followUpDate: date }))}
               onTimeChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
+              onAnytimeChange={(isAnytime) => setFormData(prev => ({ ...prev, isAnytimeFollowUp: isAnytime }))}
             />
           )}
 

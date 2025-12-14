@@ -404,6 +404,49 @@ export function formatTimeForDisplay(timeStr: string): string {
 }
 
 /**
+ * Converts 12-hour time format (e.g., "2:30 pm") to 24-hour format (e.g., "14:30")
+ * Returns time in HH:MM format for ISO string creation
+ */
+export function convert12HourTo24Hour(time12h: string): string | null {
+  if (!time12h || typeof time12h !== 'string') {
+    return null;
+  }
+
+  const trimmed = time12h.trim().toLowerCase();
+  const isPM = trimmed.includes('pm');
+  const isAM = trimmed.includes('am');
+
+  if (!isPM && !isAM) {
+    return null;
+  }
+
+  const timeOnly = trimmed.replace(/am|pm/g, '').trim();
+  const parts = timeOnly.split(':');
+
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  let hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+
+  if (isNaN(hours) || isNaN(minutes)) {
+    return null;
+  }
+
+  if (isPM && hours !== 12) {
+    hours += 12;
+  } else if (isAM && hours === 12) {
+    hours = 0;
+  }
+
+  const h = String(hours).padStart(2, '0');
+  const m = String(minutes).padStart(2, '0');
+
+  return `${h}:${m}`;
+}
+
+/**
  * Combines a date string (YYYY-MM-DD) with a time string (HH:MM:SS) into a local Date object
  * This function does NOT perform any timezone conversion - it creates a Date in the user's local timezone
  */
