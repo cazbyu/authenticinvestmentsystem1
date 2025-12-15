@@ -2648,7 +2648,7 @@ const styles = StyleSheet.create({
   },
   switchesRowWrapper: {
     width: '100%',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 16,
     paddingHorizontal: 16,
   },
@@ -2658,8 +2658,8 @@ const styles = StyleSheet.create({
   switchesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '60%',
-    maxWidth: 600,
+    width: 220,
+    maxWidth: '100%',
     gap: 24,
   },
   switchesRowMobile: {
@@ -2673,7 +2673,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flex: 1,
+    width: 220,
+    maxWidth: '100%',
     minWidth: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -2689,8 +2690,8 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
-    flex: 1,
-    marginRight: 8,
+    flex: 0,
+    marginRight: 12,
   },
   dateRow: {
     flexDirection: 'row',
@@ -3134,6 +3135,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginTop: 8,
+    width: 220,
+    maxWidth: '100%',
   },
   delegateInfoText: {
     fontSize: 14,

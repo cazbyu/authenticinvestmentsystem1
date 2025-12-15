@@ -167,16 +167,25 @@ export default function FollowUpToggleSection({
 const styles = StyleSheet.create({
   container: {
     marginVertical: 16,
+    paddingHorizontal: 16,
   },
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    width: 220,
+    maxWidth: '100%',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 8,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
+    flex: 0,
+    marginRight: 12,
   },
   pickerContainer: {
     marginTop: 12,
