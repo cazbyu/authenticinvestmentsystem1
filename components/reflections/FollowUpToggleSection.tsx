@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
-    width: 250,
+    width: 300,
     maxWidth: '100%',
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -186,6 +186,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 0,
     marginRight: 12,
+    whiteSpace: 'nowrap',
   },
   pickerContainer: {
     marginTop: 12,
