@@ -40,6 +40,7 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImages, setSelectedImages] = useState<any[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [allAttachments, setAllAttachments] = useState<any[]>([]);
 
   // New note input state
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -62,6 +63,14 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
       loadAssociatedItems();
     }
   }, [visible, task?.id]);
+
+  useEffect(() => {
+    const attachments: any[] = [];
+    noteAttachmentsMap.forEach((noteAttachments) => {
+      attachments.push(...noteAttachments);
+    });
+    setAllAttachments(attachments);
+  }, [noteAttachmentsMap]);
 
   const fetchTaskNotes = async () => {
     if (!task?.id) return;
@@ -612,6 +621,64 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
               <Text style={styles.detailValue}>None</Text>
             )}
           </View>
+
+          {/* Aggregated Images and Attachments Section */}
+          {allAttachments.length > 0 && (
+            <View style={styles.detailSection}>
+              <View style={styles.attachmentsHeaderRow}>
+                <Text style={styles.detailLabel}>Images and Attachments:</Text>
+                <AttachmentBadge count={allAttachments.length} size="small" />
+              </View>
+              <View style={styles.attachmentsGrid}>
+                {allAttachments.slice(0, 4).map((file, idx) => {
+                  const isImage = file.file_type?.startsWith('image/');
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.attachmentThumbnailWrapper}
+                      onPress={() => {
+                        if (isImage) {
+                          const imageAttachments = allAttachments.filter(f => f.file_type?.startsWith('image/'));
+                          const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                          setSelectedImages(imageAttachments);
+                          setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                          setImageViewerVisible(true);
+                        } else {
+                          Linking.openURL(file.public_url || file.uri);
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {isImage ? (
+                        <Image
+                          source={{ uri: file.public_url || file.uri }}
+                          style={styles.thumbnailImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.documentThumbnail}>
+                          <AttachmentThumbnail
+                            uri={file.public_url || file.uri}
+                            fileType={file.file_type || file.type}
+                            fileName={file.file_name || file.name}
+                            size="small"
+                          />
+                        </View>
+                      )}
+                      <Text style={styles.thumbnailFileName} numberOfLines={1}>
+                        {file.file_name || file.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {allAttachments.length > 4 && (
+                  <View style={styles.moreAttachmentsIndicator}>
+                    <Text style={styles.moreAttachmentsText}>+{allAttachments.length - 4}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
           {/* Notes Section - Always Visible */}
           <View style={styles.detailSection}>
             <View style={styles.notesHeaderRow}>
@@ -670,9 +737,9 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
                                     style={styles.attachmentThumbnailWrapper}
                                     onPress={() => {
                                       if (isImage) {
-                                        const imageAttachments = noteAttachments.filter(f => f.file_type?.startsWith('image/'));
-                                        const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
-                                        setSelectedImages(imageAttachments);
+                                        const allImages = allAttachments.filter(f => f.file_type?.startsWith('image/'));
+                                        const imageIndex = allImages.findIndex(img => img.id === file.id);
+                                        setSelectedImages(allImages);
                                         setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
                                         setImageViewerVisible(true);
                                       } else {
@@ -1161,6 +1228,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginBottom: 4,
+  },
+  attachmentsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
   },
   detailActions: {
     flexDirection: 'row',

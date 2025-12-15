@@ -38,6 +38,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImages, setSelectedImages] = useState<any[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [allNoteAttachments, setAllNoteAttachments] = useState<any[]>([]);
 
   // New note input state
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -59,6 +60,14 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
       loadAssociatedItems();
     }
   }, [visible, reflection?.id]);
+
+  useEffect(() => {
+    const attachments: any[] = [];
+    noteAttachmentsMap.forEach((noteAttachments) => {
+      attachments.push(...noteAttachments);
+    });
+    setAllNoteAttachments(attachments);
+  }, [noteAttachmentsMap]);
 
   const fetchReflectionNotes = async () => {
     if (!reflection?.id) return;
@@ -505,9 +514,11 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
                       style={styles.attachmentThumbnailWrapper}
                       onPress={() => {
                         if (isImage) {
-                          const imageAttachments = reflection.attachments!.filter(f => f.file_type?.startsWith('image/'));
-                          const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
-                          setSelectedImages(imageAttachments);
+                          const reflectionImages = reflection.attachments?.filter(f => f.file_type?.startsWith('image/')) || [];
+                          const noteImages = allNoteAttachments.filter(f => f.file_type?.startsWith('image/'));
+                          const allImages = [...reflectionImages, ...noteImages];
+                          const imageIndex = allImages.findIndex(img => img.id === file.id);
+                          setSelectedImages(allImages);
                           setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
                           setImageViewerVisible(true);
                         } else {
@@ -669,9 +680,11 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
                                     style={styles.attachmentThumbnailWrapper}
                                     onPress={() => {
                                       if (isImage) {
-                                        const imageAttachments = noteAttachments.filter(f => f.file_type?.startsWith('image/'));
-                                        const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
-                                        setSelectedImages(imageAttachments);
+                                        const reflectionImages = reflection.attachments?.filter(f => f.file_type?.startsWith('image/')) || [];
+                                        const noteImages = allNoteAttachments.filter(f => f.file_type?.startsWith('image/'));
+                                        const allImages = [...reflectionImages, ...noteImages];
+                                        const imageIndex = allImages.findIndex(img => img.id === file.id);
+                                        setSelectedImages(allImages);
                                         setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
                                         setImageViewerVisible(true);
                                       } else {
