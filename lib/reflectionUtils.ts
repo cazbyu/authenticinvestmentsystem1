@@ -104,11 +104,12 @@ export async function fetchReflectionById(
     if (error) throw error;
     if (!reflection) return null;
 
-    const [rolesData, domainsData, keyRelsData, notesData] = await Promise.all([
+    const [rolesData, domainsData, keyRelsData, notesData, attachmentsData] = await Promise.all([
       fetchReflectionRoles(reflection.id),
       fetchReflectionDomains(reflection.id),
       fetchReflectionKeyRelationships(reflection.id),
       fetchReflectionNotes(reflection.id, reflection.date, reflection.user_id),
+      fetchReflectionAttachments(reflection.id),
     ]);
 
     return {
@@ -117,6 +118,7 @@ export async function fetchReflectionById(
       domains: domainsData,
       keyRelationships: keyRelsData,
       notes: notesData,
+      attachments: attachmentsData,
     };
   } catch (error) {
     console.error('Error fetching reflection by ID:', error);

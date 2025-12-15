@@ -489,6 +489,64 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
             </View>
           )}
 
+          {/* Images and Attachments */}
+          {reflection.attachments && reflection.attachments.length > 0 && (
+            <View style={styles.detailSection}>
+              <View style={styles.attachmentsHeaderRow}>
+                <Text style={styles.detailLabel}>Images and Attachments:</Text>
+                <AttachmentBadge count={reflection.attachments.length} size="small" />
+              </View>
+              <View style={styles.attachmentsGrid}>
+                {reflection.attachments.slice(0, 4).map((file, idx) => {
+                  const isImage = file.file_type?.startsWith('image/');
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.attachmentThumbnailWrapper}
+                      onPress={() => {
+                        if (isImage) {
+                          const imageAttachments = reflection.attachments!.filter(f => f.file_type?.startsWith('image/'));
+                          const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                          setSelectedImages(imageAttachments);
+                          setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                          setImageViewerVisible(true);
+                        } else {
+                          Linking.openURL(file.public_url || '');
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {isImage ? (
+                        <Image
+                          source={{ uri: file.public_url }}
+                          style={styles.thumbnailImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.documentThumbnail}>
+                          <AttachmentThumbnail
+                            uri={file.public_url || ''}
+                            fileType={file.file_type}
+                            fileName={file.file_name}
+                            size="small"
+                          />
+                        </View>
+                      )}
+                      <Text style={styles.thumbnailFileName} numberOfLines={1}>
+                        {file.file_name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {reflection.attachments.length > 4 && (
+                  <View style={styles.moreAttachmentsIndicator}>
+                    <Text style={styles.moreAttachmentsText}>+{reflection.attachments.length - 4}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* Reflection Type */}
           <View style={styles.detailSection}>
             <Text style={styles.detailLabel}>Type:</Text>
@@ -959,6 +1017,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
     color: '#374151'
+  },
+  attachmentsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
   },
   notesHeaderRow: {
     flexDirection: 'row',
