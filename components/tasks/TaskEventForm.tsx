@@ -218,6 +218,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [dontShowWarningAgain, setDontShowWarningAgain] = useState(false);
   const [isEditingCompletedTask, setIsEditingCompletedTask] = useState(false);
 
+  // Track if we're still in the initial load phase (to prevent auto-scroll)
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   // Delegate state
   const [delegates, setDelegates] = useState<Delegate[]>([]);
   const [showDelegateModal, setShowDelegateModal] = useState(false);
@@ -303,10 +306,18 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   };
 
   useEffect(() => {
-    fetchFormData();
-    if (initialData) {
-      loadInitialData();
-    }
+    const initialize = async () => {
+      // Mark that we're in initial load phase
+      setIsInitialLoad(true);
+      await fetchFormData();
+      if (initialData) {
+        await loadInitialData();
+      }
+      // Mark initial load as complete
+      setIsInitialLoad(false);
+    };
+
+    initialize();
   }, [mode, initialData]);
 
   // Handle pre-selected type
@@ -383,7 +394,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   useEffect(() => {
     const enabled = !!formData.isGoal && !!formData.selectedGoal && !!formData.recurrenceRule;
     setGoalMode(enabled);
-    if (enabled) {
+
+    // Only trigger prefill, modal opening, and scroll when user actively changes goal settings
+    // (not during initial data load)
+    if (enabled && !isInitialLoad) {
       // Prefill from goal
       const g = formData.selectedGoal!;
       setFormData(prev => ({
@@ -398,7 +412,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       // Scroll to bottom to show goal area controls
       scrollRef.current?.scrollToEnd({ animated: true });
     }
-  }, [formData.isGoal, formData.selectedGoal, formData.recurrenceRule]);
+  }, [formData.isGoal, formData.selectedGoal, formData.recurrenceRule, isInitialLoad]);
 
   const fetchFormData = async () => {
     setLoading(true);
@@ -508,17 +522,26 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
     // Determine reflection mode from database flags
     let reflectionMode: ReflectionMode = 'rose';
+    let determinedType: SchedulingType = initialData.type || 'task';
+
     if (initialData.daily_rose) {
       reflectionMode = 'rose';
+      determinedType = 'reflection';
     } else if (initialData.daily_thorn) {
       reflectionMode = 'thorn';
+      determinedType = 'reflection';
     } else if (initialData.type === 'depositIdea') {
       reflectionMode = 'depositIdea';
+      determinedType = 'reflection';
+    } else if (initialData.content && !initialData.due_date && !initialData.start_date) {
+      // If there's content but no date fields, it's likely a reflection
+      reflectionMode = 'reflection';
+      determinedType = 'reflection';
     }
 
     // Build formData, handling both edit mode (with id) and create mode (pre-fill only)
     const newFormData: FormData = {
-      type: initialData.type || 'task',
+      type: determinedType,
       reflectionMode,
       title: initialData.title || initialData.reflection_title || '',
       dueDate: initialData.due_date || formatLocalDate(new Date()),
@@ -547,6 +570,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       followUpEnabled: initialData.follow_up || false,
       followUpDate: initialData.follow_up_date || formatLocalDate(new Date()),
       followUpTime: '',
+      isAnytimeFollowUp: true,
+      parentId: parentId || initialData.parent_id,
+      parentType: parentType || initialData.parent_type,
     };
 
     setFormData(newFormData);
