@@ -4,6 +4,7 @@ import { FileText, Plus, Lightbulb } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
+import { fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 
 interface JournalEntry {
   id: string;
@@ -560,7 +561,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       if (reflectionsData && reflectionsData.length) {
         const rIds = reflectionsData.map((r: any) => r.id);
 
-        const [rRolesRes, rDomainsRes, rKeyRelsRes, rNotesRes] = await Promise.all([
+        const [rRolesRes, rDomainsRes, rKeyRelsRes, rNotesRes, rAttachmentsMap] = await Promise.all([
           supabase
             .from('0008-ap-universal-roles-join')
             .select('parent_id, role_id, role:0008-ap-roles(id,label)')
@@ -581,6 +582,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
             .select('parent_id, note:0008-ap-notes(id,content,created_at)')
             .in('parent_id', rIds)
             .eq('parent_type', 'reflection'),
+          fetchAttachmentsForReflections(rIds),
         ]);
 
         const rRoles = rRolesRes.data ?? [];
@@ -626,6 +628,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
             .map((k: any) => k.key_relationship)
             .filter(Boolean);
           const notes = (notesByR.get(r.id) ?? []).map((n: any) => n.note).filter(Boolean);
+          const attachments = rAttachmentsMap.get(r.id) ?? [];
 
           journalEntries.push({
             id: r.id,
@@ -637,7 +640,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
             has_notes: notes.length > 0,
             source_id: r.id,
             source_type: 'reflection',
-            source_data: { ...r, roles, domains, keyRelationships, notes },
+            source_data: { ...r, roles, domains, keyRelationships, notes, attachments },
           });
         }
       }
