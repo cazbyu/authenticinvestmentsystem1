@@ -90,6 +90,17 @@ export default function FollowUpToggleSection({
               </TouchableOpacity>
             </View>
 
+            {!isAnytime && (
+              <View style={styles.timeField}>
+                <Text style={[styles.fieldLabel, { color: colors.text }]}>Time</Text>
+                <TimePickerDropdown
+                  value={time}
+                  onChange={onTimeChange}
+                  colors={colors}
+                />
+              </View>
+            )}
+
             <View style={styles.anytimeField}>
               <Text style={[styles.fieldLabel, { color: colors.text }]}>Anytime</Text>
               <Switch
@@ -100,17 +111,6 @@ export default function FollowUpToggleSection({
               />
             </View>
           </View>
-
-          {!isAnytime && (
-            <View style={styles.field}>
-              <Text style={[styles.fieldLabel, { color: colors.text }]}>Time</Text>
-              <TimePickerDropdown
-                value={time}
-                onChange={onTimeChange}
-                colors={colors}
-              />
-            </View>
-          )}
 
           <Text style={[styles.selectedInfo, { color: colors.textSecondary }]}>
             Follow up on {formatDisplayDate(date)}{!isAnytime && time ? ` at ${time}` : ''}
@@ -185,9 +185,14 @@ const styles = StyleSheet.create({
   dateTimeRow: {
     flexDirection: 'row',
     gap: 12,
+    alignItems: 'flex-end',
   },
   dateField: {
-    flex: 1,
+    width: 150,
+    gap: 6,
+  },
+  timeField: {
+    width: 150,
     gap: 6,
   },
   anytimeField: {
@@ -195,9 +200,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 4,
-  },
-  field: {
-    gap: 6,
   },
   fieldLabel: {
     fontSize: 14,

@@ -143,6 +143,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     minHeight: 48,
+    width: 150,
+    alignSelf: 'flex-start',
   },
   dropdownButtonText: {
     fontSize: 16,
