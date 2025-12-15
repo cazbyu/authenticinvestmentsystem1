@@ -2658,7 +2658,7 @@ const styles = StyleSheet.create({
   switchesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: 220,
+    width: 250,
     maxWidth: '100%',
     gap: 24,
   },
@@ -2673,7 +2673,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: 220,
+    width: 250,
     maxWidth: '100%',
     minWidth: 0,
     paddingHorizontal: 12,
@@ -3135,7 +3135,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginTop: 8,
-    width: 220,
+    width: 250,
     maxWidth: '100%',
   },
   delegateInfoText: {
