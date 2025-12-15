@@ -39,6 +39,7 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
   const [selectedImages, setSelectedImages] = useState<any[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [allNoteAttachments, setAllNoteAttachments] = useState<any[]>([]);
+  const [allCombinedAttachments, setAllCombinedAttachments] = useState<any[]>([]);
 
   // New note input state
   const [newNoteContent, setNewNoteContent] = useState('');
@@ -68,6 +69,12 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
     });
     setAllNoteAttachments(attachments);
   }, [noteAttachmentsMap]);
+
+  useEffect(() => {
+    const reflectionAttachments = reflection?.attachments || [];
+    const combined = [...reflectionAttachments, ...allNoteAttachments];
+    setAllCombinedAttachments(combined);
+  }, [reflection?.attachments, allNoteAttachments]);
 
   const fetchReflectionNotes = async () => {
     if (!reflection?.id) return;
@@ -498,66 +505,6 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
             </View>
           )}
 
-          {/* Images and Attachments */}
-          {reflection.attachments && reflection.attachments.length > 0 && (
-            <View style={styles.detailSection}>
-              <View style={styles.attachmentsHeaderRow}>
-                <Text style={styles.detailLabel}>Images and Attachments:</Text>
-                <AttachmentBadge count={reflection.attachments.length} size="small" />
-              </View>
-              <View style={styles.attachmentsGrid}>
-                {reflection.attachments.slice(0, 4).map((file, idx) => {
-                  const isImage = file.file_type?.startsWith('image/');
-                  return (
-                    <TouchableOpacity
-                      key={idx}
-                      style={styles.attachmentThumbnailWrapper}
-                      onPress={() => {
-                        if (isImage) {
-                          const reflectionImages = reflection.attachments?.filter(f => f.file_type?.startsWith('image/')) || [];
-                          const noteImages = allNoteAttachments.filter(f => f.file_type?.startsWith('image/'));
-                          const allImages = [...reflectionImages, ...noteImages];
-                          const imageIndex = allImages.findIndex(img => img.id === file.id);
-                          setSelectedImages(allImages);
-                          setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
-                          setImageViewerVisible(true);
-                        } else {
-                          Linking.openURL(file.public_url || '');
-                        }
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      {isImage ? (
-                        <Image
-                          source={{ uri: file.public_url }}
-                          style={styles.thumbnailImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.documentThumbnail}>
-                          <AttachmentThumbnail
-                            uri={file.public_url || ''}
-                            fileType={file.file_type}
-                            fileName={file.file_name}
-                            size="small"
-                          />
-                        </View>
-                      )}
-                      <Text style={styles.thumbnailFileName} numberOfLines={1}>
-                        {file.file_name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                {reflection.attachments.length > 4 && (
-                  <View style={styles.moreAttachmentsIndicator}>
-                    <Text style={styles.moreAttachmentsText}>+{reflection.attachments.length - 4}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-
           {/* Reflection Type */}
           <View style={styles.detailSection}>
             <Text style={styles.detailLabel}>Type:</Text>
@@ -618,6 +565,64 @@ export function ReflectionDetailsModal({ visible, reflection, onClose, onDelete,
                     <Text style={styles.tagText}>{kr.name}</Text>
                   </View>
                 ))}
+              </View>
+            </View>
+          )}
+
+          {/* Aggregated Images and Attachments */}
+          {allCombinedAttachments.length > 0 && (
+            <View style={styles.detailSection}>
+              <View style={styles.attachmentsHeaderRow}>
+                <Text style={styles.detailLabel}>Images and Attachments:</Text>
+                <AttachmentBadge count={allCombinedAttachments.length} size="small" />
+              </View>
+              <View style={styles.attachmentsGrid}>
+                {allCombinedAttachments.slice(0, 4).map((file, idx) => {
+                  const isImage = file.file_type?.startsWith('image/');
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.attachmentThumbnailWrapper}
+                      onPress={() => {
+                        if (isImage) {
+                          const allImages = allCombinedAttachments.filter(f => f.file_type?.startsWith('image/'));
+                          const imageIndex = allImages.findIndex(img => img.id === file.id);
+                          setSelectedImages(allImages);
+                          setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                          setImageViewerVisible(true);
+                        } else {
+                          Linking.openURL(file.public_url || file.uri);
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {isImage ? (
+                        <Image
+                          source={{ uri: file.public_url || file.uri }}
+                          style={styles.thumbnailImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.documentThumbnail}>
+                          <AttachmentThumbnail
+                            uri={file.public_url || file.uri}
+                            fileType={file.file_type || file.type}
+                            fileName={file.file_name || file.name}
+                            size="small"
+                          />
+                        </View>
+                      )}
+                      <Text style={styles.thumbnailFileName} numberOfLines={1}>
+                        {file.file_name || file.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {allCombinedAttachments.length > 4 && (
+                  <View style={styles.moreAttachmentsIndicator}>
+                    <Text style={styles.moreAttachmentsText}>+{allCombinedAttachments.length - 4}</Text>
+                  </View>
+                )}
               </View>
             </View>
           )}
