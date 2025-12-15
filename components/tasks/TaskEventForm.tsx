@@ -2690,9 +2690,8 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
-    flex: 0,
+    flexShrink: 0,
     marginRight: 12,
-    whiteSpace: 'nowrap',
   },
   dateRow: {
     flexDirection: 'row',

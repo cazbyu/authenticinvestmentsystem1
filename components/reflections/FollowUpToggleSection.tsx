@@ -184,9 +184,8 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    flex: 0,
+    flexShrink: 0,
     marginRight: 12,
-    whiteSpace: 'nowrap',
   },
   pickerContainer: {
     marginTop: 12,
