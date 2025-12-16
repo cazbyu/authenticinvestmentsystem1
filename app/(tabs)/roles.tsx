@@ -112,7 +112,6 @@ export default function Roles() {
   const [roleStatsPeriod, setRoleStatsPeriod] = useState<'week' | 'month'>('week');
   const [roleStatistics, setRoleStatistics] = useState<Record<string, RoleStatistics>>({});
   const [loadingStatistics, setLoadingStatistics] = useState(false);
-  const [roleImageUrls, setRoleImageUrls] = useState<Record<string, string>>({});
 
   // Memoize the scope object to prevent unnecessary re-renders
   const goalsScope = useMemo(() => {
