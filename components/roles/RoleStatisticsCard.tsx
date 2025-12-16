@@ -63,7 +63,7 @@ export function RoleStatisticsCard({
             </Text>
           </View>
         )}
-        <Text style={styles.roleLabel} numberOfLines={1}>{role.label}</Text>
+        <Text style={styles.roleLabel}>{role.label}</Text>
       </View>
 
       {/* Center-Left: Summary Metrics */}
@@ -71,7 +71,7 @@ export function RoleStatisticsCard({
         <View style={styles.summaryTile}>
           <View style={styles.summaryHeader}>
             <Text style={styles.summaryLabel}>Deposits</Text>
-            <CheckCircle size={12} color="#10b981" />
+            <CheckCircle size={10} color="#10b981" />
           </View>
           <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
         </View>
@@ -85,7 +85,7 @@ export function RoleStatisticsCard({
       <View style={styles.scheduleSection}>
         <View style={styles.scheduleHeader}>
           <Text style={styles.scheduleLabel}>Deposits</Text>
-          <Calendar size={12} color="#6b7280" />
+          <Calendar size={10} color="#6b7280" />
         </View>
         <View style={styles.scheduleGrid}>
           <Text style={styles.scheduleRow}>W1: {statistics.scheduledByWeek.week1}</Text>
@@ -129,6 +129,7 @@ const styles = StyleSheet.create({
     gap: 18,
     minHeight: 130,
     minWidth: 700,
+    overflow: 'hidden',
   },
   loadingContainer: {
     flex: 1,
@@ -172,34 +173,36 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
+    width: '100%',
   },
   summarySection: {
-    gap: 12,
+    gap: 10,
     width: 100,
     flexShrink: 0,
     paddingRight: 16,
     borderRightWidth: 1,
     borderRightColor: '#9ca3af',
+    alignItems: 'center',
   },
   summaryTile: {
-    minWidth: 85,
+    alignItems: 'center',
   },
   summaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 2,
+    gap: 3,
+    marginBottom: 1,
   },
   summaryLabel: {
-    fontSize: 10,
-    color: '#4b5563',
-    fontWeight: '600',
+    fontSize: 8,
+    color: '#6b7280',
+    fontWeight: '500',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   summaryValue: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 34,
+    fontWeight: '800',
     color: '#111827',
   },
   scheduleSection: {
@@ -213,7 +216,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   scheduleLabel: {
     fontSize: 9,
@@ -223,7 +226,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   scheduleGrid: {
-    gap: 2,
+    gap: 1,
   },
   scheduleRow: {
     fontSize: 12,
@@ -233,6 +236,8 @@ const styles = StyleSheet.create({
   quadrantSection: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignContent: 'center',
+    justifyContent: 'center',
     width: 160,
     minWidth: 160,
     flexShrink: 0,
@@ -243,7 +248,7 @@ const styles = StyleSheet.create({
     height: 54,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: 4,
   },
   quadrantValue: {
     fontSize: 20,
