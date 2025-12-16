@@ -14,7 +14,7 @@ import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUt
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { BalanceScoresView } from '@/components/wellness/BalanceScoresView';
 import { getSupabaseClient } from '@/lib/supabase';
-import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
+import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, CreditCard as Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
