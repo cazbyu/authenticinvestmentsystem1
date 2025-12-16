@@ -41,26 +41,19 @@ export function DomainStatisticsCard({
         onPress={() => onPress(domain)}
         activeOpacity={0.8}
       >
-        {/* Left: Domain Identity */}
+        {/* Left: Identity + Primary Metrics */}
         <View style={styles.identitySection}>
-          <View style={styles.domainIcon}>
-            <Heart size={40} color="#ec4899" />
+          <View style={styles.avatar}>
+            <Heart size={32} color="#ec4899" />
           </View>
-          <Text style={styles.domainLabel}>{domain.name}</Text>
-        </View>
-
-        {/* Center-Left: Summary Metrics */}
-        <View style={styles.summarySection}>
-          <View style={styles.summaryTile}>
-            <View style={styles.summaryHeader}>
-              <Text style={styles.summaryLabel}>Deposits</Text>
-              <CheckCircle size={12} color="#10b981" />
-            </View>
-            <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
+          <Text style={styles.titleLabel}>{domain.name}</Text>
+          <View style={styles.metricRow}>
+            <Text style={styles.metricLabel}>Deposits</Text>
+            <Text style={styles.metricValue}>{statistics.completedDeposits}</Text>
           </View>
-          <View style={styles.summaryTile}>
-            <Text style={styles.summaryLabel}>AS</Text>
-            <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
+          <View style={styles.metricRow}>
+            <Text style={styles.metricLabel}>AS</Text>
+            <Text style={styles.metricValue}>{statistics.authenticScore}</Text>
           </View>
         </View>
 
@@ -125,53 +118,41 @@ const styles = StyleSheet.create({
   identitySection: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 90,
+    width: 140,
     flexShrink: 0,
     paddingRight: 16,
     borderRightWidth: 1,
     borderRightColor: '#9ca3af',
+    gap: 6,
   },
-  domainIcon: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#fce7f3',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
   },
-  domainLabel: {
+  titleLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
+    marginBottom: 4,
   },
-  summarySection: {
-    gap: 12,
-    width: 100,
-    flexShrink: 0,
-    paddingRight: 16,
-    borderRightWidth: 1,
-    borderRightColor: '#9ca3af',
-  },
-  summaryTile: {
-    minWidth: 85,
-  },
-  summaryHeader: {
-    flexDirection: 'row',
+  metricRow: {
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 2,
+    gap: 2,
   },
-  summaryLabel: {
-    fontSize: 10,
-    color: '#4b5563',
+  metricLabel: {
+    fontSize: 9,
+    color: '#6b7280',
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
-  summaryValue: {
-    fontSize: 32,
+  metricValue: {
+    fontSize: 26,
     fontWeight: '700',
     color: '#111827',
   },

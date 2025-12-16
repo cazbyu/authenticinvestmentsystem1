@@ -52,32 +52,25 @@ export function RoleStatisticsCard({
         style={styles.dashboardStrip}
         {...wrapperProps}
       >
-      {/* Left: Role Identity */}
+      {/* Left: Identity + Primary Metrics */}
       <View style={styles.identitySection}>
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={styles.roleAvatar} />
+          <Image source={{ uri: imageUrl }} style={styles.avatar} />
         ) : (
-          <View style={[styles.roleAvatarPlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
-            <Text style={styles.roleAvatarText}>
+          <View style={[styles.avatarPlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
+            <Text style={styles.avatarText}>
               {role.label.charAt(0).toUpperCase()}
             </Text>
           </View>
         )}
-        <Text style={styles.roleLabel} numberOfLines={1}>{role.label}</Text>
-      </View>
-
-      {/* Center-Left: Summary Metrics */}
-      <View style={styles.summarySection}>
-        <View style={styles.summaryTile}>
-          <View style={styles.summaryHeader}>
-            <Text style={styles.summaryLabel}>Deposits</Text>
-            <CheckCircle size={12} color="#10b981" />
-          </View>
-          <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
+        <Text style={styles.titleLabel}>{role.label}</Text>
+        <View style={styles.metricRow}>
+          <Text style={styles.metricLabel}>Deposits</Text>
+          <Text style={styles.metricValue}>{statistics.completedDeposits}</Text>
         </View>
-        <View style={styles.summaryTile}>
-          <Text style={styles.summaryLabel}>AS</Text>
-          <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
+        <View style={styles.metricRow}>
+          <Text style={styles.metricLabel}>AS</Text>
+          <Text style={styles.metricValue}>{statistics.authenticScore}</Text>
         </View>
       </View>
 
@@ -142,92 +135,79 @@ const styles = StyleSheet.create({
   identitySection: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 90,
+    width: 140,
     flexShrink: 0,
     paddingRight: 16,
     borderRightWidth: 1,
     borderRightColor: '#9ca3af',
+    gap: 6,
   },
-  roleAvatar: {
-    width: 70,
-    height: 70,
+  avatar: {
+    width: 60,
+    height: 60,
     borderRadius: 4,
-    marginBottom: 8,
   },
-  roleAvatarPlaceholder: {
-    width: 70,
-    height: 70,
+  avatarPlaceholder: {
+    width: 60,
+    height: 60,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
   },
-  roleAvatarText: {
-    fontSize: 28,
+  avatarText: {
+    fontSize: 24,
     fontWeight: '700',
     color: '#ffffff',
   },
-  roleLabel: {
+  titleLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
+    marginBottom: 4,
   },
-  summarySection: {
-    gap: 12,
-    width: 100,
-    flexShrink: 0,
-    paddingRight: 16,
-    borderRightWidth: 1,
-    borderRightColor: '#9ca3af',
-  },
-  summaryTile: {
-    minWidth: 85,
-  },
-  summaryHeader: {
-    flexDirection: 'row',
+  metricRow: {
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 2,
+    gap: 2,
   },
-  summaryLabel: {
-    fontSize: 10,
-    color: '#4b5563',
+  metricLabel: {
+    fontSize: 9,
+    color: '#6b7280',
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
-  summaryValue: {
-    fontSize: 32,
+  metricValue: {
+    fontSize: 26,
     fontWeight: '700',
     color: '#111827',
   },
   scheduleSection: {
-    minWidth: 100,
-    flex: 1,
-    paddingRight: 16,
+    width: 80,
+    flexShrink: 0,
+    paddingRight: 12,
     borderRightWidth: 1,
     borderRightColor: '#9ca3af',
   },
   scheduleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 8,
+    gap: 3,
+    marginBottom: 6,
   },
   scheduleLabel: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#4b5563',
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   scheduleGrid: {
-    gap: 4,
+    gap: 2,
   },
   scheduleRow: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     color: '#111827',
   },
   quadrantSection: {
