@@ -2614,7 +2614,7 @@ const styles = StyleSheet.create({
   },
   periodSelectorContainer: {
     marginBottom: 16,
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
   periodSelector: {
     flexDirection: 'row',
@@ -2657,6 +2657,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statisticsCardWrapper: {
-    width: '48%',
+    flex: 1,
+    minWidth: '45%',
+    maxWidth: '50%',
   },
 });
