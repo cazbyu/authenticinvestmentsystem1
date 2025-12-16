@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
-import { CheckCircle, Calendar, Flower, AlertCircle, Lightbulb, FileText } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Calendar, Flower, CircleAlert as AlertCircle, Lightbulb, FileText } from 'lucide-react-native';
 import { RoleStatistics } from '@/lib/roleStatistics';
 
 interface Role {
