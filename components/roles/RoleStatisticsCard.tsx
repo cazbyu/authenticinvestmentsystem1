@@ -92,19 +92,19 @@ export function RoleStatisticsCard({
       {/* Right: Icon Quadrants */}
       <View style={styles.quadrantSection}>
         <View style={styles.quadrantTile}>
-          <Flower size={20} color="#ec4899" />
+          <Flower size={26} color="#ec4899" />
           <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
         </View>
         <View style={styles.quadrantTile}>
-          <Lightbulb size={20} color="#f59e0b" />
+          <Lightbulb size={26} color="#f59e0b" />
           <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
         </View>
         <View style={styles.quadrantTile}>
-          <AlertCircle size={20} color="#ef4444" />
+          <AlertCircle size={26} color="#ef4444" />
           <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
         </View>
         <View style={styles.quadrantTile}>
-          <FileText size={20} color="#6b7280" />
+          <FileText size={26} color="#6b7280" />
           <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
         </View>
       </View>
@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 18,
     minHeight: 130,
+    minWidth: 700,
   },
   loadingContainer: {
     flex: 1,
@@ -135,7 +136,8 @@ const styles = StyleSheet.create({
   identitySection: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 90,
+    width: 90,
+    flexShrink: 0,
     paddingRight: 16,
     borderRightWidth: 1,
     borderRightColor: '#9ca3af',
@@ -167,6 +169,8 @@ const styles = StyleSheet.create({
   },
   summarySection: {
     gap: 12,
+    width: 100,
+    flexShrink: 0,
     paddingRight: 16,
     borderRightWidth: 1,
     borderRightColor: '#9ca3af',
@@ -194,6 +198,7 @@ const styles = StyleSheet.create({
   },
   scheduleSection: {
     minWidth: 100,
+    flex: 1,
     paddingRight: 16,
     borderRightWidth: 1,
     borderRightColor: '#9ca3af',
@@ -222,18 +227,20 @@ const styles = StyleSheet.create({
   quadrantSection: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    width: 140,
-    gap: 10,
+    width: 160,
+    minWidth: 160,
+    flexShrink: 0,
+    gap: 8,
   },
   quadrantTile: {
-    width: 65,
-    height: 55,
+    width: 76,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
   },
   quadrantValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: '#111827',
   },
