@@ -1765,16 +1765,19 @@ export default function Roles() {
                     const stats = roleStatistics[role.id];
                     if (!stats) return null;
 
-                    const cardWidth = width < 768 ? '100%' : width < 1024 ? '48%' : width < 1440 ? '32%' : '24%';
-
                     return (
-                      <View key={role.id} style={[styles.statisticsCardWrapper, { width: cardWidth }]}>
+                      <ScrollView
+                        key={role.id}
+                        style={styles.statisticsCardWrapper}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                      >
                         <RoleStatisticsCard
                           role={role}
                           statistics={stats}
                           period={roleStatsPeriod}
                         />
-                      </View>
+                      </ScrollView>
                     );
                   })}
                 </View>
@@ -2655,8 +2658,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   statisticsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 10,
   },
   statisticsCardWrapper: {
