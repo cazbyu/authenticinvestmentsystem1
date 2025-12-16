@@ -29,6 +29,8 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
+import { RoleStatisticsCard } from '@/components/roles/RoleStatisticsCard';
+import { getRoleStatistics, RoleStatistics } from '@/lib/roleStatistics';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -105,6 +107,12 @@ export default function Roles() {
   const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
   const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
+  // Role Bank statistics
+  const [roleStatsPeriod, setRoleStatsPeriod] = useState<'week' | 'month'>('week');
+  const [roleStatistics, setRoleStatistics] = useState<Record<string, RoleStatistics>>({});
+  const [loadingStatistics, setLoadingStatistics] = useState(false);
+  const [roleImageUrls, setRoleImageUrls] = useState<Record<string, string>>({});
 
   // Memoize the scope object to prevent unnecessary re-renders
   const goalsScope = useMemo(() => {
