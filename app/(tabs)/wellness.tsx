@@ -1432,7 +1432,8 @@ const styles = StyleSheet.create({
   statisticsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 16,
+    justifyContent: 'space-between',
   },
   statisticsCardWrapper: {
     width: '48%',
