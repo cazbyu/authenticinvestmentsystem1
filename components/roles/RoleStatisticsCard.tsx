@@ -76,7 +76,7 @@ export function RoleStatisticsCard({
           <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
         </View>
         <View style={styles.summaryTile}>
-          <Text style={styles.summaryLabel}>AS</Text>
+          <Text style={styles.summaryLabel}>Authentic Score</Text>
           <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
         </View>
       </View>
@@ -169,11 +169,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   roleLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
     width: '100%',
+    lineHeight: 13,
   },
   summarySection: {
     gap: 10,
@@ -186,12 +187,16 @@ const styles = StyleSheet.create({
   },
   summaryTile: {
     alignItems: 'center',
+    width: '100%',
   },
   summaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 3,
     marginBottom: 1,
+    flexWrap: 'wrap',
+    width: '100%',
   },
   summaryLabel: {
     fontSize: 8,
@@ -199,11 +204,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
+    textAlign: 'center',
   },
   summaryValue: {
     fontSize: 34,
     fontWeight: '800',
     color: '#111827',
+    textAlign: 'center',
   },
   scheduleSection: {
     width: 80,
