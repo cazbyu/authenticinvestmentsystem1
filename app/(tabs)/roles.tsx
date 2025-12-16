@@ -1766,18 +1766,19 @@ export default function Roles() {
                     if (!stats) return null;
 
                     return (
-                      <ScrollView
+                      <View
                         key={role.id}
-                        style={styles.statisticsCardWrapper}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
+                        style={[
+                          styles.statisticsCardWrapper,
+                          { width: width < 768 ? '100%' : '49%' }
+                        ]}
                       >
                         <RoleStatisticsCard
                           role={role}
                           statistics={stats}
                           period={roleStatsPeriod}
                         />
-                      </ScrollView>
+                      </View>
                     );
                   })}
                 </View>
@@ -2658,10 +2659,11 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   statisticsGrid: {
-    flexDirection: 'column',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   statisticsCardWrapper: {
-    width: '100%',
+    minWidth: 0,
   },
 });

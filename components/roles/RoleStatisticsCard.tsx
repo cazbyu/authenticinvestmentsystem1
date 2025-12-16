@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, useWindowDimensions, ScrollView } from 'react-native';
 import { CircleCheck as CheckCircle, Calendar, Flower, CircleAlert as AlertCircle, Lightbulb, FileText } from 'lucide-react-native';
 import { RoleStatistics } from '@/lib/roleStatistics';
 
@@ -14,8 +14,9 @@ interface Role {
 interface RoleStatisticsCardProps {
   role: Role;
   statistics: RoleStatistics | null;
+  period?: 'week' | 'month' | 'year';
   loading?: boolean;
-  onPress: (role: Role) => void;
+  onPress?: (role: Role) => void;
   imageUrl?: string;
 }
 
@@ -32,20 +33,25 @@ export function RoleStatisticsCard({
 
   if (loading || !statistics) {
     return (
-      <View style={styles.dashboardStrip}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.dashboardStrip}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     );
   }
 
+  const StripWrapper = onPress ? TouchableOpacity : View;
+  const wrapperProps = onPress ? { onPress: () => onPress(role), activeOpacity: 0.8 } : {};
+
   return (
-    <TouchableOpacity
-      style={styles.dashboardStrip}
-      onPress={() => onPress(role)}
-      activeOpacity={0.8}
-    >
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <StripWrapper
+        style={styles.dashboardStrip}
+        {...wrapperProps}
+      >
       {/* Left: Role Identity */}
       <View style={styles.identitySection}>
         {imageUrl ? (
@@ -108,7 +114,8 @@ export function RoleStatisticsCard({
           <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
         </View>
       </View>
-    </TouchableOpacity>
+      </StripWrapper>
+    </ScrollView>
   );
 }
 
@@ -119,7 +126,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1d5db',
     borderRadius: 12,
     padding: 18,
-    marginBottom: 12,
     gap: 18,
     minHeight: 130,
     minWidth: 700,
