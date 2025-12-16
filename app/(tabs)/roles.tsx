@@ -919,6 +919,40 @@ export default function Roles() {
     }
   }, [activeMainTab, selectedRole, selectedKR]);
 
+  // Fetch role statistics when viewing main role bank and period changes
+  useEffect(() => {
+    const fetchRoleStatistics = async () => {
+      if (activeMainTab === 'roles' && !selectedRole && roles.length > 0) {
+        setLoadingStatistics(true);
+        try {
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const stats: Record<string, RoleStatistics> = {};
+
+          for (const role of roles) {
+            const roleStats = await getRoleStatistics(
+              supabase,
+              user.id,
+              role.id,
+              roleStatsPeriod
+            );
+            stats[role.id] = roleStats;
+          }
+
+          setRoleStatistics(stats);
+        } catch (error) {
+          console.error('Error fetching role statistics:', error);
+        } finally {
+          setLoadingStatistics(false);
+        }
+      }
+    };
+
+    fetchRoleStatistics();
+  }, [activeMainTab, roles.length, roleStatsPeriod, selectedRole]);
+
   const handleViewChange = (view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
     if (selectedRole && (view === 'deposits' || view === 'ideas')) {
@@ -1687,6 +1721,64 @@ export default function Roles() {
       <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'roles' && (
           <ScrollView style={styles.rolesList}>
+            {/* Statistics Section */}
+            <View style={styles.statisticsSection}>
+              {/* Time Period Selector */}
+              <View style={styles.periodSelectorContainer}>
+                <View style={styles.periodSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.periodButton,
+                      roleStatsPeriod === 'week' && styles.periodButtonActive
+                    ]}
+                    onPress={() => setRoleStatsPeriod('week')}
+                  >
+                    <Text style={[
+                      styles.periodButtonText,
+                      roleStatsPeriod === 'week' && styles.periodButtonTextActive
+                    ]}>Week</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.periodButton,
+                      roleStatsPeriod === 'month' && styles.periodButtonActive
+                    ]}
+                    onPress={() => setRoleStatsPeriod('month')}
+                  >
+                    <Text style={[
+                      styles.periodButtonText,
+                      roleStatsPeriod === 'month' && styles.periodButtonTextActive
+                    ]}>Month</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* 2-Column Statistics Grid */}
+              {loadingStatistics ? (
+                <View style={styles.statisticsLoadingContainer}>
+                  <Text style={styles.statisticsLoadingText}>Loading statistics...</Text>
+                </View>
+              ) : (
+                <View style={styles.statisticsGrid}>
+                  {roles.map(role => {
+                    const stats = roleStatistics[role.id];
+                    if (!stats) return null;
+
+                    return (
+                      <View key={role.id} style={styles.statisticsCardWrapper}>
+                        <RoleStatisticsCard
+                          role={role}
+                          statistics={stats}
+                          period={roleStatsPeriod}
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            {/* Roles Grid */}
             {roles.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No active roles found</Text>
@@ -2514,5 +2606,57 @@ const styles = StyleSheet.create({
   },
   krItemEditButton: {
     padding: 8,
+  },
+  statisticsSection: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  periodSelectorContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  periodSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    padding: 4,
+  },
+  periodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 6,
+  },
+  periodButtonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  periodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  periodButtonTextActive: {
+    color: '#0078d4',
+  },
+  statisticsLoadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  statisticsLoadingText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  statisticsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statisticsCardWrapper: {
+    width: '48%',
   },
 });

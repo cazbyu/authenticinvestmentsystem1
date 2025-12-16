@@ -26,6 +26,8 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
+import { DomainStatisticsCard } from '@/components/wellness/DomainStatisticsCard';
+import { getDomainStatistics, DomainStatistics } from '@/lib/roleStatistics';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -77,6 +79,11 @@ export default function Wellness() {
   const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
   const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
+  // Domain Bank statistics
+  const [domainStatsPeriod, setDomainStatsPeriod] = useState<'week' | 'month'>('week');
+  const [domainStatistics, setDomainStatistics] = useState<Record<string, DomainStatistics>>({});
+  const [loadingStatistics, setLoadingStatistics] = useState(false);
 
   // 12-Week Goals for selected domain (only fetch when domain is selected)
   const goalProgressScope = useMemo(() =>
@@ -484,6 +491,40 @@ export default function Wellness() {
     }
   }, [activeView, selectedDomain?.id, journalDateRange, calculatePeriodScore]);
 
+  // Fetch domain statistics when viewing main wellness bank and period changes
+  useEffect(() => {
+    const fetchDomainStatistics = async () => {
+      if (activeMainTab === 'domains' && !selectedDomain && domains.length > 0) {
+        setLoadingStatistics(true);
+        try {
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const stats: Record<string, DomainStatistics> = {};
+
+          for (const domain of domains) {
+            const domainStats = await getDomainStatistics(
+              supabase,
+              user.id,
+              domain.id,
+              domainStatsPeriod
+            );
+            stats[domain.id] = domainStats;
+          }
+
+          setDomainStatistics(stats);
+        } catch (error) {
+          console.error('Error fetching domain statistics:', error);
+        } finally {
+          setLoadingStatistics(false);
+        }
+      }
+    };
+
+    fetchDomainStatistics();
+  }, [activeMainTab, domains.length, domainStatsPeriod, selectedDomain]);
+
   const handleViewChange = useCallback((view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
     if (selectedDomain && (view === 'deposits' || view === 'ideas')) {
@@ -822,6 +863,67 @@ export default function Wellness() {
         {/* Domain Cards Section - Below Header Tabs */}
         {activeMainTab === 'domains' && (
           <View style={styles.domainsCardsSection}>
+            {/* Statistics Section with Time Period Selector */}
+            {domains.length > 0 && (
+              <View style={styles.statisticsSection}>
+                {/* Time Period Selector */}
+                <View style={styles.periodSelectorContainer}>
+                  <View style={styles.periodSelector}>
+                    <TouchableOpacity
+                      style={[
+                        styles.periodButton,
+                        domainStatsPeriod === 'week' && styles.periodButtonActive
+                      ]}
+                      onPress={() => setDomainStatsPeriod('week')}
+                    >
+                      <Text style={[
+                        styles.periodButtonText,
+                        domainStatsPeriod === 'week' && styles.periodButtonTextActive
+                      ]}>Week</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.periodButton,
+                        domainStatsPeriod === 'month' && styles.periodButtonActive
+                      ]}
+                      onPress={() => setDomainStatsPeriod('month')}
+                    >
+                      <Text style={[
+                        styles.periodButtonText,
+                        domainStatsPeriod === 'month' && styles.periodButtonTextActive
+                      ]}>Month</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* 2-Column Statistics Grid */}
+                {loadingStatistics ? (
+                  <View style={styles.statisticsLoadingContainer}>
+                    <Text style={styles.statisticsLoadingText}>Loading statistics...</Text>
+                  </View>
+                ) : (
+                  <View style={styles.statisticsGrid}>
+                    {domains.map(domain => {
+                      const stats = domainStatistics[domain.id];
+                      if (!stats) return null;
+
+                      return (
+                        <View key={domain.id} style={styles.statisticsCardWrapper}>
+                          <DomainStatisticsCard
+                            domain={domain}
+                            statistics={stats}
+                            period={domainStatsPeriod}
+                            color={getDomainColor(domain.name)}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Domain Cards */}
             {domains.length === 0 ? (
               <View style={styles.emptyCardsContainer}>
                 <Text style={styles.emptyCardsText}>No domains found</Text>
@@ -1284,5 +1386,55 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  statisticsSection: {
+    marginBottom: 20,
+  },
+  periodSelectorContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  periodSelector: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    padding: 4,
+  },
+  periodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 6,
+  },
+  periodButtonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  periodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  periodButtonTextActive: {
+    color: '#0078d4',
+  },
+  statisticsLoadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  statisticsLoadingText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  statisticsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statisticsCardWrapper: {
+    width: '48%',
   },
 });
