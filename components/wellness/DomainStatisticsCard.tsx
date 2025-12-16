@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
-import { CheckCircle, Calendar, Flower, AlertCircle, Lightbulb, FileText, Heart } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { CircleCheck as CheckCircle, Calendar, Flower, CircleAlert as AlertCircle, Lightbulb, FileText, Heart } from 'lucide-react-native';
 import { DomainStatistics } from '@/lib/roleStatistics';
 
 interface Domain {
@@ -22,230 +22,205 @@ export function DomainStatisticsCard({
   loading = false,
   onPress
 }: DomainStatisticsCardProps) {
-  const { width } = useWindowDimensions();
-  const isMobile = width < 768;
-
   if (loading || !statistics) {
     return (
-      <View style={styles.card}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.dashboardStrip}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     );
   }
 
   return (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => onPress(domain)}
-      activeOpacity={0.7}
-    >
-      {/* Top: Identity - Icon + Name */}
-      <View style={styles.identityRow}>
-        <View style={[styles.domainIconContainer, isMobile && styles.domainIconMobile]}>
-          <Heart size={isMobile ? 20 : 24} color="#ec4899" />
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <TouchableOpacity
+        style={styles.dashboardStrip}
+        onPress={() => onPress(domain)}
+        activeOpacity={0.8}
+      >
+        {/* Left: Domain Identity */}
+        <View style={styles.identitySection}>
+          <View style={styles.domainIcon}>
+            <Heart size={40} color="#ec4899" />
+          </View>
+          <Text style={styles.domainLabel}>{domain.name}</Text>
         </View>
-        <Text style={styles.domainName} numberOfLines={1}>{domain.name}</Text>
-      </View>
 
-      {/* Middle: Primary Metrics - Total Deposits + AS */}
-      <View style={styles.metricsRow}>
-        <View style={styles.depositMetric}>
-          <Text style={styles.metricLabel}>Total</Text>
-          <Text style={styles.depositCount}>{statistics.completedDeposits}</Text>
-        </View>
-        <View style={styles.asMetric}>
-          <Text style={styles.metricLabel}>AS</Text>
-          <Text style={styles.asValue}>{statistics.authenticScore}</Text>
-        </View>
-      </View>
-
-      {/* Bottom: Operational Detail - Weekly + Quadrant */}
-      <View style={styles.detailRow}>
-        <View style={styles.weeklyIndicators}>
-          <View style={styles.weekIndicator}>
-            <Text style={styles.weekLabel}>W1</Text>
-            <View style={styles.weekDot} />
-            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week1}</Text>
+        {/* Center-Left: Summary Metrics */}
+        <View style={styles.summarySection}>
+          <View style={styles.summaryTile}>
+            <View style={styles.summaryHeader}>
+              <Text style={styles.summaryLabel}>Deposits</Text>
+              <CheckCircle size={12} color="#10b981" />
+            </View>
+            <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
           </View>
-          <View style={styles.weekIndicator}>
-            <Text style={styles.weekLabel}>W2</Text>
-            <View style={styles.weekDot} />
-            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week2}</Text>
-          </View>
-          <View style={styles.weekIndicator}>
-            <Text style={styles.weekLabel}>W3</Text>
-            <View style={styles.weekDot} />
-            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week3}</Text>
-          </View>
-          <View style={styles.weekIndicator}>
-            <Text style={styles.weekLabel}>W4</Text>
-            <View style={styles.weekDot} />
-            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week4}</Text>
+          <View style={styles.summaryTile}>
+            <Text style={styles.summaryLabel}>AS</Text>
+            <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
           </View>
         </View>
 
-        <View style={styles.quadrantGrid}>
-          <View style={styles.quadrantRow}>
-            <View style={styles.quadrantCell}>
-              <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
-            </View>
-            <View style={styles.quadrantCell}>
-              <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
-            </View>
+        {/* Center: Weekly Schedule */}
+        <View style={styles.scheduleSection}>
+          <View style={styles.scheduleHeader}>
+            <Text style={styles.scheduleLabel}>Deposits</Text>
+            <Calendar size={12} color="#6b7280" />
           </View>
-          <View style={styles.quadrantRow}>
-            <View style={styles.quadrantCell}>
-              <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
-            </View>
-            <View style={styles.quadrantCell}>
-              <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
-            </View>
+          <View style={styles.scheduleGrid}>
+            <Text style={styles.scheduleRow}>W1: {statistics.scheduledByWeek.week1}</Text>
+            <Text style={styles.scheduleRow}>W2: {statistics.scheduledByWeek.week2}</Text>
+            <Text style={styles.scheduleRow}>W3: {statistics.scheduledByWeek.week3}</Text>
+            <Text style={styles.scheduleRow}>W4: {statistics.scheduledByWeek.week4}</Text>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
+
+        {/* Right: Icon Quadrants */}
+        <View style={styles.quadrantSection}>
+          <View style={styles.quadrantTile}>
+            <Flower size={26} color="#ec4899" />
+            <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
+          </View>
+          <View style={styles.quadrantTile}>
+            <Lightbulb size={26} color="#f59e0b" />
+            <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
+          </View>
+          <View style={styles.quadrantTile}>
+            <AlertCircle size={26} color="#ef4444" />
+            <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
+          </View>
+          <View style={styles.quadrantTile}>
+            <FileText size={26} color="#6b7280" />
+            <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 6,
-    borderLeftWidth: 4,
-    borderLeftColor: '#ec4899',
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 2,
+  dashboardStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#d1d5db',
+    borderRadius: 12,
+    padding: 18,
+    gap: 18,
+    minHeight: 130,
+    minWidth: 700,
   },
   loadingContainer: {
-    padding: 16,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingText: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#6b7280',
   },
-  identityRow: {
-    flexDirection: 'row',
+  identitySection: {
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
+    justifyContent: 'center',
+    width: 90,
+    flexShrink: 0,
+    paddingRight: 16,
+    borderRightWidth: 1,
+    borderRightColor: '#9ca3af',
   },
-  domainIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  domainIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: '#fce7f3',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
-  domainIconMobile: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  domainName: {
-    fontSize: 14,
-    fontWeight: '600',
+  domainLabel: {
+    fontSize: 11,
+    fontWeight: '700',
     color: '#111827',
-    flex: 1,
+    textAlign: 'center',
   },
-  metricsRow: {
-    flexDirection: 'row',
+  summarySection: {
     gap: 12,
-    marginBottom: 10,
+    width: 100,
+    flexShrink: 0,
+    paddingRight: 16,
+    borderRightWidth: 1,
+    borderRightColor: '#9ca3af',
   },
-  depositMetric: {
-    flex: 1,
-    backgroundColor: '#fef2f7',
-    borderRadius: 6,
-    padding: 8,
-    alignItems: 'center',
+  summaryTile: {
+    minWidth: 85,
   },
-  asMetric: {
-    flex: 1,
-    backgroundColor: '#fef2f7',
-    borderRadius: 6,
-    padding: 8,
-    alignItems: 'center',
-  },
-  metricLabel: {
-    fontSize: 10,
-    color: '#9f1239',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  depositCount: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  asValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#ec4899',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  weeklyIndicators: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  weekIndicator: {
+  summaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: 2,
   },
-  weekLabel: {
+  summaryLabel: {
     fontSize: 10,
-    color: '#9ca3af',
-    fontWeight: '500',
-  },
-  weekDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#d1d5db',
-  },
-  weekValue: {
-    fontSize: 11,
+    color: '#4b5563',
     fontWeight: '600',
-    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  quadrantGrid: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 3,
-    overflow: 'hidden',
+  summaryValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#111827',
   },
-  quadrantRow: {
+  scheduleSection: {
+    width: 80,
+    flexShrink: 0,
+    paddingRight: 12,
+    borderRightWidth: 1,
+    borderRightColor: '#9ca3af',
+  },
+  scheduleHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginBottom: 6,
   },
-  quadrantCell: {
-    width: 24,
-    height: 20,
+  scheduleLabel: {
+    fontSize: 9,
+    color: '#4b5563',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  scheduleGrid: {
+    gap: 2,
+  },
+  scheduleRow: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  quadrantSection: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    width: 160,
+    minWidth: 160,
+    flexShrink: 0,
+    gap: 8,
+  },
+  quadrantTile: {
+    width: 76,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 0.5,
-    borderColor: '#e5e7eb',
+    gap: 3,
   },
   quadrantValue: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
   },
 });
