@@ -39,68 +39,67 @@ export function DomainStatisticsCard({
       activeOpacity={0.7}
     >
       <View style={styles.cardContent}>
+        {/* Left: Icon and Name (vertically centered) */}
         <View style={styles.leftSection}>
           <View style={styles.domainIconContainer}>
             <Heart size={32} color="#ec4899" />
           </View>
-          <Text style={styles.domainName} numberOfLines={2}>{domain.name}</Text>
+          <View style={styles.domainNameContainer}>
+            <Text style={styles.domainName} numberOfLines={2}>{domain.name}</Text>
+            <Text style={styles.depositCount}>{statistics.completedDeposits}</Text>
+          </View>
         </View>
 
+        {/* Middle: Scheduled Deposits by Week */}
         <View style={styles.middleSection}>
-          <View style={styles.completedSection}>
-            <View style={styles.statHeader}>
-              <CheckCircle size={16} color="#10b981" />
-              <Text style={styles.statLabel}>Deposits</Text>
-            </View>
-            <Text style={styles.statValue}>{statistics.completedDeposits}</Text>
+          <View style={styles.statHeader}>
+            <Calendar size={14} color="#3b82f6" />
+            <Text style={styles.statLabel}>Deposits</Text>
           </View>
-
-          <View style={styles.scheduledSection}>
-            <View style={styles.statHeader}>
-              <Calendar size={16} color="#3b82f6" />
-              <Text style={styles.statLabel}>Deposits</Text>
+          <View style={styles.weeksList}>
+            <View style={styles.weekRow}>
+              <Text style={styles.weekLabel}>W1:</Text>
+              <View style={styles.weekCheckbox} />
+              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week1}</Text>
             </View>
-            <View style={styles.weeksList}>
-              <View style={styles.weekRow}>
-                <Text style={styles.weekLabel}>W1:</Text>
-                <Text style={styles.weekValue}>{statistics.scheduledByWeek.week1}</Text>
-              </View>
-              <View style={styles.weekRow}>
-                <Text style={styles.weekLabel}>W2:</Text>
-                <Text style={styles.weekValue}>{statistics.scheduledByWeek.week2}</Text>
-              </View>
-              <View style={styles.weekRow}>
-                <Text style={styles.weekLabel}>W3:</Text>
-                <Text style={styles.weekValue}>{statistics.scheduledByWeek.week3}</Text>
-              </View>
-              <View style={styles.weekRow}>
-                <Text style={styles.weekLabel}>W4:</Text>
-                <Text style={styles.weekValue}>{statistics.scheduledByWeek.week4}</Text>
-              </View>
+            <View style={styles.weekRow}>
+              <Text style={styles.weekLabel}>W2:</Text>
+              <View style={styles.weekCheckbox} />
+              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week2}</Text>
+            </View>
+            <View style={styles.weekRow}>
+              <Text style={styles.weekLabel}>W3:</Text>
+              <View style={styles.weekCheckbox} />
+              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week3}</Text>
+            </View>
+            <View style={styles.weekRow}>
+              <Text style={styles.weekLabel}>W4:</Text>
+              <View style={styles.weekCheckbox} />
+              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week4}</Text>
             </View>
           </View>
         </View>
 
+        {/* Right: Reflection Quadrant */}
         <View style={styles.rightSection}>
-          <View style={styles.reflectionStats}>
-            <View style={styles.reflectionRow}>
-              <Flower size={14} color="#ec4899" />
-              <Text style={styles.reflectionValue}>{statistics.reflectionStats.roses}</Text>
+          <View style={styles.reflectionQuadrant}>
+            <View style={styles.quadrantRow}>
+              <View style={styles.quadrantCell}>
+                <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
+              </View>
+              <View style={styles.quadrantCell}>
+                <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
+              </View>
             </View>
-            <View style={styles.reflectionRow}>
-              <AlertCircle size={14} color="#ef4444" />
-              <Text style={styles.reflectionValue}>{statistics.reflectionStats.thorns}</Text>
-            </View>
-            <View style={styles.reflectionRow}>
-              <Lightbulb size={14} color="#f59e0b" />
-              <Text style={styles.reflectionValue}>{statistics.reflectionStats.depositIdeas}</Text>
-            </View>
-            <View style={styles.reflectionRow}>
-              <FileText size={14} color="#6366f1" />
-              <Text style={styles.reflectionValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
+            <View style={styles.quadrantRow}>
+              <View style={styles.quadrantCell}>
+                <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
+              </View>
+              <View style={styles.quadrantCell}>
+                <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
+              </View>
             </View>
           </View>
-
           <View style={styles.authenticScoreBadge}>
             <Text style={styles.authenticScoreLabel}>AS</Text>
             <Text style={styles.authenticScoreValue}>{statistics.authenticScore}</Text>
@@ -138,10 +137,13 @@ const styles = StyleSheet.create({
   cardContent: {
     flexDirection: 'row',
     gap: 12,
+    alignItems: 'center',
   },
   leftSection: {
+    flexDirection: 'row',
     alignItems: 'center',
-    width: 60,
+    gap: 8,
+    minWidth: 100,
   },
   domainIconContainer: {
     width: 48,
@@ -150,84 +152,95 @@ const styles = StyleSheet.create({
     backgroundColor: '#fce7f3',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+  },
+  domainNameContainer: {
+    flex: 1,
+    gap: 4,
   },
   domainName: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    textAlign: 'center',
+    color: '#1f2937',
+  },
+  depositCount: {
+    fontSize: 24,
+    fontWeight: 'bold',
     color: '#1f2937',
   },
   middleSection: {
     flex: 1,
-    gap: 8,
-  },
-  completedSection: {
-    gap: 4,
-  },
-  scheduledSection: {
     gap: 4,
   },
   statHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: 4,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#6b7280',
     fontWeight: '500',
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
   weeksList: {
-    gap: 2,
+    gap: 3,
   },
   weekRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   weekLabel: {
     fontSize: 11,
     color: '#6b7280',
-    width: 24,
+    width: 22,
+  },
+  weekCheckbox: {
+    width: 14,
+    height: 14,
+    borderWidth: 1.5,
+    borderColor: '#10b981',
+    borderRadius: 2,
+    backgroundColor: '#ecfdf5',
   },
   weekValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#1f2937',
   },
   rightSection: {
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    minWidth: 60,
-  },
-  reflectionStats: {
-    gap: 6,
-  },
-  reflectionRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  reflectionValue: {
+  reflectionQuadrant: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  quadrantRow: {
+    flexDirection: 'row',
+  },
+  quadrantCell: {
+    width: 32,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0.5,
+    borderColor: '#e5e7eb',
+  },
+  quadrantValue: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
-    minWidth: 20,
-    textAlign: 'right',
   },
   authenticScoreBadge: {
     backgroundColor: '#f3f4f6',
     borderRadius: 6,
     padding: 6,
     alignItems: 'center',
-    minWidth: 50,
+    minWidth: 64,
   },
   authenticScoreLabel: {
     fontSize: 10,

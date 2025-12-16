@@ -1435,6 +1435,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   statisticsCardWrapper: {
-    width: '100%',
+    width: '48%',
   },
 });
