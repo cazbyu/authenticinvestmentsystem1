@@ -41,70 +41,66 @@ export function DomainStatisticsCard({
       onPress={() => onPress(domain)}
       activeOpacity={0.7}
     >
-      {/* Top Row: Icon, Name, Total, AS */}
-      <View style={styles.topRow}>
-        <View style={styles.identitySection}>
-          <View style={[styles.domainIconContainer, isMobile && styles.domainIconMobile]}>
-            <Heart size={isMobile ? 24 : 32} color="#ec4899" />
-          </View>
-          <View style={styles.nameSection}>
-            <Text style={styles.domainName} numberOfLines={1}>{domain.name}</Text>
-            <Text style={styles.depositCount}>{statistics.completedDeposits}</Text>
-          </View>
+      {/* Top: Identity - Icon + Name */}
+      <View style={styles.identityRow}>
+        <View style={[styles.domainIconContainer, isMobile && styles.domainIconMobile]}>
+          <Heart size={isMobile ? 20 : 24} color="#ec4899" />
         </View>
+        <Text style={styles.domainName} numberOfLines={1}>{domain.name}</Text>
+      </View>
 
-        <View style={styles.scoreSection}>
-          <View style={styles.authenticScoreBadge}>
-            <Text style={styles.authenticScoreLabel}>AS</Text>
-            <Text style={styles.authenticScoreValue}>{statistics.authenticScore}</Text>
-          </View>
+      {/* Middle: Primary Metrics - Total Deposits + AS */}
+      <View style={styles.metricsRow}>
+        <View style={styles.depositMetric}>
+          <Text style={styles.metricLabel}>Total</Text>
+          <Text style={styles.depositCount}>{statistics.completedDeposits}</Text>
+        </View>
+        <View style={styles.asMetric}>
+          <Text style={styles.metricLabel}>AS</Text>
+          <Text style={styles.asValue}>{statistics.authenticScore}</Text>
         </View>
       </View>
 
-      {/* Bottom Row: Weekly Data & Quadrant */}
-      <View style={styles.bottomRow}>
-        <View style={styles.weeklySection}>
-          <View style={styles.weeksCompact}>
-            <View style={styles.weekItem}>
-              <Text style={styles.weekLabelCompact}>W1</Text>
-              <View style={styles.weekCheckboxSmall} />
-              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week1}</Text>
-            </View>
-            <View style={styles.weekItem}>
-              <Text style={styles.weekLabelCompact}>W2</Text>
-              <View style={styles.weekCheckboxSmall} />
-              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week2}</Text>
-            </View>
-            <View style={styles.weekItem}>
-              <Text style={styles.weekLabelCompact}>W3</Text>
-              <View style={styles.weekCheckboxSmall} />
-              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week3}</Text>
-            </View>
-            <View style={styles.weekItem}>
-              <Text style={styles.weekLabelCompact}>W4</Text>
-              <View style={styles.weekCheckboxSmall} />
-              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week4}</Text>
-            </View>
+      {/* Bottom: Operational Detail - Weekly + Quadrant */}
+      <View style={styles.detailRow}>
+        <View style={styles.weeklyIndicators}>
+          <View style={styles.weekIndicator}>
+            <Text style={styles.weekLabel}>W1</Text>
+            <View style={styles.weekDot} />
+            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week1}</Text>
+          </View>
+          <View style={styles.weekIndicator}>
+            <Text style={styles.weekLabel}>W2</Text>
+            <View style={styles.weekDot} />
+            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week2}</Text>
+          </View>
+          <View style={styles.weekIndicator}>
+            <Text style={styles.weekLabel}>W3</Text>
+            <View style={styles.weekDot} />
+            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week3}</Text>
+          </View>
+          <View style={styles.weekIndicator}>
+            <Text style={styles.weekLabel}>W4</Text>
+            <View style={styles.weekDot} />
+            <Text style={styles.weekValue}>{statistics.scheduledByWeek.week4}</Text>
           </View>
         </View>
 
-        <View style={styles.quadrantSection}>
-          <View style={styles.reflectionQuadrant}>
-            <View style={styles.quadrantRow}>
-              <View style={styles.quadrantCell}>
-                <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
-              </View>
-              <View style={styles.quadrantCell}>
-                <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
-              </View>
+        <View style={styles.quadrantGrid}>
+          <View style={styles.quadrantRow}>
+            <View style={styles.quadrantCell}>
+              <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
             </View>
-            <View style={styles.quadrantRow}>
-              <View style={styles.quadrantCell}>
-                <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
-              </View>
-              <View style={styles.quadrantCell}>
-                <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
-              </View>
+            <View style={styles.quadrantCell}>
+              <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
+            </View>
+          </View>
+          <View style={styles.quadrantRow}>
+            <View style={styles.quadrantCell}>
+              <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
+            </View>
+            <View style={styles.quadrantCell}>
+              <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
             </View>
           </View>
         </View>
@@ -120,11 +116,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderLeftWidth: 4,
     borderLeftColor: '#ec4899',
-    padding: 10,
-    marginBottom: 10,
+    padding: 12,
+    marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 2,
     elevation: 2,
   },
@@ -134,25 +130,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
-    fontSize: 13,
-    color: '#6b7280',
+    fontSize: 12,
+    color: '#9ca3af',
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  identitySection: {
+  identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flex: 1,
+    gap: 10,
+    marginBottom: 10,
   },
   domainIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#fce7f3',
     alignItems: 'center',
     justifyContent: 'center',
@@ -162,104 +152,100 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
   },
-  nameSection: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   domainName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#111827',
     flex: 1,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+  },
+  depositMetric: {
+    flex: 1,
+    backgroundColor: '#fef2f7',
+    borderRadius: 6,
+    padding: 8,
+    alignItems: 'center',
+  },
+  asMetric: {
+    flex: 1,
+    backgroundColor: '#fef2f7',
+    borderRadius: 6,
+    padding: 8,
+    alignItems: 'center',
+  },
+  metricLabel: {
+    fontSize: 10,
+    color: '#9f1239',
+    fontWeight: '500',
+    marginBottom: 2,
   },
   depositCount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
   },
-  scoreSection: {
-    marginLeft: 8,
-  },
-  authenticScoreBadge: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignItems: 'center',
-    minWidth: 48,
-  },
-  authenticScoreLabel: {
-    fontSize: 9,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  authenticScoreValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  asValue: {
+    fontSize: 24,
+    fontWeight: '700',
     color: '#ec4899',
   },
-  bottomRow: {
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
-  weeklySection: {
+  weeklyIndicators: {
     flex: 1,
-  },
-  weeksCompact: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
     flexWrap: 'wrap',
   },
-  weekItem: {
+  weekIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
-  weekLabelCompact: {
+  weekLabel: {
     fontSize: 10,
-    color: '#6b7280',
+    color: '#9ca3af',
     fontWeight: '500',
   },
-  weekCheckboxSmall: {
-    width: 12,
-    height: 12,
-    borderWidth: 1.5,
-    borderColor: '#10b981',
+  weekDot: {
+    width: 4,
+    height: 4,
     borderRadius: 2,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#d1d5db',
   },
-  weekValueCompact: {
-    fontSize: 12,
+  weekValue: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#374151',
   },
-  quadrantSection: {
-    marginLeft: 8,
-  },
-  reflectionQuadrant: {
+  quadrantGrid: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   quadrantRow: {
     flexDirection: 'row',
   },
   quadrantCell: {
-    width: 28,
-    height: 24,
+    width: 24,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 0.5,
     borderColor: '#e5e7eb',
   },
   quadrantValue: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#6b7280',
   },
 });
