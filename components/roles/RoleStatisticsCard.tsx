@@ -49,69 +49,69 @@ export function RoleStatisticsCard({
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       <StripWrapper
-        style={styles.dashboardStrip}
+        style={[styles.dashboardStrip, isMobile && styles.dashboardStripMobile]}
         {...wrapperProps}
       >
       {/* Left: Role Identity */}
-      <View style={styles.identitySection}>
+      <View style={[styles.identitySection, isMobile && styles.identitySectionMobile]}>
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={styles.roleAvatar} />
+          <Image source={{ uri: imageUrl }} style={[styles.roleAvatar, isMobile && styles.roleAvatarMobile]} />
         ) : (
-          <View style={[styles.roleAvatarPlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
-            <Text style={styles.roleAvatarText}>
+          <View style={[styles.roleAvatarPlaceholder, isMobile && styles.roleAvatarMobile, { backgroundColor: role.color || '#0078d4' }]}>
+            <Text style={[styles.roleAvatarText, isMobile && styles.roleAvatarTextMobile]}>
               {role.label.charAt(0).toUpperCase()}
             </Text>
           </View>
         )}
-        <Text style={styles.roleLabel}>{role.label}</Text>
+        <Text style={[styles.roleLabel, isMobile && styles.roleLabelMobile]}>{role.label}</Text>
       </View>
 
       {/* Center-Left: Summary Metrics */}
-      <View style={styles.summarySection}>
-        <View style={styles.summaryTile}>
+      <View style={[styles.summarySection, isMobile && styles.summarySectionMobile]}>
+        <View style={[styles.summaryTile, isMobile && styles.summaryTileMobile]}>
           <View style={styles.summaryHeader}>
-            <Text style={styles.summaryLabel}>Deposits</Text>
+            <Text style={[styles.summaryLabel, isMobile && styles.summaryLabelMobile]}>Deposits</Text>
             <CheckCircle size={10} color="#10b981" />
           </View>
-          <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
+          <Text style={[styles.summaryValue, isMobile && styles.summaryValueMobile]}>{statistics.completedDeposits}</Text>
         </View>
-        <View style={styles.summaryTile}>
-          <Text style={styles.summaryLabel}>Authentic Score</Text>
-          <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
+        <View style={[styles.summaryTile, isMobile && styles.summaryTileMobile]}>
+          <Text style={[styles.summaryLabel, isMobile && styles.summaryLabelMobile]}>Authentic Score</Text>
+          <Text style={[styles.summaryValue, isMobile && styles.summaryValueMobile]}>{statistics.authenticScore}</Text>
         </View>
       </View>
 
       {/* Center: Weekly Schedule */}
-      <View style={styles.scheduleSection}>
-        <View style={styles.scheduleHeader}>
-          <Text style={styles.scheduleLabel}>Deposits</Text>
+      <View style={[styles.scheduleSection, isMobile && styles.scheduleSectionMobile]}>
+        <View style={[styles.scheduleHeader, isMobile && styles.scheduleHeaderMobile]}>
+          <Text style={[styles.scheduleLabel, isMobile && styles.scheduleLabelMobile]}>Deposits</Text>
           <Calendar size={10} color="#6b7280" />
         </View>
-        <View style={styles.scheduleGrid}>
-          <Text style={styles.scheduleRow}>W1: {statistics.scheduledByWeek.week1}</Text>
-          <Text style={styles.scheduleRow}>W2: {statistics.scheduledByWeek.week2}</Text>
-          <Text style={styles.scheduleRow}>W3: {statistics.scheduledByWeek.week3}</Text>
-          <Text style={styles.scheduleRow}>W4: {statistics.scheduledByWeek.week4}</Text>
+        <View style={[styles.scheduleGrid, isMobile && styles.scheduleGridMobile]}>
+          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W1: {statistics.scheduledByWeek.week1}</Text>
+          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W2: {statistics.scheduledByWeek.week2}</Text>
+          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W3: {statistics.scheduledByWeek.week3}</Text>
+          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W4: {statistics.scheduledByWeek.week4}</Text>
         </View>
       </View>
 
       {/* Right: Icon Quadrants */}
-      <View style={styles.quadrantSection}>
-        <View style={styles.quadrantTile}>
-          <Flower size={26} color="#ec4899" />
-          <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
+      <View style={[styles.quadrantSection, isMobile && styles.quadrantSectionMobile]}>
+        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
+          <Flower size={isMobile ? 22 : 26} color="#ec4899" />
+          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.roses}</Text>
         </View>
-        <View style={styles.quadrantTile}>
-          <Lightbulb size={26} color="#f59e0b" />
-          <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
+        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
+          <Lightbulb size={isMobile ? 22 : 26} color="#f59e0b" />
+          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.depositIdeas}</Text>
         </View>
-        <View style={styles.quadrantTile}>
-          <AlertCircle size={26} color="#ef4444" />
-          <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
+        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
+          <AlertCircle size={isMobile ? 22 : 26} color="#ef4444" />
+          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.thorns}</Text>
         </View>
-        <View style={styles.quadrantTile}>
-          <FileText size={26} color="#6b7280" />
-          <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
+        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
+          <FileText size={isMobile ? 22 : 26} color="#6b7280" />
+          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
         </View>
       </View>
       </StripWrapper>
@@ -261,5 +261,76 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#111827',
+  },
+  dashboardStripMobile: {
+    padding: 12,
+    gap: 12,
+    minHeight: 100,
+    minWidth: 500,
+  },
+  identitySectionMobile: {
+    width: 70,
+    paddingRight: 10,
+  },
+  roleAvatarMobile: {
+    width: 50,
+    height: 50,
+    marginBottom: 4,
+  },
+  roleAvatarTextMobile: {
+    fontSize: 20,
+  },
+  roleLabelMobile: {
+    fontSize: 9,
+    lineHeight: 11,
+  },
+  summarySectionMobile: {
+    gap: 4,
+    width: 75,
+    paddingRight: 10,
+  },
+  summaryTileMobile: {
+    gap: 0,
+  },
+  summaryLabelMobile: {
+    fontSize: 0,
+    opacity: 0,
+    height: 0,
+    marginBottom: 0,
+  },
+  summaryValueMobile: {
+    fontSize: 28,
+  },
+  scheduleSectionMobile: {
+    width: 70,
+    paddingRight: 10,
+  },
+  scheduleHeaderMobile: {
+    marginBottom: 2,
+  },
+  scheduleLabelMobile: {
+    fontSize: 0,
+    opacity: 0,
+    height: 0,
+  },
+  scheduleGridMobile: {
+    gap: 0,
+  },
+  scheduleRowMobile: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  quadrantSectionMobile: {
+    width: 130,
+    minWidth: 130,
+    gap: 6,
+  },
+  quadrantTileMobile: {
+    width: 62,
+    height: 44,
+    gap: 3,
+  },
+  quadrantValueMobile: {
+    fontSize: 16,
   },
 });
