@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { DraggableFab } from '@/components/DraggableFab';
@@ -55,6 +55,7 @@ export default function Roles() {
   const { authenticScore, refreshScoreForRole } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [keyRelationships, setKeyRelationships] = useState<KeyRelationship[]>([]);
@@ -1753,7 +1754,7 @@ export default function Roles() {
                 </View>
               </View>
 
-              {/* 2-Column Statistics Grid */}
+              {/* Responsive Statistics Grid */}
               {loadingStatistics ? (
                 <View style={styles.statisticsLoadingContainer}>
                   <Text style={styles.statisticsLoadingText}>Loading statistics...</Text>
@@ -1764,8 +1765,10 @@ export default function Roles() {
                     const stats = roleStatistics[role.id];
                     if (!stats) return null;
 
+                    const cardWidth = width < 768 ? '100%' : width < 1024 ? '48%' : width < 1440 ? '32%' : '24%';
+
                     return (
-                      <View key={role.id} style={styles.statisticsCardWrapper}>
+                      <View key={role.id} style={[styles.statisticsCardWrapper, { width: cardWidth }]}>
                         <RoleStatisticsCard
                           role={role}
                           statistics={stats}
@@ -2654,10 +2657,9 @@ const styles = StyleSheet.create({
   statisticsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    justifyContent: 'space-between',
+    gap: 10,
   },
   statisticsCardWrapper: {
-    width: '48%',
+    width: '100%',
   },
 });

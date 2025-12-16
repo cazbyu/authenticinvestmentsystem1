@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { CheckCircle, Calendar, Flower, AlertCircle, Lightbulb, FileText, Heart } from 'lucide-react-native';
 import { DomainStatistics } from '@/lib/roleStatistics';
 
@@ -22,6 +22,9 @@ export function DomainStatisticsCard({
   loading = false,
   onPress
 }: DomainStatisticsCardProps) {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
   if (loading || !statistics) {
     return (
       <View style={styles.card}>
@@ -38,50 +41,54 @@ export function DomainStatisticsCard({
       onPress={() => onPress(domain)}
       activeOpacity={0.7}
     >
-      <View style={styles.cardContent}>
-        {/* Left: Icon and Name (vertically centered) */}
-        <View style={styles.leftSection}>
-          <View style={styles.domainIconContainer}>
-            <Heart size={40} color="#ec4899" />
+      {/* Top Row: Icon, Name, Total, AS */}
+      <View style={styles.topRow}>
+        <View style={styles.identitySection}>
+          <View style={[styles.domainIconContainer, isMobile && styles.domainIconMobile]}>
+            <Heart size={isMobile ? 24 : 32} color="#ec4899" />
           </View>
-          <View style={styles.domainNameContainer}>
-            <Text style={styles.domainName} numberOfLines={2}>{domain.name}</Text>
+          <View style={styles.nameSection}>
+            <Text style={styles.domainName} numberOfLines={1}>{domain.name}</Text>
             <Text style={styles.depositCount}>{statistics.completedDeposits}</Text>
           </View>
         </View>
 
-        {/* Middle: Scheduled Deposits by Week */}
-        <View style={styles.middleSection}>
-          <View style={styles.statHeader}>
-            <Calendar size={14} color="#3b82f6" />
-            <Text style={styles.statLabel}>Deposits</Text>
+        <View style={styles.scoreSection}>
+          <View style={styles.authenticScoreBadge}>
+            <Text style={styles.authenticScoreLabel}>AS</Text>
+            <Text style={styles.authenticScoreValue}>{statistics.authenticScore}</Text>
           </View>
-          <View style={styles.weeksList}>
-            <View style={styles.weekRow}>
-              <Text style={styles.weekLabel}>W1:</Text>
-              <View style={styles.weekCheckbox} />
-              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week1}</Text>
+        </View>
+      </View>
+
+      {/* Bottom Row: Weekly Data & Quadrant */}
+      <View style={styles.bottomRow}>
+        <View style={styles.weeklySection}>
+          <View style={styles.weeksCompact}>
+            <View style={styles.weekItem}>
+              <Text style={styles.weekLabelCompact}>W1</Text>
+              <View style={styles.weekCheckboxSmall} />
+              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week1}</Text>
             </View>
-            <View style={styles.weekRow}>
-              <Text style={styles.weekLabel}>W2:</Text>
-              <View style={styles.weekCheckbox} />
-              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week2}</Text>
+            <View style={styles.weekItem}>
+              <Text style={styles.weekLabelCompact}>W2</Text>
+              <View style={styles.weekCheckboxSmall} />
+              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week2}</Text>
             </View>
-            <View style={styles.weekRow}>
-              <Text style={styles.weekLabel}>W3:</Text>
-              <View style={styles.weekCheckbox} />
-              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week3}</Text>
+            <View style={styles.weekItem}>
+              <Text style={styles.weekLabelCompact}>W3</Text>
+              <View style={styles.weekCheckboxSmall} />
+              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week3}</Text>
             </View>
-            <View style={styles.weekRow}>
-              <Text style={styles.weekLabel}>W4:</Text>
-              <View style={styles.weekCheckbox} />
-              <Text style={styles.weekValue}>{statistics.scheduledByWeek.week4}</Text>
+            <View style={styles.weekItem}>
+              <Text style={styles.weekLabelCompact}>W4</Text>
+              <View style={styles.weekCheckboxSmall} />
+              <Text style={styles.weekValueCompact}>{statistics.scheduledByWeek.week4}</Text>
             </View>
           </View>
         </View>
 
-        {/* Right: Reflection Quadrant */}
-        <View style={styles.rightSection}>
+        <View style={styles.quadrantSection}>
           <View style={styles.reflectionQuadrant}>
             <View style={styles.quadrantRow}>
               <View style={styles.quadrantCell}>
@@ -100,10 +107,6 @@ export function DomainStatisticsCard({
               </View>
             </View>
           </View>
-          <View style={styles.authenticScoreBadge}>
-            <Text style={styles.authenticScoreLabel}>AS</Text>
-            <Text style={styles.authenticScoreValue}>{statistics.authenticScore}</Text>
-          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -112,145 +115,151 @@ export function DomainStatisticsCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: '48%',
-    minHeight: 140,
+    width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 8,
+    borderRadius: 6,
     borderLeftWidth: 4,
     borderLeftColor: '#ec4899',
-    padding: 16,
-    marginBottom: 16,
+    padding: 10,
+    marginBottom: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   loadingContainer: {
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6b7280',
   },
-  cardContent: {
+  topRow: {
     flexDirection: 'row',
-    gap: 16,
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  leftSection: {
+  identitySection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    minWidth: 120,
+    gap: 8,
+    flex: 1,
   },
   domainIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#fce7f3',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  domainNameContainer: {
+  domainIconMobile: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  nameSection: {
     flex: 1,
-    gap: 4,
-  },
-  domainName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  depositCount: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  middleSection: {
-    flex: 1,
-    gap: 6,
-  },
-  statHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 10,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  weeksList: {
-    gap: 4,
-  },
-  weekRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  weekLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    width: 26,
+  domainName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
+    flex: 1,
   },
-  weekCheckbox: {
-    width: 16,
-    height: 16,
+  depositCount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+  },
+  scoreSection: {
+    marginLeft: 8,
+  },
+  authenticScoreBadge: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: 'center',
+    minWidth: 48,
+  },
+  authenticScoreLabel: {
+    fontSize: 9,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  authenticScoreValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ec4899',
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  weeklySection: {
+    flex: 1,
+  },
+  weeksCompact: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  weekItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  weekLabelCompact: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  weekCheckboxSmall: {
+    width: 12,
+    height: 12,
     borderWidth: 1.5,
     borderColor: '#10b981',
-    borderRadius: 3,
+    borderRadius: 2,
     backgroundColor: '#ecfdf5',
   },
-  weekValue: {
-    fontSize: 14,
+  weekValueCompact: {
+    fontSize: 12,
     fontWeight: '600',
     color: '#1f2937',
   },
-  rightSection: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+  quadrantSection: {
+    marginLeft: 8,
   },
   reflectionQuadrant: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 6,
+    borderRadius: 4,
     overflow: 'hidden',
   },
   quadrantRow: {
     flexDirection: 'row',
   },
   quadrantCell: {
-    width: 38,
-    height: 32,
+    width: 28,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 0.5,
     borderColor: '#e5e7eb',
   },
   quadrantValue: {
-    fontSize: 15,
+    fontSize: 11,
     fontWeight: '600',
     color: '#1f2937',
-  },
-  authenticScoreBadge: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 6,
-    padding: 8,
-    alignItems: 'center',
-    minWidth: 76,
-  },
-  authenticScoreLabel: {
-    fontSize: 11,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  authenticScoreValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ec4899',
   },
 });
