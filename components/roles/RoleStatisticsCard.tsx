@@ -271,6 +271,7 @@ const styles = StyleSheet.create({
   identitySectionMobile: {
     width: 70,
     paddingRight: 10,
+    flexShrink: 0,
   },
   roleAvatarMobile: {
     width: 50,
@@ -288,6 +289,7 @@ const styles = StyleSheet.create({
     gap: 4,
     width: 75,
     paddingRight: 10,
+    flexShrink: 0,
   },
   summaryTileMobile: {
     gap: 0,
@@ -302,8 +304,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
   },
   scheduleSectionMobile: {
-    width: 70,
-    paddingRight: 10,
+    width: 65,
+    paddingRight: 8,
+    flexShrink: 1,
   },
   scheduleHeaderMobile: {
     marginBottom: 2,
@@ -317,12 +320,13 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   scheduleRowMobile: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 13,
   },
   quadrantSectionMobile: {
-    width: 130,
-    minWidth: 130,
+    width: 136,
+    minWidth: 136,
+    flexShrink: 0,
     gap: 6,
   },
   quadrantTileMobile: {
