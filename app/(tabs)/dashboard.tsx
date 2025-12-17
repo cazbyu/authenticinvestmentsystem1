@@ -28,15 +28,21 @@ import { FilterIndicator } from '@/components/dashboard/FilterIndicator';
 import { fetchDashboardMetrics, TimePeriod, DashboardMetrics } from '@/lib/dashboardSummaryMetrics';
 import { CheckSquare, Calendar, Lightbulb, Flower2, AlertTriangle, BookOpen } from 'lucide-react-native';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
+import { ReflectFilterButtons } from '@/components/dashboard/ReflectFilterButtons';
+import { ActFilterButtons } from '@/components/dashboard/ActFilterButtons';
+import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
+import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('actions');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('home');
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('week');
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
+  const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('all');
+  const [actFilter, setActFilter] = useState<'all' | 'task' | 'event'>('all');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -81,9 +87,9 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error loading metrics:', error);
       setMetrics({
-        tasks: 0,
-        events: 0,
-        depositIdeas: 0,
+        tasks: { count: 0, score: 0 },
+        events: { count: 0, score: 0 },
+        depositIdeas: { pending: 0, activated: 0 },
         roses: 0,
         thorns: 0,
         reflections: 0
@@ -92,9 +98,11 @@ export default function Dashboard() {
   };
 
   const resetToMain = useCallback(() => {
-    setActiveTab('actions');
+    setActiveTab('home');
     setSelectedPeriod('week');
     setActiveView('deposits');
+    setReflectFilter('all');
+    setActFilter('all');
     setSortOption('due_date');
     setIsSortModalVisible(false);
     setIsFormModalVisible(false);
@@ -863,19 +871,23 @@ export default function Dashboard() {
             onPeriodChange={setSelectedPeriod}
           />
 
-          {metrics && (
+          {activeTab === 'home' && metrics && (
             <View style={styles.cardsGrid}>
               <View style={styles.cardRow}>
                 <DashboardCard
                   title="Tasks"
-                  count={metrics.tasks}
+                  displayMode="countScore"
+                  count={metrics.tasks.count}
+                  score={metrics.tasks.score}
                   icon={CheckSquare}
                   iconColor="#007AFF"
                   iconBackgroundColor="#E3F2FD"
                 />
                 <DashboardCard
                   title="Events"
-                  count={metrics.events}
+                  displayMode="countScore"
+                  count={metrics.events.count}
+                  score={metrics.events.score}
                   icon={Calendar}
                   iconColor="#FF9500"
                   iconBackgroundColor="#FFF3E0"
@@ -884,13 +896,18 @@ export default function Dashboard() {
               <View style={styles.cardRow}>
                 <DashboardCard
                   title="Deposit Ideas"
-                  count={metrics.depositIdeas}
+                  displayMode="dualCount"
+                  primaryCount={metrics.depositIdeas.pending}
+                  secondaryCount={metrics.depositIdeas.activated}
+                  primaryLabel="Pending"
+                  secondaryLabel="Activated"
                   icon={Lightbulb}
                   iconColor="#FFD60A"
                   iconBackgroundColor="#FFFBEA"
                 />
                 <DashboardCard
                   title="Roses"
+                  displayMode="single"
                   count={metrics.roses}
                   icon={Flower2}
                   iconColor="#FF2D55"
@@ -900,6 +917,7 @@ export default function Dashboard() {
               <View style={styles.cardRow}>
                 <DashboardCard
                   title="Thorns"
+                  displayMode="single"
                   count={metrics.thorns}
                   icon={AlertTriangle}
                   iconColor="#FF3B30"
@@ -907,12 +925,30 @@ export default function Dashboard() {
                 />
                 <DashboardCard
                   title="Reflections"
+                  displayMode="single"
                   count={metrics.reflections}
                   icon={BookOpen}
                   iconColor="#34C759"
                   iconBackgroundColor="#E8F5E9"
                 />
               </View>
+            </View>
+          )}
+
+          {(activeTab === 'reflect' || activeTab === 'act') && (
+            <View style={styles.filterRow}>
+              {activeTab === 'reflect' && (
+                <ReflectFilterButtons
+                  activeFilter={reflectFilter}
+                  onFilterChange={setReflectFilter}
+                />
+              )}
+              {activeTab === 'act' && (
+                <ActFilterButtons
+                  activeFilter={actFilter}
+                  onFilterChange={setActFilter}
+                />
+              )}
             </View>
           )}
         </View>
@@ -926,18 +962,30 @@ export default function Dashboard() {
 
         <View style={styles.content} pointerEvents="box-none">
 
-        {activeTab === 'reflections' ? (
-          <ReflectionHistoryView
-            filterPeriod={selectedPeriod}
+        {activeTab === 'home' ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Dashboard metrics displayed above</Text>
+          </View>
+        ) : activeTab === 'reflect' ? (
+          <ReflectionTableView
+            filter={reflectFilter}
+            period={selectedPeriod}
+            userId={userId}
             onReflectionPress={(reflection: any) => {
               setSelectedReflectionDetail(reflection);
               setIsReflectionDetailModalVisible(true);
             }}
           />
-        ) : activeTab === 'goals' ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Goals view coming soon</Text>
-          </View>
+        ) : activeTab === 'act' ? (
+          <ActionsTableView
+            filter={actFilter}
+            period={selectedPeriod}
+            userId={userId}
+            onRefresh={() => {
+              refreshScore();
+              loadMetrics();
+            }}
+          />
         ) : loading ? null
           : (activeView === 'deposits' && tasks.length === 0) || (activeView === 'ideas' && depositIdeas.length === 0) ?
             <View style={styles.emptyContainer}><Text style={styles.emptyText}>No {activeView} found</Text></View>
@@ -1180,6 +1228,13 @@ const styles = StyleSheet.create({
     cardRow: {
       flexDirection: 'row',
       marginHorizontal: -6,
+    },
+    filterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: '#fff',
     },
     content: { flex: 1 },
     draggableList: { flex: 1 },

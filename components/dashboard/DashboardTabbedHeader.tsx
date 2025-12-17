@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Menu } from 'lucide-react-native';
+import { Menu, House } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
-export type DashboardTab = 'actions' | 'goals' | 'reflections';
+export type DashboardTab = 'home' | 'reflect' | 'act';
 
 interface DashboardTabbedHeaderProps {
   activeTab: DashboardTab;
@@ -52,60 +52,66 @@ export function DashboardTabbedHeader({
         <TouchableOpacity
           style={[
             styles.tab,
-            activeTab === 'actions' && styles.activeTab,
+            activeTab === 'home' && styles.activeTab,
           ]}
-          onPress={() => onTabChange('actions')}
-          accessibilityLabel="Actions tab"
+          onPress={() => onTabChange('home')}
+          accessibilityLabel="Home tab"
           accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'actions' }}
+          accessibilityState={{ selected: activeTab === 'home' }}
+        >
+          <View style={styles.tabContent}>
+            <House
+              size={14}
+              color={activeTab === 'home' ? '#0078d4' : '#ffffff'}
+            />
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === 'home' && styles.activeTabText,
+              ]}
+            >
+              Home
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'reflect' && styles.activeTab,
+          ]}
+          onPress={() => onTabChange('reflect')}
+          accessibilityLabel="Reflect tab"
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'reflect' }}
         >
           <Text
             style={[
               styles.tabText,
-              activeTab === 'actions' && styles.activeTabText,
+              activeTab === 'reflect' && styles.activeTabText,
             ]}
           >
-            Actions
+            Reflect
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[
             styles.tab,
-            activeTab === 'goals' && styles.activeTab,
+            activeTab === 'act' && styles.activeTab,
           ]}
-          onPress={() => onTabChange('goals')}
-          accessibilityLabel="Goals tab"
+          onPress={() => onTabChange('act')}
+          accessibilityLabel="Act tab"
           accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'goals' }}
+          accessibilityState={{ selected: activeTab === 'act' }}
         >
           <Text
             style={[
               styles.tabText,
-              activeTab === 'goals' && styles.activeTabText,
+              activeTab === 'act' && styles.activeTabText,
             ]}
           >
-            Goals
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'reflections' && styles.activeTab,
-          ]}
-          onPress={() => onTabChange('reflections')}
-          accessibilityLabel="Reflections tab"
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'reflections' }}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'reflections' && styles.activeTabText,
-            ]}
-          >
-            Reflections
+            Act
           </Text>
         </TouchableOpacity>
       </View>
@@ -177,6 +183,11 @@ const styles = StyleSheet.create({
   },
   activeTab: {
     backgroundColor: '#ffffff',
+  },
+  tabContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   tabText: {
     fontSize: 11,
