@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
+import { Header } from '@/components/Header';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
 import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
@@ -15,28 +16,26 @@ import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDet
 import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
+import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { DraggableFab } from '@/components/DraggableFab';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
-import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
-import { ActionSummaryCard } from '@/components/dashboard/ActionSummaryCard';
-import { GoalSummaryCard } from '@/components/dashboard/GoalSummaryCard';
-import { RoleSummaryCard } from '@/components/dashboard/RoleSummaryCard';
-import { FilterIndicator } from '@/components/dashboard/FilterIndicator';
-import { fetchDashboardMetrics, TimePeriod, DashboardMetrics } from '@/lib/dashboardSummaryMetrics';
-import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 
+// --- Main Dashboard Screen Component ---
+// This screen has 4 views accessible via tabs in the header:
+// 1. DEPOSITS: Shows pending/in-progress tasks and events (your upcoming actions)
+//              Note: Despite the name "deposits", this shows PENDING TASKS, not completed authentic deposits
+//              Completed authentic deposits are shown in the Journal view
+// 2. IDEAS: Shows deposit ideas that haven't been activated yet
+// 3. JOURNAL: Shows historical data (completed tasks, withdrawals, reflections)
+// 4. ANALYTICS: Shows charts and visualizations of your progress
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
-
-  const [activeTab, setActiveTab] = useState<DashboardTab>('actions');
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('week');
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  // activeView controls which of the 4 tabs is displayed
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
@@ -71,22 +70,8 @@ export default function Dashboard() {
   } = useGoalProgress();
   
 
-  const loadMetrics = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const dashboardMetrics = await fetchDashboardMetrics(user.id, selectedPeriod);
-      setMetrics(dashboardMetrics);
-    } catch (error) {
-      console.error('Error loading metrics:', error);
-    }
-  };
-
+  // Reset to main Actions & Ideas view when tab is pressed
   const resetToMain = useCallback(() => {
-    setActiveTab('actions');
-    setSelectedPeriod('week');
     setActiveView('deposits');
     setSortOption('due_date');
     setIsSortModalVisible(false);
@@ -363,36 +348,28 @@ export default function Dashboard() {
   }, [activeView, fetchData]);
 
   useEffect(() => {
-    loadMetrics();
-  }, [selectedPeriod]);
-
-  useEffect(() => {
     registerResetHandler('dashboard', resetToMain);
     fetchData();
-    loadMetrics();
 
+    // Listen for task creation events from other components
     const handleTaskCreated = () => {
       console.log('[Dashboard] Received task created event, refreshing...');
       fetchData();
-      loadMetrics();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Dashboard] Received task updated event, refreshing...');
       fetchData();
-      loadMetrics();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Dashboard] Received task deleted event, refreshing...');
       fetchData();
-      loadMetrics();
     };
 
     const handleRefreshAll = () => {
       console.log('[Dashboard] Received refresh all event, refreshing...');
       fetchData();
-      loadMetrics();
     };
 
     eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
@@ -427,7 +404,7 @@ export default function Dashboard() {
           supabase,
           user.id,
           task,
-          task.occurrence_date || task.due_date || formatLocalDate(new Date())
+          task.occurrence_date || task.due_date
         );
 
         if (!result.success) {
@@ -616,7 +593,7 @@ export default function Dashboard() {
 
       // Copy role joins
       if (depositIdea.roles && depositIdea.roles.length > 0) {
-        const roleJoins = depositIdea.roles.map((role: any) => ({
+        const roleJoins = depositIdea.roles.map(role => ({
           parent_id: taskId,
           parent_type: 'task',
           role_id: role.id,
@@ -629,7 +606,7 @@ export default function Dashboard() {
 
       // Copy domain joins
       if (depositIdea.domains && depositIdea.domains.length > 0) {
-        const domainJoins = depositIdea.domains.map((domain: any) => ({
+        const domainJoins = depositIdea.domains.map(domain => ({
           parent_id: taskId,
           parent_type: 'task',
           domain_id: domain.id,
@@ -642,7 +619,7 @@ export default function Dashboard() {
 
       // Copy key relationship joins
       if (depositIdea.keyRelationships && depositIdea.keyRelationships.length > 0) {
-        const krJoins = depositIdea.keyRelationships.map((kr: any) => ({
+        const krJoins = depositIdea.keyRelationships.map(kr => ({
           parent_id: taskId,
           parent_type: 'task',
           key_relationship_id: kr.id,
@@ -837,76 +814,23 @@ export default function Dashboard() {
     { value: 'delegated', label: 'Delegated' },
   ];
 
-  const handleSummaryCardPress = (cardType: 'actions' | 'goals' | 'roles') => {
-    if (cardType === 'actions') {
-      setActiveTab('actions');
-    } else if (cardType === 'goals') {
-      setActiveTab('goals');
-    } else if (cardType === 'roles') {
-      setActiveTab('actions');
-    }
-  };
-
-  const handleClearFilter = () => {
-    setSelectedPeriod('week');
-  };
-
   return (
     <SafeAreaView style={styles.container}>
-      <DashboardTabbedHeader
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        authenticScore={authenticScore}
-      />
-
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
-        <View style={styles.summarySection}>
-          <PeriodSelector
-            selectedPeriod={selectedPeriod}
-            onPeriodChange={setSelectedPeriod}
+      <Header title="Authentic Intelligence" activeView={activeView} onViewChange={setActiveView} onSortPress={() => setIsSortModalVisible(true)} authenticScore={authenticScore} forceShowMenu={true} />
+      <View style={styles.content} pointerEvents="box-none">
+        
+        {activeView === 'journal' ? (
+          <JournalView
+            scope={{ type: 'user' }}
+            onEntryPress={handleJournalEntryPress}
+            refreshKey={journalRefreshKey}
           />
-
-          {metrics && (
-            <View style={styles.cardsContainer}>
-              <ActionSummaryCard
-                metrics={metrics.actions}
-                onPress={() => handleSummaryCardPress('actions')}
-              />
-              <GoalSummaryCard
-                metrics={metrics.goals}
-                onPress={() => handleSummaryCardPress('goals')}
-              />
-              <RoleSummaryCard
-                metrics={metrics.roles}
-                onPress={() => handleSummaryCardPress('roles')}
-              />
-            </View>
-          )}
-        </View>
-
-        {selectedPeriod !== 'week' && (
-          <FilterIndicator
-            period={selectedPeriod}
-            onClear={handleClearFilter}
+        ) : activeView === 'analytics' ? (
+          <AnalyticsView
+            scope={{ type: 'user' }}
           />
-        )}
-
-        <View style={styles.content} pointerEvents="box-none">
-
-        {activeTab === 'reflections' ? (
-          <ReflectionHistoryView
-            filterPeriod={selectedPeriod}
-            onReflectionPress={(reflection: any) => {
-              setSelectedReflectionDetail(reflection);
-              setIsReflectionDetailModalVisible(true);
-            }}
-          />
-        ) : activeTab === 'goals' ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Goals view coming soon</Text>
-          </View>
         ) : loading ? null
-          : (activeView === 'deposits' && tasks.length === 0) || (activeView === 'ideas' && depositIdeas.length === 0) ?
+          : (activeView === 'deposits' && tasks.length === 0) || (activeView === 'ideas' && depositIdeas.length === 0) ? 
             <View style={styles.emptyContainer}><Text style={styles.emptyText}>No {activeView} found</Text></View>
           : activeView === 'deposits' ? 
             Platform.OS === 'web' ? (
@@ -955,22 +879,19 @@ export default function Dashboard() {
               contentContainerStyle={styles.scrollContentContainer}
             >
               <View style={styles.taskList}>
-                {depositIdeas.map(depositIdea =>
+                {depositIdeas.map(depositIdea => 
                   <DepositIdeaCard
                     key={depositIdea.id}
                     depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
-                    onActivate={handleActivateDepositIdea}
                     onPress={handleDepositIdeaPress}
                   />
                 )}
               </View>
             </ScrollView>
         }
-        </View>
-      </ScrollView>
-
+      </View>
       <DraggableFab onPress={() => setIsFormModalVisible(true)} size={44}>
         <Plus size={28} color="#ffffff" />
       </DraggableFab>
@@ -1133,18 +1054,6 @@ export default function Dashboard() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f8fafc' },
-    scrollContainer: { flex: 1 },
-    summarySection: {
-      backgroundColor: '#fff',
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: '#e5e7eb',
-    },
-    cardsContainer: {
-      marginTop: 16,
-      gap: 12,
-    },
     content: { flex: 1 },
     draggableList: { flex: 1 },
     scrollContent: { flex: 1 },
