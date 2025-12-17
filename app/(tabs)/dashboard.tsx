@@ -866,28 +866,46 @@ export default function Dashboard() {
 
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
         <View style={styles.summarySection}>
-          <PeriodSelector
-            selectedPeriod={selectedPeriod}
-            onPeriodChange={setSelectedPeriod}
-          />
+          <View style={styles.controlsRow}>
+            <PeriodSelector
+              selectedPeriod={selectedPeriod}
+              onPeriodChange={setSelectedPeriod}
+            />
+            {activeTab === 'reflect' && (
+              <ReflectFilterButtons
+                activeFilter={reflectFilter}
+                onFilterChange={setReflectFilter}
+              />
+            )}
+            {activeTab === 'act' && (
+              <ActFilterButtons
+                activeFilter={actFilter}
+                onFilterChange={setActFilter}
+              />
+            )}
+          </View>
 
           {activeTab === 'home' && metrics && (
             <View style={styles.cardsGrid}>
               <View style={styles.cardRow}>
                 <DashboardCard
                   title="Tasks"
-                  displayMode="countScore"
-                  count={metrics.tasks.count}
-                  score={metrics.tasks.score}
+                  displayMode="dualCount"
+                  primaryCount={metrics.tasks.count}
+                  secondaryCount={metrics.tasks.score}
+                  primaryLabel="Completed"
+                  secondaryLabel="Authentic Score"
                   icon={CheckSquare}
                   iconColor="#007AFF"
                   iconBackgroundColor="#E3F2FD"
                 />
                 <DashboardCard
                   title="Events"
-                  displayMode="countScore"
-                  count={metrics.events.count}
-                  score={metrics.events.score}
+                  displayMode="dualCount"
+                  primaryCount={metrics.events.count}
+                  secondaryCount={metrics.events.score}
+                  primaryLabel="Completed"
+                  secondaryLabel="Authentic Score"
                   icon={Calendar}
                   iconColor="#FF9500"
                   iconBackgroundColor="#FFF3E0"
@@ -932,23 +950,6 @@ export default function Dashboard() {
                   iconBackgroundColor="#E8F5E9"
                 />
               </View>
-            </View>
-          )}
-
-          {(activeTab === 'reflect' || activeTab === 'act') && (
-            <View style={styles.filterRow}>
-              {activeTab === 'reflect' && (
-                <ReflectFilterButtons
-                  activeFilter={reflectFilter}
-                  onFilterChange={setReflectFilter}
-                />
-              )}
-              {activeTab === 'act' && (
-                <ActFilterButtons
-                  activeFilter={actFilter}
-                  onFilterChange={setActFilter}
-                />
-              )}
             </View>
           )}
         </View>
@@ -1222,19 +1223,18 @@ const styles = StyleSheet.create({
       borderBottomWidth: 1,
       borderBottomColor: '#e5e7eb',
     },
+    controlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
     cardsGrid: {
       marginTop: 16,
     },
     cardRow: {
       flexDirection: 'row',
       marginHorizontal: -6,
-    },
-    filterRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      backgroundColor: '#fff',
     },
     content: { flex: 1 },
     draggableList: { flex: 1 },

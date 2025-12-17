@@ -94,10 +94,7 @@ export function ReflectFilterButtons({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    gap: 6,
   },
   filterButton: {
     paddingVertical: 8,

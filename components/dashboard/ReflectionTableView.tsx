@@ -217,6 +217,11 @@ export function ReflectionTableView({
       onPress={() => handleItemPress(item)}
       activeOpacity={0.7}
     >
+      <View style={styles.dateColumn}>
+        <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+          {formatDate(item.date)}
+        </Text>
+      </View>
       <View style={styles.contentColumn}>
         <View style={styles.itemContent}>
           {getIconForType(item.type)}
@@ -224,11 +229,6 @@ export function ReflectionTableView({
             {item.title}
           </Text>
         </View>
-      </View>
-      <View style={styles.dateColumn}>
-        <Text style={[styles.dateText, { color: colors.textSecondary }]}>
-          {formatDate(item.date)}
-        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -252,10 +252,10 @@ export function ReflectionTableView({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerText, { color: colors.text }]}>
+        <Text style={[styles.headerDate, { color: colors.text }]}>Date</Text>
+        <Text style={[styles.headerContent, { color: colors.text }]}>
           Reflections & Daily Items
         </Text>
-        <Text style={[styles.headerText, { color: colors.text }]}>Date</Text>
       </View>
 
       <FlatList
@@ -285,25 +285,35 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 2,
   },
-  headerText: {
+  headerDate: {
     fontSize: 14,
     fontWeight: '600',
+    width: 100,
+  },
+  headerContent: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
+  dateColumn: {
+    justifyContent: 'center',
+    width: 100,
+  },
+  dateText: {
+    fontSize: 13,
+  },
   contentColumn: {
     flex: 1,
-    marginRight: 16,
   },
   itemContent: {
     flexDirection: 'row',
@@ -313,12 +323,6 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: 14,
     flex: 1,
-  },
-  dateColumn: {
-    justifyContent: 'center',
-  },
-  dateText: {
-    fontSize: 13,
   },
   loadingContainer: {
     flex: 1,

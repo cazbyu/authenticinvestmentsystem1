@@ -59,20 +59,10 @@ export function DashboardTabbedHeader({
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'home' }}
         >
-          <View style={styles.tabContent}>
-            <House
-              size={14}
-              color={activeTab === 'home' ? '#0078d4' : '#ffffff'}
-            />
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'home' && styles.activeTabText,
-              ]}
-            >
-              Home
-            </Text>
-          </View>
+          <House
+            size={16}
+            color={activeTab === 'home' ? '#0078d4' : '#ffffff'}
+          />
         </TouchableOpacity>
 
         <TouchableOpacity

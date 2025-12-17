@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
-import { FileText, Plus, Lightbulb } from 'lucide-react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FileText, Plus, Lightbulb, Flower2, AlertTriangle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
@@ -1071,28 +1071,16 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
                   entry.source_type === 'depositIdea' ? (
                     <Lightbulb size={16} color="#f59e0b" />
                   ) : entry.source_data?.daily_rose ? (
-                    <Image
-                      source={require('@/assets/images/rose.png')}
-                      style={styles.iconImage}
-                      resizeMode="contain"
-                    />
+                    <Flower2 size={16} color="#ec4899" />
                   ) : entry.source_data?.daily_thorn ? (
-                    <Image
-                      source={require('@/assets/images/thorn.png')}
-                      style={styles.iconImage}
-                      resizeMode="contain"
-                    />
+                    <AlertTriangle size={16} color="#ef4444" />
                   ) : (
                     <View style={styles.reflectionBadge}>
                       <Text style={styles.reflectionBadgeText}>R</Text>
                     </View>
                   )
                 ) : entry.type === 'withdrawal' ? (
-                  <Image
-                    source={require('@/assets/images/thorn.png')}
-                    style={styles.iconImage}
-                    resizeMode="contain"
-                  />
+                  <AlertTriangle size={16} color="#ef4444" />
                 ) : entry.has_notes ? (
                   <FileText size={14} color="#6b7280" />
                 ) : null}
@@ -1225,10 +1213,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '700',
-  },
-  iconImage: {
-    width: 20,
-    height: 20,
   },
   loadMoreContainer: {
     paddingVertical: 20,

@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { Lightbulb, FileText } from 'lucide-react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Lightbulb, FileText, Flower2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import Tooltip from '@/components/common/Tooltip';
 
@@ -40,24 +40,16 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
   const renderIcon = (icon: 'rose' | 'thorn' | 'idea' | 'note', isSelected: boolean) => {
     if (icon === 'rose') {
       return (
-        <Image
-          source={require('@/assets/images/rose.png')}
-          style={[
-            styles.iconImage,
-            isSelected && { tintColor: '#ffffff' }
-          ]}
-          resizeMode="contain"
+        <Flower2
+          size={24}
+          color={isSelected ? '#ffffff' : colors.text}
         />
       );
     } else if (icon === 'thorn') {
       return (
-        <Image
-          source={require('@/assets/images/thorn.png')}
-          style={[
-            styles.iconImage,
-            isSelected && { tintColor: '#ffffff' }
-          ]}
-          resizeMode="contain"
+        <AlertTriangle
+          size={24}
+          color={isSelected ? '#ffffff' : colors.text}
         />
       );
     } else if (icon === 'idea') {
@@ -130,9 +122,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 8,
-  },
-  iconImage: {
-    width: 32,
-    height: 32,
   },
 });

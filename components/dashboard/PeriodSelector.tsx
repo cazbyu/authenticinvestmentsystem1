@@ -48,18 +48,18 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   button: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 70,
   },
   buttonSelected: {
     backgroundColor: '#007AFF',
   },
   buttonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: '#666',
   },
