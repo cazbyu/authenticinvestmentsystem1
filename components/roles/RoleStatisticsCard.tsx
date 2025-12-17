@@ -301,11 +301,11 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   summaryValueMobile: {
-    fontSize: 22,
+    fontSize: 28,
   },
   scheduleSectionMobile: {
     width: 65,
-    paddingRight: 4,
+    paddingRight: 8,
     flexShrink: 1,
   },
   scheduleHeaderMobile: {
@@ -328,7 +328,6 @@ const styles = StyleSheet.create({
     minWidth: 136,
     flexShrink: 0,
     gap: 6,
-    paddingLeft: 10,
   },
   quadrantTileMobile: {
     width: 62,
