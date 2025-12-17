@@ -2,14 +2,12 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ReflectionWithRelations } from '@/lib/reflectionUtils';
-import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import MonthlyCardsView from './MonthlyCardsView';
 import MonthlyIndexView from './MonthlyIndexView';
 import DailyViewModal from './DailyViewModal';
 
 interface ReflectionHistoryViewProps {
   onReflectionPress?: (reflection: ReflectionWithRelations) => void;
-  filterPeriod?: TimePeriod;
 }
 
 type ViewState = 'monthlyCards' | 'monthlyIndex' | 'dailyView';
