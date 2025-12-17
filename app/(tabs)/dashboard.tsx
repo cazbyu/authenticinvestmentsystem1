@@ -77,8 +77,7 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const dashboardMetrics = await fetchDashboardMetrics(user.id, selectedPeriod, userTimezone);
+      const dashboardMetrics = await fetchDashboardMetrics(user.id, selectedPeriod);
       setMetrics(dashboardMetrics);
     } catch (error) {
       console.error('Error loading metrics:', error);

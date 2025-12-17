@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
-import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { formatLocalDate, getWeekStart, getWeekEnd } from './dateUtils';
 
 export type TimePeriod = 'today' | 'week' | 'month';
 
@@ -36,8 +35,8 @@ export interface DashboardMetrics {
   reflections: ReflectionMetrics;
 }
 
-function getDateRange(period: TimePeriod, userTimezone: string): { start: Date; end: Date } {
-  const now = toZonedTime(new Date(), userTimezone);
+function getDateRange(period: TimePeriod): { start: Date; end: Date } {
+  const now = new Date();
 
   switch (period) {
     case 'today':
@@ -49,24 +48,22 @@ function getDateRange(period: TimePeriod, userTimezone: string): { start: Date; 
 
     case 'week':
       return {
-        start: startOfWeek(now, { weekStartsOn: 1 }),
-        end: endOfWeek(now, { weekStartsOn: 1 })
+        start: getWeekStart(now, 'monday'),
+        end: getWeekEnd(now, 'monday')
       };
 
     case 'month':
-      return {
-        start: startOfMonth(now),
-        end: endOfMonth(now)
-      };
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start: monthStart, end: monthEnd };
   }
 }
 
 async function fetchActionMetrics(
   profileId: string,
-  period: TimePeriod,
-  userTimezone: string
+  period: TimePeriod
 ): Promise<ActionMetrics> {
-  const { start, end } = getDateRange(period, userTimezone);
+  const { start, end } = getDateRange(period);
 
   const { data: actions, error } = await supabase
     .from('actions')
@@ -90,10 +87,9 @@ async function fetchActionMetrics(
 
 async function fetchGoalMetrics(
   profileId: string,
-  period: TimePeriod,
-  userTimezone: string
+  period: TimePeriod
 ): Promise<GoalMetrics> {
-  const { start, end } = getDateRange(period, userTimezone);
+  const { start, end } = getDateRange(period);
 
   const { data: goals, error } = await supabase
     .from('goals')
@@ -137,10 +133,9 @@ async function fetchRoleMetrics(profileId: string): Promise<RoleMetrics> {
 
 async function fetchReflectionMetrics(
   profileId: string,
-  period: TimePeriod,
-  userTimezone: string
+  period: TimePeriod
 ): Promise<ReflectionMetrics> {
-  const { start, end } = getDateRange(period, userTimezone);
+  const { start, end } = getDateRange(period);
 
   const { data: reflections, error } = await supabase
     .from('reflections')
@@ -165,14 +160,13 @@ async function fetchReflectionMetrics(
 
 export async function fetchDashboardMetrics(
   profileId: string,
-  period: TimePeriod = 'week',
-  userTimezone: string = 'UTC'
+  period: TimePeriod = 'week'
 ): Promise<DashboardMetrics> {
   const [actions, goals, roles, reflections] = await Promise.all([
-    fetchActionMetrics(profileId, period, userTimezone),
-    fetchGoalMetrics(profileId, period, userTimezone),
+    fetchActionMetrics(profileId, period),
+    fetchGoalMetrics(profileId, period),
     fetchRoleMetrics(profileId),
-    fetchReflectionMetrics(profileId, period, userTimezone)
+    fetchReflectionMetrics(profileId, period)
   ]);
 
   return {
