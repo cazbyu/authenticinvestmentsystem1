@@ -23,11 +23,10 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
-import { ActionSummaryCard } from '@/components/dashboard/ActionSummaryCard';
-import { GoalSummaryCard } from '@/components/dashboard/GoalSummaryCard';
-import { RoleSummaryCard } from '@/components/dashboard/RoleSummaryCard';
+import { DashboardCard } from '@/components/dashboard/DashboardCard';
 import { FilterIndicator } from '@/components/dashboard/FilterIndicator';
 import { fetchDashboardMetrics, TimePeriod, DashboardMetrics } from '@/lib/dashboardSummaryMetrics';
+import { CheckSquare, Calendar, Lightbulb, Flower2, AlertTriangle, BookOpen } from 'lucide-react-native';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 
 export default function Dashboard() {
@@ -81,6 +80,14 @@ export default function Dashboard() {
       setMetrics(dashboardMetrics);
     } catch (error) {
       console.error('Error loading metrics:', error);
+      setMetrics({
+        tasks: 0,
+        events: 0,
+        depositIdeas: 0,
+        roses: 0,
+        thorns: 0,
+        reflections: 0
+      });
     }
   };
 
@@ -837,16 +844,6 @@ export default function Dashboard() {
     { value: 'delegated', label: 'Delegated' },
   ];
 
-  const handleSummaryCardPress = (cardType: 'actions' | 'goals' | 'roles') => {
-    if (cardType === 'actions') {
-      setActiveTab('actions');
-    } else if (cardType === 'goals') {
-      setActiveTab('goals');
-    } else if (cardType === 'roles') {
-      setActiveTab('actions');
-    }
-  };
-
   const handleClearFilter = () => {
     setSelectedPeriod('week');
   };
@@ -867,19 +864,55 @@ export default function Dashboard() {
           />
 
           {metrics && (
-            <View style={styles.cardsContainer}>
-              <ActionSummaryCard
-                metrics={metrics.actions}
-                onPress={() => handleSummaryCardPress('actions')}
-              />
-              <GoalSummaryCard
-                metrics={metrics.goals}
-                onPress={() => handleSummaryCardPress('goals')}
-              />
-              <RoleSummaryCard
-                metrics={metrics.roles}
-                onPress={() => handleSummaryCardPress('roles')}
-              />
+            <View style={styles.cardsGrid}>
+              <View style={styles.cardRow}>
+                <DashboardCard
+                  title="Tasks"
+                  count={metrics.tasks}
+                  icon={CheckSquare}
+                  iconColor="#007AFF"
+                  iconBackgroundColor="#E3F2FD"
+                />
+                <DashboardCard
+                  title="Events"
+                  count={metrics.events}
+                  icon={Calendar}
+                  iconColor="#FF9500"
+                  iconBackgroundColor="#FFF3E0"
+                />
+              </View>
+              <View style={styles.cardRow}>
+                <DashboardCard
+                  title="Deposit Ideas"
+                  count={metrics.depositIdeas}
+                  icon={Lightbulb}
+                  iconColor="#FFD60A"
+                  iconBackgroundColor="#FFFBEA"
+                />
+                <DashboardCard
+                  title="Roses"
+                  count={metrics.roses}
+                  icon={Flower2}
+                  iconColor="#FF2D55"
+                  iconBackgroundColor="#FFE4E6"
+                />
+              </View>
+              <View style={styles.cardRow}>
+                <DashboardCard
+                  title="Thorns"
+                  count={metrics.thorns}
+                  icon={AlertTriangle}
+                  iconColor="#FF3B30"
+                  iconBackgroundColor="#FEE2E2"
+                />
+                <DashboardCard
+                  title="Reflections"
+                  count={metrics.reflections}
+                  icon={BookOpen}
+                  iconColor="#34C759"
+                  iconBackgroundColor="#E8F5E9"
+                />
+              </View>
             </View>
           )}
         </View>
@@ -1137,13 +1170,16 @@ const styles = StyleSheet.create({
     summarySection: {
       backgroundColor: '#fff',
       paddingVertical: 16,
-      paddingHorizontal: 16,
+      paddingHorizontal: 10,
       borderBottomWidth: 1,
       borderBottomColor: '#e5e7eb',
     },
-    cardsContainer: {
+    cardsGrid: {
       marginTop: 16,
-      gap: 12,
+    },
+    cardRow: {
+      flexDirection: 'row',
+      marginHorizontal: -6,
     },
     content: { flex: 1 },
     draggableList: { flex: 1 },
