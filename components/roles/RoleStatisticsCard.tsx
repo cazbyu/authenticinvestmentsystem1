@@ -29,9 +29,17 @@ export function RoleStatisticsCard({
 }: RoleStatisticsCardProps) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
-  const isTablet = width >= 768 && width < 1024;
 
   if (loading || !statistics) {
+    if (isMobile) {
+      return (
+        <View style={styles.mobileCard}>
+          <View style={styles.mobileLoadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        </View>
+      );
+    }
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.dashboardStrip}>
@@ -43,75 +51,105 @@ export function RoleStatisticsCard({
     );
   }
 
+  if (isMobile) {
+    const CardWrapper = onPress ? TouchableOpacity : View;
+    const wrapperProps = onPress ? { onPress: () => onPress(role), activeOpacity: 0.7 } : {};
+
+    return (
+      <CardWrapper style={styles.mobileCard} {...wrapperProps}>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.mobileRoleImage} />
+        ) : (
+          <View style={[styles.mobileRolePlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
+            <Text style={styles.mobileRolePlaceholderText}>
+              {role.label.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <Text style={styles.mobileRoleName}>{role.label}</Text>
+        <View style={styles.mobileMetrics}>
+          <View style={styles.mobileMetricItem}>
+            <Text style={styles.mobileMetricLabel}>Deposits</Text>
+            <Text style={styles.mobileMetricValue}>{statistics.completedDeposits}</Text>
+          </View>
+          <View style={styles.mobileMetricItem}>
+            <Text style={styles.mobileMetricLabel}>Authentic Score</Text>
+            <Text style={styles.mobileMetricValue}>{statistics.authenticScore}</Text>
+          </View>
+        </View>
+      </CardWrapper>
+    );
+  }
+
   const StripWrapper = onPress ? TouchableOpacity : View;
   const wrapperProps = onPress ? { onPress: () => onPress(role), activeOpacity: 0.8 } : {};
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       <StripWrapper
-        style={[styles.dashboardStrip, isMobile && styles.dashboardStripMobile]}
+        style={styles.dashboardStrip}
         {...wrapperProps}
       >
       {/* Left: Role Identity */}
-      <View style={[styles.identitySection, isMobile && styles.identitySectionMobile]}>
+      <View style={styles.identitySection}>
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={[styles.roleAvatar, isMobile && styles.roleAvatarMobile]} />
+          <Image source={{ uri: imageUrl }} style={styles.roleAvatar} />
         ) : (
-          <View style={[styles.roleAvatarPlaceholder, isMobile && styles.roleAvatarMobile, { backgroundColor: role.color || '#0078d4' }]}>
-            <Text style={[styles.roleAvatarText, isMobile && styles.roleAvatarTextMobile]}>
+          <View style={[styles.roleAvatarPlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
+            <Text style={styles.roleAvatarText}>
               {role.label.charAt(0).toUpperCase()}
             </Text>
           </View>
         )}
-        <Text style={[styles.roleLabel, isMobile && styles.roleLabelMobile]}>{role.label}</Text>
+        <Text style={styles.roleLabel}>{role.label}</Text>
       </View>
 
       {/* Center-Left: Summary Metrics */}
-      <View style={[styles.summarySection, isMobile && styles.summarySectionMobile]}>
-        <View style={[styles.summaryTile, isMobile && styles.summaryTileMobile]}>
+      <View style={styles.summarySection}>
+        <View style={styles.summaryTile}>
           <View style={styles.summaryHeader}>
-            <Text style={[styles.summaryLabel, isMobile && styles.summaryLabelMobile]}>Deposits</Text>
+            <Text style={styles.summaryLabel}>Deposits</Text>
             <CheckCircle size={10} color="#10b981" />
           </View>
-          <Text style={[styles.summaryValue, isMobile && styles.summaryValueMobile]}>{statistics.completedDeposits}</Text>
+          <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
         </View>
-        <View style={[styles.summaryTile, isMobile && styles.summaryTileMobile]}>
-          <Text style={[styles.summaryLabel, isMobile && styles.summaryLabelMobile]}>Authentic Score</Text>
-          <Text style={[styles.summaryValue, isMobile && styles.summaryValueMobile]}>{statistics.authenticScore}</Text>
+        <View style={styles.summaryTile}>
+          <Text style={styles.summaryLabel}>Authentic Score</Text>
+          <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
         </View>
       </View>
 
       {/* Center: Weekly Schedule */}
-      <View style={[styles.scheduleSection, isMobile && styles.scheduleSectionMobile]}>
-        <View style={[styles.scheduleHeader, isMobile && styles.scheduleHeaderMobile]}>
-          <Text style={[styles.scheduleLabel, isMobile && styles.scheduleLabelMobile]}>Deposits</Text>
+      <View style={styles.scheduleSection}>
+        <View style={styles.scheduleHeader}>
+          <Text style={styles.scheduleLabel}>Deposits</Text>
           <Calendar size={10} color="#6b7280" />
         </View>
-        <View style={[styles.scheduleGrid, isMobile && styles.scheduleGridMobile]}>
-          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W1: {statistics.scheduledByWeek.week1}</Text>
-          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W2: {statistics.scheduledByWeek.week2}</Text>
-          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W3: {statistics.scheduledByWeek.week3}</Text>
-          <Text style={[styles.scheduleRow, isMobile && styles.scheduleRowMobile]}>W4: {statistics.scheduledByWeek.week4}</Text>
+        <View style={styles.scheduleGrid}>
+          <Text style={styles.scheduleRow}>W1: {statistics.scheduledByWeek.week1}</Text>
+          <Text style={styles.scheduleRow}>W2: {statistics.scheduledByWeek.week2}</Text>
+          <Text style={styles.scheduleRow}>W3: {statistics.scheduledByWeek.week3}</Text>
+          <Text style={styles.scheduleRow}>W4: {statistics.scheduledByWeek.week4}</Text>
         </View>
       </View>
 
       {/* Right: Icon Quadrants */}
-      <View style={[styles.quadrantSection, isMobile && styles.quadrantSectionMobile]}>
-        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
-          <Flower size={isMobile ? 22 : 26} color="#ec4899" />
-          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.roses}</Text>
+      <View style={styles.quadrantSection}>
+        <View style={styles.quadrantTile}>
+          <Flower size={26} color="#ec4899" />
+          <Text style={styles.quadrantValue}>{statistics.reflectionStats.roses}</Text>
         </View>
-        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
-          <Lightbulb size={isMobile ? 22 : 26} color="#f59e0b" />
-          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.depositIdeas}</Text>
+        <View style={styles.quadrantTile}>
+          <Lightbulb size={26} color="#f59e0b" />
+          <Text style={styles.quadrantValue}>{statistics.reflectionStats.depositIdeas}</Text>
         </View>
-        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
-          <AlertCircle size={isMobile ? 22 : 26} color="#ef4444" />
-          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.thorns}</Text>
+        <View style={styles.quadrantTile}>
+          <AlertCircle size={26} color="#ef4444" />
+          <Text style={styles.quadrantValue}>{statistics.reflectionStats.thorns}</Text>
         </View>
-        <View style={[styles.quadrantTile, isMobile && styles.quadrantTileMobile]}>
-          <FileText size={isMobile ? 22 : 26} color="#6b7280" />
-          <Text style={[styles.quadrantValue, isMobile && styles.quadrantValueMobile]}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
+        <View style={styles.quadrantTile}>
+          <FileText size={26} color="#6b7280" />
+          <Text style={styles.quadrantValue}>{statistics.reflectionStats.reflectionsAndNotes}</Text>
         </View>
       </View>
       </StripWrapper>
@@ -262,80 +300,62 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
-  dashboardStripMobile: {
-    padding: 12,
-    gap: 12,
-    minHeight: 100,
-    minWidth: 500,
+  mobileCard: {
+    backgroundColor: '#d1d5db',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    minHeight: 180,
   },
-  identitySectionMobile: {
-    width: 70,
-    paddingRight: 10,
-    flexShrink: 0,
+  mobileLoadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
-  roleAvatarMobile: {
-    width: 50,
-    height: 50,
-    marginBottom: 4,
+  mobileRoleImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
   },
-  roleAvatarTextMobile: {
-    fontSize: 20,
+  mobileRolePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  roleLabelMobile: {
-    fontSize: 9,
-    lineHeight: 11,
+  mobileRolePlaceholderText: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#ffffff',
   },
-  summarySectionMobile: {
+  mobileRoleName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+  },
+  mobileMetrics: {
+    flexDirection: 'row',
+    gap: 32,
+    marginTop: 8,
+  },
+  mobileMetricItem: {
+    alignItems: 'center',
     gap: 4,
-    width: 75,
-    paddingRight: 10,
-    flexShrink: 0,
   },
-  summaryTileMobile: {
-    gap: 0,
+  mobileMetricLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  summaryLabelMobile: {
-    fontSize: 0,
-    opacity: 0,
-    height: 0,
-    marginBottom: 0,
-  },
-  summaryValueMobile: {
-    fontSize: 22,
-  },
-  scheduleSectionMobile: {
-    width: 65,
-    paddingRight: 4,
-    flexShrink: 1,
-  },
-  scheduleHeaderMobile: {
-    marginBottom: 2,
-  },
-  scheduleLabelMobile: {
-    fontSize: 0,
-    opacity: 0,
-    height: 0,
-  },
-  scheduleGridMobile: {
-    gap: 0,
-  },
-  scheduleRowMobile: {
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  quadrantSectionMobile: {
-    width: 136,
-    minWidth: 136,
-    flexShrink: 0,
-    gap: 6,
-    paddingLeft: 10,
-  },
-  quadrantTileMobile: {
-    width: 62,
-    height: 44,
-    gap: 3,
-  },
-  quadrantValueMobile: {
-    fontSize: 16,
+  mobileMetricValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#111827',
   },
 });
