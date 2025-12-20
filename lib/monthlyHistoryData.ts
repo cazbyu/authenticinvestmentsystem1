@@ -129,6 +129,53 @@ export async function fetchMonthlyDates(
   }
 }
 
+export async function fetchDatesByRange(
+  startDate: Date,
+  endDate: Date
+): Promise<DateWithContent[]> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const formatDate = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const { data, error } = await supabase.rpc('get_dates_with_items_by_range', {
+      p_start_date: formatDate(startDate),
+      p_end_date: formatDate(endDate),
+      p_user_id: user.id,
+    });
+
+    if (error) {
+      console.error('Error fetching dates by range:', error);
+      throw error;
+    }
+
+    return (data || []).map((item: any) => ({
+      itemDate: item.item_date,
+      reflectionsCount: Number(item.reflections_count),
+      tasksCount: Number(item.tasks_count),
+      eventsCount: Number(item.events_count),
+      depositIdeasCount: Number(item.deposit_ideas_count),
+      withdrawalsCount: Number(item.withdrawals_count),
+      notesCount: Number(item.notes_count),
+      contentSummary: item.content_summary,
+      itemDetails: item.item_details || [],
+    }));
+  } catch (error) {
+    console.error('Error in fetchDatesByRange:', error);
+    return [];
+  }
+}
+
 export function invalidateMonthlyStatsCache(): void {
   monthlyStatsCache = null;
   cacheTimestamp = null;

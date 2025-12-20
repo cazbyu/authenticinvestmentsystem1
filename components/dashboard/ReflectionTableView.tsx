@@ -7,19 +7,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { Lightbulb, BookOpen, Flower2, AlertTriangle } from 'lucide-react-native';
+import { Flower, AlertTriangle, FileText, BookOpen } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import { ReflectFilter } from './ReflectFilterButtons';
 import DailyViewModal from '@/components/reflections/DailyViewModal';
-
-interface ReflectionItem {
-  id: string;
-  date: string;
-  title: string;
-  type: 'depositIdea' | 'rose' | 'thorn' | 'reflection';
-}
+import { fetchDatesByRange, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
+import { getWeekStart, getWeekEnd } from '@/lib/dateUtils';
 
 interface ReflectionTableViewProps {
   filter: ReflectFilter;
@@ -28,8 +23,12 @@ interface ReflectionTableViewProps {
   onReflectionPress?: (reflection: any) => void;
 }
 
-function getDateRange(period: TimePeriod): { start: Date; end: Date } {
+async function getDateRange(
+  period: TimePeriod,
+  userId: string
+): Promise<{ start: Date; end: Date }> {
   const now = new Date();
+  const supabase = getSupabaseClient();
 
   switch (period) {
     case 'today':
@@ -40,16 +39,22 @@ function getDateRange(period: TimePeriod): { start: Date; end: Date } {
       return { start: todayStart, end: todayEnd };
 
     case 'week':
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - 6);
+      const { data: userData } = await supabase
+        .from('0008-ap-users')
+        .select('week_start_day')
+        .eq('id', userId)
+        .single();
+
+      const weekStartDay = (userData?.week_start_day || 'sunday') as 'sunday' | 'monday';
+      const weekStart = getWeekStart(now, weekStartDay);
       weekStart.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(now);
+      const weekEnd = getWeekEnd(now, weekStartDay);
       weekEnd.setHours(23, 59, 59, 999);
       return { start: weekStart, end: weekEnd };
 
     case 'month':
       const monthStart = new Date(now);
-      monthStart.setDate(now.getDate() - 27);
+      monthStart.setDate(now.getDate() - 29);
       monthStart.setHours(0, 0, 0, 0);
       const monthEnd = new Date(now);
       monthEnd.setHours(23, 59, 59, 999);
@@ -64,123 +69,58 @@ export function ReflectionTableView({
   onReflectionPress,
 }: ReflectionTableViewProps) {
   const { colors } = useTheme();
-  const [items, setItems] = useState<ReflectionItem[]>([]);
+  const [dates, setDates] = useState<DateWithContent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
-    loadReflectionItems();
+    loadDateRangeData();
   }, [filter, period, userId]);
 
-  const loadReflectionItems = async () => {
+  const loadDateRangeData = async () => {
     try {
       setLoading(true);
-      const supabase = getSupabaseClient();
-      const { start, end } = getDateRange(period);
-      const startStr = start.toISOString();
-      const endStr = end.toISOString();
-      const allItems: ReflectionItem[] = [];
+      const { start, end } = await getDateRange(period, userId);
+      const data = await fetchDatesByRange(start, end);
 
-      if (filter === 'all' || filter === 'depositIdea') {
-        const { data: depositIdeas } = await supabase
-          .from('0008-ap-deposit-ideas')
-          .select('id, title, created_at')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-          .eq('archived', false)
-          .gte('created_at', startStr)
-          .lte('created_at', endStr);
-
-        if (depositIdeas) {
-          allItems.push(
-            ...depositIdeas.map((item) => ({
-              id: item.id,
-              date: item.created_at,
-              title: item.title,
-              type: 'depositIdea' as const,
-            }))
-          );
+      const filteredData = data.map((dateItem) => {
+        if (filter === 'all') {
+          return dateItem;
         }
-      }
 
-      if (filter === 'all' || filter === 'rose') {
-        const { data: roses } = await supabase
-          .from('0008-ap-reflections')
-          .select('id, content, created_at, reflection_title')
-          .eq('user_id', userId)
-          .eq('daily_rose', true)
-          .eq('archived', false)
-          .gte('created_at', startStr)
-          .lte('created_at', endStr);
+        const filteredDetails = dateItem.itemDetails.filter((item) => {
+          if (filter === 'depositIdea') {
+            return false;
+          }
+          if (filter === 'rose') {
+            return item.type === 'rose';
+          }
+          if (filter === 'thorn') {
+            return item.type === 'thorn';
+          }
+          if (filter === 'reflection') {
+            return item.type === 'reflection';
+          }
+          return true;
+        });
 
-        if (roses) {
-          allItems.push(
-            ...roses.map((item) => ({
-              id: item.id,
-              date: item.created_at,
-              title: item.reflection_title || item.content.substring(0, 50) + '...',
-              type: 'rose' as const,
-            }))
-          );
-        }
-      }
+        return {
+          ...dateItem,
+          itemDetails: filteredDetails,
+        };
+      });
 
-      if (filter === 'all' || filter === 'thorn') {
-        const { data: thorns } = await supabase
-          .from('0008-ap-reflections')
-          .select('id, content, created_at, reflection_title')
-          .eq('user_id', userId)
-          .eq('daily_thorn', true)
-          .eq('archived', false)
-          .gte('created_at', startStr)
-          .lte('created_at', endStr);
-
-        if (thorns) {
-          allItems.push(
-            ...thorns.map((item) => ({
-              id: item.id,
-              date: item.created_at,
-              title: item.reflection_title || item.content.substring(0, 50) + '...',
-              type: 'thorn' as const,
-            }))
-          );
-        }
-      }
-
-      if (filter === 'all' || filter === 'reflection') {
-        const { data: reflections } = await supabase
-          .from('0008-ap-reflections')
-          .select('id, content, created_at, reflection_title')
-          .eq('user_id', userId)
-          .eq('daily_rose', false)
-          .eq('daily_thorn', false)
-          .eq('archived', false)
-          .gte('created_at', startStr)
-          .lte('created_at', endStr);
-
-        if (reflections) {
-          allItems.push(
-            ...reflections.map((item) => ({
-              id: item.id,
-              date: item.created_at,
-              title: item.reflection_title || item.content.substring(0, 50) + '...',
-              type: 'reflection' as const,
-            }))
-          );
-        }
-      }
-
-      allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setItems(allItems);
+      setDates(filteredData);
     } catch (error) {
-      console.error('Error loading reflection items:', error);
+      console.error('Error loading date range data:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
@@ -188,55 +128,82 @@ export function ReflectionTableView({
     });
   };
 
-  const getIconForType = (type: ReflectionItem['type']) => {
+  const getIconForItemType = (type: ItemDetail['type']) => {
+    const iconProps = { size: 14 };
+
     switch (type) {
-      case 'depositIdea':
-        return <Lightbulb size={18} color="#f59e0b" />;
       case 'rose':
-        return <Flower2 size={18} color="#ec4899" />;
+        return <Flower {...iconProps} color="#16a34a" />;
       case 'thorn':
-        return <AlertTriangle size={18} color="#ef4444" />;
+        return <AlertTriangle {...iconProps} color="#f59e0b" />;
+      case 'note':
+        return <FileText {...iconProps} color="#0078d4" />;
       case 'reflection':
-        return <BookOpen size={18} color="#8b5cf6" />;
+        return <BookOpen {...iconProps} color="#8b5cf6" />;
+      default:
+        return <FileText {...iconProps} color="#0078d4" />;
     }
   };
 
-  const handleItemPress = (item: ReflectionItem) => {
-    const itemDate = new Date(item.date);
-    const dateStr = itemDate.toISOString().split('T')[0];
-    setSelectedDate(dateStr);
+  const renderItemDetails = (items: ItemDetail[]) => {
+    if (!items || items.length === 0) {
+      return (
+        <Text style={[styles.emptyDateText, { color: colors.textSecondary }]}>
+          No reflections today
+        </Text>
+      );
+    }
+
+    return items.map((item, index) => (
+      <View key={index} style={styles.itemRow}>
+        <View style={styles.iconContainer}>{getIconForItemType(item.type)}</View>
+        <Text style={[styles.itemText, { color: colors.textSecondary }]} numberOfLines={1}>
+          {item.title}
+        </Text>
+      </View>
+    ));
+  };
+
+  const handleDatePress = (dateString: string) => {
+    const normalizedDate = dateString.split('T')[0];
+    setSelectedDate(normalizedDate);
   };
 
   const handleCloseDailyView = () => {
     setSelectedDate(null);
   };
 
-  const renderItem = ({ item }: { item: ReflectionItem }) => (
-    <TouchableOpacity
-      style={[styles.row, { borderBottomColor: colors.border }]}
-      onPress={() => handleItemPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.dateColumn}>
-        <Text style={[styles.dateText, { color: colors.textSecondary }]}>
-          {formatDate(item.date)}
-        </Text>
-      </View>
-      <View style={styles.contentColumn}>
-        <View style={styles.itemContent}>
-          {getIconForType(item.type)}
-          <Text style={[styles.titleText, { color: colors.text }]} numberOfLines={2}>
-            {item.title}
+  const renderDateRow = ({ item }: { item: DateWithContent }) => {
+    const hasItems = item.itemDetails && item.itemDetails.length > 0;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.dateRow,
+          {
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+          },
+        ]}
+        onPress={() => handleDatePress(item.itemDate)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.dateColumn}>
+          <Text style={[styles.dateText, { color: colors.text }]}>
+            {formatDate(item.itemDate)}
           </Text>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.contentColumn}>
+          <View style={styles.itemsContainer}>{renderItemDetails(item.itemDetails)}</View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-        No reflections or daily items found
+        No dates in selected period
       </Text>
     </View>
   );
@@ -259,11 +226,11 @@ export function ReflectionTableView({
       </View>
 
       <FlatList
-        data={items}
-        renderItem={renderItem}
-        keyExtractor={(item) => `${item.type}-${item.id}`}
+        data={dates}
+        renderItem={renderDateRow}
+        keyExtractor={(item) => item.itemDate}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={items.length === 0 ? styles.emptyList : undefined}
+        contentContainerStyle={dates.length === 0 ? styles.emptyList : undefined}
       />
 
       {selectedDate && (
@@ -292,37 +259,54 @@ const styles = StyleSheet.create({
   headerDate: {
     fontSize: 14,
     fontWeight: '600',
-    width: 100,
+    width: 120,
   },
   headerContent: {
     fontSize: 14,
     fontWeight: '600',
     flex: 1,
   },
-  row: {
+  dateRow: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
+    minHeight: 60,
   },
   dateColumn: {
+    width: 120,
     justifyContent: 'center',
-    width: 100,
   },
   dateText: {
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: '600',
   },
   contentColumn: {
     flex: 1,
+    justifyContent: 'center',
+    paddingLeft: 16,
   },
-  itemContent: {
+  itemsContainer: {
+    gap: 6,
+  },
+  itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
-  titleText: {
+  iconContainer: {
+    width: 14,
+    height: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemText: {
     fontSize: 14,
     flex: 1,
+  },
+  emptyDateText: {
+    fontSize: 14,
+    fontStyle: 'italic',
   },
   loadingContainer: {
     flex: 1,
