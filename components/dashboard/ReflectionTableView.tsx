@@ -145,11 +145,26 @@ export function ReflectionTableView({
     }
   };
 
+  const getEmptyMessage = (filter: ReflectFilter) => {
+    switch (filter) {
+      case 'rose':
+        return 'No Rose today';
+      case 'thorn':
+        return 'No Thorn today';
+      case 'reflection':
+        return 'No Reflection today';
+      case 'depositIdea':
+        return 'No Deposit Idea today';
+      default:
+        return 'No reflections today';
+    }
+  };
+
   const renderItemDetails = (items: ItemDetail[]) => {
     if (!items || items.length === 0) {
       return (
         <Text style={[styles.emptyDateText, { color: colors.textSecondary }]}>
-          No reflections today
+          {getEmptyMessage(filter)}
         </Text>
       );
     }

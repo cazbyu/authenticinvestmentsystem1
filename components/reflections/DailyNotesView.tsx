@@ -108,7 +108,6 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     leadingIndicators: true,
     roleInvestment: true,
     domainBalance: true,
-    lessons: true,
   });
 
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -601,185 +600,11 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
             Daily Reflection - {formatCurrentDate()}
           </Text>
 
-          {aggregationData && (
-            <>
-              <View style={[styles.card, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity
-                  style={styles.cardHeader}
-                  onPress={() => toggleSection('leadingIndicators')}
-                  activeOpacity={0.7}
-                >
-                  <Target size={24} color={colors.primary} />
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
-                  {expandedSections.leadingIndicators ? (
-                    <ChevronUp size={20} color={colors.textSecondary} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.textSecondary} />
-                  )}
-                </TouchableOpacity>
-
-                {expandedSections.leadingIndicators && (
-                  <>
-                    {aggregationData.goalSummaries.length === 0 ? (
-                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                        You completed no actions towards your goals today.
-                      </Text>
-                    ) : (
-                      <View style={styles.goalsList}>
-                        <Text style={[styles.highlightText, { color: colors.text }]}>
-                          Today, you completed {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {aggregationData.goalSummaries.length} {aggregationData.goalSummaries.length === 1 ? 'goal' : 'goals'}.
-                        </Text>
-                        {aggregationData.goalSummaries.map(goal => (
-                          <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
-                            For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
-                          </Text>
-                        ))}
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-
-              <View style={[styles.card, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity
-                  style={styles.cardHeader}
-                  onPress={() => toggleSection('roleInvestment')}
-                  activeOpacity={0.7}
-                >
-                  <Users size={24} color={colors.primary} />
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>Role Investment Summary</Text>
-                  {expandedSections.roleInvestment ? (
-                    <ChevronUp size={20} color={colors.textSecondary} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.textSecondary} />
-                  )}
-                </TouchableOpacity>
-
-                {expandedSections.roleInvestment && (
-                  <>
-                    {aggregationData.roleInvestments.length === 0 ? (
-                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                        You invested in no roles today.
-                      </Text>
-                    ) : (
-                      <View style={styles.rolesList}>
-                        <Text style={[styles.highlightText, { color: colors.text }]}>
-                          You invested in the following roles today:
-                        </Text>
-                        {aggregationData.roleInvestments.map(role => {
-                          const totalDeposits = role.task_count + role.deposit_idea_count;
-                          return (
-                            <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
-                              • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-
-              <View style={[styles.card, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity
-                  style={styles.cardHeader}
-                  onPress={() => toggleSection('domainBalance')}
-                  activeOpacity={0.7}
-                >
-                  <Activity size={24} color={colors.primary} />
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>Wellness Domain Balance</Text>
-                  {expandedSections.domainBalance ? (
-                    <ChevronUp size={20} color={colors.textSecondary} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.textSecondary} />
-                  )}
-                </TouchableOpacity>
-
-                {expandedSections.domainBalance && (
-                  <>
-                    {aggregationData.domainBalance.length === 0 ? (
-                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                        You invested in no wellness domains today.
-                      </Text>
-                    ) : (
-                      <View style={styles.domainsList}>
-                        <Text style={[styles.highlightText, { color: colors.text }]}>
-                          You have invested in the following domains today:
-                        </Text>
-                        {aggregationData.domainBalance.map(domain => (
-                          <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
-                            • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
-                          </Text>
-                        ))}
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-
-              <View style={[styles.card, { backgroundColor: colors.surface }]}>
-                <TouchableOpacity
-                  style={styles.cardHeader}
-                  onPress={() => toggleSection('lessons')}
-                  activeOpacity={0.7}
-                >
-                  <AlertCircle size={24} color={aggregationData.totalWithdrawals > 0 ? '#f59e0b' : '#10b981'} />
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>Lessons</Text>
-                  {expandedSections.lessons ? (
-                    <ChevronUp size={20} color={colors.textSecondary} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.textSecondary} />
-                  )}
-                </TouchableOpacity>
-
-                {expandedSections.lessons && (
-                  <>
-                    {aggregationData.totalWithdrawals === 0 ? (
-                      <Text style={[styles.successText, { color: '#10b981' }]}>
-                        You made no withdrawals today.
-                      </Text>
-                    ) : (
-                      <View>
-                        <Text style={[styles.highlightText, { color: colors.text }]}>
-                          You made {aggregationData.totalWithdrawals} {aggregationData.totalWithdrawals === 1 ? 'withdrawal' : 'withdrawals'} today{aggregationData.withdrawalRoles.length > 0 || aggregationData.withdrawalDomains.length > 0 ? ' in the following:' : '.'}
-                        </Text>
-                        {aggregationData.withdrawalRoles.length > 0 && (
-                          <View>
-                            <Text style={[styles.warningText, { color: '#f59e0b' }]}>Roles:</Text>
-                            <View style={styles.withdrawalsList}>
-                              {aggregationData.withdrawalRoles.map((role, index) => (
-                                <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
-                                  • {role.role_label} ({role.count})
-                                </Text>
-                              ))}
-                            </View>
-                          </View>
-                        )}
-                        {aggregationData.withdrawalDomains.length > 0 && (
-                          <View style={{ marginTop: 8 }}>
-                            <Text style={[styles.warningText, { color: '#f59e0b' }]}>Domains:</Text>
-                            <View style={styles.withdrawalsList}>
-                              {aggregationData.withdrawalDomains.map((domain, index) => (
-                                <Text key={index} style={[styles.withdrawalText, { color: colors.text }]}>
-                                  • {domain.domain_name} ({domain.count})
-                                </Text>
-                              ))}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-            </>
-          )}
-
         {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
               <Text style={[styles.cardTitle, { color: colors.text }]}>
-                Today's Reflections and Notes {timelineItems.length > 0 && `(${timelineItems.length})`}
+                Today's Lessons, Reflections and Notes {timelineItems.length > 0 && `(${timelineItems.length})`}
               </Text>
               <View style={styles.notesActions}>
                 <TouchableOpacity
@@ -969,7 +794,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
               <Text style={[styles.cardTitle, { color: colors.text }]}>
-                Today's Reflections and Notes
+                Today's Lessons, Reflections and Notes
               </Text>
               <View style={styles.notesActions}>
                 <TouchableOpacity
@@ -1051,6 +876,124 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
             )}
           </View>
         )}
+
+          {aggregationData && (
+            <>
+              <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                  style={styles.cardHeader}
+                  onPress={() => toggleSection('leadingIndicators')}
+                  activeOpacity={0.7}
+                >
+                  <Target size={24} color={colors.primary} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
+                  {expandedSections.leadingIndicators ? (
+                    <ChevronUp size={20} color={colors.textSecondary} />
+                  ) : (
+                    <ChevronDown size={20} color={colors.textSecondary} />
+                  )}
+                </TouchableOpacity>
+
+                {expandedSections.leadingIndicators && (
+                  <>
+                    {aggregationData.goalSummaries.length === 0 ? (
+                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                        You completed no actions towards your goals today.
+                      </Text>
+                    ) : (
+                      <View style={styles.goalsList}>
+                        <Text style={[styles.highlightText, { color: colors.text }]}>
+                          Today, you completed {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {aggregationData.goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {aggregationData.goalSummaries.length} {aggregationData.goalSummaries.length === 1 ? 'goal' : 'goals'}.
+                        </Text>
+                        {aggregationData.goalSummaries.map(goal => (
+                          <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
+                            For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+
+              <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                  style={styles.cardHeader}
+                  onPress={() => toggleSection('roleInvestment')}
+                  activeOpacity={0.7}
+                >
+                  <Users size={24} color={colors.primary} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Role Investment Summary</Text>
+                  {expandedSections.roleInvestment ? (
+                    <ChevronUp size={20} color={colors.textSecondary} />
+                  ) : (
+                    <ChevronDown size={20} color={colors.textSecondary} />
+                  )}
+                </TouchableOpacity>
+
+                {expandedSections.roleInvestment && (
+                  <>
+                    {aggregationData.roleInvestments.length === 0 ? (
+                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                        You invested in no roles today.
+                      </Text>
+                    ) : (
+                      <View style={styles.rolesList}>
+                        <Text style={[styles.highlightText, { color: colors.text }]}>
+                          You invested in the following roles today:
+                        </Text>
+                        {aggregationData.roleInvestments.map(role => {
+                          const totalDeposits = role.task_count + role.deposit_idea_count;
+                          return (
+                            <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
+                              • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
+                            </Text>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+
+              <View style={[styles.card, { backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                  style={styles.cardHeader}
+                  onPress={() => toggleSection('domainBalance')}
+                  activeOpacity={0.7}
+                >
+                  <Activity size={24} color={colors.primary} />
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Wellness Zone Balance</Text>
+                  {expandedSections.domainBalance ? (
+                    <ChevronUp size={20} color={colors.textSecondary} />
+                  ) : (
+                    <ChevronDown size={20} color={colors.textSecondary} />
+                  )}
+                </TouchableOpacity>
+
+                {expandedSections.domainBalance && (
+                  <>
+                    {aggregationData.domainBalance.length === 0 ? (
+                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                        You invested in no wellness domains today.
+                      </Text>
+                    ) : (
+                      <View style={styles.domainsList}>
+                        <Text style={[styles.highlightText, { color: colors.text }]}>
+                          You have invested in the following domains today:
+                        </Text>
+                        {aggregationData.domainBalance.map(domain => (
+                          <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
+                            • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            </>
+          )}
         </View>
 
       </ScrollView>

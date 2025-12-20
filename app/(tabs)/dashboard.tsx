@@ -24,7 +24,6 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import { DashboardCard } from '@/components/dashboard/DashboardCard';
-import { FilterIndicator } from '@/components/dashboard/FilterIndicator';
 import { fetchDashboardMetrics, TimePeriod, DashboardMetrics } from '@/lib/dashboardSummaryMetrics';
 import { CheckSquare, Calendar, Lightbulb, Flower2, AlertTriangle, BookOpen } from 'lucide-react-native';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
@@ -852,10 +851,6 @@ export default function Dashboard() {
     { value: 'delegated', label: 'Delegated' },
   ];
 
-  const handleClearFilter = () => {
-    setSelectedPeriod('week');
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <DashboardTabbedHeader
@@ -953,13 +948,6 @@ export default function Dashboard() {
             </View>
           )}
         </View>
-
-        {selectedPeriod !== 'week' && (
-          <FilterIndicator
-            period={selectedPeriod}
-            onClear={handleClearFilter}
-          />
-        )}
 
         <View style={styles.content} pointerEvents="box-none">
 
