@@ -36,10 +36,10 @@ interface ActionsTableViewProps {
 function getDateRange(period: TimePeriod): { start: Date; end: Date } {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
+  const past = new Date('1900-01-01');
 
   switch (period) {
     case 'today':
-      const past = new Date('1900-01-01');
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
       return { start: past, end: todayEnd };
@@ -48,13 +48,13 @@ function getDateRange(period: TimePeriod): { start: Date; end: Date } {
       const weekEnd = new Date(now);
       weekEnd.setDate(now.getDate() + 6);
       weekEnd.setHours(23, 59, 59, 999);
-      return { start: now, end: weekEnd };
+      return { start: past, end: weekEnd };
 
     case 'month':
       const monthEnd = new Date(now);
       monthEnd.setDate(now.getDate() + 27);
       monthEnd.setHours(23, 59, 59, 999);
-      return { start: now, end: monthEnd };
+      return { start: past, end: monthEnd };
   }
 }
 
