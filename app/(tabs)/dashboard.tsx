@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('home');
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('week');
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [journalPeriodScore, setJournalPeriodScore] = useState<number>(0);
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
   const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('all');
   const [actFilter, setActFilter] = useState<'all' | 'task' | 'event'>('all');
@@ -94,6 +95,116 @@ export default function Dashboard() {
         thorns: 0,
         reflections: 0
       });
+    }
+  };
+
+  const loadJournalPeriodScore = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const now = new Date();
+      let startDate: Date;
+
+      switch (selectedPeriod) {
+        case 'today':
+          startDate = new Date(now);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'week':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 6);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'month':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 27);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'all':
+          startDate = new Date('2000-01-01');
+          break;
+      }
+
+      const startStr = startDate.toISOString();
+      const endStr = now.toISOString();
+
+      const { data: tasksData } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, is_urgent, is_important, is_twelve_week_goal')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .not('completed_at', 'is', null)
+        .gte('completed_at', startStr)
+        .lte('completed_at', endStr);
+
+      let depositsScore = 0;
+
+      if (tasksData && tasksData.length > 0) {
+        const taskIds = tasksData.map((t: any) => t.id);
+
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task')
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        tasksData.forEach((task: any) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          depositsScore += calculateTaskPoints(task, roles, domains, goals);
+        });
+      }
+
+      const { data: withdrawalsData } = await supabase
+        .from('0008-ap-withdrawals')
+        .select('amount')
+        .eq('user_id', user.id)
+        .gte('withdrawn_at', startStr)
+        .lte('withdrawn_at', endStr);
+
+      let withdrawalsScore = 0;
+      if (withdrawalsData) {
+        withdrawalsScore = withdrawalsData.reduce((sum, w) => sum + (parseFloat(String(w.amount)) || 0), 0);
+      }
+
+      setJournalPeriodScore(depositsScore - withdrawalsScore);
+    } catch (error) {
+      console.error('Error loading journal period score:', error);
+      setJournalPeriodScore(0);
     }
   };
 
@@ -380,35 +491,41 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadMetrics();
+    loadJournalPeriodScore();
   }, [selectedPeriod]);
 
   useEffect(() => {
     registerResetHandler('dashboard', resetToMain);
     fetchData();
     loadMetrics();
+    loadJournalPeriodScore();
 
     const handleTaskCreated = () => {
       console.log('[Dashboard] Received task created event, refreshing...');
       fetchData();
       loadMetrics();
+      loadJournalPeriodScore();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Dashboard] Received task updated event, refreshing...');
       fetchData();
       loadMetrics();
+      loadJournalPeriodScore();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Dashboard] Received task deleted event, refreshing...');
       fetchData();
       loadMetrics();
+      loadJournalPeriodScore();
     };
 
     const handleRefreshAll = () => {
       console.log('[Dashboard] Received refresh all event, refreshing...');
       fetchData();
       loadMetrics();
+      loadJournalPeriodScore();
     };
 
     eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
@@ -867,7 +984,7 @@ export default function Dashboard() {
             <PeriodSelector
               selectedPeriod={selectedPeriod}
               onPeriodChange={setSelectedPeriod}
-              score={activeTab === 'journal' ? authenticScore : (metrics ? metrics.tasks.score + metrics.events.score : undefined)}
+              score={activeTab === 'journal' ? journalPeriodScore : (metrics ? metrics.tasks.score + metrics.events.score : undefined)}
             />
             {activeTab === 'reflect' && (
               <ReflectFilterButtons
@@ -976,6 +1093,7 @@ export default function Dashboard() {
             onRefresh={() => {
               refreshScore();
               loadMetrics();
+              loadJournalPeriodScore();
             }}
           />
         ) : activeTab === 'journal' ? (
