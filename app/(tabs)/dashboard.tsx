@@ -984,7 +984,7 @@ export default function Dashboard() {
             <PeriodSelector
               selectedPeriod={selectedPeriod}
               onPeriodChange={setSelectedPeriod}
-              score={activeTab === 'journal' ? journalPeriodScore : (metrics ? metrics.tasks.score + metrics.events.score : undefined)}
+              score={activeTab === 'journal' ? journalPeriodScore : undefined}
             />
             {activeTab === 'reflect' && (
               <ReflectFilterButtons
