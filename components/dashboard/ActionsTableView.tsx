@@ -80,6 +80,8 @@ export function ActionsTableView({
       const startStr = start.toISOString().split('T')[0];
       const endStr = end.toISOString().split('T')[0];
 
+      console.log('[ActionsTableView] Loading actions:', { filter, period, userId, startStr, endStr });
+
       let tasksData: any[] = [];
 
       if (filter === 'task') {
@@ -101,6 +103,7 @@ export function ActionsTableView({
         const { data, error } = await query.order('due_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
+        console.log('[ActionsTableView] Tasks query returned:', tasksData.length, 'items');
       } else if (filter === 'event') {
         let query = supabase
           .from('0008-ap-tasks')
@@ -120,6 +123,7 @@ export function ActionsTableView({
         const { data, error } = await query.order('start_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
+        console.log('[ActionsTableView] Events query returned:', tasksData.length, 'items');
       } else {
         const tasksQuery = supabase
           .from('0008-ap-tasks')
@@ -155,6 +159,8 @@ export function ActionsTableView({
         if (tasksResult.error) throw tasksResult.error;
         if (eventsResult.error) throw eventsResult.error;
 
+        console.log('[ActionsTableView] Combined query - Tasks:', tasksResult.data?.length || 0, 'Events:', eventsResult.data?.length || 0);
+
         tasksData = [
           ...(tasksResult.data || []),
           ...(eventsResult.data || []),
@@ -165,6 +171,8 @@ export function ActionsTableView({
           if (!dateB) return -1;
           return dateA.localeCompare(dateB);
         });
+
+        console.log('[ActionsTableView] Total after merge and sort:', tasksData.length);
       }
 
       if (tasksData && tasksData.length > 0) {
@@ -229,12 +237,14 @@ export function ActionsTableView({
           };
         });
 
+        console.log('[ActionsTableView] Final actions with scores:', actionsWithScores.length);
         setActions(actionsWithScores);
       } else {
+        console.log('[ActionsTableView] No tasks data, setting empty array');
         setActions([]);
       }
     } catch (error) {
-      console.error('Error loading actions:', error);
+      console.error('[ActionsTableView] Error loading actions:', error);
       Alert.alert('Error', 'Failed to load actions');
     } finally {
       setLoading(false);
