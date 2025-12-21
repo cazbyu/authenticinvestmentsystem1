@@ -80,6 +80,7 @@ export default function Dashboard() {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       const dashboardMetrics = await fetchDashboardMetrics(user.id, selectedPeriod);
       setMetrics(dashboardMetrics);
@@ -120,6 +121,7 @@ export default function Dashboard() {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       if (activeView === 'deposits') {
         // DEPOSITS VIEW: Fetch pending/in-progress tasks and events
