@@ -20,6 +20,7 @@ interface ActionItem {
   title: string;
   type: 'task' | 'event';
   due_date: string | null;
+  start_date: string | null;
   is_urgent: boolean;
   is_important: boolean;
   depositValue: number;
@@ -79,29 +80,92 @@ export function ActionsTableView({
       const startStr = start.toISOString().split('T')[0];
       const endStr = end.toISOString().split('T')[0];
 
-      let query = supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, due_date, is_urgent, is_important')
-        .eq('user_id', userId)
-        .in('status', ['pending', 'in_progress'])
-        .is('deleted_at', null)
-        .is('parent_task_id', null);
+      let tasksData: any[] = [];
 
       if (filter === 'task') {
-        query = query.eq('type', 'task');
+        let query = supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .eq('user_id', userId)
+          .eq('type', 'task')
+          .in('status', ['pending', 'in_progress'])
+          .is('deleted_at', null)
+          .is('parent_task_id', null);
+
+        if (period === 'today') {
+          query = query.lte('due_date', endStr);
+        } else {
+          query = query.gte('due_date', startStr).lte('due_date', endStr);
+        }
+
+        const { data, error } = await query.order('due_date', { ascending: true });
+        if (error) throw error;
+        tasksData = data || [];
       } else if (filter === 'event') {
-        query = query.eq('type', 'event');
-      }
+        let query = supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .eq('user_id', userId)
+          .eq('type', 'event')
+          .in('status', ['pending', 'in_progress'])
+          .is('deleted_at', null)
+          .is('parent_task_id', null);
 
-      if (period === 'today') {
-        query = query.lte('due_date', endStr);
+        if (period === 'today') {
+          query = query.lte('start_date', endStr);
+        } else {
+          query = query.gte('start_date', startStr).lte('start_date', endStr);
+        }
+
+        const { data, error } = await query.order('start_date', { ascending: true });
+        if (error) throw error;
+        tasksData = data || [];
       } else {
-        query = query.gte('due_date', startStr).lte('due_date', endStr);
+        const tasksQuery = supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .eq('user_id', userId)
+          .eq('type', 'task')
+          .in('status', ['pending', 'in_progress'])
+          .is('deleted_at', null)
+          .is('parent_task_id', null);
+
+        const eventsQuery = supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .eq('user_id', userId)
+          .eq('type', 'event')
+          .in('status', ['pending', 'in_progress'])
+          .is('deleted_at', null)
+          .is('parent_task_id', null);
+
+        if (period === 'today') {
+          tasksQuery.lte('due_date', endStr);
+          eventsQuery.lte('start_date', endStr);
+        } else {
+          tasksQuery.gte('due_date', startStr).lte('due_date', endStr);
+          eventsQuery.gte('start_date', startStr).lte('start_date', endStr);
+        }
+
+        const [tasksResult, eventsResult] = await Promise.all([
+          tasksQuery,
+          eventsQuery,
+        ]);
+
+        if (tasksResult.error) throw tasksResult.error;
+        if (eventsResult.error) throw eventsResult.error;
+
+        tasksData = [
+          ...(tasksResult.data || []),
+          ...(eventsResult.data || []),
+        ].sort((a, b) => {
+          const dateA = a.type === 'event' ? a.start_date : a.due_date;
+          const dateB = b.type === 'event' ? b.start_date : b.due_date;
+          if (!dateA) return 1;
+          if (!dateB) return -1;
+          return dateA.localeCompare(dateB);
+        });
       }
-
-      const { data: tasksData, error } = await query.order('due_date', { ascending: true });
-
-      if (error) throw error;
 
       if (tasksData && tasksData.length > 0) {
         const taskIds = tasksData.map((t) => t.id);
@@ -158,6 +222,7 @@ export function ActionsTableView({
             title: task.title,
             type: task.type,
             due_date: task.due_date,
+            start_date: task.start_date,
             is_urgent: task.is_urgent,
             is_important: task.is_important,
             depositValue: score,
@@ -222,7 +287,7 @@ export function ActionsTableView({
   };
 
   const formatDueDate = (dateString: string | null) => {
-    if (!dateString) return 'No due date';
+    if (!dateString) return { text: 'No date', isOverdue: false };
 
     const dueDate = new Date(dateString);
     const now = new Date();
@@ -269,7 +334,8 @@ export function ActionsTableView({
   };
 
   const renderItem = ({ item }: { item: ActionItem }) => {
-    const dueInfo = formatDueDate(item.due_date);
+    const displayDate = item.type === 'event' ? item.start_date : item.due_date;
+    const dueInfo = formatDueDate(displayDate);
     const priorityStyle = getPriorityStyle(item);
 
     return (
