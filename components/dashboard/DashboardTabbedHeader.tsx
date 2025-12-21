@@ -7,7 +7,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
-export type DashboardTab = 'home' | 'reflect' | 'act';
+export type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
 interface DashboardTabbedHeaderProps {
   activeTab: DashboardTab;
@@ -102,6 +102,26 @@ export function DashboardTabbedHeader({
             ]}
           >
             Act
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'journal' && styles.activeTab,
+          ]}
+          onPress={() => onTabChange('journal')}
+          accessibilityLabel="Journal tab"
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'journal' }}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'journal' && styles.activeTabText,
+            ]}
+          >
+            Journal
           </Text>
         </TouchableOpacity>
       </View>

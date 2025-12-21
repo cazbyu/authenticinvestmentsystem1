@@ -6,9 +6,8 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import { CheckSquare, Calendar, Check, Trash2 } from 'lucide-react-native';
+import { CheckSquare, Calendar } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
@@ -24,6 +23,13 @@ interface ActionItem {
   is_urgent: boolean;
   is_important: boolean;
   depositValue: number;
+  isOverdue?: boolean;
+  originalDate?: string;
+}
+
+interface DateWithActions {
+  date: string;
+  actions: ActionItem[];
 }
 
 interface ActionsTableViewProps {
@@ -65,7 +71,7 @@ export function ActionsTableView({
   onRefresh,
 }: ActionsTableViewProps) {
   const { colors } = useTheme();
-  const [actions, setActions] = useState<ActionItem[]>([]);
+  const [dateGroups, setDateGroups] = useState<DateWithActions[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,8 +85,6 @@ export function ActionsTableView({
       const { start, end } = getDateRange(period);
       const startStr = start.toISOString().split('T')[0];
       const endStr = end.toISOString().split('T')[0];
-
-      console.log('[ActionsTableView] Loading actions:', { filter, period, userId, startStr, endStr });
 
       let tasksData: any[] = [];
 
@@ -97,13 +101,12 @@ export function ActionsTableView({
         if (period === 'today') {
           query = query.lte('due_date', endStr);
         } else {
-          query = query.gte('due_date', startStr).lte('due_date', endStr);
+          query = query.lte('due_date', endStr);
         }
 
         const { data, error } = await query.order('due_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
-        console.log('[ActionsTableView] Tasks query returned:', tasksData.length, 'items');
       } else if (filter === 'event') {
         let query = supabase
           .from('0008-ap-tasks')
@@ -117,13 +120,12 @@ export function ActionsTableView({
         if (period === 'today') {
           query = query.lte('start_date', endStr);
         } else {
-          query = query.gte('start_date', startStr).lte('start_date', endStr);
+          query = query.lte('start_date', endStr);
         }
 
         const { data, error } = await query.order('start_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
-        console.log('[ActionsTableView] Events query returned:', tasksData.length, 'items');
       } else {
         const tasksQuery = supabase
           .from('0008-ap-tasks')
@@ -147,8 +149,8 @@ export function ActionsTableView({
           tasksQuery.lte('due_date', endStr);
           eventsQuery.lte('start_date', endStr);
         } else {
-          tasksQuery.gte('due_date', startStr).lte('due_date', endStr);
-          eventsQuery.gte('start_date', startStr).lte('start_date', endStr);
+          tasksQuery.lte('due_date', endStr);
+          eventsQuery.lte('start_date', endStr);
         }
 
         const [tasksResult, eventsResult] = await Promise.all([
@@ -159,20 +161,10 @@ export function ActionsTableView({
         if (tasksResult.error) throw tasksResult.error;
         if (eventsResult.error) throw eventsResult.error;
 
-        console.log('[ActionsTableView] Combined query - Tasks:', tasksResult.data?.length || 0, 'Events:', eventsResult.data?.length || 0);
-
         tasksData = [
           ...(tasksResult.data || []),
           ...(eventsResult.data || []),
-        ].sort((a, b) => {
-          const dateA = a.type === 'event' ? a.start_date : a.due_date;
-          const dateB = b.type === 'event' ? b.start_date : b.due_date;
-          if (!dateA) return 1;
-          if (!dateB) return -1;
-          return dateA.localeCompare(dateB);
-        });
-
-        console.log('[ActionsTableView] Total after merge and sort:', tasksData.length);
+        ];
       }
 
       if (tasksData && tasksData.length > 0) {
@@ -219,11 +211,18 @@ export function ActionsTableView({
           }
         });
 
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const todayStr = now.toISOString().split('T')[0];
+
         const actionsWithScores: ActionItem[] = tasksData.map((task) => {
           const roles = rolesByTask.get(task.id) || [];
           const domains = domainsByTask.get(task.id) || [];
           const goals = goalsByTask.get(task.id) || [];
           const score = calculateTaskPoints(task, roles, domains, goals);
+
+          const displayDate = task.type === 'event' ? task.start_date : task.due_date;
+          const isOverdue = displayDate && displayDate < todayStr;
 
           return {
             id: task.id,
@@ -234,180 +233,144 @@ export function ActionsTableView({
             is_urgent: task.is_urgent,
             is_important: task.is_important,
             depositValue: score,
+            isOverdue,
+            originalDate: isOverdue ? displayDate : undefined,
           };
         });
 
-        console.log('[ActionsTableView] Final actions with scores:', actionsWithScores.length);
-        setActions(actionsWithScores);
+        const grouped = new Map<string, ActionItem[]>();
+
+        actionsWithScores.forEach((action) => {
+          let displayDate = action.type === 'event' ? action.start_date : action.due_date;
+
+          if (!displayDate) {
+            displayDate = 'No Date';
+          } else if (action.isOverdue) {
+            displayDate = todayStr;
+          }
+
+          if (!grouped.has(displayDate)) {
+            grouped.set(displayDate, []);
+          }
+          grouped.get(displayDate)!.push(action);
+        });
+
+        const sortedDates = Array.from(grouped.keys()).sort((a, b) => {
+          if (a === 'No Date') return 1;
+          if (b === 'No Date') return -1;
+          return a.localeCompare(b);
+        });
+
+        const dateGroupsData: DateWithActions[] = sortedDates.map((date) => ({
+          date,
+          actions: grouped.get(date) || [],
+        }));
+
+        setDateGroups(dateGroupsData);
       } else {
-        console.log('[ActionsTableView] No tasks data, setting empty array');
-        setActions([]);
+        setDateGroups([]);
       }
     } catch (error) {
       console.error('[ActionsTableView] Error loading actions:', error);
-      Alert.alert('Error', 'Failed to load actions');
+      setDateGroups([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleComplete = async (actionId: string) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', actionId);
+  const formatDate = (dateString: string) => {
+    if (dateString === 'No Date') return 'No Date';
 
-      if (error) throw error;
-
-      await loadActions();
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      console.error('Error completing action:', error);
-      Alert.alert('Error', 'Failed to complete action');
-    }
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
-  const handleDelete = async (actionId: string) => {
-    Alert.alert('Delete Action', 'Are you sure you want to delete this action?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const supabase = getSupabaseClient();
-            const { error } = await supabase
-              .from('0008-ap-tasks')
-              .update({ deleted_at: new Date().toISOString() })
-              .eq('id', actionId);
-
-            if (error) throw error;
-
-            await loadActions();
-            if (onRefresh) onRefresh();
-          } catch (error) {
-            console.error('Error deleting action:', error);
-            Alert.alert('Error', 'Failed to delete action');
-          }
-        },
-      },
-    ]);
+  const formatOverdueDate = (dateString: string) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
-  const formatDueDate = (dateString: string | null) => {
-    if (!dateString) return { text: 'No date', isOverdue: false };
-
-    const dueDate = new Date(dateString);
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-
-    const isOverdue = dueDate < now;
-
-    return {
-      text: dueDate.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      }),
-      isOverdue,
-    };
-  };
-
-  const getPriorityStyle = (action: ActionItem) => {
+  const getPriorityColor = (action: ActionItem) => {
     if (action.is_urgent && action.is_important) {
-      return {
-        backgroundColor: '#ffffff',
-        borderColor: '#ef4444',
-        borderWidth: 3,
-      };
+      return '#ef4444';
     } else if (!action.is_urgent && action.is_important) {
-      return {
-        backgroundColor: '#ffffff',
-        borderColor: '#22c55e',
-        borderWidth: 3,
-      };
+      return '#22c55e';
     } else if (action.is_urgent && !action.is_important) {
-      return {
-        backgroundColor: '#ffffff',
-        borderColor: '#eab308',
-        borderWidth: 3,
-      };
+      return '#eab308';
     } else {
-      return {
-        backgroundColor: '#ffffff',
-        borderColor: '#9ca3af',
-        borderWidth: 3,
-      };
+      return '#9ca3af';
     }
   };
 
-  const renderItem = ({ item }: { item: ActionItem }) => {
-    const displayDate = item.type === 'event' ? item.start_date : item.due_date;
-    const dueInfo = formatDueDate(displayDate);
-    const priorityStyle = getPriorityStyle(item);
+  const renderActionItem = (action: ActionItem) => {
+    const priorityColor = getPriorityColor(action);
 
     return (
-      <View
-        style={[
-          styles.row,
-          priorityStyle,
-          { borderBottomColor: colors.border },
-        ]}
-      >
-        <View style={styles.iconColumn}>
-          {item.type === 'task' ? (
-            <CheckSquare size={18} color={colors.primary} />
+      <View key={action.id} style={styles.actionRow}>
+        <View style={styles.iconContainer}>
+          {action.type === 'task' ? (
+            <CheckSquare size={16} color={colors.primary} />
           ) : (
-            <Calendar size={18} color={colors.primary} />
+            <Calendar size={16} color={colors.primary} />
           )}
         </View>
-
-        <View style={styles.dueDateColumn}>
-          <Text
-            style={[
-              styles.dueDateText,
-              {
-                color: dueInfo.isOverdue ? '#ef4444' : colors.text,
-              },
-            ]}
-          >
-            {dueInfo.text}
+        <View style={styles.actionContent}>
+          <Text style={[styles.actionText, { color: priorityColor }]} numberOfLines={1}>
+            {action.title}
+            {action.isOverdue && action.originalDate && (
+              <Text style={styles.overdueText}>
+                {' '}(Overdue - {formatOverdueDate(action.originalDate)})
+              </Text>
+            )}
           </Text>
         </View>
-
-        <View style={styles.titleColumn}>
-          <Text style={[styles.titleText, { color: colors.text }]} numberOfLines={2}>
-            {item.title}
-          </Text>
+        <View style={styles.valueContainer}>
+          <Text style={styles.valueText}>+{action.depositValue.toFixed(1)}</Text>
         </View>
-
-        <View style={styles.scoreColumn}>
-          <Text style={styles.scoreText}>+{item.depositValue.toFixed(1)}</Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.completeButton}
-          onPress={() => handleComplete(item.id)}
-        >
-          <Check size={18} color="#22c55e" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDelete(item.id)}
-        >
-          <Trash2 size={18} color="#ef4444" />
-        </TouchableOpacity>
       </View>
+    );
+  };
+
+  const renderDateRow = ({ item }: { item: DateWithActions }) => {
+    return (
+      <TouchableOpacity
+        style={[
+          styles.dateRow,
+          {
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+          },
+        ]}
+        activeOpacity={0.7}
+      >
+        <View style={styles.dateColumn}>
+          <Text style={[styles.dateText, { color: colors.text }]}>
+            {formatDate(item.date)}
+          </Text>
+        </View>
+        <View style={styles.actionsColumn}>
+          <View style={styles.actionsContainer}>
+            {item.actions.map((action) => renderActionItem(action))}
+          </View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-        No pending actions found
+        No pending actions in selected period
       </Text>
     </View>
   );
@@ -423,20 +386,18 @@ export function ActionsTableView({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerIcon, { color: colors.text }]}></Text>
-        <Text style={[styles.headerDueDate, { color: colors.text }]}>Due Date</Text>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Title</Text>
-        <Text style={[styles.headerScore, { color: colors.text }]}>Value</Text>
-        <Text style={[styles.headerAction, { color: colors.text }]}></Text>
-        <Text style={[styles.headerAction, { color: colors.text }]}></Text>
+        <Text style={[styles.headerDate, { color: colors.text }]}>Date</Text>
+        <Text style={[styles.headerContent, { color: colors.text }]}>
+          Actions & Events
+        </Text>
       </View>
 
       <FlatList
-        data={actions}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        data={dateGroups}
+        renderItem={renderDateRow}
+        keyExtractor={(item) => item.date}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={actions.length === 0 ? styles.emptyList : undefined}
+        contentContainerStyle={dateGroups.length === 0 ? styles.emptyList : undefined}
       />
     </View>
   );
@@ -449,83 +410,73 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 2,
-    alignItems: 'center',
   },
-  headerIcon: {
-    width: 30,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  headerDueDate: {
-    width: 90,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  headerScore: {
-    width: 60,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-  headerAction: {
-    width: 40,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  row: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginHorizontal: 12,
-    marginVertical: 6,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  iconColumn: {
-    width: 30,
-    alignItems: 'center',
-  },
-  dueDateColumn: {
-    width: 90,
-  },
-  dueDateText: {
-    fontSize: 12,
-  },
-  titleColumn: {
-    flex: 1,
-    marginRight: 8,
-  },
-  titleText: {
+  headerDate: {
     fontSize: 14,
+    fontWeight: '600',
+    width: 120,
   },
-  scoreColumn: {
-    width: 60,
+  headerContent: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    minHeight: 60,
+  },
+  dateColumn: {
+    width: 120,
+    justifyContent: 'center',
+  },
+  dateText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionsColumn: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingLeft: 16,
+  },
+  actionsContainer: {
+    gap: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconContainer: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionContent: {
+    flex: 1,
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  overdueText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '400',
+  },
+  valueContainer: {
+    minWidth: 50,
     alignItems: 'flex-end',
   },
-  scoreText: {
+  valueText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#16a34a',
-  },
-  completeButton: {
-    width: 40,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    width: 40,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   loadingContainer: {
     flex: 1,

@@ -977,6 +977,17 @@ export default function Dashboard() {
               loadMetrics();
             }}
           />
+        ) : activeTab === 'journal' ? (
+          <JournalView
+            scope={{ type: 'user', id: userId }}
+            onEntryPress={handleJournalEntryPress}
+            onAddWithdrawal={() => {
+              setActiveView('journal');
+              setIsFormModalVisible(true);
+            }}
+            periodScore={authenticScore}
+            refreshKey={journalRefreshKey}
+          />
         ) : loading ? null
           : (activeView === 'deposits' && tasks.length === 0) || (activeView === 'ideas' && depositIdeas.length === 0) ?
             <View style={styles.emptyContainer}><Text style={styles.emptyText}>No {activeView} found</Text></View>
