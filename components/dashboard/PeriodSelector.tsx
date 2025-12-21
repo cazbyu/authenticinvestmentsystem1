@@ -5,9 +5,10 @@ import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 interface PeriodSelectorProps {
   selectedPeriod: TimePeriod;
   onPeriodChange: (period: TimePeriod) => void;
+  score?: number;
 }
 
-export function PeriodSelector({ selectedPeriod, onPeriodChange }: PeriodSelectorProps) {
+export function PeriodSelector({ selectedPeriod, onPeriodChange, score }: PeriodSelectorProps) {
   const periods: { value: TimePeriod; label: string }[] = [
     { value: 'today', label: 'Today' },
     { value: 'week', label: 'Week' },
@@ -15,32 +16,47 @@ export function PeriodSelector({ selectedPeriod, onPeriodChange }: PeriodSelecto
     { value: 'all', label: 'All' }
   ];
 
+  const formatScore = (value: number) => {
+    const prefix = value >= 0 ? '+' : '';
+    return `${prefix}${value.toFixed(1)}`;
+  };
+
   return (
-    <View style={styles.container}>
-      {periods.map(period => (
-        <TouchableOpacity
-          key={period.value}
-          style={[
-            styles.button,
-            selectedPeriod === period.value && styles.buttonSelected
-          ]}
-          onPress={() => onPeriodChange(period.value)}
-        >
-          <Text
+    <View style={styles.wrapper}>
+      <View style={styles.container}>
+        {periods.map(period => (
+          <TouchableOpacity
+            key={period.value}
             style={[
-              styles.buttonText,
-              selectedPeriod === period.value && styles.buttonTextSelected
+              styles.button,
+              selectedPeriod === period.value && styles.buttonSelected
             ]}
+            onPress={() => onPeriodChange(period.value)}
           >
-            {period.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
+            <Text
+              style={[
+                styles.buttonText,
+                selectedPeriod === period.value && styles.buttonTextSelected
+              ]}
+            >
+              {period.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {score !== undefined && (
+        <Text style={styles.scoreText}>{formatScore(score)}</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
   container: {
     flexDirection: 'row',
     backgroundColor: '#f5f5f5',
@@ -66,5 +82,10 @@ const styles = StyleSheet.create({
   },
   buttonTextSelected: {
     color: '#fff',
+  },
+  scoreText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0078d4',
   },
 });

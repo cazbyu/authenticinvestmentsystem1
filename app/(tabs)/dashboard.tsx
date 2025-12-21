@@ -867,6 +867,7 @@ export default function Dashboard() {
             <PeriodSelector
               selectedPeriod={selectedPeriod}
               onPeriodChange={setSelectedPeriod}
+              score={activeTab === 'journal' ? authenticScore : (metrics ? metrics.tasks.score + metrics.events.score : undefined)}
             />
             {activeTab === 'reflect' && (
               <ReflectFilterButtons
@@ -981,7 +982,6 @@ export default function Dashboard() {
           <JournalView
             scope={{ type: 'user', id: userId }}
             onEntryPress={handleJournalEntryPress}
-            periodScore={authenticScore}
             dateRange={selectedPeriod}
             refreshKey={journalRefreshKey}
           />

@@ -28,12 +28,11 @@ interface JournalViewProps {
     name?: string;
   };
   onEntryPress: (entry: JournalEntry) => void;
-  periodScore?: number;
   dateRange?: 'today' | 'week' | 'month' | 'all';
   refreshKey?: number;
 }
 
-export function JournalView({ scope, onEntryPress, periodScore, dateRange = 'month', refreshKey }: JournalViewProps) {
+export function JournalView({ scope, onEntryPress, dateRange = 'month', refreshKey }: JournalViewProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -947,33 +946,8 @@ export function JournalView({ scope, onEntryPress, periodScore, dateRange = 'mon
 
   const getBalanceColor = (balance: number) => (balance >= 0 ? '#16a34a' : '#dc2626');
 
-  const getHeaderTitle = () => {
-    switch (scope.type) {
-      case 'user':
-        return 'Total Authentic Score';
-      case 'role':
-        return `Authentic Score – ${scope.name}`;
-      case 'key_relationship':
-        return `Authentic Score – ${scope.name}`;
-      case 'domain':
-        return `Authentic Score – ${scope.name}`;
-      default:
-        return 'Authentic Score';
-    }
-  };
-
   return (
     <View style={styles.container}>
-      {/* Period Score Display - Only show when periodScore is provided */}
-      {periodScore !== undefined && (
-        <View style={styles.periodScoreContainer}>
-          <View style={styles.periodScoreContent}>
-            <Text style={styles.periodScoreLabel}>{getHeaderTitle()}</Text>
-            <Text style={styles.periodScoreValue}>{formatBalance(periodScore)}</Text>
-          </View>
-        </View>
-      )}
-
       {/* Journal Header */}
       <View style={styles.journalHeader}>
         <Text style={styles.headerDate}>Date</Text>
@@ -1057,28 +1031,6 @@ export function JournalView({ scope, onEntryPress, periodScore, dateRange = 'mon
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
-  periodScoreContainer: {
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: '#e5e7eb',
-  },
-  periodScoreContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  periodScoreLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  periodScoreValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#0078d4',
-  },
   journalHeader: {
     flexDirection: 'row',
     backgroundColor: '#f8fafc',
