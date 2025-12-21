@@ -35,40 +35,39 @@ export function DashboardCard({
     switch (displayMode) {
       case 'countScore':
         return (
-          <View style={styles.content}>
+          <>
+            <Text style={styles.title}>{title}</Text>
             <View style={styles.countScoreContainer}>
               <Text style={styles.count}>{count || 0}</Text>
-              <Text style={styles.scoreText}>+{(score || 0).toFixed(1)} pts</Text>
+              <Text style={styles.scoreText}>{(score || 0).toFixed(1)}</Text>
             </View>
-            <Text style={styles.title}>{title}</Text>
-          </View>
+          </>
         );
 
       case 'dualCount':
         return (
-          <View style={styles.content}>
+          <>
+            <Text style={styles.title}>{title}</Text>
             <View style={styles.dualCountContainer}>
               <View style={styles.countBlock}>
-                <Text style={styles.smallCount}>{primaryCount || 0}</Text>
+                <Text style={styles.count}>{primaryCount || 0}</Text>
                 <Text style={styles.countLabel}>{primaryLabel || 'Primary'}</Text>
               </View>
-              <View style={styles.separator} />
               <View style={styles.countBlock}>
-                <Text style={styles.smallCount}>{secondaryCount || 0}</Text>
+                <Text style={styles.count}>{secondaryCount || 0}</Text>
                 <Text style={styles.countLabel}>{secondaryLabel || 'Secondary'}</Text>
               </View>
             </View>
-            <Text style={styles.title}>{title}</Text>
-          </View>
+          </>
         );
 
       case 'single':
       default:
         return (
-          <View style={styles.content}>
-            <Text style={styles.count}>{count || 0}</Text>
+          <>
             <Text style={styles.title}>{title}</Text>
-          </View>
+            <Text style={styles.count}>{count || 0}</Text>
+          </>
         );
     }
   };
@@ -80,13 +79,12 @@ export function DashboardCard({
       activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
     >
-      <View style={styles.header}>
+      <View style={styles.content}>
         <View style={[styles.iconContainer, { backgroundColor: iconBackgroundColor }]}>
           <Icon size={24} color={iconColor} />
         </View>
+        {renderContent()}
       </View>
-
-      {renderContent()}
     </TouchableOpacity>
   );
 }
@@ -106,64 +104,58 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     marginVertical: 6,
   },
-  header: {
-    marginBottom: 12,
-  },
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
   content: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
   },
   count: {
     fontSize: 32,
     fontWeight: '700',
     color: '#1f2937',
-    marginBottom: 4,
+    textAlign: 'center',
   },
   title: {
     fontSize: 14,
     fontWeight: '500',
     color: '#6b7280',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   countScoreContainer: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-    marginBottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
   },
   scoreText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#16a34a',
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1f2937',
+    textAlign: 'center',
   },
   dualCountContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 12,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 16,
   },
   countBlock: {
     alignItems: 'center',
-  },
-  smallCount: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1f2937',
   },
   countLabel: {
     fontSize: 11,
     fontWeight: '500',
     color: '#6b7280',
-    marginTop: 2,
-  },
-  separator: {
-    width: 1,
-    height: 30,
-    backgroundColor: '#d1d5db',
+    marginTop: 4,
+    textAlign: 'center',
   },
 });
