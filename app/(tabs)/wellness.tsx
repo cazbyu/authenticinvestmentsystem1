@@ -26,7 +26,7 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
-import { DomainStatisticsCard } from '@/components/wellness/DomainStatisticsCard';
+import { DomainCard } from '@/components/wellness/DomainCard';
 import { getDomainStatistics, DomainStatistics } from '@/lib/roleStatistics';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -864,68 +864,6 @@ export default function Wellness() {
         {/* Domain Cards Section - Below Header Tabs */}
         {activeMainTab === 'domains' && (
           <View style={styles.domainsCardsSection}>
-            {/* Statistics Section with Time Period Selector */}
-            {domains.length > 0 && (
-              <View style={styles.statisticsSection}>
-                {/* Time Period Selector */}
-                <View style={styles.periodSelectorContainer}>
-                  <View style={styles.periodSelector}>
-                    <TouchableOpacity
-                      style={[
-                        styles.periodButton,
-                        domainStatsPeriod === 'week' && styles.periodButtonActive
-                      ]}
-                      onPress={() => setDomainStatsPeriod('week')}
-                    >
-                      <Text style={[
-                        styles.periodButtonText,
-                        domainStatsPeriod === 'week' && styles.periodButtonTextActive
-                      ]}>Week</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.periodButton,
-                        domainStatsPeriod === 'month' && styles.periodButtonActive
-                      ]}
-                      onPress={() => setDomainStatsPeriod('month')}
-                    >
-                      <Text style={[
-                        styles.periodButtonText,
-                        domainStatsPeriod === 'month' && styles.periodButtonTextActive
-                      ]}>Month</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Responsive Statistics Grid */}
-                {loadingStatistics ? (
-                  <View style={styles.statisticsLoadingContainer}>
-                    <Text style={styles.statisticsLoadingText}>Loading statistics...</Text>
-                  </View>
-                ) : (
-                  <View style={styles.statisticsGrid}>
-                    {domains.map(domain => {
-                      const stats = domainStatistics[domain.id];
-                      if (!stats) return null;
-
-                      const cardWidth = width < 768 ? '100%' : width < 1024 ? '48%' : width < 1440 ? '32%' : '24%';
-
-                      return (
-                        <View key={domain.id} style={[styles.statisticsCardWrapper, { width: cardWidth }]}>
-                          <DomainStatisticsCard
-                            domain={domain}
-                            statistics={stats}
-                            period={domainStatsPeriod}
-                            color={getDomainColor(domain.name)}
-                          />
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            )}
-
             {/* Domain Cards */}
             {domains.length === 0 ? (
               <View style={styles.emptyCardsContainer}>
@@ -933,24 +871,18 @@ export default function Wellness() {
               </View>
             ) : (
               <View style={styles.domainsGrid}>
-                {domains.map(domain => (
-                  <TouchableOpacity
-                    key={domain.id}
-                    style={[
-                      styles.domainCard,
-                      { borderTopColor: getDomainColor(domain.name) }
-                    ]}
-                    onPress={() => handleDomainPress(domain)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.domainCardContent}>
-                      <Text style={styles.domainName}>{domain.name}</Text>
-                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
-                        <Heart size={20} color="#ffffff" />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {domains.map(domain => {
+                  const stats = domainStatistics[domain.id];
+                  return (
+                    <DomainCard
+                      key={domain.id}
+                      domain={domain}
+                      statistics={stats || null}
+                      onPress={handleDomainPress}
+                      color={getDomainColor(domain.name)}
+                    />
+                  );
+                })}
               </View>
             )}
           </View>
@@ -1194,39 +1126,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  domainCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    borderTopWidth: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    width: '23%',
-    minWidth: 70,
-  },
-  domainCardContent: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: 8,
-    paddingVertical: 10,
-  },
-  domainIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  domainName: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1f2937',
-    textAlign: 'center',
-    lineHeight: 14,
-  },
   taskListContainer: {
     flex: 1,
   },
@@ -1389,55 +1288,5 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     lineHeight: 20,
-  },
-  statisticsSection: {
-    marginBottom: 20,
-  },
-  periodSelectorContainer: {
-    marginBottom: 16,
-    alignItems: 'flex-end',
-  },
-  periodSelector: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 8,
-    padding: 4,
-  },
-  periodButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 24,
-    borderRadius: 6,
-  },
-  periodButtonActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  periodButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
-  periodButtonTextActive: {
-    color: '#0078d4',
-  },
-  statisticsLoadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  statisticsLoadingText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  statisticsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  statisticsCardWrapper: {
-    width: '100%',
   },
 });

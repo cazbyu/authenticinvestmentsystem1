@@ -29,7 +29,7 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
-import { RoleStatisticsCard } from '@/components/roles/RoleStatisticsCard';
+import { RoleCard } from '@/components/roles/RoleCard';
 import { getRoleStatistics, RoleStatistics } from '@/lib/roleStatistics';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -1722,69 +1722,6 @@ export default function Roles() {
       <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'roles' && (
           <ScrollView style={styles.rolesList}>
-            {/* Statistics Section */}
-            <View style={styles.statisticsSection}>
-              {/* Time Period Selector */}
-              <View style={styles.periodSelectorContainer}>
-                <View style={styles.periodSelector}>
-                  <TouchableOpacity
-                    style={[
-                      styles.periodButton,
-                      roleStatsPeriod === 'week' && styles.periodButtonActive
-                    ]}
-                    onPress={() => setRoleStatsPeriod('week')}
-                  >
-                    <Text style={[
-                      styles.periodButtonText,
-                      roleStatsPeriod === 'week' && styles.periodButtonTextActive
-                    ]}>Week</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.periodButton,
-                      roleStatsPeriod === 'month' && styles.periodButtonActive
-                    ]}
-                    onPress={() => setRoleStatsPeriod('month')}
-                  >
-                    <Text style={[
-                      styles.periodButtonText,
-                      roleStatsPeriod === 'month' && styles.periodButtonTextActive
-                    ]}>Month</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Responsive Statistics Grid */}
-              {loadingStatistics ? (
-                <View style={styles.statisticsLoadingContainer}>
-                  <Text style={styles.statisticsLoadingText}>Loading statistics...</Text>
-                </View>
-              ) : (
-                <View style={styles.statisticsGrid}>
-                  {roles.map(role => {
-                    const stats = roleStatistics[role.id];
-                    if (!stats) return null;
-
-                    return (
-                      <View
-                        key={role.id}
-                        style={[
-                          styles.statisticsCardWrapper,
-                          { width: width < 768 ? '100%' : '49%' }
-                        ]}
-                      >
-                        <RoleStatisticsCard
-                          role={role}
-                          statistics={stats}
-                          period={roleStatsPeriod}
-                        />
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-
             {/* Roles Grid */}
             {roles.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -1798,53 +1735,18 @@ export default function Roles() {
               </View>
             ) : (
               <View style={styles.rolesGrid}>
-                {roles.map(role => (
-                  <TouchableOpacity
-                    key={role.id}
-                    style={[
-                      styles.roleCard,
-                      styles.roleCardHalf,
-                      { borderLeftColor: role.color || '#0078d4' }
-                    ]}
-                    onPress={() => handleRolePress(role)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.roleCardContent}>
-                      <View style={styles.roleCardMain}>
-                        {role.image_path && roleImageUrls[role.id] ? (
-                          <Image
-                            source={{ uri: roleImageUrls[role.id] || undefined }}
-                            style={styles.roleImage}
-                            onError={(error) => {
-                              console.error('[RoleBank] Failed to load role image:', role.label, role.image_path, error.nativeEvent.error);
-                            }}
-                          />
-                        ) : (
-                          <View style={[styles.roleImagePlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
-                            <Text style={styles.roleImageText}>
-                              {role.label.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
-
-                        <View style={styles.roleInfo}>
-                          <Text style={styles.roleName} numberOfLines={2}>{role.label}</Text>
-                        </View>
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.editRoleButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleEditRole(role);
-                        }}
-                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                      >
-                        <Pencil size={16} color="#6b7280" />
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {roles.map(role => {
+                  const stats = roleStatistics[role.id];
+                  return (
+                    <RoleCard
+                      key={role.id}
+                      role={role}
+                      statistics={stats || null}
+                      onPress={handleRolePress}
+                      imageUrl={roleImageUrls[role.id]}
+                    />
+                  );
+                })}
               </View>
             )}
           </ScrollView>
@@ -2157,73 +2059,12 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  roleCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  roleCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-  },
-  roleCardMain: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    flex: 1,
-    gap: 8,
-  },
   rolesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 8,
     paddingHorizontal: 16,
-  },
-  roleCardHalf: {
-    width: '23%',
-    minWidth: 70,
-    minHeight: 120,
-  },
-  roleImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  roleImagePlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  roleImageText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  roleInfo: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  roleName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-    textAlign: 'center',
-  },
-  editRoleButton: {
-    padding: 8,
-    position: 'absolute',
-    top: 4,
-    right: 4,
   },
   taskList: {
     flex: 1,
@@ -2613,57 +2454,5 @@ const styles = StyleSheet.create({
   },
   krItemEditButton: {
     padding: 8,
-  },
-  statisticsSection: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  periodSelectorContainer: {
-    marginBottom: 16,
-    alignItems: 'flex-end',
-  },
-  periodSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-    padding: 4,
-  },
-  periodButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 24,
-    borderRadius: 6,
-  },
-  periodButtonActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  periodButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  periodButtonTextActive: {
-    color: '#0078d4',
-  },
-  statisticsLoadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  statisticsLoadingText: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  statisticsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  statisticsCardWrapper: {
-    minWidth: 0,
   },
 });
