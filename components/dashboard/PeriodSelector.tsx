@@ -11,7 +11,8 @@ export function PeriodSelector({ selectedPeriod, onPeriodChange }: PeriodSelecto
   const periods: { value: TimePeriod; label: string }[] = [
     { value: 'today', label: 'Today' },
     { value: 'week', label: 'Week' },
-    { value: 'month', label: 'Month' }
+    { value: 'month', label: 'Month' },
+    { value: 'all', label: 'All' }
   ];
 
   return (

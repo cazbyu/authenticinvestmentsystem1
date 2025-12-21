@@ -1,7 +1,7 @@
 import { getSupabaseClient } from './supabase';
 import { calculateTaskPoints } from './taskUtils';
 
-export type TimePeriod = 'today' | 'week' | 'month';
+export type TimePeriod = 'today' | 'week' | 'month' | 'all';
 
 export interface DashboardMetrics {
   tasks: {
@@ -47,6 +47,13 @@ function getDateRange(period: TimePeriod): { start: Date; end: Date } {
       const monthEnd = new Date(now);
       monthEnd.setHours(23, 59, 59, 999);
       return { start: monthStart, end: monthEnd };
+
+    case 'all':
+      const allStart = new Date('2000-01-01');
+      allStart.setHours(0, 0, 0, 0);
+      const allEnd = new Date(now);
+      allEnd.setHours(23, 59, 59, 999);
+      return { start: allStart, end: allEnd };
   }
 }
 

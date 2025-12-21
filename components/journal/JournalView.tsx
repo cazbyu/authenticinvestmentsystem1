@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { FileText, Plus, Lightbulb, Flower2, AlertTriangle } from 'lucide-react-native';
+import { FileText, Lightbulb, Flower2, AlertTriangle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
@@ -28,18 +28,15 @@ interface JournalViewProps {
     name?: string;
   };
   onEntryPress: (entry: JournalEntry) => void;
-  onAddWithdrawal?: () => void;
   periodScore?: number;
-  onDateRangeChange?: (dateRange: 'week' | 'month' | 'all') => void;
+  dateRange?: 'today' | 'week' | 'month' | 'all';
   refreshKey?: number;
 }
 
-export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore, onDateRangeChange, refreshKey }: JournalViewProps) {
+export function JournalView({ scope, onEntryPress, periodScore, dateRange = 'month', refreshKey }: JournalViewProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'deposits' | 'reflections'>('all');
-  const [dateRange, setDateRange] = useState<'week' | 'month' | 'all'>('month');
   const [totalBalance, setTotalBalance] = useState(0);
   const [pageSize] = useState(30);
   const [displayedCount, setDisplayedCount] = useState(30);
@@ -51,7 +48,6 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
     data: JournalEntry[];
     timestamp: number;
     scope: string;
-    filter: string;
     dateRange: string;
   } | null>(null);
   const CACHE_TTL = 30000;
@@ -71,20 +67,25 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
   const getDateFilter = (): string | '' => {
     if (dateRange === 'all') return '';
     const now = new Date();
-    const days = dateRange === 'week' ? 7 : 30;
+    let days = 30;
+    if (dateRange === 'today') {
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      return todayStart.toISOString().split('T')[0];
+    } else if (dateRange === 'week') {
+      days = 7;
+    }
     const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     return since.toISOString().split('T')[0];
   };
 
   const fetchJournalEntries = async (forceRefresh: boolean = false) => {
     const scopeKey = JSON.stringify(scope);
-    const cacheKey = `${scopeKey}-${filter}-${dateRange}`;
 
     if (!forceRefresh && cacheRef.current) {
       const cacheAge = Date.now() - cacheRef.current.timestamp;
       const cacheMatch =
         cacheRef.current.scope === scopeKey &&
-        cacheRef.current.filter === filter &&
         cacheRef.current.dateRange === dateRange;
 
       if (cacheMatch && cacheAge < CACHE_TTL) {
@@ -137,7 +138,6 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       // ---------------------------------------------------------
       // 1) Deposits = completed tasks
       // ---------------------------------------------------------
-      if (filter === 'all' || filter === 'deposits') {
         let tasksQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
@@ -283,12 +283,10 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
             });
           }
         }
-      }
 
       // ---------------------------------------------------------
       // 1b) Pending Tasks (active deposits)
       // ---------------------------------------------------------
-      if (filter === 'all' || filter === 'deposits') {
         let pendingTasksQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, status, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id, created_at')
@@ -430,12 +428,10 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
             });
           }
         }
-      }
 
       // ---------------------------------------------------------
-      // 2) Withdrawals (only shown in 'all' filter)
+      // 2) Withdrawals
       // ---------------------------------------------------------
-      if (filter === 'all') {
         let withdrawalsQuery = supabase
           .from('0008-ap-withdrawals')
           .select('id, title, amount, withdrawn_at, user_id')
@@ -536,12 +532,10 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
             });
           }
         }
-      }
 
       // ---------------------------------------------------------
       // 3) Reflections (don't affect balance)
       // ---------------------------------------------------------
-      if (filter === 'all' || filter === 'reflections') {
         let reflectionsQuery = supabase
         .from('0008-ap-reflections')
         .select('id, content, date, created_at, reflection_type, daily_rose, daily_thorn')
@@ -644,12 +638,10 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
           });
         }
       }
-      }
 
       // ---------------------------------------------------------
       // 4) Deposit Ideas (stored separately, appear as reflections)
       // ---------------------------------------------------------
-      if (filter === 'all' || filter === 'reflections') {
         let depositIdeasQuery = supabase
         .from('0008-ap-deposit-ideas')
         .select('id, title, created_at, user_id, is_active')
@@ -751,7 +743,6 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
           });
         }
       }
-      }
 
       // ---------------------------------------------------------
       // 5) Sort & compute running balance
@@ -812,7 +803,6 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
         data: journalEntries,
         timestamp: Date.now(),
         scope: scopeKey,
-        filter,
         dateRange,
       };
 
@@ -856,14 +846,14 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
   useEffect(() => {
     setDisplayedCount(pageSize);
     cacheRef.current = null;
-  }, [filter, dateRange, pageSize]);
+  }, [dateRange, pageSize]);
 
   useEffect(() => {
     // Create a stable scope key for comparison
     const scopeKey = JSON.stringify(scope);
 
     // Only fetch if scope actually changed (unless refreshKey changed which forces refresh)
-    if (scopeKey === previousScopeRef.current && !filter && !dateRange && refreshKey === undefined) {
+    if (scopeKey === previousScopeRef.current && !dateRange && refreshKey === undefined) {
       return;
     }
 
@@ -897,7 +887,7 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, filter, dateRange, refreshKey]);
+  }, [scope, dateRange, refreshKey]);
 
   // Real-time subscription for task status changes
   useEffect(() => {
@@ -974,54 +964,6 @@ export function JournalView({ scope, onEntryPress, onAddWithdrawal, periodScore,
 
   return (
     <View style={styles.container}>
-      {/* Filter Controls */}
-      <View style={styles.filterContainer}>
-        <View style={styles.filterRow}>
-          <View style={styles.filterRowContent}>
-            <View style={styles.filterGroup}>
-              {(['all', 'deposits', 'reflections'] as const).map((filterOption) => (
-                <TouchableOpacity
-                  key={filterOption}
-                  style={[styles.filterButton, filter === filterOption && styles.activeFilterButton]}
-                  onPress={() => setFilter(filterOption)}
-                >
-                  <Text style={[styles.filterButtonText, filter === filterOption && styles.activeFilterButtonText]}>
-                    {filterOption.charAt(0).toUpperCase() + filterOption.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.filterGroup}>
-              {(['week', 'month', 'all'] as const).map((rangeOption) => (
-                <TouchableOpacity
-                  key={rangeOption}
-                  style={[styles.filterButton, dateRange === rangeOption && styles.activeFilterButton]}
-                  onPress={() => {
-                    setDateRange(rangeOption);
-                    if (onDateRangeChange) {
-                      onDateRangeChange(rangeOption);
-                    }
-                  }}
-                >
-                  <Text style={[styles.filterButtonText, dateRange === rangeOption && styles.activeFilterButtonText]}>
-                    {rangeOption.charAt(0).toUpperCase() + rangeOption.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Add Withdrawal Button */}
-          {onAddWithdrawal && (
-            <TouchableOpacity style={styles.addWithdrawalButton} onPress={onAddWithdrawal}>
-              <Plus size={16} color="#dc2626" />
-              <Text style={styles.addWithdrawalText}>Add Withdrawal</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
       {/* Period Score Display - Only show when periodScore is provided */}
       {periodScore !== undefined && (
         <View style={styles.periodScoreContainer}>
@@ -1137,33 +1079,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0078d4',
   },
-  filterContainer: {
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  filterRow: { flexDirection: 'column', gap: 12 },
-  filterRowContent: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16 },
-  filterGroup: { flexDirection: 'row', backgroundColor: '#ffffff', borderRadius: 8, padding: 2 },
-  addWithdrawalButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#dc2626',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignSelf: 'center',
-    gap: 6,
-  },
-  addWithdrawalText: { fontSize: 14, fontWeight: '600', color: '#dc2626' },
-  filterButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  activeFilterButton: { backgroundColor: '#0078d4' },
-  filterButtonText: { fontSize: 12, fontWeight: '500', color: '#6b7280' },
-  activeFilterButtonText: { color: '#ffffff' },
   journalHeader: {
     flexDirection: 'row',
     backgroundColor: '#f8fafc',

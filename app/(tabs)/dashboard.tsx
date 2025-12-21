@@ -981,11 +981,8 @@ export default function Dashboard() {
           <JournalView
             scope={{ type: 'user', id: userId }}
             onEntryPress={handleJournalEntryPress}
-            onAddWithdrawal={() => {
-              setActiveView('journal');
-              setIsFormModalVisible(true);
-            }}
             periodScore={authenticScore}
+            dateRange={selectedPeriod}
             refreshKey={journalRefreshKey}
           />
         ) : loading ? null

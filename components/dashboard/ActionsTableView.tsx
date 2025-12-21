@@ -61,6 +61,11 @@ function getDateRange(period: TimePeriod): { start: Date; end: Date } {
       monthEnd.setDate(now.getDate() + 27);
       monthEnd.setHours(23, 59, 59, 999);
       return { start: past, end: monthEnd };
+
+    case 'all':
+      const allEnd = new Date('2099-12-31');
+      allEnd.setHours(23, 59, 59, 999);
+      return { start: past, end: allEnd };
   }
 }
 
