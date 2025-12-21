@@ -860,33 +860,6 @@ export default function Wellness() {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Domain Cards Section - Below Header Tabs */}
-        {activeMainTab === 'domains' && (
-          <View style={styles.domainsCardsSection}>
-            {/* Domain Cards */}
-            {domains.length === 0 ? (
-              <View style={styles.emptyCardsContainer}>
-                <Text style={styles.emptyCardsText}>No domains found</Text>
-              </View>
-            ) : (
-              <View style={styles.domainsGrid}>
-                {domains.map(domain => {
-                  const stats = domainStatistics[domain.id];
-                  return (
-                    <DomainCard
-                      key={domain.id}
-                      domain={domain}
-                      statistics={stats || null}
-                      onPress={handleDomainPress}
-                      color={getDomainColor(domain.name)}
-                    />
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        )}
       </View>
     );
   };
@@ -984,6 +957,62 @@ export default function Wellness() {
     // Main Wellness Bank view with tabs
     return (
       <View style={styles.content} pointerEvents="box-none">
+        {activeMainTab === 'domains' && (
+          <ScrollView style={styles.domainsContent}>
+            {/* Time Period Selector */}
+            <View style={styles.timePeriodContainer}>
+              <View style={styles.timePeriodSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'week' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('week')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'week' && styles.timePeriodButtonTextActive
+                  ]}>Week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'month' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('month')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'month' && styles.timePeriodButtonTextActive
+                  ]}>Month</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Domain Cards */}
+            {domains.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No domains found</Text>
+              </View>
+            ) : (
+              <View style={styles.domainsGrid}>
+                {domains.map(domain => {
+                  const stats = domainStatistics[domain.id];
+                  return (
+                    <DomainCard
+                      key={domain.id}
+                      domain={domain}
+                      statistics={stats || null}
+                      onPress={handleDomainPress}
+                      color={getDomainColor(domain.name)}
+                    />
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        )}
+
         {activeMainTab === 'balance' && (
           <BalanceScoresView getDomainColor={getDomainColor} />
         )}
@@ -1107,24 +1136,50 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  domainsCardsSection: {
-    paddingTop: 12,
+  domainsContent: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  timePeriodContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    alignItems: 'flex-end',
   },
-  emptyCardsContainer: {
-    paddingVertical: 20,
-    alignItems: 'center',
+  timePeriodSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  emptyCardsText: {
-    color: 'rgba(255, 255, 255, 0.8)',
+  timePeriodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 6,
+  },
+  timePeriodButtonActive: {
+    backgroundColor: '#0078d4',
+  },
+  timePeriodButtonText: {
     fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  timePeriodButtonTextActive: {
+    color: '#ffffff',
   },
   domainsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   taskListContainer: {
     flex: 1,
