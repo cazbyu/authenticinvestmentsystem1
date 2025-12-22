@@ -122,7 +122,7 @@ export function RoleStatisticsCard({
       {/* Center: Weekly Schedule */}
       <View style={styles.scheduleSection}>
         <View style={styles.scheduleHeader}>
-          <Text style={styles.scheduleLabel}>Deposits</Text>
+          <Text style={styles.scheduleLabel}>Next 4 Weeks</Text>
           <Calendar size={10} color="#6b7280" />
         </View>
         <View style={styles.scheduleGrid}>
