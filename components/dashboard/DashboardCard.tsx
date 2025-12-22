@@ -81,7 +81,7 @@ export function DashboardCard({
     >
       <View style={styles.content}>
         <View style={[styles.iconContainer, { backgroundColor: iconBackgroundColor }]}>
-          <Icon size={24} color={iconColor} />
+          <Icon size={30} color={iconColor} />
         </View>
         {renderContent()}
       </View>
@@ -105,9 +105,9 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
@@ -118,13 +118,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   count: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: '700',
     color: '#1f2937',
     textAlign: 'center',
   },
   title: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
     color: '#6b7280',
     marginBottom: 8,
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   scoreText: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: '700',
     color: '#1f2937',
     textAlign: 'center',
