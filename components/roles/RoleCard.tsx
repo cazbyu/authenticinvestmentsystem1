@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
-import { Info } from 'lucide-react-native';
-import { HoverStatsPopup } from '@/components/common/HoverStatsPopup';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { RoleStatistics } from '@/lib/roleStatistics';
 
 interface Role {
@@ -20,33 +18,8 @@ interface RoleCardProps {
 }
 
 export function RoleCard({ role, statistics, onPress, imageUrl }: RoleCardProps) {
-  const [showPopup, setShowPopup] = useState(false);
-  const [isInfoPressed, setIsInfoPressed] = useState(false);
-
-  const handleMouseEnter = () => {
-    if (Platform.OS === 'web') {
-      setShowPopup(true);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (Platform.OS === 'web') {
-      setShowPopup(false);
-    }
-  };
-
-  const handleInfoPress = () => {
-    setIsInfoPressed(!isInfoPressed);
-  };
-
-  const isHoverVisible = Platform.OS === 'web' ? showPopup : isInfoPressed;
-
   return (
-    <View
-      style={styles.cardWrapper}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
+    <View style={styles.cardWrapper}>
       <TouchableOpacity
         style={styles.card}
         onPress={() => onPress(role)}
@@ -76,25 +49,7 @@ export function RoleCard({ role, statistics, onPress, imageUrl }: RoleCardProps)
             </View>
           )}
         </View>
-
-        {Platform.OS !== 'web' && statistics && (
-          <TouchableOpacity
-            style={styles.infoButton}
-            onPress={handleInfoPress}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Info size={16} color="#6b7280" />
-          </TouchableOpacity>
-        )}
       </TouchableOpacity>
-
-      {statistics && (
-        <HoverStatsPopup
-          scheduledByWeek={statistics.scheduledByWeek}
-          reflectionStats={statistics.reflectionStats}
-          visible={isHoverVisible}
-        />
-      )}
     </View>
   );
 }
@@ -169,13 +124,5 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
     textAlign: 'center',
-  },
-  infoButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    padding: 4,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
   },
 });

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { Heart, Info } from 'lucide-react-native';
-import { HoverStatsPopup } from '@/components/common/HoverStatsPopup';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Heart } from 'lucide-react-native';
 import { DomainStatistics } from '@/lib/roleStatistics';
 
 interface Domain {
@@ -18,33 +17,8 @@ interface DomainCardProps {
 }
 
 export function DomainCard({ domain, statistics, onPress, color }: DomainCardProps) {
-  const [showPopup, setShowPopup] = useState(false);
-  const [isInfoPressed, setIsInfoPressed] = useState(false);
-
-  const handleMouseEnter = () => {
-    if (Platform.OS === 'web') {
-      setShowPopup(true);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (Platform.OS === 'web') {
-      setShowPopup(false);
-    }
-  };
-
-  const handleInfoPress = () => {
-    setIsInfoPressed(!isInfoPressed);
-  };
-
-  const isHoverVisible = Platform.OS === 'web' ? showPopup : isInfoPressed;
-
   return (
-    <View
-      style={styles.cardWrapper}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
+    <View style={styles.cardWrapper}>
       <TouchableOpacity
         style={styles.card}
         onPress={() => onPress(domain)}
@@ -68,25 +42,7 @@ export function DomainCard({ domain, statistics, onPress, color }: DomainCardPro
             </View>
           )}
         </View>
-
-        {Platform.OS !== 'web' && statistics && (
-          <TouchableOpacity
-            style={styles.infoButton}
-            onPress={handleInfoPress}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Info size={16} color="#6b7280" />
-          </TouchableOpacity>
-        )}
       </TouchableOpacity>
-
-      {statistics && (
-        <HoverStatsPopup
-          scheduledByWeek={statistics.scheduledByWeek}
-          reflectionStats={statistics.reflectionStats}
-          visible={isHoverVisible}
-        />
-      )}
     </View>
   );
 }
@@ -150,13 +106,5 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
     textAlign: 'center',
-  },
-  infoButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    padding: 4,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
   },
 });
