@@ -110,7 +110,7 @@ export default function Roles() {
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
 
   // Role Bank statistics
-  const [roleStatsPeriod, setRoleStatsPeriod] = useState<'week' | 'month'>('week');
+  const [roleStatsPeriod, setRoleStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [roleStatistics, setRoleStatistics] = useState<Record<string, RoleStatistics>>({});
   const [loadingStatistics, setLoadingStatistics] = useState(false);
 
@@ -1504,7 +1504,8 @@ export default function Roles() {
                 <JournalView
                   scope={krJournalScope}
                   onEntryPress={handleJournalEntryPress}
-                  periodScore={periodScore}
+                  dateRange={journalDateRange}
+                  showTimePeriodSelector={true}
                   onDateRangeChange={handleJournalDateRangeChange}
                 />
               )
@@ -1610,7 +1611,8 @@ export default function Roles() {
                 <JournalView
                   scope={journalScope}
                   onEntryPress={handleJournalEntryPress}
-                  periodScore={periodScore}
+                  dateRange={journalDateRange}
+                  showTimePeriodSelector={true}
                   onDateRangeChange={handleJournalDateRangeChange}
                 />
               )
@@ -1722,6 +1724,60 @@ export default function Roles() {
       <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'roles' && (
           <ScrollView style={styles.rolesList}>
+            {/* Time Period Selector */}
+            <View style={styles.timePeriodContainer}>
+              <View style={styles.timePeriodSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'today' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('today')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'today' && styles.timePeriodButtonTextActive
+                  ]}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'week' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('week')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'week' && styles.timePeriodButtonTextActive
+                  ]}>Week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'month' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('month')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'month' && styles.timePeriodButtonTextActive
+                  ]}>Month</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'all' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('all')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'all' && styles.timePeriodButtonTextActive
+                  ]}>All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* Roles Grid */}
             {roles.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -2058,6 +2114,39 @@ const styles = StyleSheet.create({
   rolesList: {
     flex: 1,
     padding: 16,
+  },
+  timePeriodContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 12,
+    alignItems: 'flex-end',
+  },
+  timePeriodSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  timePeriodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+  },
+  timePeriodButtonActive: {
+    backgroundColor: '#0078d4',
+  },
+  timePeriodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  timePeriodButtonTextActive: {
+    color: '#ffffff',
   },
   rolesGrid: {
     flexDirection: 'row',

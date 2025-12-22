@@ -82,7 +82,7 @@ export default function Wellness() {
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
 
   // Domain Bank statistics
-  const [domainStatsPeriod, setDomainStatsPeriod] = useState<'week' | 'month'>('week');
+  const [domainStatsPeriod, setDomainStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [domainStatistics, setDomainStatistics] = useState<Record<string, DomainStatistics>>({});
   const [loadingStatistics, setLoadingStatistics] = useState(false);
 
@@ -903,7 +903,8 @@ export default function Wellness() {
               <JournalView
                 scope={{ type: 'domain', id: selectedDomain.id, name: selectedDomain.name }}
                 onEntryPress={handleJournalEntryPress}
-                periodScore={periodScore}
+                dateRange={journalDateRange}
+                showTimePeriodSelector={true}
                 onDateRangeChange={handleJournalDateRangeChange}
               />
             ) : activeView === 'analytics' ? (
@@ -965,6 +966,18 @@ export default function Wellness() {
                 <TouchableOpacity
                   style={[
                     styles.timePeriodButton,
+                    domainStatsPeriod === 'today' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('today')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'today' && styles.timePeriodButtonTextActive
+                  ]}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
                     domainStatsPeriod === 'week' && styles.timePeriodButtonActive
                   ]}
                   onPress={() => setDomainStatsPeriod('week')}
@@ -985,6 +998,18 @@ export default function Wellness() {
                     styles.timePeriodButtonText,
                     domainStatsPeriod === 'month' && styles.timePeriodButtonTextActive
                   ]}>Month</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'all' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('all')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'all' && styles.timePeriodButtonTextActive
+                  ]}>All</Text>
                 </TouchableOpacity>
               </View>
             </View>

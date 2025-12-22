@@ -67,11 +67,11 @@ export function RoleCard({ role, statistics, onPress, imageUrl }: RoleCardProps)
             <View style={styles.statsContainer}>
               <View style={styles.statBlock}>
                 <Text style={styles.statValue}>{statistics.completedDeposits}</Text>
-                <Text style={styles.statLabel}>Deposits</Text>
+                <Text style={styles.statLabel}>Completed</Text>
               </View>
               <View style={styles.statBlock}>
-                <Text style={styles.statValue}>{statistics.authenticScore}</Text>
-                <Text style={styles.statLabel}>Score</Text>
+                <Text style={styles.statValue}>{statistics.totalScheduled}</Text>
+                <Text style={styles.statLabel}>Scheduled</Text>
               </View>
             </View>
           )}

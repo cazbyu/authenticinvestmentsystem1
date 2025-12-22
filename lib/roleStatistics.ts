@@ -3,6 +3,7 @@ import { calculateAuthenticScoreForPeriod } from './taskUtils';
 
 export interface RoleStatistics {
   completedDeposits: number;
+  totalScheduled: number;
   scheduledByWeek: {
     week1: number;
     week2: number;
@@ -20,6 +21,7 @@ export interface RoleStatistics {
 
 export interface DomainStatistics {
   completedDeposits: number;
+  totalScheduled: number;
   scheduledByWeek: {
     week1: number;
     week2: number;
@@ -35,18 +37,25 @@ export interface DomainStatistics {
   authenticScore: number;
 }
 
-function getDateRange(period: 'week' | 'month'): { startDate: Date; endDate: Date } {
+function getDateRange(period: 'today' | 'week' | 'month' | 'all'): { startDate: Date | null; endDate: Date } {
   const endDate = new Date();
-  const startDate = new Date();
+  endDate.setHours(23, 59, 59, 999);
 
-  if (period === 'week') {
-    startDate.setDate(endDate.getDate() - 7);
-  } else {
-    startDate.setDate(endDate.getDate() - 30);
+  if (period === 'all') {
+    return { startDate: null, endDate };
   }
 
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
+  const startDate = new Date();
+
+  if (period === 'today') {
+    startDate.setHours(0, 0, 0, 0);
+  } else if (period === 'week') {
+    startDate.setDate(endDate.getDate() - 7);
+    startDate.setHours(0, 0, 0, 0);
+  } else {
+    startDate.setDate(endDate.getDate() - 30);
+    startDate.setHours(0, 0, 0, 0);
+  }
 
   return { startDate, endDate };
 }
@@ -73,22 +82,27 @@ function getWeekRanges(): Array<{ start: Date; end: Date }> {
 export async function getCompletedDepositsCount(
   supabase: SupabaseClient,
   userId: string,
-  period: 'week' | 'month',
+  period: 'today' | 'week' | 'month' | 'all',
   scopeType: 'role' | 'domain' | 'key_relationship',
   scopeId: string
 ): Promise<number> {
   try {
     const { startDate, endDate } = getDateRange(period);
 
-    const { data: tasks, error: tasksError } = await supabase
+    let tasksQuery = supabase
       .from('0008-ap-tasks')
       .select('id, completed_at')
       .eq('user_id', userId)
       .eq('status', 'completed')
       .is('deleted_at', null)
-      .not('completed_at', 'is', null)
-      .gte('completed_at', startDate.toISOString())
-      .lte('completed_at', endDate.toISOString());
+      .not('completed_at', 'is', null);
+
+    if (startDate) {
+      tasksQuery = tasksQuery.gte('completed_at', startDate.toISOString());
+    }
+    tasksQuery = tasksQuery.lte('completed_at', endDate.toISOString());
+
+    const { data: tasks, error: tasksError } = await tasksQuery;
 
     if (tasksError) throw tasksError;
     if (!tasks || tasks.length === 0) return 0;
@@ -196,23 +210,110 @@ export async function getScheduledDepositsByWeek(
   }
 }
 
+export async function getScheduledDepositsForPeriod(
+  supabase: SupabaseClient,
+  userId: string,
+  period: 'today' | 'week' | 'month' | 'all',
+  scopeType: 'role' | 'domain' | 'key_relationship',
+  scopeId: string
+): Promise<number> {
+  try {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date | null = null;
+
+    if (period === 'today') {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'week') {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date();
+      endDate.setDate(now.getDate() + 7);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'month') {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date();
+      endDate.setDate(now.getDate() + 30);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    }
+
+    let tasksQuery = supabase
+      .from('0008-ap-tasks')
+      .select('id, due_date')
+      .eq('user_id', userId)
+      .neq('status', 'completed')
+      .is('deleted_at', null)
+      .not('due_date', 'is', null)
+      .gte('due_date', startDate.toISOString());
+
+    if (endDate) {
+      tasksQuery = tasksQuery.lte('due_date', endDate.toISOString());
+    }
+
+    const { data: tasks, error: tasksError } = await tasksQuery;
+
+    if (tasksError) throw tasksError;
+    if (!tasks || tasks.length === 0) return 0;
+
+    const taskIds = tasks.map(t => t.id);
+
+    const joinTable = scopeType === 'role'
+      ? '0008-ap-universal-roles-join'
+      : scopeType === 'domain'
+      ? '0008-ap-universal-domains-join'
+      : '0008-ap-universal-key-relationships-join';
+
+    const idField = scopeType === 'role'
+      ? 'role_id'
+      : scopeType === 'domain'
+      ? 'domain_id'
+      : 'key_relationship_id';
+
+    const { data: joinData, error: joinError } = await supabase
+      .from(joinTable)
+      .select('parent_id')
+      .in('parent_id', taskIds)
+      .eq('parent_type', 'task')
+      .eq(idField, scopeId);
+
+    if (joinError) throw joinError;
+
+    return joinData?.length || 0;
+  } catch (error) {
+    console.error('Error getting scheduled deposits for period:', error);
+    return 0;
+  }
+}
+
 export async function getReflectionStatistics(
   supabase: SupabaseClient,
   userId: string,
-  period: 'week' | 'month',
+  period: 'today' | 'week' | 'month' | 'all',
   scopeType: 'role' | 'domain' | 'key_relationship',
   scopeId: string
 ): Promise<{ roses: number; thorns: number; depositIdeas: number; reflectionsAndNotes: number }> {
   try {
     const { startDate, endDate } = getDateRange(period);
 
-    const { data: reflections, error: reflectionsError } = await supabase
+    let reflectionsQuery = supabase
       .from('0008-ap-reflections')
       .select('id, daily_rose, daily_thorn, date')
       .eq('user_id', userId)
-      .is('archived', false)
-      .gte('date', startDate.toISOString().split('T')[0])
-      .lte('date', endDate.toISOString().split('T')[0]);
+      .is('archived', false);
+
+    if (startDate) {
+      reflectionsQuery = reflectionsQuery.gte('date', startDate.toISOString().split('T')[0]);
+    }
+    reflectionsQuery = reflectionsQuery.lte('date', endDate.toISOString().split('T')[0]);
+
+    const { data: reflections, error: reflectionsError } = await reflectionsQuery;
 
     if (reflectionsError) throw reflectionsError;
 
@@ -259,15 +360,20 @@ export async function getReflectionStatistics(
       });
     }
 
-    const { data: tasks, error: tasksError } = await supabase
+    let tasksQuery = supabase
       .from('0008-ap-tasks')
       .select('id, completed_at')
       .eq('user_id', userId)
       .eq('status', 'completed')
       .is('deleted_at', null)
-      .not('completed_at', 'is', null)
-      .gte('completed_at', startDate.toISOString())
-      .lte('completed_at', endDate.toISOString());
+      .not('completed_at', 'is', null);
+
+    if (startDate) {
+      tasksQuery = tasksQuery.gte('completed_at', startDate.toISOString());
+    }
+    tasksQuery = tasksQuery.lte('completed_at', endDate.toISOString());
+
+    const { data: tasks, error: tasksError } = await tasksQuery;
 
     if (tasksError) throw tasksError;
 
@@ -298,12 +404,17 @@ export async function getReflectionStatistics(
       }
     }
 
-    const { data: depositIdeas, error: depositIdeasError } = await supabase
+    let depositIdeasQuery = supabase
       .from('0008-ap-deposit-ideas')
       .select('id, created_at')
-      .eq('user_id', userId)
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
+      .eq('user_id', userId);
+
+    if (startDate) {
+      depositIdeasQuery = depositIdeasQuery.gte('created_at', startDate.toISOString());
+    }
+    depositIdeasQuery = depositIdeasQuery.lte('created_at', endDate.toISOString());
+
+    const { data: depositIdeas, error: depositIdeasError } = await depositIdeasQuery;
 
     if (depositIdeasError) throw depositIdeasError;
 
@@ -339,11 +450,12 @@ export async function getRoleStatistics(
   supabase: SupabaseClient,
   userId: string,
   roleId: string,
-  period: 'week' | 'month'
+  period: 'today' | 'week' | 'month' | 'all'
 ): Promise<RoleStatistics> {
   try {
-    const [completedDeposits, scheduledByWeek, reflectionStats, authenticScore] = await Promise.all([
+    const [completedDeposits, totalScheduled, scheduledByWeek, reflectionStats, authenticScore] = await Promise.all([
       getCompletedDepositsCount(supabase, userId, period, 'role', roleId),
+      getScheduledDepositsForPeriod(supabase, userId, period, 'role', roleId),
       getScheduledDepositsByWeek(supabase, userId, 'role', roleId),
       getReflectionStatistics(supabase, userId, period, 'role', roleId),
       calculateAuthenticScoreForPeriod(supabase, userId, period, { type: 'role', id: roleId })
@@ -351,6 +463,7 @@ export async function getRoleStatistics(
 
     return {
       completedDeposits,
+      totalScheduled,
       scheduledByWeek,
       reflectionStats,
       authenticScore
@@ -359,6 +472,7 @@ export async function getRoleStatistics(
     console.error('Error getting role statistics:', error);
     return {
       completedDeposits: 0,
+      totalScheduled: 0,
       scheduledByWeek: { week1: 0, week2: 0, week3: 0, week4: 0 },
       reflectionStats: { roses: 0, thorns: 0, depositIdeas: 0, reflectionsAndNotes: 0 },
       authenticScore: 0
@@ -370,11 +484,12 @@ export async function getDomainStatistics(
   supabase: SupabaseClient,
   userId: string,
   domainId: string,
-  period: 'week' | 'month'
+  period: 'today' | 'week' | 'month' | 'all'
 ): Promise<DomainStatistics> {
   try {
-    const [completedDeposits, scheduledByWeek, reflectionStats, authenticScore] = await Promise.all([
+    const [completedDeposits, totalScheduled, scheduledByWeek, reflectionStats, authenticScore] = await Promise.all([
       getCompletedDepositsCount(supabase, userId, period, 'domain', domainId),
+      getScheduledDepositsForPeriod(supabase, userId, period, 'domain', domainId),
       getScheduledDepositsByWeek(supabase, userId, 'domain', domainId),
       getReflectionStatistics(supabase, userId, period, 'domain', domainId),
       calculateAuthenticScoreForPeriod(supabase, userId, period, { type: 'domain', id: domainId })
@@ -382,6 +497,7 @@ export async function getDomainStatistics(
 
     return {
       completedDeposits,
+      totalScheduled,
       scheduledByWeek,
       reflectionStats,
       authenticScore
@@ -390,6 +506,7 @@ export async function getDomainStatistics(
     console.error('Error getting domain statistics:', error);
     return {
       completedDeposits: 0,
+      totalScheduled: 0,
       scheduledByWeek: { week1: 0, week2: 0, week3: 0, week4: 0 },
       reflectionStats: { roses: 0, thorns: 0, depositIdeas: 0, reflectionsAndNotes: 0 },
       authenticScore: 0

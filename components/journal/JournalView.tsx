@@ -30,11 +30,14 @@ interface JournalViewProps {
   onEntryPress: (entry: JournalEntry) => void;
   dateRange?: 'today' | 'week' | 'month' | 'all';
   refreshKey?: number;
+  showTimePeriodSelector?: boolean;
+  onDateRangeChange?: (dateRange: 'today' | 'week' | 'month' | 'all') => void;
 }
 
-export function JournalView({ scope, onEntryPress, dateRange = 'month', refreshKey }: JournalViewProps) {
+export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKey, showTimePeriodSelector = false, onDateRangeChange }: JournalViewProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>(dateRange || 'week');
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalBalance, setTotalBalance] = useState(0);
   const [pageSize] = useState(30);
@@ -843,9 +846,22 @@ export function JournalView({ scope, onEntryPress, dateRange = 'month', refreshK
   };
 
   useEffect(() => {
+    if (dateRange) {
+      setSelectedPeriod(dateRange);
+    }
+  }, [dateRange]);
+
+  useEffect(() => {
     setDisplayedCount(pageSize);
     cacheRef.current = null;
   }, [dateRange, pageSize]);
+
+  const handlePeriodChange = (period: 'today' | 'week' | 'month' | 'all') => {
+    setSelectedPeriod(period);
+    if (onDateRangeChange) {
+      onDateRangeChange(period);
+    }
+  };
 
   useEffect(() => {
     // Create a stable scope key for comparison
@@ -948,6 +964,62 @@ export function JournalView({ scope, onEntryPress, dateRange = 'month', refreshK
 
   return (
     <View style={styles.container}>
+      {/* Time Period Selector (if enabled) */}
+      {showTimePeriodSelector && (
+        <View style={styles.timePeriodContainer}>
+          <View style={styles.timePeriodSelector}>
+            <TouchableOpacity
+              style={[
+                styles.timePeriodButton,
+                selectedPeriod === 'today' && styles.timePeriodButtonActive
+              ]}
+              onPress={() => handlePeriodChange('today')}
+            >
+              <Text style={[
+                styles.timePeriodButtonText,
+                selectedPeriod === 'today' && styles.timePeriodButtonTextActive
+              ]}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.timePeriodButton,
+                selectedPeriod === 'week' && styles.timePeriodButtonActive
+              ]}
+              onPress={() => handlePeriodChange('week')}
+            >
+              <Text style={[
+                styles.timePeriodButtonText,
+                selectedPeriod === 'week' && styles.timePeriodButtonTextActive
+              ]}>Week</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.timePeriodButton,
+                selectedPeriod === 'month' && styles.timePeriodButtonActive
+              ]}
+              onPress={() => handlePeriodChange('month')}
+            >
+              <Text style={[
+                styles.timePeriodButtonText,
+                selectedPeriod === 'month' && styles.timePeriodButtonTextActive
+              ]}>Month</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.timePeriodButton,
+                selectedPeriod === 'all' && styles.timePeriodButtonActive
+              ]}
+              onPress={() => handlePeriodChange('all')}
+            >
+              <Text style={[
+                styles.timePeriodButtonText,
+                selectedPeriod === 'all' && styles.timePeriodButtonTextActive
+              ]}>All</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Journal Header */}
       <View style={styles.journalHeader}>
         <Text style={styles.headerDate}>Date</Text>
@@ -1098,5 +1170,38 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  timePeriodContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'flex-end',
+    backgroundColor: '#f8fafc',
+  },
+  timePeriodSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  timePeriodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+  },
+  timePeriodButtonActive: {
+    backgroundColor: '#0078d4',
+  },
+  timePeriodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  timePeriodButtonTextActive: {
+    color: '#ffffff',
   },
 });
