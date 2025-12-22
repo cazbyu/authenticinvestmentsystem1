@@ -180,7 +180,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 2,
     gap: 0,
-    alignSelf: 'flex-end',
+    alignSelf: 'flex-start',
+    marginLeft: 48,
   },
   tab: {
     paddingVertical: 6,
