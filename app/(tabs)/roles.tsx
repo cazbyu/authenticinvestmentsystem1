@@ -930,17 +930,21 @@ export default function Roles() {
           const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
-          const stats: Record<string, RoleStatistics> = {};
+          const statsArray = await Promise.all(
+            roles.map(role =>
+              getRoleStatistics(
+                supabase,
+                user.id,
+                role.id,
+                roleStatsPeriod
+              ).then(stats => ({ roleId: role.id, stats }))
+            )
+          );
 
-          for (const role of roles) {
-            const roleStats = await getRoleStatistics(
-              supabase,
-              user.id,
-              role.id,
-              roleStatsPeriod
-            );
-            stats[role.id] = roleStats;
-          }
+          const stats: Record<string, RoleStatistics> = {};
+          statsArray.forEach(({ roleId, stats: roleStats }) => {
+            stats[roleId] = roleStats;
+          });
 
           setRoleStatistics(stats);
         } catch (error) {

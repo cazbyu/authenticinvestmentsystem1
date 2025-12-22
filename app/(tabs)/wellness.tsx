@@ -502,17 +502,21 @@ export default function Wellness() {
           const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
-          const stats: Record<string, DomainStatistics> = {};
+          const statsArray = await Promise.all(
+            domains.map(domain =>
+              getDomainStatistics(
+                supabase,
+                user.id,
+                domain.id,
+                domainStatsPeriod
+              ).then(stats => ({ domainId: domain.id, stats }))
+            )
+          );
 
-          for (const domain of domains) {
-            const domainStats = await getDomainStatistics(
-              supabase,
-              user.id,
-              domain.id,
-              domainStatsPeriod
-            );
-            stats[domain.id] = domainStats;
-          }
+          const stats: Record<string, DomainStatistics> = {};
+          statsArray.forEach(({ domainId, stats: domainStats }) => {
+            stats[domainId] = domainStats;
+          });
 
           setDomainStatistics(stats);
         } catch (error) {
