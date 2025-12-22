@@ -53,14 +53,14 @@ export function DomainStatisticsCard({
         <View style={styles.summarySection}>
           <View style={styles.summaryTile}>
             <View style={styles.summaryHeader}>
-              <Text style={styles.summaryLabel}>Deposits</Text>
+              <Text style={styles.summaryLabel}>Completed</Text>
               <CheckCircle size={12} color="#10b981" />
             </View>
             <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
           </View>
           <View style={styles.summaryTile}>
-            <Text style={styles.summaryLabel}>AS</Text>
-            <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
+            <Text style={styles.summaryLabel}>Scheduled</Text>
+            <Text style={styles.summaryValue}>{statistics.totalScheduled}</Text>
           </View>
         </View>
 

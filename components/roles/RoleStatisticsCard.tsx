@@ -69,12 +69,12 @@ export function RoleStatisticsCard({
         <Text style={styles.mobileRoleName}>{role.label}</Text>
         <View style={styles.mobileMetrics}>
           <View style={styles.mobileMetricItem}>
-            <Text style={styles.mobileMetricLabel}>Deposits</Text>
+            <Text style={styles.mobileMetricLabel}>Completed</Text>
             <Text style={styles.mobileMetricValue}>{statistics.completedDeposits}</Text>
           </View>
           <View style={styles.mobileMetricItem}>
-            <Text style={styles.mobileMetricLabel}>Authentic Score</Text>
-            <Text style={styles.mobileMetricValue}>{statistics.authenticScore}</Text>
+            <Text style={styles.mobileMetricLabel}>Scheduled</Text>
+            <Text style={styles.mobileMetricValue}>{statistics.totalScheduled}</Text>
           </View>
         </View>
       </CardWrapper>
@@ -108,14 +108,14 @@ export function RoleStatisticsCard({
       <View style={styles.summarySection}>
         <View style={styles.summaryTile}>
           <View style={styles.summaryHeader}>
-            <Text style={styles.summaryLabel}>Deposits</Text>
+            <Text style={styles.summaryLabel}>Completed</Text>
             <CheckCircle size={10} color="#10b981" />
           </View>
           <Text style={styles.summaryValue}>{statistics.completedDeposits}</Text>
         </View>
         <View style={styles.summaryTile}>
-          <Text style={styles.summaryLabel}>Authentic Score</Text>
-          <Text style={styles.summaryValue}>{statistics.authenticScore}</Text>
+          <Text style={styles.summaryLabel}>Scheduled</Text>
+          <Text style={styles.summaryValue}>{statistics.totalScheduled}</Text>
         </View>
       </View>
 
