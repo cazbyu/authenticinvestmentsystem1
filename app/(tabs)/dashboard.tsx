@@ -31,6 +31,7 @@ import { ReflectFilterButtons } from '@/components/dashboard/ReflectFilterButton
 import { ActFilterButtons } from '@/components/dashboard/ActFilterButtons';
 import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
+import { CompassView } from '@/components/compass/CompassView';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
@@ -1072,9 +1073,7 @@ export default function Dashboard() {
         <View style={styles.content} pointerEvents="box-none">
 
         {activeTab === 'home' ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Dashboard metrics displayed above</Text>
-          </View>
+          <CompassView />
         ) : activeTab === 'reflect' ? (
           <ReflectionTableView
             filter={reflectFilter}

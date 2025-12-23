@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { ChartBar as BarChart3, Heart, Target, User } from 'lucide-react-native';
+import { Compass, Heart, Target, User } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 
@@ -43,9 +43,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'Actions & Ideas',
+          title: 'Compass',
           tabBarIcon: ({ size, color }) => (
-            <BarChart3 size={size} color={color} />
+            <Compass size={size} color={color} />
           ),
         }}
       />

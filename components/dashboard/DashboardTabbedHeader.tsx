@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Menu, House } from 'lucide-react-native';
+import { Menu, Compass } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -55,11 +55,11 @@ export function DashboardTabbedHeader({
             activeTab === 'home' && styles.activeTab,
           ]}
           onPress={() => onTabChange('home')}
-          accessibilityLabel="Home tab"
+          accessibilityLabel="Compass tab"
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'home' }}
         >
-          <House
+          <Compass
             size={16}
             color={activeTab === 'home' ? '#0078d4' : '#ffffff'}
           />
