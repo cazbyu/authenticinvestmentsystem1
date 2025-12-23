@@ -21,8 +21,6 @@ interface LifeCompassProps {
   size?: number;
 }
 
-const AnimatedG = Animated.createAnimatedComponent(G);
-
 const DIRECTIONS = {
   NORTH: { angle: 0, name: 'North Star', route: '/goals', params: { section: 'northstar' } },
   EAST: { angle: 90, name: 'Wellness Bank', route: '/wellness', params: {} },
@@ -235,19 +233,30 @@ export function LifeCompass({ size = 320 }: LifeCompassProps) {
                 <Circle cx="144" cy="144" r="16.8" fill="#fff"/>
               </G>
             </G>
-            <AnimatedG
-              id="spindle_green"
-              origin="144, 144"
-              style={animatedStyle}
-            >
-              <G id="spindle_green-2">
-                <Polygon points="121.73 144.02 143.91 48.12 166.27 143.98 144.09 239.88 121.73 144.02" fill="#00a651"/>
-                <Path d="M155.5,155.48c-6.34,6.35-16.63,6.36-22.98.02-1.06-1.06-1.92-2.23-2.63-3.47l14.18,60.78,14.06-60.81c-.7,1.24-1.57,2.41-2.62,3.47Z" fill="#fff"/>
-                <Circle cx="144" cy="144" r="10.35" transform="translate(-54.24 97.4) rotate(-31.77)" fill="#fff"/>
-              </G>
-              <Circle cx="144" cy="144" r="3.6" fill="#333"/>
-            </AnimatedG>
           </Svg>
+          <Animated.View
+            style={[
+              styles.spindleContainer,
+              animatedStyle,
+              { width: responsiveSize, height: responsiveSize }
+            ]}
+            pointerEvents="none"
+          >
+            <Svg
+              width={responsiveSize}
+              height={responsiveSize}
+              viewBox="0 0 288 288"
+            >
+              <G id="spindle_green">
+                <G id="spindle_green-2">
+                  <Polygon points="121.73 144.02 143.91 48.12 166.27 143.98 144.09 239.88 121.73 144.02" fill="#00a651"/>
+                  <Path d="M155.5,155.48c-6.34,6.35-16.63,6.36-22.98.02-1.06-1.06-1.92-2.23-2.63-3.47l14.18,60.78,14.06-60.81c-.7,1.24-1.57,2.41-2.62,3.47Z" fill="#fff"/>
+                  <Circle cx="144" cy="144" r="10.35" transform="translate(-54.24 97.4) rotate(-31.77)" fill="#fff"/>
+                </G>
+                <Circle cx="144" cy="144" r="3.6" fill="#333"/>
+              </G>
+            </Svg>
+          </Animated.View>
         </View>
       </GestureDetector>
     </View>
@@ -264,5 +273,11 @@ const styles = StyleSheet.create({
   compassContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  spindleContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
 });
