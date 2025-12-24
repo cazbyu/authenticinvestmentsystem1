@@ -1,18 +1,77 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Modal } from 'react-native';
 import { AspirationalQuote } from './AspirationalQuote';
 import { LifeCompass } from './LifeCompass';
 import { useTheme } from '@/contexts/ThemeContext';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
+import JournalForm from '@/components/reflections/JournalForm';
 
 export function CompassView() {
   const { colors } = useTheme();
+  const [isTaskEventFormVisible, setIsTaskEventFormVisible] = useState(false);
+  const [taskEventFormType, setTaskEventFormType] = useState<'task' | 'event' | 'depositIdea'>('task');
+  const [isJournalFormVisible, setIsJournalFormVisible] = useState(false);
+  const [journalFormType, setJournalFormType] = useState<'rose' | 'thorn' | 'reflection'>('reflection');
+
+  const handleTaskFormOpen = (formType: 'task' | 'event' | 'depositIdea') => {
+    setTaskEventFormType(formType);
+    setIsTaskEventFormVisible(true);
+  };
+
+  const handleJournalFormOpen = (formType: 'rose' | 'thorn' | 'reflection') => {
+    setJournalFormType(formType);
+    setIsJournalFormVisible(true);
+  };
+
+  const handleTaskEventFormClose = () => {
+    setIsTaskEventFormVisible(false);
+  };
+
+  const handleTaskEventFormSuccess = () => {
+    setIsTaskEventFormVisible(false);
+  };
+
+  const handleJournalFormClose = () => {
+    setIsJournalFormVisible(false);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AspirationalQuote />
       <View style={styles.compassWrapper}>
-        <LifeCompass size={320} />
+        <LifeCompass
+          size={320}
+          onTaskFormOpen={handleTaskFormOpen}
+          onJournalFormOpen={handleJournalFormOpen}
+        />
       </View>
+
+      <Modal
+        visible={isTaskEventFormVisible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={handleTaskEventFormClose}
+      >
+        <TaskEventForm
+          mode="create"
+          initialData={{
+            type: taskEventFormType,
+            notes: '',
+            selectedRoleIds: [],
+            selectedDomainIds: [],
+            selectedKeyRelationshipIds: [],
+          }}
+          onSubmitSuccess={handleTaskEventFormSuccess}
+          onClose={handleTaskEventFormClose}
+        />
+      </Modal>
+
+      <JournalForm
+        visible={isJournalFormVisible}
+        mode="create"
+        onClose={handleJournalFormClose}
+        onSaveSuccess={handleJournalFormClose}
+      />
     </View>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform, TouchableOpacity, Text } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -14,21 +14,19 @@ import Svg, {
   Circle,
   Path,
   Polygon,
+  Text as SvgText,
 } from 'react-native-svg';
 import { useRouter } from 'expo-router';
+import { COMPASS_WAYPOINTS, DECORATIVE_WAYPOINTS, ALL_WAYPOINTS, WAYPOINT_TOLERANCE, COMPASS_CENTER, CompassWaypoint, MIN_DRAG_DISTANCE } from './compassConfig';
+import * as Haptics from 'expo-haptics';
 
 interface LifeCompassProps {
   size?: number;
+  onTaskFormOpen?: (formType: 'task' | 'event' | 'depositIdea') => void;
+  onJournalFormOpen?: (formType: 'rose' | 'thorn' | 'reflection') => void;
 }
 
-const DIRECTIONS = {
-  NORTH: { angle: 0, name: 'North Star', route: '/goals', params: { section: 'northstar' } },
-  EAST: { angle: 90, name: 'Wellness Bank', route: '/wellness', params: {} },
-  SOUTH: { angle: 180, name: 'Goal Bank', route: '/goals', params: {} },
-  WEST: { angle: 270, name: 'Role Bank', route: '/roles', params: {} },
-};
-
-const TOLERANCE = 20;
+const TOLERANCE = WAYPOINT_TOLERANCE;
 
 function normalizeAngle(angle: number): number {
   let normalized = angle % 360;
@@ -36,30 +34,38 @@ function normalizeAngle(angle: number): number {
   return normalized;
 }
 
-function findNearestDirection(angle: number): { angle: number; name: string } | null {
+function findNearestWaypoint(angle: number): CompassWaypoint | null {
   const normalized = normalizeAngle(angle);
 
-  for (const [key, direction] of Object.entries(DIRECTIONS)) {
-    const diff = Math.abs(normalized - direction.angle);
-    const diff2 = Math.abs(normalized - (direction.angle + 360));
-    const diff3 = Math.abs(normalized - (direction.angle - 360));
+  const activeWaypoints = COMPASS_WAYPOINTS.filter(w => w.type !== 'decorative');
+
+  for (const waypoint of activeWaypoints) {
+    const diff = Math.abs(normalized - waypoint.angle);
+    const diff2 = Math.abs(normalized - (waypoint.angle + 360));
+    const diff3 = Math.abs(normalized - (waypoint.angle - 360));
 
     const minDiff = Math.min(diff, diff2, diff3);
 
     if (minDiff <= TOLERANCE) {
-      return { angle: direction.angle, name: direction.name };
+      return waypoint;
     }
   }
 
   return null;
 }
 
-export function LifeCompass({ size = 320 }: LifeCompassProps) {
+function calculateAngularDistance(angle1: number, angle2: number): number {
+  const diff = Math.abs(normalizeAngle(angle1) - normalizeAngle(angle2));
+  return Math.min(diff, 360 - diff);
+}
+
+export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: LifeCompassProps) {
   const router = useRouter();
   const rotation = useSharedValue(0);
-  const [nearDirection, setNearDirection] = useState<string | null>(null);
-  const compassCenterX = 144;
-  const compassCenterY = 144;
+  const [focusedWaypoint, setFocusedWaypoint] = useState<string | null>(null);
+  const [dragDistance, setDragDistance] = useState(0);
+  const compassCenterX = COMPASS_CENTER.x;
+  const compassCenterY = COMPASS_CENTER.y;
 
   useEffect(() => {
     const savedAngle = Platform.OS === 'web'
@@ -86,49 +92,56 @@ export function LifeCompass({ size = 320 }: LifeCompassProps) {
   };
 
   const handleAngleChange = (angle: number) => {
-    const nearest = findNearestDirection(angle);
-    if (nearest) {
-      setNearDirection(nearest.name);
+    const nearest = findNearestWaypoint(angle);
+    if (nearest && nearest.type !== 'decorative') {
+      setFocusedWaypoint(nearest.id);
     } else {
-      setNearDirection(null);
+      setFocusedWaypoint(null);
+    }
+  };
+
+  const handleWaypointAction = (waypoint: CompassWaypoint) => {
+    if (Platform.OS === 'web') {
+      localStorage.setItem('compass_angle', String(waypoint.angle));
+    }
+
+    if (Platform.OS !== 'web' && Haptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    if (waypoint.action === 'navigate' && waypoint.route) {
+      router.push(waypoint.route as any);
+    } else if (waypoint.action === 'task-form' && waypoint.formType && onTaskFormOpen) {
+      onTaskFormOpen(waypoint.formType as 'task' | 'event' | 'depositIdea');
+    } else if (waypoint.action === 'journal-form' && waypoint.formType && onJournalFormOpen) {
+      onJournalFormOpen(waypoint.formType as 'rose' | 'thorn' | 'reflection');
     }
   };
 
   const handleNavigate = (angle: number) => {
-    const normalized = normalizeAngle(angle);
-
-    let targetDirection = null;
-    for (const [key, direction] of Object.entries(DIRECTIONS)) {
-      const diff = Math.abs(normalized - direction.angle);
-      const diff2 = Math.abs(normalized - (direction.angle + 360));
-      const diff3 = Math.abs(normalized - (direction.angle - 360));
-
-      if (Math.min(diff, diff2, diff3) <= TOLERANCE) {
-        targetDirection = direction;
-        break;
-      }
-    }
-
-    if (targetDirection) {
-      if (Platform.OS === 'web') {
-        localStorage.setItem('compass_angle', String(targetDirection.angle));
-      }
-
-      router.push(targetDirection.route);
+    const waypoint = findNearestWaypoint(angle);
+    if (waypoint && waypoint.type !== 'decorative') {
+      handleWaypointAction(waypoint);
     }
   };
 
   const panGesture = Gesture.Pan()
+    .onStart(() => {
+      runOnJS(setDragDistance)(0);
+    })
     .onUpdate((event) => {
+      const distance = Math.sqrt(event.translationX ** 2 + event.translationY ** 2);
+      runOnJS(setDragDistance)(distance);
+
       const angle = calculateAngle(event.x, event.y);
       rotation.value = angle;
       runOnJS(handleAngleChange)(angle);
     })
     .onEnd(() => {
       const currentAngle = rotation.value;
-      const nearest = findNearestDirection(currentAngle);
+      const nearest = findNearestWaypoint(currentAngle);
 
-      if (nearest) {
+      if (nearest && nearest.type !== 'decorative' && dragDistance >= MIN_DRAG_DISTANCE) {
         rotation.value = withSpring(nearest.angle, {
           damping: 15,
           stiffness: 150,
@@ -139,7 +152,8 @@ export function LifeCompass({ size = 320 }: LifeCompassProps) {
         }, 300);
       }
 
-      runOnJS(setNearDirection)(null);
+      runOnJS(setFocusedWaypoint)(null);
+      runOnJS(setDragDistance)(0);
     });
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -149,15 +163,89 @@ export function LifeCompass({ size = 320 }: LifeCompassProps) {
   const screenWidth = Dimensions.get('window').width;
   const responsiveSize = Math.min(size, screenWidth * 0.8);
 
+  const calculateWaypointPosition = (waypoint: CompassWaypoint) => {
+    const angleRad = (waypoint.angle - 90) * (Math.PI / 180);
+    const radius = waypoint.radius || 108;
+    const x = compassCenterX + radius * Math.cos(angleRad);
+    const y = compassCenterY + radius * Math.sin(angleRad);
+    return { x, y };
+  };
+
+  const getWaypointSize = (waypoint: CompassWaypoint, isFocused: boolean) => {
+    const baseSize = waypoint.size === 'large' ? 12 : 8;
+    return isFocused ? baseSize * 1.4 : baseSize;
+  };
+
+  const handleWaypointPress = (waypoint: CompassWaypoint) => {
+    if (waypoint.type === 'decorative') return;
+
+    if (Platform.OS !== 'web' && Haptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    rotation.value = withSpring(waypoint.angle, {
+      damping: 15,
+      stiffness: 150,
+    });
+
+    setTimeout(() => {
+      handleWaypointAction(waypoint);
+    }, 300);
+  };
+
+  const renderWaypointLabel = (waypoint: CompassWaypoint) => {
+    if (!waypoint.label || waypoint.size !== 'large') return null;
+
+    const { x, y } = calculateWaypointPosition(waypoint);
+    let labelX = x;
+    let labelY = y;
+    let textAnchor: 'start' | 'middle' | 'end' = 'middle';
+    const lines = waypoint.label.split('\n');
+
+    switch (waypoint.labelPosition) {
+      case 'top':
+        labelY = y - 20;
+        break;
+      case 'bottom':
+        labelY = y + 20;
+        break;
+      case 'left':
+        labelX = x - 20;
+        textAnchor = 'end';
+        break;
+      case 'right':
+        labelX = x + 20;
+        textAnchor = 'start';
+        break;
+    }
+
+    return (
+      <G key={`label-${waypoint.id}`}>
+        {lines.map((line, index) => (
+          <SvgText
+            key={`${waypoint.id}-line-${index}`}
+            x={labelX}
+            y={labelY + (index * 14)}
+            fontSize="13"
+            fill="#333"
+            fontWeight="500"
+            textAnchor={textAnchor}
+          >
+            {line}
+          </SvgText>
+        ))}
+      </G>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <GestureDetector gesture={panGesture}>
-        <View style={[styles.compassContainer, { width: responsiveSize, height: responsiveSize }]}>
-          <Svg
-            width={responsiveSize}
-            height={responsiveSize}
-            viewBox="0 0 288 288"
-          >
+      <View style={[styles.compassContainer, { width: responsiveSize, height: responsiveSize }]}>
+        <Svg
+          width={responsiveSize}
+          height={responsiveSize}
+          viewBox="0 0 288 288"
+        >
             <G id="Circle">
               <G id="Lines">
                 <Rect x="142.8" y="30.45" width="2.4" height="227.52" transform="translate(-22.85 27.2) rotate(-10)" fill="#333"/>
@@ -233,32 +321,80 @@ export function LifeCompass({ size = 320 }: LifeCompassProps) {
                 <Circle cx="144" cy="144" r="16.8" fill="#fff"/>
               </G>
             </G>
+            <G id="Waypoints">
+              {ALL_WAYPOINTS.map((waypoint) => {
+                const { x, y } = calculateWaypointPosition(waypoint);
+                const isFocused = focusedWaypoint === waypoint.id;
+                const waypointSize = getWaypointSize(waypoint, isFocused);
+
+                return (
+                  <G key={waypoint.id}>
+                    <Circle
+                      cx={x}
+                      cy={y}
+                      r={waypointSize}
+                      fill={waypoint.color}
+                      opacity={waypoint.type === 'decorative' ? 0.3 : isFocused ? 1 : 0.8}
+                      style={{
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: isFocused ? 0.4 : 0.2,
+                        shadowRadius: isFocused ? 4 : 2,
+                      }}
+                    />
+                  </G>
+                );
+              })}
+              {COMPASS_WAYPOINTS.filter(w => w.size === 'large').map(renderWaypointLabel)}
+            </G>
           </Svg>
-          <Animated.View
-            style={[
-              styles.spindleContainer,
-              animatedStyle,
-              { width: responsiveSize, height: responsiveSize }
-            ]}
-            pointerEvents="none"
-          >
-            <Svg
-              width={responsiveSize}
-              height={responsiveSize}
-              viewBox="0 0 288 288"
+          {ALL_WAYPOINTS.filter(w => w.type !== 'decorative').map((waypoint) => {
+            const { x, y } = calculateWaypointPosition(waypoint);
+            const scale = responsiveSize / 288;
+            const touchSize = 44;
+
+            return (
+              <TouchableOpacity
+                key={`touch-${waypoint.id}`}
+                style={[
+                  styles.waypointTouch,
+                  {
+                    left: (x * scale) - (touchSize / 2),
+                    top: (y * scale) - (touchSize / 2),
+                    width: touchSize,
+                    height: touchSize,
+                  },
+                ]}
+                onPress={() => handleWaypointPress(waypoint)}
+                activeOpacity={0.6}
+              />
+            );
+          })}
+          <GestureDetector gesture={panGesture}>
+            <Animated.View
+              style={[
+                styles.spindleContainer,
+                animatedStyle,
+                { width: responsiveSize, height: responsiveSize }
+              ]}
             >
-              <G id="spindle_green">
-                <G id="spindle_green-2">
-                  <Polygon points="121.73 144.02 143.91 48.12 166.27 143.98 144.09 239.88 121.73 144.02" fill="#00a651"/>
-                  <Path d="M155.5,155.48c-6.34,6.35-16.63,6.36-22.98.02-1.06-1.06-1.92-2.23-2.63-3.47l14.18,60.78,14.06-60.81c-.7,1.24-1.57,2.41-2.62,3.47Z" fill="#fff"/>
-                  <Circle cx="144" cy="144" r="10.35" transform="translate(-54.24 97.4) rotate(-31.77)" fill="#fff"/>
+              <Svg
+                width={responsiveSize}
+                height={responsiveSize}
+                viewBox="0 0 288 288"
+              >
+                <G id="spindle_green">
+                  <G id="spindle_green-2">
+                    <Polygon points="121.73 144.02 143.91 48.12 166.27 143.98 144.09 239.88 121.73 144.02" fill="#00a651"/>
+                    <Path d="M155.5,155.48c-6.34,6.35-16.63,6.36-22.98.02-1.06-1.06-1.92-2.23-2.63-3.47l14.18,60.78,14.06-60.81c-.7,1.24-1.57,2.41-2.62,3.47Z" fill="#fff"/>
+                    <Circle cx="144" cy="144" r="10.35" transform="translate(-54.24 97.4) rotate(-31.77)" fill="#fff"/>
+                  </G>
+                  <Circle cx="144" cy="144" r="3.6" fill="#333"/>
                 </G>
-                <Circle cx="144" cy="144" r="3.6" fill="#333"/>
-              </G>
-            </Svg>
-          </Animated.View>
+              </Svg>
+            </Animated.View>
+          </GestureDetector>
         </View>
-      </GestureDetector>
     </View>
   );
 }
@@ -279,5 +415,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+  },
+  waypointTouch: {
+    position: 'absolute',
+    borderRadius: 22,
+    backgroundColor: 'transparent',
   },
 });
