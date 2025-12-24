@@ -14,6 +14,7 @@ export interface CompassWaypoint {
   formType?: 'task' | 'event' | 'depositIdea' | 'rose' | 'thorn' | 'reflection';
   labelPosition?: 'top' | 'right' | 'bottom' | 'left';
   radius?: number;
+  showDot?: boolean;
 }
 
 export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
@@ -29,6 +30,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     route: '/(tabs)/dashboard',
     labelPosition: 'top',
     radius: 115,
+    showDot: false,
   },
   {
     id: 'events',
@@ -40,7 +42,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'task-form',
     formType: 'event',
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
   {
     id: 'deposit-ideas',
@@ -52,7 +55,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'task-form',
     formType: 'depositIdea',
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
   {
     id: 'reflection-library',
@@ -65,7 +69,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     action: 'navigate',
     route: '/reflections',
     routeParams: { tab: 'reflectionHistory' },
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
   {
     id: 'reflections',
@@ -77,7 +82,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'journal-form',
     formType: 'reflection',
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
   {
     id: 'wellness',
@@ -91,6 +97,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     route: '/(tabs)/wellness',
     labelPosition: 'right',
     radius: 115,
+    showDot: false,
   },
   {
     id: 'goals',
@@ -104,6 +111,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     route: '/(tabs)/goals',
     labelPosition: 'bottom',
     radius: 115,
+    showDot: false,
   },
   {
     id: 'roles',
@@ -117,6 +125,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     route: '/(tabs)/roles',
     labelPosition: 'left',
     radius: 115,
+    showDot: false,
   },
   {
     id: 'thorns',
@@ -128,7 +137,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'journal-form',
     formType: 'thorn',
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
   {
     id: 'calendar',
@@ -140,7 +150,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'navigation',
     action: 'navigate',
     route: '/calendar',
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
   {
     id: 'roses',
@@ -152,7 +163,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'journal-form',
     formType: 'rose',
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
   {
     id: 'tasks',
@@ -164,7 +176,8 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'task-form',
     formType: 'task',
-    radius: 108,
+    radius: 118,
+    showDot: true,
   },
 ];
 
@@ -177,6 +190,7 @@ export const DECORATIVE_WAYPOINTS: CompassWaypoint[] = [
     size: 'small',
     type: 'decorative',
     radius: 106,
+    showDot: true,
   },
   {
     id: 'decorative-2',
@@ -186,6 +200,7 @@ export const DECORATIVE_WAYPOINTS: CompassWaypoint[] = [
     size: 'small',
     type: 'decorative',
     radius: 106,
+    showDot: true,
   },
 ];
 

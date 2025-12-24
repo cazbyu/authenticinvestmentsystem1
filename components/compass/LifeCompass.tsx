@@ -14,6 +14,14 @@ import Svg, {
   Circle,
   Path,
   Polygon,
+  Defs,
+  Filter,
+  FeGaussianBlur,
+  FeOffset,
+  FeFlood,
+  FeComposite,
+  FeMerge,
+  FeMergeNode,
   Text as SvgText,
 } from 'react-native-svg';
 import { useRouter } from 'expo-router';
@@ -64,8 +72,14 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
   const rotation = useSharedValue(0);
   const [focusedWaypoint, setFocusedWaypoint] = useState<string | null>(null);
   const [dragDistance, setDragDistance] = useState(0);
+  const [isHovering, setIsHovering] = useState(false);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [isAtWaypoint, setIsAtWaypoint] = useState(false);
   const compassCenterX = COMPASS_CENTER.x;
   const compassCenterY = COMPASS_CENTER.y;
+
+  const screenWidth = Dimensions.get('window').width;
+  const isDesktopWeb = Platform.OS === 'web' && screenWidth >= 768;
 
   useEffect(() => {
     const savedAngle = Platform.OS === 'web'
@@ -160,8 +174,11 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
-  const screenWidth = Dimensions.get('window').width;
   const responsiveSize = Math.min(size, screenWidth * 0.8);
+
+  const focusedWaypointLabel = focusedWaypoint
+    ? COMPASS_WAYPOINTS.find(w => w.id === focusedWaypoint)?.label
+    : null;
 
   const calculateWaypointPosition = (waypoint: CompassWaypoint) => {
     const angleRad = (waypoint.angle - 90) * (Math.PI / 180);
@@ -172,8 +189,63 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
   };
 
   const getWaypointSize = (waypoint: CompassWaypoint, isFocused: boolean) => {
-    const baseSize = waypoint.size === 'large' ? 12 : 8;
+    const baseSize = waypoint.size === 'large' ? 12 : 4;
     return isFocused ? baseSize * 1.4 : baseSize;
+  };
+
+  const handleMouseMove = (event: any) => {
+    if (!isDesktopWeb) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const angle = calculateAngle(x, y);
+    const nearest = findNearestWaypoint(angle);
+
+    if (nearest && nearest.type !== 'decorative') {
+      rotation.value = withSpring(nearest.angle, {
+        damping: 20,
+        stiffness: 200,
+      });
+      setFocusedWaypoint(nearest.id);
+      setIsAtWaypoint(true);
+      setTooltipVisible(true);
+    } else {
+      rotation.value = withSpring(angle, {
+        damping: 10,
+        stiffness: 100,
+      });
+      setFocusedWaypoint(null);
+      setIsAtWaypoint(false);
+      setTooltipVisible(false);
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (!isDesktopWeb) return;
+    setIsHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (!isDesktopWeb) return;
+    setIsHovering(false);
+    setFocusedWaypoint(null);
+    setTooltipVisible(false);
+    setIsAtWaypoint(false);
+  };
+
+  const handleCompassClick = () => {
+    if (!isDesktopWeb || !isAtWaypoint) return;
+
+    const currentAngle = rotation.value;
+    const waypoint = findNearestWaypoint(currentAngle);
+
+    if (waypoint && waypoint.type !== 'decorative') {
+      setTimeout(() => {
+        handleWaypointAction(waypoint);
+      }, 300);
+    }
   };
 
   const handleWaypointPress = (waypoint: CompassWaypoint) => {
@@ -240,7 +312,28 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
 
   return (
     <View style={styles.container}>
-      <View style={[styles.compassContainer, { width: responsiveSize, height: responsiveSize }]}>
+      {isDesktopWeb && tooltipVisible && focusedWaypointLabel && (
+        <View style={styles.tooltip}>
+          <Text style={styles.tooltipText}>{focusedWaypointLabel}</Text>
+        </View>
+      )}
+      <View
+        style={[
+          styles.compassContainer,
+          { width: responsiveSize, height: responsiveSize },
+          isDesktopWeb && Platform.OS === 'web' && {
+            // @ts-ignore - web-only cursor style
+            cursor: isAtWaypoint ? 'pointer' : 'default'
+          }
+        ]}
+        {...(isDesktopWeb && Platform.OS === 'web' ? {
+          // @ts-ignore - web-only mouse events
+          onMouseMove: handleMouseMove,
+          onMouseEnter: handleMouseEnter,
+          onMouseLeave: handleMouseLeave,
+          onClick: handleCompassClick,
+        } : {})}
+      >
         <Svg
           width={responsiveSize}
           height={responsiveSize}
@@ -323,6 +416,8 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
             </G>
             <G id="Waypoints">
               {ALL_WAYPOINTS.map((waypoint) => {
+                if (waypoint.showDot === false) return null;
+
                 const { x, y } = calculateWaypointPosition(waypoint);
                 const isFocused = focusedWaypoint === waypoint.id;
                 const waypointSize = getWaypointSize(waypoint, isFocused);
@@ -348,7 +443,7 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
               {COMPASS_WAYPOINTS.filter(w => w.size === 'large').map(renderWaypointLabel)}
             </G>
           </Svg>
-          {ALL_WAYPOINTS.filter(w => w.type !== 'decorative').map((waypoint) => {
+          {!isDesktopWeb && ALL_WAYPOINTS.filter(w => w.type !== 'decorative').map((waypoint) => {
             const { x, y } = calculateWaypointPosition(waypoint);
             const scale = responsiveSize / 288;
             const touchSize = 44;
@@ -370,7 +465,7 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
               />
             );
           })}
-          <GestureDetector gesture={panGesture}>
+          <GestureDetector gesture={isDesktopWeb ? Gesture.Manual() : panGesture}>
             <Animated.View
               style={[
                 styles.spindleContainer,
@@ -383,7 +478,19 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
                 height={responsiveSize}
                 viewBox="0 0 288 288"
               >
-                <G id="spindle_green">
+                <Defs>
+                  <Filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <FeGaussianBlur in="SourceAlpha" stdDeviation="4" />
+                    <FeOffset dx="0" dy="0" result="offsetblur" />
+                    <FeFlood floodColor="#00a651" floodOpacity="0.8" />
+                    <FeComposite in2="offsetblur" operator="in" />
+                    <FeMerge>
+                      <FeMergeNode />
+                      <FeMergeNode in="SourceGraphic" />
+                    </FeMerge>
+                  </Filter>
+                </Defs>
+                <G id="spindle_green" filter={isAtWaypoint ? "url(#glow)" : undefined}>
                   <G id="spindle_green-2">
                     <Polygon points="121.73 144.02 143.91 48.12 166.27 143.98 144.09 239.88 121.73 144.02" fill="#00a651"/>
                     <Path d="M155.5,155.48c-6.34,6.35-16.63,6.36-22.98.02-1.06-1.06-1.92-2.23-2.63-3.47l14.18,60.78,14.06-60.81c-.7,1.24-1.57,2.41-2.62,3.47Z" fill="#fff"/>
@@ -420,5 +527,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 22,
     backgroundColor: 'transparent',
+  },
+  tooltip: {
+    position: 'absolute',
+    top: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    zIndex: 1000,
+  },
+  tooltipText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
