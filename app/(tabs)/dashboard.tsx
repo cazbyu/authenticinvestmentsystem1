@@ -23,9 +23,6 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
-import { DashboardCard } from '@/components/dashboard/DashboardCard';
-import { fetchDashboardMetrics, TimePeriod, DashboardMetrics } from '@/lib/dashboardSummaryMetrics';
-import { CheckSquare, Calendar, Lightbulb, Flower2, AlertTriangle, BookOpen } from 'lucide-react-native';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 import { ReflectFilterButtons } from '@/components/dashboard/ReflectFilterButtons';
 import { ActFilterButtons } from '@/components/dashboard/ActFilterButtons';
@@ -38,8 +35,7 @@ export default function Dashboard() {
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('home');
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('week');
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [journalPeriodScore, setJournalPeriodScore] = useState<number>(0);
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
   const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('all');
@@ -76,28 +72,6 @@ export default function Dashboard() {
     deleteTask,
   } = useGoalProgress();
   
-
-  const loadMetrics = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setUserId(user.id);
-
-      const dashboardMetrics = await fetchDashboardMetrics(user.id, selectedPeriod);
-      setMetrics(dashboardMetrics);
-    } catch (error) {
-      console.error('Error loading metrics:', error);
-      setMetrics({
-        tasks: { count: 0, score: 0 },
-        events: { count: 0, score: 0 },
-        depositIdeas: { pending: 0, activated: 0 },
-        roses: 0,
-        thorns: 0,
-        reflections: 0
-      });
-    }
-  };
 
   const loadJournalPeriodScore = async () => {
     try {
@@ -491,41 +465,35 @@ export default function Dashboard() {
   }, [activeView, fetchData]);
 
   useEffect(() => {
-    loadMetrics();
     loadJournalPeriodScore();
   }, [selectedPeriod]);
 
   useEffect(() => {
     registerResetHandler('dashboard', resetToMain);
     fetchData();
-    loadMetrics();
     loadJournalPeriodScore();
 
     const handleTaskCreated = () => {
       console.log('[Dashboard] Received task created event, refreshing...');
       fetchData();
-      loadMetrics();
       loadJournalPeriodScore();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Dashboard] Received task updated event, refreshing...');
       fetchData();
-      loadMetrics();
       loadJournalPeriodScore();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Dashboard] Received task deleted event, refreshing...');
       fetchData();
-      loadMetrics();
       loadJournalPeriodScore();
     };
 
     const handleRefreshAll = () => {
       console.log('[Dashboard] Received refresh all event, refreshing...');
       fetchData();
-      loadMetrics();
       loadJournalPeriodScore();
     };
 
@@ -1000,74 +968,6 @@ export default function Dashboard() {
               />
             )}
           </View>
-
-          {activeTab === 'home' && metrics && (
-            <View style={styles.cardsGrid}>
-              <View style={styles.cardRow}>
-                <DashboardCard
-                  title="Tasks"
-                  displayMode="dualCount"
-                  primaryCount={metrics.tasks.count}
-                  secondaryCount={metrics.tasks.score}
-                  primaryLabel="Completed"
-                  secondaryLabel="Authentic Score"
-                  icon={CheckSquare}
-                  iconColor="#007AFF"
-                  iconBackgroundColor="#E3F2FD"
-                />
-                <DashboardCard
-                  title="Events"
-                  displayMode="dualCount"
-                  primaryCount={metrics.events.count}
-                  secondaryCount={metrics.events.score}
-                  primaryLabel="Completed"
-                  secondaryLabel="Authentic Score"
-                  icon={Calendar}
-                  iconColor="#FF9500"
-                  iconBackgroundColor="#FFF3E0"
-                />
-              </View>
-              <View style={styles.cardRow}>
-                <DashboardCard
-                  title="Deposit Ideas"
-                  displayMode="dualCount"
-                  primaryCount={metrics.depositIdeas.pending}
-                  secondaryCount={metrics.depositIdeas.activated}
-                  primaryLabel="Pending"
-                  secondaryLabel="Activated"
-                  icon={Lightbulb}
-                  iconColor="#FFD60A"
-                  iconBackgroundColor="#FFFBEA"
-                />
-                <DashboardCard
-                  title="Roses"
-                  displayMode="single"
-                  count={metrics.roses}
-                  icon={Flower2}
-                  iconColor="#FF2D55"
-                  iconBackgroundColor="#FFE4E6"
-                />
-              </View>
-              <View style={styles.cardRow}>
-                <DashboardCard
-                  title="Thorns"
-                  displayMode="single"
-                  count={metrics.thorns}
-                  icon={AlertTriangle}
-                  iconColor="#FF3B30"
-                  iconBackgroundColor="#FEE2E2"
-                />
-                <DashboardCard
-                  title="Reflections"
-                  displayMode="single"
-                  count={metrics.reflections}
-                  icon={BookOpen}
-                  iconColor="#34C759"
-                  iconBackgroundColor="#E8F5E9"
-                />
-              </View>
-            </View>
-          )}
         </View>
 
         <View style={styles.content} pointerEvents="box-none">
@@ -1091,7 +991,6 @@ export default function Dashboard() {
             userId={userId}
             onRefresh={() => {
               refreshScore();
-              loadMetrics();
               loadJournalPeriodScore();
             }}
           />
@@ -1343,13 +1242,6 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: 12,
-    },
-    cardsGrid: {
-      marginTop: 16,
-    },
-    cardRow: {
-      flexDirection: 'row',
-      marginHorizontal: -6,
     },
     content: { flex: 1 },
     draggableList: { flex: 1 },
