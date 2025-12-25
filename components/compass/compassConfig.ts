@@ -42,7 +42,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'task-form',
     formType: 'event',
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
   {
@@ -55,13 +55,13 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'task-form',
     formType: 'depositIdea',
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
   {
     id: 'reflection-library',
     angle: 45,
-    label: 'History',
+    label: 'Reflection Library',
     icon: FileText,
     color: '#666666',
     size: 'small',
@@ -69,7 +69,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     action: 'navigate',
     route: '/reflections',
     routeParams: { tab: 'reflectionHistory' },
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
   {
@@ -82,7 +82,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'journal-form',
     formType: 'reflection',
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
   {
@@ -137,7 +137,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'journal-form',
     formType: 'thorn',
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
   {
@@ -150,7 +150,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'navigation',
     action: 'navigate',
     route: '/calendar',
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
   {
@@ -163,7 +163,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'journal-form',
     formType: 'rose',
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
   {
@@ -176,7 +176,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     type: 'modal',
     action: 'task-form',
     formType: 'task',
-    radius: 118,
+    radius: 124,
     showDot: true,
   },
 ];

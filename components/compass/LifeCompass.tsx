@@ -67,6 +67,24 @@ function calculateAngularDistance(angle1: number, angle2: number): number {
   return Math.min(diff, 360 - diff);
 }
 
+function getShortestRotation(currentAngle: number, targetAngle: number): number {
+  const current = normalizeAngle(currentAngle);
+  const target = normalizeAngle(targetAngle);
+
+  const diff = target - current;
+  const diffAbs = Math.abs(diff);
+
+  if (diffAbs <= 180) {
+    return current + diff;
+  } else {
+    if (diff > 0) {
+      return current + diff - 360;
+    } else {
+      return current + diff + 360;
+    }
+  }
+}
+
 export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: LifeCompassProps) {
   const router = useRouter();
   const rotation = useSharedValue(0);
@@ -87,7 +105,7 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
       : null;
 
     if (savedAngle) {
-      rotation.value = parseFloat(savedAngle);
+      rotation.value = normalizeAngle(parseFloat(savedAngle));
     }
   }, []);
 
@@ -116,7 +134,7 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
 
   const handleWaypointAction = (waypoint: CompassWaypoint) => {
     if (Platform.OS === 'web') {
-      localStorage.setItem('compass_angle', String(waypoint.angle));
+      localStorage.setItem('compass_angle', String(normalizeAngle(waypoint.angle)));
     }
 
     if (Platform.OS !== 'web' && Haptics) {
@@ -156,7 +174,8 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
       const nearest = findNearestWaypoint(currentAngle);
 
       if (nearest && nearest.type !== 'decorative' && dragDistance >= MIN_DRAG_DISTANCE) {
-        rotation.value = withSpring(nearest.angle, {
+        const targetAngle = getShortestRotation(currentAngle, nearest.angle);
+        rotation.value = withSpring(targetAngle, {
           damping: 15,
           stiffness: 150,
         });
@@ -204,7 +223,8 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
     const nearest = findNearestWaypoint(angle);
 
     if (nearest && nearest.type !== 'decorative') {
-      rotation.value = withSpring(nearest.angle, {
+      const targetAngle = getShortestRotation(rotation.value, nearest.angle);
+      rotation.value = withSpring(targetAngle, {
         damping: 20,
         stiffness: 200,
       });
@@ -212,7 +232,8 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
       setIsAtWaypoint(true);
       setTooltipVisible(true);
     } else {
-      rotation.value = withSpring(angle, {
+      const targetAngle = getShortestRotation(rotation.value, angle);
+      rotation.value = withSpring(targetAngle, {
         damping: 10,
         stiffness: 100,
       });
@@ -255,7 +276,8 @@ export function LifeCompass({ size = 320, onTaskFormOpen, onJournalFormOpen }: L
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
-    rotation.value = withSpring(waypoint.angle, {
+    const targetAngle = getShortestRotation(rotation.value, waypoint.angle);
+    rotation.value = withSpring(targetAngle, {
       damping: 15,
       stiffness: 150,
     });
