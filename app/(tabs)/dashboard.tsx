@@ -996,12 +996,12 @@ export default function Dashboard() {
       }}
     >
       <Text style={{ fontSize: 32 }}>🔥</Text>
-      <Text style={{ 
-        color: 'white', 
-        fontSize: 18, 
+      <Text style={{
+        color: 'white',
+        fontSize: 18,
         fontWeight: 'bold',
       }}>
-        Set Morning Spark
+        Morning Spark
       </Text>
     </TouchableOpacity>
   )}
