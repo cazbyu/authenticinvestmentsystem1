@@ -29,7 +29,7 @@ import { ActFilterButtons } from '@/components/dashboard/ActFilterButtons';
 import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { shouldShowRitual } from '@/lib/ritualUtils';
 
 export default function Dashboard() {
@@ -66,9 +66,13 @@ export default function Dashboard() {
   const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
 
-  // Morning Spark ritual state
+  // Ritual state
   const [showMorningSpark, setShowMorningSpark] = useState(false);
+  const [showEveningReview, setShowEveningReview] = useState(false);
+  const [showWeeklyAlignment, setShowWeeklyAlignment] = useState(false);
   const sparkAnimation = useState(new Animated.Value(1))[0];
+  const reviewAnimation = useState(new Animated.Value(1))[0];
+  const alignmentAnimation = useState(new Animated.Value(1))[0];
 
   // Follow-through TaskEventForm state
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
@@ -521,19 +525,31 @@ export default function Dashboard() {
     };
   }, [activeView, sortOption, registerResetHandler, unregisterResetHandler, resetToMain]);
 
-  useEffect(() => {
-    const checkMorningSparkAvailability = async () => {
-      if (userId) {
-        const shouldShow = await shouldShowRitual(userId, 'morning_spark');
-        setShowMorningSpark(shouldShow);
-      }
-    };
+  const checkRitualAvailability = useCallback(async () => {
+    if (userId) {
+      const [showSpark, showReview, showAlignment] = await Promise.all([
+        shouldShowRitual(userId, 'morning_spark'),
+        shouldShowRitual(userId, 'evening_review'),
+        shouldShowRitual(userId, 'weekly_alignment'),
+      ]);
+      setShowMorningSpark(showSpark);
+      setShowEveningReview(showReview);
+      setShowWeeklyAlignment(showAlignment);
+    }
+  }, [userId]);
 
-    checkMorningSparkAvailability();
-    const interval = setInterval(checkMorningSparkAvailability, 60000);
+  useEffect(() => {
+    checkRitualAvailability();
+    const interval = setInterval(checkRitualAvailability, 60000);
 
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [checkRitualAvailability]);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkRitualAvailability();
+    }, [checkRitualAvailability])
+  );
 
   useEffect(() => {
     if (showMorningSpark) {
@@ -557,6 +573,52 @@ export default function Dashboard() {
       return () => animation.stop();
     }
   }, [showMorningSpark, sparkAnimation]);
+
+  useEffect(() => {
+    if (showEveningReview) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(reviewAnimation, {
+            toValue: 1.05,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(reviewAnimation, {
+            toValue: 1,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [showEveningReview, reviewAnimation]);
+
+  useEffect(() => {
+    if (showWeeklyAlignment) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(alignmentAnimation, {
+            toValue: 1.05,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(alignmentAnimation, {
+            toValue: 1,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [showWeeklyAlignment, alignmentAnimation]);
 
   const handleCompleteTask = async (task: Task) => {
     try {
@@ -1015,42 +1077,47 @@ export default function Dashboard() {
 
         <View style={styles.content} pointerEvents="box-none">
 
-  {activeTab === 'home' && showMorningSpark && (
-    <Animated.View
-      style={{
-        transform: [{ scale: sparkAnimation }],
-      }}
-    >
-      <TouchableOpacity
-        onPress={() => router.push('/spark')}
-        style={{
-          backgroundColor: '#EF4444',
-          padding: 20,
-          borderRadius: 12,
-          marginHorizontal: 16,
-          marginTop: 16,
-          marginBottom: 16,
-          alignItems: 'center',
-          flexDirection: 'row',
-          justifyContent: 'center',
-          gap: 12,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 3.84,
-          elevation: 5,
-        }}
-      >
-        <Text style={{ fontSize: 32 }}>🔥</Text>
-        <Text style={{
-          color: 'white',
-          fontSize: 18,
-          fontWeight: 'bold',
-        }}>
-          Morning Spark
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
+  {activeTab === 'home' && (showMorningSpark || showEveningReview || showWeeklyAlignment) && (
+    <View style={{ gap: 12, marginHorizontal: 16, marginTop: 16 }}>
+      {showMorningSpark && (
+        <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
+          <TouchableOpacity
+            onPress={() => router.push('/spark')}
+            style={styles.ritualButton}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 32 }}>🔥</Text>
+            <Text style={styles.ritualButtonText}>Set Morning Spark</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {showEveningReview && (
+        <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
+          <TouchableOpacity
+            onPress={() => router.push('/evening-review')}
+            style={[styles.ritualButton, { backgroundColor: '#8B5CF6' }]}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 32 }}>🌙</Text>
+            <Text style={styles.ritualButtonText}>Complete Evening Review</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {showWeeklyAlignment && (
+        <Animated.View style={{ transform: [{ scale: alignmentAnimation }] }}>
+          <TouchableOpacity
+            onPress={() => router.push('/weekly-alignment')}
+            style={[styles.ritualButton, { backgroundColor: '#10B981' }]}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 32 }}>🎯</Text>
+            <Text style={styles.ritualButtonText}>Set Weekly Focus</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+    </View>
   )}
 
   {activeTab === 'home' ? (
@@ -1369,5 +1436,24 @@ const styles = StyleSheet.create({
     },
     goalsList: {
       gap: 12,
+    },
+    ritualButton: {
+      backgroundColor: '#EF4444',
+      padding: 20,
+      borderRadius: 12,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+    },
+    ritualButtonText: {
+      color: 'white',
+      fontSize: 18,
+      fontWeight: 'bold',
     },
 });
