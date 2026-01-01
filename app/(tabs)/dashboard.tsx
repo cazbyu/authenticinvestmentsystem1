@@ -29,6 +29,7 @@ import { ActFilterButtons } from '@/components/dashboard/ActFilterButtons';
 import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
+import { router } from 'expo-router';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
@@ -972,8 +973,42 @@ export default function Dashboard() {
 
         <View style={styles.content} pointerEvents="box-none">
 
-        {activeTab === 'home' ? (
-          <CompassView />
+  {/* Morning Spark Button - ADD THIS ENTIRE BLOCK */}
+  {activeTab === 'home' && (
+    <TouchableOpacity 
+      onPress={() => router.push('/spark')}
+      style={{
+        backgroundColor: '#EF4444',
+        padding: 20,
+        borderRadius: 12,
+        marginHorizontal: 16,
+        marginTop: 16,
+        marginBottom: 16,
+        alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+      }}
+    >
+      <Text style={{ fontSize: 32 }}>🔥</Text>
+      <Text style={{ 
+        color: 'white', 
+        fontSize: 18, 
+        fontWeight: 'bold',
+      }}>
+        Set Morning Spark
+      </Text>
+    </TouchableOpacity>
+  )}
+
+  {activeTab === 'home' ? (
+    <CompassView />
+      
         ) : activeTab === 'reflect' ? (
           <ReflectionTableView
             filter={reflectFilter}
