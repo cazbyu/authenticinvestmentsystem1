@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Platform, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Easing, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
@@ -542,13 +542,13 @@ export default function Dashboard() {
           Animated.timing(sparkAnimation, {
             toValue: 1.05,
             duration: 750,
-            easing: Animated.Easing.inOut(Animated.Easing.ease),
+            easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(sparkAnimation, {
             toValue: 1,
             duration: 750,
-            easing: Animated.Easing.inOut(Animated.Easing.ease),
+            easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
         ])
