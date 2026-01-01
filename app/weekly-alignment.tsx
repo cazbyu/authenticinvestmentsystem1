@@ -17,7 +17,8 @@ import * as Haptics from 'expo-haptics';
 import { ArrowLeft, CheckCircle2, Target, TrendingUp, Calendar } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { hasCompletedWeeklyAlignmentThisWeek } from '@/lib/ritualUtils';
+import { hasCompletedWeeklyAlignmentThisWeek, isWeeklyAlignmentWindowOpen, getWeeklyAlignmentPoints, calculateWeekBounds } from '@/lib/ritualUtils';
+import { getUserPreferences } from '@/lib/userPreferences';
 
 interface WeeklyAlignment {
   id: string;
@@ -46,6 +47,9 @@ export default function WeeklyAlignmentScreen() {
 
   const [keystoneFocus, setKeystoneFocus] = useState('');
   const [weekBounds, setWeekBounds] = useState<WeekBounds>({ weekStart: '', weekEnd: '' });
+  const [bonusWindow, setBonusWindow] = useState(false);
+  const [points, setPoints] = useState(10);
+  const [userPreferredDay, setUserPreferredDay] = useState<string>('');
 
   const [scaleAnim] = useState(new Animated.Value(1));
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -64,42 +68,22 @@ export default function WeeklyAlignmentScreen() {
     }
   }, [isCompleted, completedAlignment]);
 
-  function getCurrentWeekBounds(): WeekBounds {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const mondayOffset = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
+  async function getLastWeekBounds(userId: string): Promise<WeekBounds> {
+    const bounds = await calculateWeekBounds(userId);
+    const weekStart = new Date(bounds.weekStart);
+    weekStart.setDate(weekStart.getDate() - 7);
 
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + mondayOffset);
-    monday.setHours(0, 0, 0, 0);
-
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    const weekEnd = new Date(bounds.weekEnd);
+    weekEnd.setDate(weekEnd.getDate() - 7);
 
     return {
-      weekStart: monday.toISOString().split('T')[0],
-      weekEnd: sunday.toISOString().split('T')[0],
+      weekStart: weekStart.toISOString().split('T')[0],
+      weekEnd: weekEnd.toISOString().split('T')[0],
     };
   }
 
-  function getLastWeekBounds(): WeekBounds {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const mondayOffset = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
-
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + mondayOffset - 7);
-    monday.setHours(0, 0, 0, 0);
-
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
-
-    return {
-      weekStart: monday.toISOString().split('T')[0],
-      weekEnd: sunday.toISOString().split('T')[0],
-    };
+  function capitalizeFirstLetter(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   function formatWeekRange(startDate: string, endDate: string): string {
@@ -130,8 +114,22 @@ export default function WeeklyAlignmentScreen() {
         return;
       }
 
-      const bounds = getCurrentWeekBounds();
+      const [bounds, prefs] = await Promise.all([
+        calculateWeekBounds(user.id),
+        getUserPreferences(user.id)
+      ]);
+
       setWeekBounds(bounds);
+
+      const inBonusWindow = isWeeklyAlignmentWindowOpen();
+      const alignmentPoints = getWeeklyAlignmentPoints();
+
+      setBonusWindow(inBonusWindow);
+      setPoints(alignmentPoints);
+
+      if (prefs?.weekly_alignment_day) {
+        setUserPreferredDay(capitalizeFirstLetter(prefs.weekly_alignment_day));
+      }
 
       const completed = await hasCompletedWeeklyAlignmentThisWeek(user.id);
 
@@ -139,7 +137,7 @@ export default function WeeklyAlignmentScreen() {
         await fetchCompletedAlignment(user.id, bounds.weekStart);
         setIsCompleted(true);
       } else {
-        const lastWeekBounds = getLastWeekBounds();
+        const lastWeekBounds = await getLastWeekBounds(user.id);
         await fetchLastWeekAlignment(user.id, lastWeekBounds.weekStart);
       }
     } catch (error) {
@@ -231,6 +229,8 @@ export default function WeeklyAlignmentScreen() {
         Alert.alert('Error', 'Failed to save Weekly Alignment. Please try again.');
         return;
       }
+
+      console.log(`[Weekly Alignment] Awarded ${points} points (Bonus window: ${bonusWindow})`);
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -357,6 +357,30 @@ export default function WeeklyAlignmentScreen() {
           <Text style={[styles.weekRangeText, { color: colors.textSecondary }]}>
             {formatWeekRange(weekBounds.weekStart, weekBounds.weekEnd)}
           </Text>
+        </View>
+
+        <View style={[styles.pointsBanner, { backgroundColor: bonusWindow ? '#ECFDF5' : '#F3F4F6' }]}>
+          <View style={styles.pointsBannerContent}>
+            <Text style={{ fontSize: 24, marginRight: 8 }}>
+              {bonusWindow ? '⭐' : '⏰'}
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.pointsBannerTitle, { color: bonusWindow ? '#10B981' : '#6B7280' }]}>
+                {bonusWindow ? 'Bonus Window Active!' : 'Outside Bonus Window'}
+              </Text>
+              <Text style={[styles.pointsBannerSubtitle, { color: bonusWindow ? '#059669' : '#4B5563' }]}>
+                Complete now for +{points} points
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.windowInfo, { color: bonusWindow ? '#059669' : '#6B7280' }]}>
+            Bonus window: Friday 12:00 AM - Monday 11:59 PM
+          </Text>
+          {userPreferredDay && (
+            <Text style={[styles.preferenceInfo, { color: colors.textSecondary }]}>
+              Your planning day: {userPreferredDay}
+            </Text>
+          )}
         </View>
 
         {lastWeekAlignment ? (
@@ -646,5 +670,33 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  pointsBanner: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  pointsBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pointsBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  pointsBannerSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  windowInfo: {
+    fontSize: 13,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  preferenceInfo: {
+    fontSize: 13,
+    marginTop: 4,
   },
 });

@@ -20,6 +20,7 @@ import { calculateStorageUsage, formatBytes, StorageUsage } from '@/lib/storageU
 import { Camera, Upload, User, HardDrive, RefreshCw, Clock } from 'lucide-react-native';
 import { TimePickerDropdown } from '@/components/tasks/TimePickerDropdown';
 import { getRitualSettings, updateRitualSettings, getDefaultRitualSettings, RitualSettings, RitualType } from '@/lib/ritualUtils';
+import { getUserPreferences, updateUserPreferences, UserPreferences } from '@/lib/userPreferences';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -66,6 +67,7 @@ export default function SettingsScreen() {
     weekly_alignment: null,
   });
   const [savingRituals, setSavingRituals] = useState(false);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -160,6 +162,7 @@ export default function SettingsScreen() {
     refreshScore();
     loadStorageUsage();
     loadRitualSettings();
+    loadUserPreferences();
   }, []);
 
   useEffect(() => {
@@ -319,6 +322,41 @@ export default function SettingsScreen() {
       setRitualSettings(newSettings);
     } catch (error) {
       console.error('Error loading ritual settings:', error);
+    }
+  };
+
+  const loadUserPreferences = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const prefs = await getUserPreferences(user.id);
+      if (prefs) {
+        setUserPreferences(prefs);
+      }
+    } catch (error) {
+      console.error('Error loading user preferences:', error);
+    }
+  };
+
+  const saveUserPreferences = async () => {
+    try {
+      if (!userPreferences) return;
+
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const success = await updateUserPreferences(user.id, userPreferences);
+      if (success) {
+        Alert.alert('Success', 'Preferences saved successfully!');
+      } else {
+        Alert.alert('Error', 'Failed to save preferences');
+      }
+    } catch (error) {
+      console.error('Error saving user preferences:', error);
+      Alert.alert('Error', 'Failed to save preferences');
     }
   };
 

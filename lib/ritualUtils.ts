@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './supabase';
 import { calculateTaskPoints } from './taskUtils';
+import { getUserPreferences } from './userPreferences';
 
 export type RitualType = 'morning_spark' | 'evening_review' | 'weekly_alignment';
 
@@ -267,14 +268,24 @@ export async function hasCompletedEveningReviewToday(userId: string): Promise<bo
 export async function hasCompletedWeeklyAlignmentThisWeek(userId: string): Promise<boolean> {
   try {
     const supabase = getSupabaseClient();
-    const now = new Date();
+    const prefs = await getUserPreferences(userId);
 
-    const dayOfWeek = now.getDay();
-    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - daysToMonday);
-    monday.setHours(0, 0, 0, 0);
-    const weekStartDate = monday.toISOString().split('T')[0];
+    const weekStartDay = prefs?.week_start_day || 'sunday';
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+
+    let daysToWeekStart: number;
+    if (weekStartDay === 'sunday') {
+      daysToWeekStart = -dayOfWeek;
+    } else {
+      daysToWeekStart = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
+    }
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() + daysToWeekStart);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekStartDate = weekStart.toISOString().split('T')[0];
 
     const { data, error } = await supabase
       .from('0008-ap-weekly-alignments')
@@ -509,5 +520,64 @@ export async function calculateDailyScore(
   } catch (error) {
     console.error('Exception in calculateDailyScore:', error);
     return 0;
+  }
+}
+
+export function isWeeklyAlignmentWindowOpen(): boolean {
+  const today = new Date().getDay();
+  return today === 5 || today === 6 || today === 0 || today === 1;
+}
+
+export function getWeeklyAlignmentPoints(): number {
+  const today = new Date().getDay();
+  const isInWindow = today === 5 || today === 6 || today === 0 || today === 1;
+  return isInWindow ? 50 : 10;
+}
+
+export async function calculateWeekBounds(userId: string): Promise<{ weekStart: string; weekEnd: string }> {
+  try {
+    const prefs = await getUserPreferences(userId);
+    const weekStartDay = prefs?.week_start_day || 'sunday';
+
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+
+    let daysToWeekStart: number;
+    if (weekStartDay === 'sunday') {
+      daysToWeekStart = -dayOfWeek;
+    } else {
+      daysToWeekStart = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
+    }
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() + daysToWeekStart);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    return {
+      weekStart: weekStart.toISOString().split('T')[0],
+      weekEnd: weekEnd.toISOString().split('T')[0]
+    };
+  } catch (error) {
+    console.error('Exception in calculateWeekBounds:', error);
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysToSunday = -dayOfWeek;
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() + daysToSunday);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    return {
+      weekStart: weekStart.toISOString().split('T')[0],
+      weekEnd: weekEnd.toISOString().split('T')[0]
+    };
   }
 }
