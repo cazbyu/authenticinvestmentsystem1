@@ -250,7 +250,7 @@ export default function SparkScreen() {
                   { color: sliderTouched && fuelLevel ? '#ffffff' : colors.textSecondary },
                 ]}
               >
-                I'm Committed
+                Next
               </Text>
             )}
           </TouchableOpacity>
