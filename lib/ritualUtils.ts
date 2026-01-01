@@ -53,10 +53,16 @@ export function isWithinTimeWindow(from: string, until: string): boolean {
     const now = new Date();
     const currentTime = now.toTimeString().slice(0, 8);
 
+    console.log(`[isWithinTimeWindow] Current time: ${currentTime}, Window: ${from} - ${until}`);
+
     if (from <= until) {
-      return currentTime >= from && currentTime <= until;
+      const result = currentTime >= from && currentTime <= until;
+      console.log(`[isWithinTimeWindow] Normal window check result: ${result}`);
+      return result;
     } else {
-      return currentTime >= from || currentTime <= until;
+      const result = currentTime >= from || currentTime <= until;
+      console.log(`[isWithinTimeWindow] Overnight window check result: ${result}`);
+      return result;
     }
   } catch (error) {
     console.error('Error checking time window:', error);
@@ -66,25 +72,36 @@ export function isWithinTimeWindow(from: string, until: string): boolean {
 
 export function isRitualAvailable(settings: RitualSettings | null): boolean {
   try {
+    console.log('[isRitualAvailable] Checking settings:', settings);
+
     if (!settings) {
+      console.log('[isRitualAvailable] No settings, returning true');
       return true;
     }
 
     if (!settings.is_enabled) {
+      console.log('[isRitualAvailable] Ritual is disabled');
       return false;
     }
 
     if (settings.ritual_type === 'weekly_alignment') {
       const now = new Date();
       const dayOfWeek = now.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      console.log('[isRitualAvailable] Checking weekly_alignment, day of week:', dayOfWeek);
 
-      if (!isWeekend) {
+      const isInBonusWindow = dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0 || dayOfWeek === 1;
+      console.log('[isRitualAvailable] Is in bonus window (Fri-Mon):', isInBonusWindow);
+
+      if (!isInBonusWindow) {
+        console.log('[isRitualAvailable] Not in bonus window, ritual not available');
         return false;
       }
     }
 
-    return isWithinTimeWindow(settings.available_from, settings.available_until);
+    const inTimeWindow = isWithinTimeWindow(settings.available_from, settings.available_until);
+    console.log('[isRitualAvailable] In time window:', inTimeWindow);
+
+    return inTimeWindow;
   } catch (error) {
     console.error('Error checking ritual availability:', error);
     return true;
@@ -218,7 +235,10 @@ export async function shouldShowRitual(
   ritualType: RitualType
 ): Promise<boolean> {
   try {
+    console.log(`[shouldShowRitual] Checking ${ritualType} for user ${userId}`);
+
     const settings = await getRitualSettings(userId, ritualType);
+    console.log(`[shouldShowRitual] Settings for ${ritualType}:`, settings);
 
     const settingsToUse = settings || {
       ...getDefaultRitualSettings(ritualType),
@@ -229,12 +249,22 @@ export async function shouldShowRitual(
       updated_at: '',
     };
 
-    if (!isRitualAvailable(settingsToUse)) {
+    console.log(`[shouldShowRitual] Using settings for ${ritualType}:`, settingsToUse);
+
+    const isAvailable = isRitualAvailable(settingsToUse);
+    console.log(`[shouldShowRitual] Is ${ritualType} available:`, isAvailable);
+
+    if (!isAvailable) {
       return false;
     }
 
     const hasCompleted = await hasCompletedRitualToday(userId, ritualType);
-    return !hasCompleted;
+    console.log(`[shouldShowRitual] Has completed ${ritualType} today:`, hasCompleted);
+
+    const shouldShow = !hasCompleted;
+    console.log(`[shouldShowRitual] Should show ${ritualType}:`, shouldShow);
+
+    return shouldShow;
   } catch (error) {
     console.error(`Error in shouldShowRitual for ${ritualType}:`, error);
     return true;

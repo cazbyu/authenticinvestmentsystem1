@@ -527,11 +527,20 @@ export default function Dashboard() {
 
   const checkRitualAvailability = useCallback(async () => {
     if (userId) {
+      console.log('[Dashboard] Checking ritual availability for user:', userId);
+
       const [showSpark, showReview, showAlignment] = await Promise.all([
         shouldShowRitual(userId, 'morning_spark'),
         shouldShowRitual(userId, 'evening_review'),
         shouldShowRitual(userId, 'weekly_alignment'),
       ]);
+
+      console.log('=== RITUAL BUTTON DEBUG ===');
+      console.log('Show Morning Spark:', showSpark);
+      console.log('Show Evening Review:', showReview);
+      console.log('Show Weekly Alignment:', showAlignment);
+      console.log('=== END DEBUG ===');
+
       setShowMorningSpark(showSpark);
       setShowEveningReview(showReview);
       setShowWeeklyAlignment(showAlignment);
