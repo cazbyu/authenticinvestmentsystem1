@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase';
+import { calculateTaskPoints } from './taskUtils';
 
 export type RitualType = 'morning_spark' | 'evening_review' | 'weekly_alignment';
 
@@ -11,6 +12,13 @@ export interface RitualSettings {
   available_until: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface CardinalInvestment {
+  north: number;
+  east: number;
+  west: number;
+  south: number;
 }
 
 export async function getRitualSettings(
@@ -229,5 +237,277 @@ export async function shouldShowRitual(
   } catch (error) {
     console.error(`Error in shouldShowRitual for ${ritualType}:`, error);
     return true;
+  }
+}
+
+export async function hasCompletedEveningReviewToday(userId: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseClient();
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('0008-ap-daily-reviews')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('review_date', today)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error checking evening review completion:', error);
+      return false;
+    }
+
+    return data !== null;
+  } catch (error) {
+    console.error('Exception in hasCompletedEveningReviewToday:', error);
+    return false;
+  }
+}
+
+export async function hasCompletedWeeklyAlignmentThisWeek(userId: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseClient();
+    const now = new Date();
+
+    const dayOfWeek = now.getDay();
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - daysToMonday);
+    monday.setHours(0, 0, 0, 0);
+    const weekStartDate = monday.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('0008-ap-weekly-alignments')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('week_start_date', weekStartDate)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error checking weekly alignment completion:', error);
+      return false;
+    }
+
+    return data !== null;
+  } catch (error) {
+    console.error('Exception in hasCompletedWeeklyAlignmentThisWeek:', error);
+    return false;
+  }
+}
+
+export async function calculateDominantCardinal(
+  userId: string,
+  date: string
+): Promise<'north' | 'east' | 'west' | 'south' | null> {
+  try {
+    const supabase = getSupabaseClient();
+
+    const startOfDay = `${date}T00:00:00`;
+    const endOfDay = `${date}T23:59:59`;
+
+    const { data: completedTasks, error: tasksError } = await supabase
+      .from('0008-ap-tasks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .is('deleted_at', null)
+      .not('completed_at', 'is', null)
+      .gte('completed_at', startOfDay)
+      .lte('completed_at', endOfDay);
+
+    if (tasksError) {
+      console.error('Error fetching completed tasks:', tasksError);
+      return null;
+    }
+
+    if (!completedTasks || completedTasks.length === 0) {
+      return null;
+    }
+
+    const taskIds = completedTasks.map(t => t.id);
+
+    const [goalsResult, domainsResult, rolesResult] = await Promise.all([
+      supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .in('parent_id', taskIds)
+        .eq('parent_type', 'task'),
+      supabase
+        .from('0008-ap-universal-domains-join')
+        .select('parent_id')
+        .in('parent_id', taskIds)
+        .eq('parent_type', 'task'),
+      supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id')
+        .in('parent_id', taskIds)
+        .eq('parent_type', 'task'),
+    ]);
+
+    if (goalsResult.error || domainsResult.error || rolesResult.error) {
+      console.error('Error fetching task linkages:', {
+        goals: goalsResult.error,
+        domains: domainsResult.error,
+        roles: rolesResult.error,
+      });
+      return null;
+    }
+
+    const goalsSet = new Set((goalsResult.data || []).map(g => g.parent_id));
+    const domainsSet = new Set((domainsResult.data || []).map(d => d.parent_id));
+    const rolesSet = new Set((rolesResult.data || []).map(r => r.parent_id));
+
+    const cardinalCounts: CardinalInvestment = {
+      north: 0,
+      east: 0,
+      west: 0,
+      south: 0,
+    };
+
+    taskIds.forEach(taskId => {
+      const hasGoals = goalsSet.has(taskId);
+      const hasDomains = domainsSet.has(taskId);
+      const hasRoles = rolesSet.has(taskId);
+      const hasNoLinks = !hasGoals && !hasDomains && !hasRoles;
+
+      if (hasGoals) cardinalCounts.north++;
+      if (hasDomains) cardinalCounts.east++;
+      if (hasRoles) cardinalCounts.west++;
+      if (hasNoLinks) cardinalCounts.south++;
+    });
+
+    const maxCount = Math.max(
+      cardinalCounts.north,
+      cardinalCounts.east,
+      cardinalCounts.west,
+      cardinalCounts.south
+    );
+
+    if (maxCount === 0) {
+      return null;
+    }
+
+    const dominants = [
+      cardinalCounts.north === maxCount ? 'north' as const : null,
+      cardinalCounts.east === maxCount ? 'east' as const : null,
+      cardinalCounts.west === maxCount ? 'west' as const : null,
+      cardinalCounts.south === maxCount ? 'south' as const : null,
+    ].filter(Boolean);
+
+    if (dominants.length > 1) {
+      return null;
+    }
+
+    return dominants[0] || null;
+  } catch (error) {
+    console.error('Exception in calculateDominantCardinal:', error);
+    return null;
+  }
+}
+
+export async function calculateDailyScore(
+  userId: string,
+  date: string
+): Promise<number> {
+  try {
+    const supabase = getSupabaseClient();
+    let totalScore = 0;
+
+    const startOfDay = `${date}T00:00:00`;
+    const endOfDay = `${date}T23:59:59`;
+
+    const { data: completedTasks, error: tasksError } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, is_urgent, is_important')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .is('deleted_at', null)
+      .not('completed_at', 'is', null)
+      .gte('completed_at', startOfDay)
+      .lte('completed_at', endOfDay);
+
+    if (tasksError) {
+      console.error('Error fetching completed tasks for scoring:', tasksError);
+      return 0;
+    }
+
+    if (completedTasks && completedTasks.length > 0) {
+      const taskIds = completedTasks.map(t => t.id);
+
+      const [rolesResult, domainsResult, goalsResult] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('parent_id, role:0008-ap-roles(id, label)')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id, domain:0008-ap-domains(id, name)')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-goals-join')
+          .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+      ]);
+
+      const rolesMap = new Map<string, any[]>();
+      (rolesResult.data || []).forEach(r => {
+        if (!rolesMap.has(r.parent_id)) rolesMap.set(r.parent_id, []);
+        if (r.role) rolesMap.get(r.parent_id)!.push(r.role);
+      });
+
+      const domainsMap = new Map<string, any[]>();
+      (domainsResult.data || []).forEach(d => {
+        if (!domainsMap.has(d.parent_id)) domainsMap.set(d.parent_id, []);
+        if (d.domain) domainsMap.get(d.parent_id)!.push(d.domain);
+      });
+
+      const goalsMap = new Map<string, any[]>();
+      (goalsResult.data || []).forEach(g => {
+        if (!goalsMap.has(g.parent_id)) goalsMap.set(g.parent_id, []);
+        const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+        if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+          goalsMap.get(g.parent_id)!.push({ ...goal, goal_type: g.goal_type });
+        }
+      });
+
+      completedTasks.forEach(task => {
+        const roles = rolesMap.get(task.id) || [];
+        const domains = domainsMap.get(task.id) || [];
+        const goals = goalsMap.get(task.id) || [];
+
+        const taskPoints = calculateTaskPoints(task, roles, domains, goals);
+        totalScore += taskPoints;
+      });
+    }
+
+    const { data: sparkData, error: sparkError } = await supabase
+      .from('0008-ap-daily-sparks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('spark_date', date)
+      .maybeSingle();
+
+    if (!sparkError && sparkData !== null) {
+      totalScore += 10;
+    }
+
+    const { data: reviewData, error: reviewError } = await supabase
+      .from('0008-ap-daily-reviews')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('review_date', date)
+      .maybeSingle();
+
+    if (!reviewError && reviewData !== null) {
+      totalScore += 10;
+    }
+
+    return Math.round(totalScore * 10) / 10;
+  } catch (error) {
+    console.error('Exception in calculateDailyScore:', error);
+    return 0;
   }
 }
