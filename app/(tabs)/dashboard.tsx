@@ -30,6 +30,7 @@ import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView'
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
 import { router } from 'expo-router';
+import { shouldShowRitual } from '@/lib/ritualUtils';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
@@ -64,6 +65,10 @@ export default function Dashboard() {
   const [editingReflection, setEditingReflection] = useState<any>(null);
   const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
+
+  // Morning Spark ritual state
+  const [showMorningSpark, setShowMorningSpark] = useState(false);
+  const sparkAnimation = useState(new Animated.Value(1))[0];
 
   // Follow-through TaskEventForm state
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
@@ -515,6 +520,43 @@ export default function Dashboard() {
       eventBus.off(EVENTS.WITHDRAWAL_CREATED, handleRefreshAll);
     };
   }, [activeView, sortOption, registerResetHandler, unregisterResetHandler, resetToMain]);
+
+  useEffect(() => {
+    const checkMorningSparkAvailability = async () => {
+      if (userId) {
+        const shouldShow = await shouldShowRitual(userId, 'morning_spark');
+        setShowMorningSpark(shouldShow);
+      }
+    };
+
+    checkMorningSparkAvailability();
+    const interval = setInterval(checkMorningSparkAvailability, 60000);
+
+    return () => clearInterval(interval);
+  }, [userId]);
+
+  useEffect(() => {
+    if (showMorningSpark) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(sparkAnimation, {
+            toValue: 1.05,
+            duration: 750,
+            easing: Animated.Easing.inOut(Animated.Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(sparkAnimation, {
+            toValue: 1,
+            duration: 750,
+            easing: Animated.Easing.inOut(Animated.Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [showMorningSpark, sparkAnimation]);
 
   const handleCompleteTask = async (task: Task) => {
     try {
@@ -973,37 +1015,42 @@ export default function Dashboard() {
 
         <View style={styles.content} pointerEvents="box-none">
 
-  {/* Morning Spark Button - ADD THIS ENTIRE BLOCK */}
-  {activeTab === 'home' && (
-    <TouchableOpacity 
-      onPress={() => router.push('/spark')}
+  {activeTab === 'home' && showMorningSpark && (
+    <Animated.View
       style={{
-        backgroundColor: '#EF4444',
-        padding: 20,
-        borderRadius: 12,
-        marginHorizontal: 16,
-        marginTop: 16,
-        marginBottom: 16,
-        alignItems: 'center',
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
+        transform: [{ scale: sparkAnimation }],
       }}
     >
-      <Text style={{ fontSize: 32 }}>🔥</Text>
-      <Text style={{
-        color: 'white',
-        fontSize: 18,
-        fontWeight: 'bold',
-      }}>
-        Morning Spark
-      </Text>
-    </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => router.push('/spark')}
+        style={{
+          backgroundColor: '#EF4444',
+          padding: 20,
+          borderRadius: 12,
+          marginHorizontal: 16,
+          marginTop: 16,
+          marginBottom: 16,
+          alignItems: 'center',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          gap: 12,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          elevation: 5,
+        }}
+      >
+        <Text style={{ fontSize: 32 }}>🔥</Text>
+        <Text style={{
+          color: 'white',
+          fontSize: 18,
+          fontWeight: 'bold',
+        }}>
+          Morning Spark
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
   )}
 
   {activeTab === 'home' ? (

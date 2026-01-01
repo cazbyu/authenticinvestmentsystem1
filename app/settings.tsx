@@ -17,7 +17,9 @@ import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { getTimezonesByRegion, getTimezoneDisplayName, detectUserTimezone } from '@/lib/timezoneUtils';
 import { calculateStorageUsage, formatBytes, StorageUsage } from '@/lib/storageUtils';
-import { Camera, Upload, User, HardDrive, RefreshCw } from 'lucide-react-native';
+import { Camera, Upload, User, HardDrive, RefreshCw, Clock } from 'lucide-react-native';
+import { TimePickerDropdown } from '@/components/tasks/TimePickerDropdown';
+import { getRitualSettings, updateRitualSettings, getDefaultRitualSettings, RitualSettings, RitualType } from '@/lib/ritualUtils';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -54,6 +56,16 @@ export default function SettingsScreen() {
   const [showTimezonePicker, setShowTimezonePicker] = useState(false);
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const [loadingStorage, setLoadingStorage] = useState(false);
+  const [ritualSettings, setRitualSettings] = useState<{
+    morning_spark: RitualSettings | null;
+    evening_review: RitualSettings | null;
+    weekly_alignment: RitualSettings | null;
+  }>({
+    morning_spark: null,
+    evening_review: null,
+    weekly_alignment: null,
+  });
+  const [savingRituals, setSavingRituals] = useState(false);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -147,6 +159,7 @@ export default function SettingsScreen() {
     fetchProfile();
     refreshScore();
     loadStorageUsage();
+    loadRitualSettings();
   }, []);
 
   useEffect(() => {
@@ -281,6 +294,64 @@ export default function SettingsScreen() {
     }
   };
 
+  const loadRitualSettings = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const ritualTypes: RitualType[] = ['morning_spark', 'evening_review', 'weekly_alignment'];
+      const settingsPromises = ritualTypes.map(type => getRitualSettings(user.id, type));
+      const settingsResults = await Promise.all(settingsPromises);
+
+      const newSettings: any = {};
+      ritualTypes.forEach((type, index) => {
+        newSettings[type] = settingsResults[index] || {
+          ...getDefaultRitualSettings(type),
+          id: '',
+          user_id: user.id,
+          ritual_type: type,
+          created_at: '',
+          updated_at: '',
+        };
+      });
+
+      setRitualSettings(newSettings);
+    } catch (error) {
+      console.error('Error loading ritual settings:', error);
+    }
+  };
+
+  const saveRitualSettings = async () => {
+    try {
+      setSavingRituals(true);
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const ritualTypes: RitualType[] = ['morning_spark', 'evening_review', 'weekly_alignment'];
+      const updatePromises = ritualTypes.map(type => {
+        const settings = ritualSettings[type];
+        if (settings) {
+          return updateRitualSettings(user.id, type, {
+            is_enabled: settings.is_enabled,
+            available_from: settings.available_from,
+            available_until: settings.available_until,
+          });
+        }
+        return Promise.resolve(false);
+      });
+
+      await Promise.all(updatePromises);
+      Alert.alert('Success', 'Ritual settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving ritual settings:', error);
+      Alert.alert('Error', 'Failed to save ritual settings');
+    } finally {
+      setSavingRituals(false);
+    }
+  };
+
   const updateProfile = async (updates: Partial<typeof profile>) => {
     try {
       setSaving(true);
@@ -383,6 +454,24 @@ export default function SettingsScreen() {
     setGoogleAccessToken(null);
     setSyncEnabled(false);
     Alert.alert('Success', 'Disconnected from Google Calendar');
+  };
+
+  const convertTo12Hour = (time24: string): string => {
+    const [hours, minutes] = time24.split(':').map(Number);
+    const isPM = hours >= 12;
+    const displayHour = hours % 12 || 12;
+    const displayMinute = minutes.toString().padStart(2, '0');
+    return `${displayHour}:${displayMinute} ${isPM ? 'pm' : 'am'}`;
+  };
+
+  const convertTo24Hour = (time12: string): string => {
+    const timeLower = time12.toLowerCase().trim();
+    const isPM = timeLower.includes('pm');
+    const timeOnly = timeLower.replace(/am|pm/g, '').trim();
+    const [h, m] = timeOnly.split(':').map(s => parseInt(s.trim(), 10));
+    let hours = h === 12 ? (isPM ? 12 : 0) : (isPM ? h + 12 : h);
+    const minutes = m || 0;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
   };
 
   return (
@@ -753,6 +842,207 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Daily Rituals Section */}
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Daily Rituals</Text>
+          <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+            Configure when your daily rituals are available
+          </Text>
+
+          {/* Morning Spark */}
+          <View style={[styles.ritualCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <View style={styles.ritualHeader}>
+              <View style={styles.ritualTitleRow}>
+                <Text style={[styles.ritualTitle, { color: colors.text }]}>🔥 Morning Spark</Text>
+                <Switch
+                  value={ritualSettings.morning_spark?.is_enabled ?? true}
+                  onValueChange={(value) => {
+                    setRitualSettings(prev => ({
+                      ...prev,
+                      morning_spark: prev.morning_spark ? { ...prev.morning_spark, is_enabled: value } : null,
+                    }));
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+              <Text style={[styles.ritualDescription, { color: colors.textSecondary }]}>
+                Set your daily intention and energy level
+              </Text>
+            </View>
+
+            {ritualSettings.morning_spark?.is_enabled && (
+              <View style={styles.ritualTimeSettings}>
+                <View style={styles.timePickerRow}>
+                  <Clock size={16} color={colors.textSecondary} />
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>Available From:</Text>
+                  <TimePickerDropdown
+                    value={convertTo12Hour(ritualSettings.morning_spark?.available_from || '00:00:00')}
+                    onChange={(time) => {
+                      const time24 = convertTo24Hour(time);
+                      setRitualSettings(prev => ({
+                        ...prev,
+                        morning_spark: prev.morning_spark ? { ...prev.morning_spark, available_from: time24 } : null,
+                      }));
+                    }}
+                    isDark={isDarkMode}
+                  />
+                </View>
+                <View style={styles.timePickerRow}>
+                  <Clock size={16} color={colors.textSecondary} />
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>Available Until:</Text>
+                  <TimePickerDropdown
+                    value={convertTo12Hour(ritualSettings.morning_spark?.available_until || '12:00:00')}
+                    onChange={(time) => {
+                      const time24 = convertTo24Hour(time);
+                      setRitualSettings(prev => ({
+                        ...prev,
+                        morning_spark: prev.morning_spark ? { ...prev.morning_spark, available_until: time24 } : null,
+                      }));
+                    }}
+                    isDark={isDarkMode}
+                  />
+                </View>
+                <Text style={[styles.timeSummary, { color: colors.textSecondary }]}>
+                  Available: {convertTo12Hour(ritualSettings.morning_spark?.available_from || '00:00:00')} - {convertTo12Hour(ritualSettings.morning_spark?.available_until || '12:00:00')}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Evening Review */}
+          <View style={[styles.ritualCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <View style={styles.ritualHeader}>
+              <View style={styles.ritualTitleRow}>
+                <Text style={[styles.ritualTitle, { color: colors.text }]}>🌙 Evening Review</Text>
+                <Switch
+                  value={ritualSettings.evening_review?.is_enabled ?? true}
+                  onValueChange={(value) => {
+                    setRitualSettings(prev => ({
+                      ...prev,
+                      evening_review: prev.evening_review ? { ...prev.evening_review, is_enabled: value } : null,
+                    }));
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+              <Text style={[styles.ritualDescription, { color: colors.textSecondary }]}>
+                Reflect on your day and plan for tomorrow
+              </Text>
+            </View>
+
+            {ritualSettings.evening_review?.is_enabled && (
+              <View style={styles.ritualTimeSettings}>
+                <View style={styles.timePickerRow}>
+                  <Clock size={16} color={colors.textSecondary} />
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>Available From:</Text>
+                  <TimePickerDropdown
+                    value={convertTo12Hour(ritualSettings.evening_review?.available_from || '17:00:00')}
+                    onChange={(time) => {
+                      const time24 = convertTo24Hour(time);
+                      setRitualSettings(prev => ({
+                        ...prev,
+                        evening_review: prev.evening_review ? { ...prev.evening_review, available_from: time24 } : null,
+                      }));
+                    }}
+                    isDark={isDarkMode}
+                  />
+                </View>
+                <View style={styles.timePickerRow}>
+                  <Clock size={16} color={colors.textSecondary} />
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>Available Until:</Text>
+                  <TimePickerDropdown
+                    value={convertTo12Hour(ritualSettings.evening_review?.available_until || '23:59:59')}
+                    onChange={(time) => {
+                      const time24 = convertTo24Hour(time);
+                      setRitualSettings(prev => ({
+                        ...prev,
+                        evening_review: prev.evening_review ? { ...prev.evening_review, available_until: time24 } : null,
+                      }));
+                    }}
+                    isDark={isDarkMode}
+                  />
+                </View>
+                <Text style={[styles.timeSummary, { color: colors.textSecondary }]}>
+                  Available: {convertTo12Hour(ritualSettings.evening_review?.available_from || '17:00:00')} - {convertTo12Hour(ritualSettings.evening_review?.available_until || '23:59:59')}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Weekly Alignment */}
+          <View style={[styles.ritualCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <View style={styles.ritualHeader}>
+              <View style={styles.ritualTitleRow}>
+                <Text style={[styles.ritualTitle, { color: colors.text }]}>📅 Weekly Alignment</Text>
+                <Switch
+                  value={ritualSettings.weekly_alignment?.is_enabled ?? true}
+                  onValueChange={(value) => {
+                    setRitualSettings(prev => ({
+                      ...prev,
+                      weekly_alignment: prev.weekly_alignment ? { ...prev.weekly_alignment, is_enabled: value } : null,
+                    }));
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+              <Text style={[styles.ritualDescription, { color: colors.textSecondary }]}>
+                Align your week with your bigger goals (Weekends only)
+              </Text>
+            </View>
+
+            {ritualSettings.weekly_alignment?.is_enabled && (
+              <View style={styles.ritualTimeSettings}>
+                <View style={styles.timePickerRow}>
+                  <Clock size={16} color={colors.textSecondary} />
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>Available From:</Text>
+                  <TimePickerDropdown
+                    value={convertTo12Hour(ritualSettings.weekly_alignment?.available_from || '00:00:00')}
+                    onChange={(time) => {
+                      const time24 = convertTo24Hour(time);
+                      setRitualSettings(prev => ({
+                        ...prev,
+                        weekly_alignment: prev.weekly_alignment ? { ...prev.weekly_alignment, available_from: time24 } : null,
+                      }));
+                    }}
+                    isDark={isDarkMode}
+                  />
+                </View>
+                <View style={styles.timePickerRow}>
+                  <Clock size={16} color={colors.textSecondary} />
+                  <Text style={[styles.timeLabel, { color: colors.text }]}>Available Until:</Text>
+                  <TimePickerDropdown
+                    value={convertTo12Hour(ritualSettings.weekly_alignment?.available_until || '23:59:59')}
+                    onChange={(time) => {
+                      const time24 = convertTo24Hour(time);
+                      setRitualSettings(prev => ({
+                        ...prev,
+                        weekly_alignment: prev.weekly_alignment ? { ...prev.weekly_alignment, available_until: time24 } : null,
+                      }));
+                    }}
+                    isDark={isDarkMode}
+                  />
+                </View>
+                <Text style={[styles.timeSummary, { color: colors.textSecondary }]}>
+                  Available: {convertTo12Hour(ritualSettings.weekly_alignment?.available_from || '00:00:00')} - {convertTo12Hour(ritualSettings.weekly_alignment?.available_until || '23:59:59')}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.saveButton, { backgroundColor: colors.primary }]}
+            onPress={saveRitualSettings}
+            disabled={savingRituals}
+          >
+            <Text style={styles.saveButtonText}>
+              {savingRituals ? 'Saving...' : 'Save Ritual Settings'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Appearance Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
@@ -1046,4 +1336,65 @@ const styles = StyleSheet.create({
   storageLastUpdated: { fontSize: 12, marginTop: 16, fontStyle: 'italic' },
   storageLoadingContainer: { paddingVertical: 32, alignItems: 'center', justifyContent: 'center' },
   storageEmptyText: { fontSize: 14 },
+  ritualCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  ritualHeader: {
+    marginBottom: 12,
+  },
+  ritualTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  ritualTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  ritualDescription: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  ritualTimeSettings: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  timeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    width: 110,
+  },
+  timeSummary: {
+    fontSize: 13,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  saveButton: {
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
