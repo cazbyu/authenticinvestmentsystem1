@@ -524,6 +524,7 @@ export async function commitDailySpark(
   targetScore: number
 ): Promise<void> {
   const supabase = getSupabaseClient();
+  const today = new Date().toISOString().split('T')[0];
 
   const { error } = await supabase
     .from('0008-ap-daily-sparks')
@@ -532,8 +533,7 @@ export async function commitDailySpark(
       initial_target_score: targetScore,
     })
     .eq('user_id', userId)
-    .gte('created_at', new Date().toISOString().split('T')[0])
-    .lt('created_at', new Date(Date.now() + 86400000).toISOString().split('T')[0]);
+    .eq('spark_date', today);
 
   if (error) {
     console.error('Error committing daily spark:', error);

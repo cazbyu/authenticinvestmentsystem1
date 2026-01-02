@@ -168,6 +168,40 @@ export default function MorningSparkFuelCheck() {
     }
   }
 
+  async function handleDevReset() {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in.');
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const { error } = await supabase
+        .from('0008-ap-daily-sparks')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('spark_date', today);
+
+      if (error) {
+        console.error('Error resetting spark:', error);
+        Alert.alert('Error', 'Failed to reset spark. Please try again.');
+        return;
+      }
+
+      setExistingSparkId(null);
+      setSelectedFuel(null);
+
+      Alert.alert('Success', 'Spark reset! You can now test the flow again.');
+    } catch (error) {
+      console.error('Error in dev reset:', error);
+      Alert.alert('Error', 'Failed to reset spark. Please try again.');
+    }
+  }
+
   function formatDate() {
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = {
@@ -264,6 +298,18 @@ export default function MorningSparkFuelCheck() {
               Saving your fuel level...
             </Text>
           </View>
+        )}
+
+        {__DEV__ && (
+          <TouchableOpacity
+            style={styles.devResetButton}
+            onPress={handleDevReset}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.devResetText}>
+              Reset Today's Spark (Dev Only)
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
     </SafeAreaView>
@@ -381,5 +427,21 @@ const styles = StyleSheet.create({
   },
   savingText: {
     fontSize: 14,
+  },
+  devResetButton: {
+    height: 40,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#ef4444',
+    backgroundColor: 'transparent',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  devResetText: {
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
