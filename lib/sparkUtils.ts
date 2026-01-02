@@ -239,3 +239,146 @@ export function formatTimeDisplay(time?: string): string {
 
   return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 }
+
+export interface BrainDumpItem {
+  id: string;
+  user_id: string;
+  reflection_type: string;
+  parent_type: string;
+  content: string;
+  reflection_date?: string;
+  created_at: string;
+}
+
+export async function getBrainDumpItems(userId: string): Promise<BrainDumpItem[]> {
+  const supabase = getSupabaseClient();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayDate = yesterday.toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('0008-ap-reflections')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('reflection_type', 'daily')
+    .eq('parent_type', 'brain_dump')
+    .gte('created_at', `${yesterdayDate}T00:00:00`)
+    .lt('created_at', `${yesterdayDate}T23:59:59`)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching brain dump items:', error);
+    throw error;
+  }
+
+  return (data || []) as BrainDumpItem[];
+}
+
+export async function convertBrainDumpToTask(brainDumpId: string, userId: string, content: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { error } = await supabase
+    .from('0008-ap-tasks')
+    .insert({
+      user_id: userId,
+      type: 'task',
+      title: content.substring(0, 200),
+      description: content.length > 200 ? content : null,
+      start_date: today,
+      status: 'pending',
+    });
+
+  if (error) {
+    console.error('Error converting brain dump to task:', error);
+    throw error;
+  }
+
+  await supabase
+    .from('0008-ap-reflections')
+    .delete()
+    .eq('id', brainDumpId);
+}
+
+export async function saveBrainDumpAsIdea(brainDumpId: string, userId: string, content: string): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  const { error } = await supabase
+    .from('0008-ap-deposit-ideas')
+    .insert({
+      user_id: userId,
+      idea_title: content.substring(0, 200),
+      idea_description: content.length > 200 ? content : null,
+      is_active: true,
+      archived: false,
+    });
+
+  if (error) {
+    console.error('Error saving brain dump as idea:', error);
+    throw error;
+  }
+
+  await supabase
+    .from('0008-ap-reflections')
+    .delete()
+    .eq('id', brainDumpId);
+}
+
+export async function addReflectionToBrainDump(
+  brainDumpId: string,
+  userId: string,
+  reflectionContent: string
+): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  const { error} = await supabase
+    .from('0008-ap-reflections')
+    .insert({
+      user_id: userId,
+      reflection_type: 'daily',
+      parent_type: 'brain_dump',
+      parent_id: brainDumpId,
+      content: reflectionContent,
+      reflection_date: new Date().toISOString().split('T')[0],
+    });
+
+  if (error) {
+    console.error('Error adding reflection to brain dump:', error);
+    throw error;
+  }
+}
+
+export async function acknowledgeBrainDump(brainDumpId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  const { error } = await supabase
+    .from('0008-ap-reflections')
+    .delete()
+    .eq('id', brainDumpId);
+
+  if (error) {
+    console.error('Error acknowledging brain dump:', error);
+    throw error;
+  }
+}
+
+export function formatBrainDumpTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+
+  return `Yesterday at ${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+}
+
+export function getBrainDumpMessage(fuelLevel: 1 | 2 | 3): string {
+  switch (fuelLevel) {
+    case 1:
+      return 'Any of these need attention today? Only tackle what feels essential.';
+    case 2:
+      return "Quick review - anything here worth acting on?";
+    case 3:
+      return "Let's capture any wins or opportunities from yesterday!";
+  }
+}
