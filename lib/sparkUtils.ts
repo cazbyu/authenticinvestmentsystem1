@@ -5,7 +5,7 @@ export interface DailySpark {
   user_id: string;
   spark_date: string;
   fuel_level: 1 | 2 | 3;
-  mode: 'Recovery' | 'Steady' | 'Sprint';
+  mode: 'recovery' | 'steady' | 'sprint';
   initial_target_score: 20 | 35 | 55;
   committed_at: string;
   created_at: string;
