@@ -96,7 +96,6 @@ export async function createDailySpark(params: CreateSparkParams): Promise<Daily
   const { userId, fuelLevel, sparkDate } = params;
 
   const mode = getFuelMode(fuelLevel);
-  const targetScore = calculateTargetScore(fuelLevel);
 
   const { data, error } = await supabase
     .from('0008-ap-daily-sparks')
@@ -105,7 +104,6 @@ export async function createDailySpark(params: CreateSparkParams): Promise<Daily
       spark_date: sparkDate,
       fuel_level: fuelLevel,
       mode: mode,
-      initial_target_score: targetScore,
     })
     .select()
     .single();
