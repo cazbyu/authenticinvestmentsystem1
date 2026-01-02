@@ -1115,7 +1115,7 @@ export default function Dashboard() {
       {showMorningSpark && (
         <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
           <TouchableOpacity
-            onPress={() => router.push('/spark')}
+            onPress={() => router.push('/morning-spark')}
             style={styles.ritualButton}
             activeOpacity={0.8}
           >
