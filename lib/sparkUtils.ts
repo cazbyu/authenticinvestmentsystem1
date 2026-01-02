@@ -135,3 +135,20 @@ export async function getSparkForDate(userId: string, date: string): Promise<Dai
 
   return data;
 }
+
+export async function updateSparkFuelLevel(sparkId: string, fuelLevel: 1 | 2 | 3): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  const { error } = await supabase
+    .from('0008-ap-daily-sparks')
+    .update({
+      fuel_level: fuelLevel,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sparkId);
+
+  if (error) {
+    console.error('Error updating spark fuel level:', error);
+    throw error;
+  }
+}
