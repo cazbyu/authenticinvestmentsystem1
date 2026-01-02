@@ -152,3 +152,90 @@ export async function updateSparkFuelLevel(sparkId: string, fuelLevel: 1 | 2 | 3
     throw error;
   }
 }
+
+export interface ScheduledAction {
+  id: string;
+  type: 'task' | 'event';
+  title: string;
+  description?: string;
+  due_date?: string;
+  start_date?: string;
+  start_time?: string;
+  end_time?: string;
+  is_urgent: boolean;
+  is_important: boolean;
+  is_all_day: boolean;
+  completed_at?: string;
+}
+
+export interface ScheduledActionsData {
+  overdue: ScheduledAction[];
+  today: ScheduledAction[];
+  totalTasks: number;
+  totalEvents: number;
+}
+
+export async function getScheduledActions(userId: string): Promise<ScheduledActionsData> {
+  const supabase = getSupabaseClient();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('0008-ap-tasks')
+    .select('*')
+    .eq('user_id', userId)
+    .in('type', ['task', 'event'])
+    .is('completed_at', null)
+    .is('deleted_at', null)
+    .or(`start_date.eq.${today},due_date.eq.${today},due_date.lt.${today}`)
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('start_time', { ascending: true, nullsFirst: false });
+
+  if (error) {
+    console.error('Error fetching scheduled actions:', error);
+    throw error;
+  }
+
+  const actions = (data || []) as ScheduledAction[];
+
+  const overdue = actions.filter(
+    (action) => action.due_date && action.due_date < today
+  );
+
+  const todayActions = actions.filter(
+    (action) =>
+      !action.due_date ||
+      action.due_date === today ||
+      action.start_date === today
+  );
+
+  const totalTasks = actions.filter((a) => a.type === 'task').length;
+  const totalEvents = actions.filter((a) => a.type === 'event').length;
+
+  return {
+    overdue,
+    today: todayActions,
+    totalTasks,
+    totalEvents,
+  };
+}
+
+export function getFuelLevelMessage(fuelLevel: 1 | 2 | 3): string {
+  switch (fuelLevel) {
+    case 1:
+      return "Let's focus on what's essential. You can adjust anything that feels like too much.";
+    case 2:
+      return "Here's your plan. We can adjust if needed to keep your momentum steady.";
+    case 3:
+      return "You're energized! Let's make the most of today's opportunities.";
+  }
+}
+
+export function formatTimeDisplay(time?: string): string {
+  if (!time) return '';
+
+  const [hours, minutes] = time.split(':').map(Number);
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+
+  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+}
