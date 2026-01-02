@@ -494,3 +494,96 @@ export function getDepositIdeasMessage(fuelLevel: 1 | 2 | 3): string {
       return "Great time to activate some of those ideas you've been saving!";
   }
 }
+
+export async function getTodayTargetScore(userId: string): Promise<number> {
+  const supabase = getSupabaseClient();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('0008-ap-tasks')
+    .select('points_value')
+    .eq('user_id', userId)
+    .is('completed_at', null)
+    .or(`start_date.eq.${today},due_date.eq.${today}`);
+
+  if (error) {
+    console.error('Error calculating target score:', error);
+    throw error;
+  }
+
+  const totalScore = (data || []).reduce((sum, task) => {
+    return sum + (task.points_value || 0);
+  }, 0);
+
+  return totalScore;
+}
+
+export async function commitDailySpark(
+  userId: string,
+  targetScore: number
+): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  const { error } = await supabase
+    .from('0008-ap-daily-sparks')
+    .update({
+      committed_at: new Date().toISOString(),
+      initial_target_score: targetScore,
+    })
+    .eq('user_id', userId)
+    .gte('created_at', new Date().toISOString().split('T')[0])
+    .lt('created_at', new Date(Date.now() + 86400000).toISOString().split('T')[0]);
+
+  if (error) {
+    console.error('Error committing daily spark:', error);
+    throw error;
+  }
+}
+
+export interface Aspiration {
+  id: string;
+  aspiration_date: string;
+  aspiration_text: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getRandomAspiration(userId: string): Promise<Aspiration | null> {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('0008-ap-aspirations-library')
+    .select('*')
+    .eq('user_id', userId)
+    .limit(50);
+
+  if (error) {
+    console.error('Error fetching aspirations:', error);
+    return null;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  const randomIndex = Math.floor(Math.random() * data.length);
+  return data[randomIndex] as Aspiration;
+}
+
+const DEFAULT_INSPIRATIONS = [
+  "You've got this! Make today count. 💪",
+  "Every great achievement starts with the decision to try.",
+  "Focus on progress, not perfection.",
+  "Today is a fresh start. Embrace the possibilities.",
+  "Your potential is limitless. Let's make it happen!",
+  "Small steps lead to big changes.",
+  "Believe in yourself and all that you are.",
+  "The journey of a thousand miles begins with one step.",
+  "You are capable of amazing things.",
+  "Make today so awesome that yesterday gets jealous.",
+];
+
+export function getDefaultInspiration(): string {
+  const randomIndex = Math.floor(Math.random() * DEFAULT_INSPIRATIONS.length);
+  return DEFAULT_INSPIRATIONS[randomIndex];
+}
