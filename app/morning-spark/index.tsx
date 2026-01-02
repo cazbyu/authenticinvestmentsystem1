@@ -115,6 +115,13 @@ export default function MorningSparkFuelCheck() {
         return;
       }
 
+      const modeMap = {
+        1: 'recovery',
+        2: 'steady',
+        3: 'sprint',
+      } as const;
+
+      const mode = modeMap[fuelLevel];
       const today = new Date().toISOString().split('T')[0];
 
       if (existingSparkId) {
@@ -122,6 +129,7 @@ export default function MorningSparkFuelCheck() {
           .from('0008-ap-daily-sparks')
           .update({
             fuel_level: fuelLevel,
+            mode: mode,
             updated_at: new Date().toISOString(),
           })
           .eq('id', existingSparkId);
@@ -134,6 +142,7 @@ export default function MorningSparkFuelCheck() {
             user_id: user.id,
             spark_date: today,
             fuel_level: fuelLevel,
+            mode: mode,
           })
           .select()
           .single();
