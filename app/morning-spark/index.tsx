@@ -51,9 +51,9 @@ export default function MorningSparkFuelCheck() {
   const [existingSparkId, setExistingSparkId] = useState<string | null>(null);
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  const thumbPosition = useRef(new Animated.Value(0)).current;
+  const needleRotation = useRef(new Animated.Value(-90)).current;
   const gaugeContainerRef = useRef<View>(null);
-  const [gaugeWidth, setGaugeWidth] = useState(0);
+  const [gaugeDimensions, setGaugeDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     checkExistingSpark();
@@ -84,66 +84,63 @@ export default function MorningSparkFuelCheck() {
   }
 
   useEffect(() => {
-    if (selectedFuel && gaugeWidth > 0) {
-      const zoneWidth = gaugeWidth / 3;
-      const targetPosition = (selectedFuel - 1) * zoneWidth + zoneWidth / 2 - 24;
+    if (selectedFuel) {
+      const rotationMap = {
+        1: -90,
+        2: 0,
+        3: 90,
+      };
 
-      Animated.spring(thumbPosition, {
-        toValue: targetPosition,
-        useNativeDriver: false,
-        tension: 50,
-        friction: 7,
+      Animated.spring(needleRotation, {
+        toValue: rotationMap[selectedFuel],
+        useNativeDriver: true,
+        tension: 40,
+        friction: 8,
       }).start();
     }
-  }, [selectedFuel, gaugeWidth]);
+  }, [selectedFuel]);
+
+  function handleGaugeTap(event: any) {
+    if (gaugeDimensions.width === 0) return;
+
+    setHasInteracted(true);
+
+    const { locationX } = event.nativeEvent;
+    const centerX = gaugeDimensions.width / 2;
+    const relativeX = locationX - centerX;
+
+    let newFuel: FuelLevel;
+    if (relativeX < -gaugeDimensions.width / 6) {
+      newFuel = 1;
+    } else if (relativeX < gaugeDimensions.width / 6) {
+      newFuel = 2;
+    } else {
+      newFuel = 3;
+    }
+
+    if (newFuel !== selectedFuel) {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    }
+
+    setSelectedFuel(newFuel);
+  }
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (evt) => {
         setHasInteracted(true);
+        handleGaugeTap(evt);
       },
-      onPanResponderMove: (evt, gestureState) => {
-        if (gaugeWidth === 0) return;
-
-        const newPosition = Math.max(0, Math.min(gaugeWidth - 48, gestureState.moveX - 20));
-        thumbPosition.setValue(newPosition);
-
-        const zoneWidth = gaugeWidth / 3;
-        const centerPosition = newPosition + 24;
-        let newFuel: FuelLevel;
-
-        if (centerPosition < zoneWidth) {
-          newFuel = 1;
-        } else if (centerPosition < zoneWidth * 2) {
-          newFuel = 2;
-        } else {
-          newFuel = 3;
-        }
-
-        if (newFuel !== selectedFuel) {
-          setSelectedFuel(newFuel);
-          if (Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }
-        }
+      onPanResponderMove: (evt) => {
+        handleGaugeTap(evt);
       },
       onPanResponderRelease: () => {
-        if (selectedFuel && gaugeWidth > 0) {
-          const zoneWidth = gaugeWidth / 3;
-          const targetPosition = (selectedFuel - 1) * zoneWidth + zoneWidth / 2 - 24;
-
-          Animated.spring(thumbPosition, {
-            toValue: targetPosition,
-            useNativeDriver: false,
-            tension: 50,
-            friction: 7,
-          }).start();
-
-          if (Platform.OS !== 'web') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          }
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
       },
     })
@@ -316,54 +313,140 @@ export default function MorningSparkFuelCheck() {
           <View
             ref={gaugeContainerRef}
             onLayout={(event) => {
-              const { width } = event.nativeEvent.layout;
-              setGaugeWidth(width);
+              const { width, height } = event.nativeEvent.layout;
+              setGaugeDimensions({ width, height });
             }}
             style={styles.gaugeContainer}
             {...panResponder.panHandlers}
           >
-            <View style={styles.gaugeTrack}>
-              <View style={[styles.zone, styles.zoneLow, selectedFuel === 1 && styles.zoneActive]} />
-              <View style={[styles.zone, styles.zoneMedium, selectedFuel === 2 && styles.zoneActive]} />
-              <View style={[styles.zone, styles.zoneHigh, selectedFuel === 3 && styles.zoneActive]} />
+            <View style={styles.gaugeArcContainer}>
+              <View style={[styles.arcSegment, styles.arcLeft, { backgroundColor: fuelOptions[0].color }]} />
+              <View style={[styles.arcSegment, styles.arcMiddle, { backgroundColor: fuelOptions[1].color }]} />
+              <View style={[styles.arcSegment, styles.arcRight, { backgroundColor: fuelOptions[2].color }]} />
+
+              <View style={styles.tickMarksContainer}>
+                {Array.from({ length: 11 }).map((_, i) => {
+                  const angle = -90 + (i * 18);
+                  const isActive =
+                    (selectedFuel === 1 && i <= 3) ||
+                    (selectedFuel === 2 && i > 3 && i <= 7) ||
+                    (selectedFuel === 3 && i > 7);
+                  return (
+                    <View
+                      key={i}
+                      style={[
+                        styles.tickMark,
+                        {
+                          transform: [
+                            { rotate: `${angle}deg` },
+                            { translateY: -80 },
+                          ],
+                          backgroundColor: isActive ? '#FFFFFF' : isDarkMode ? '#4B5563' : '#D1D5DB',
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+
+              <View style={styles.needleContainer}>
+                <Animated.View
+                  style={[
+                    styles.needle,
+                    {
+                      backgroundColor: selectedFuel === 1 ? fuelOptions[0].color : selectedFuel === 2 ? fuelOptions[1].color : selectedFuel === 3 ? fuelOptions[2].color : colors.border,
+                      transform: [
+                        { rotate: needleRotation.interpolate({
+                          inputRange: [-90, 90],
+                          outputRange: ['-90deg', '90deg'],
+                        }) },
+                      ],
+                    },
+                  ]}
+                />
+                <View style={[styles.needleCenter, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={styles.needleCenterEmoji}>
+                    {selectedFuel === 1 ? fuelOptions[0].emoji : selectedFuel === 2 ? fuelOptions[1].emoji : selectedFuel === 3 ? fuelOptions[2].emoji : '⚡'}
+                  </Text>
+                </View>
+              </View>
             </View>
 
-            {gaugeWidth > 0 && (
-              <Animated.View
-                style={[
-                  styles.gaugeThumb,
-                  {
-                    left: thumbPosition,
-                    backgroundColor: selectedFuel === 1 ? fuelOptions[0].color : selectedFuel === 2 ? fuelOptions[1].color : fuelOptions[2].color,
-                  },
-                ]}
-              >
-                <Text style={styles.thumbEmoji}>
-                  {selectedFuel === 1 ? fuelOptions[0].emoji : selectedFuel === 2 ? fuelOptions[1].emoji : fuelOptions[2].emoji}
-                </Text>
-              </Animated.View>
-            )}
+            <View style={styles.gaugeLabels}>
+              <View style={styles.gaugeLabelLeft}>
+                <Text style={[styles.gaugeLabelText, { color: fuelOptions[0].color }]}>E</Text>
+                <Text style={[styles.gaugeLabelSubtext, { color: colors.textSecondary }]}>Low</Text>
+              </View>
+              <View style={styles.gaugeLabelRight}>
+                <Text style={[styles.gaugeLabelText, { color: fuelOptions[2].color }]}>F</Text>
+                <Text style={[styles.gaugeLabelSubtext, { color: colors.textSecondary }]}>Full</Text>
+              </View>
+            </View>
           </View>
 
-          <View style={styles.labelsContainer}>
-            <View style={styles.labelItem}>
-              <Text style={[styles.zoneEmoji, selectedFuel === 1 && styles.zoneEmojiActive]}>{fuelOptions[0].emoji}</Text>
-              <Text style={[styles.zoneLabel, { color: selectedFuel === 1 ? fuelOptions[0].color : colors.textSecondary }]}>
-                {fuelOptions[0].label}
+          <View style={styles.levelIndicatorsContainer}>
+            <TouchableOpacity
+              style={[
+                styles.levelIndicator,
+                selectedFuel === 1 && styles.levelIndicatorActive,
+                { borderColor: fuelOptions[0].color },
+              ]}
+              onPress={() => {
+                setHasInteracted(true);
+                setSelectedFuel(1);
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.levelIndicatorEmoji}>{fuelOptions[0].emoji}</Text>
+              <Text style={[styles.levelIndicatorLabel, { color: selectedFuel === 1 ? fuelOptions[0].color : colors.textSecondary }]}>
+                LOW
               </Text>
-            </View>
-            <View style={styles.labelItem}>
-              <Text style={[styles.zoneEmoji, selectedFuel === 2 && styles.zoneEmojiActive]}>{fuelOptions[1].emoji}</Text>
-              <Text style={[styles.zoneLabel, { color: selectedFuel === 2 ? fuelOptions[1].color : colors.textSecondary }]}>
-                {fuelOptions[1].label}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.levelIndicator,
+                selectedFuel === 2 && styles.levelIndicatorActive,
+                { borderColor: fuelOptions[1].color },
+              ]}
+              onPress={() => {
+                setHasInteracted(true);
+                setSelectedFuel(2);
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.levelIndicatorEmoji}>{fuelOptions[1].emoji}</Text>
+              <Text style={[styles.levelIndicatorLabel, { color: selectedFuel === 2 ? fuelOptions[1].color : colors.textSecondary }]}>
+                MEDIUM
               </Text>
-            </View>
-            <View style={styles.labelItem}>
-              <Text style={[styles.zoneEmoji, selectedFuel === 3 && styles.zoneEmojiActive]}>{fuelOptions[2].emoji}</Text>
-              <Text style={[styles.zoneLabel, { color: selectedFuel === 3 ? fuelOptions[2].color : colors.textSecondary }]}>
-                {fuelOptions[2].label}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.levelIndicator,
+                selectedFuel === 3 && styles.levelIndicatorActive,
+                { borderColor: fuelOptions[2].color },
+              ]}
+              onPress={() => {
+                setHasInteracted(true);
+                setSelectedFuel(3);
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.levelIndicatorEmoji}>{fuelOptions[2].emoji}</Text>
+              <Text style={[styles.levelIndicatorLabel, { color: selectedFuel === 3 ? fuelOptions[2].color : colors.textSecondary }]}>
+                HIGH
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           <Text style={[styles.descriptionText, { color: selectedFuel ? colors.text : colors.textSecondary }]}>
@@ -465,71 +548,139 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   gaugeSection: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   gaugeContainer: {
-    height: 80,
+    height: 200,
     marginBottom: 20,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  gaugeTrack: {
-    flexDirection: 'row',
-    height: 60,
-    borderRadius: 30,
-    overflow: 'hidden',
+  gaugeArcContainer: {
+    width: 200,
+    height: 120,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  zone: {
-    flex: 1,
+  arcSegment: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 20,
     opacity: 0.3,
   },
-  zoneLow: {
-    backgroundColor: '#F59E0B',
+  arcLeft: {
+    borderColor: 'transparent',
+    borderTopColor: 'transparent',
+    borderLeftColor: '#F59E0B',
+    borderBottomColor: '#F59E0B',
+    transform: [{ rotate: '-135deg' }],
   },
-  zoneMedium: {
-    backgroundColor: '#3B82F6',
+  arcMiddle: {
+    borderColor: 'transparent',
+    borderTopColor: '#3B82F6',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
+    transform: [{ rotate: '-90deg' }],
   },
-  zoneHigh: {
-    backgroundColor: '#10B981',
+  arcRight: {
+    borderColor: 'transparent',
+    borderTopColor: 'transparent',
+    borderRightColor: '#10B981',
+    borderBottomColor: '#10B981',
+    transform: [{ rotate: '45deg' }],
   },
-  zoneActive: {
-    opacity: 1,
-  },
-  gaugeThumb: {
+  tickMarksContainer: {
     position: 'absolute',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 160,
+    height: 160,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tickMark: {
+    position: 'absolute',
+    width: 2,
+    height: 8,
+    borderRadius: 1,
+  },
+  needleContainer: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  needle: {
+    position: 'absolute',
+    width: 4,
+    height: 70,
+    borderRadius: 2,
+    bottom: 80,
+  },
+  needleCenter: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
   },
-  thumbEmoji: {
-    fontSize: 24,
+  needleCenterEmoji: {
+    fontSize: 20,
   },
-  labelsContainer: {
+  gaugeLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    width: 180,
+    marginTop: -10,
   },
-  labelItem: {
-    alignItems: 'center',
-    flex: 1,
+  gaugeLabelLeft: {
+    alignItems: 'flex-start',
   },
-  zoneEmoji: {
+  gaugeLabelRight: {
+    alignItems: 'flex-end',
+  },
+  gaugeLabelText: {
     fontSize: 20,
-    marginBottom: 4,
-    opacity: 0.5,
+    fontWeight: '700',
   },
-  zoneEmojiActive: {
-    opacity: 1,
-  },
-  zoneLabel: {
+  gaugeLabelSubtext: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  levelIndicatorsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 24,
+  },
+  levelIndicator: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    gap: 4,
+  },
+  levelIndicatorActive: {
+    borderWidth: 3,
+  },
+  levelIndicatorEmoji: {
+    fontSize: 24,
+    marginBottom: 2,
+  },
+  levelIndicatorLabel: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   descriptionText: {
     fontSize: 16,
