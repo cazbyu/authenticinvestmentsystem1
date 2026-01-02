@@ -547,6 +547,30 @@ export default function Dashboard() {
     }
   }, [userId]);
 
+  const handleDevResetSpark = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = formatLocalDate(new Date());
+
+      const { error } = await supabase
+        .from('0008-ap-daily-sparks')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('spark_date', today);
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Today\'s spark has been reset');
+      checkRitualAvailability();
+    } catch (error) {
+      console.error('Error resetting spark:', error);
+      Alert.alert('Error', 'Failed to reset spark');
+    }
+  };
+
   useEffect(() => {
     checkRitualAvailability();
     const interval = setInterval(checkRitualAvailability, 60000);
@@ -1126,6 +1150,16 @@ export default function Dashboard() {
           </TouchableOpacity>
         </Animated.View>
       )}
+
+      <TouchableOpacity
+        style={styles.devResetButton}
+        onPress={handleDevResetSpark}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.devResetText}>
+          Reset Morning Spark (Dev)
+        </Text>
+      </TouchableOpacity>
     </View>
   )}
 
@@ -1464,5 +1498,20 @@ const styles = StyleSheet.create({
       color: 'white',
       fontSize: 18,
       fontWeight: 'bold',
+    },
+    devResetButton: {
+      marginTop: 8,
+      padding: 12,
+      backgroundColor: '#fff',
+      borderRadius: 8,
+      borderWidth: 2,
+      borderColor: '#EF4444',
+      borderStyle: 'dashed',
+      alignItems: 'center',
+    },
+    devResetText: {
+      color: '#EF4444',
+      fontSize: 14,
+      fontWeight: '600',
     },
 });
