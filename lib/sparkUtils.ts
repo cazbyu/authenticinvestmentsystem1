@@ -382,3 +382,115 @@ export function getBrainDumpMessage(fuelLevel: 1 | 2 | 3): string {
       return "Let's capture any wins or opportunities from yesterday!";
   }
 }
+
+export interface DepositIdea {
+  id: string;
+  user_id: string;
+  title: string;
+  is_active: boolean;
+  created_at: string;
+  activated_at?: string;
+  archived: boolean;
+  follow_up: boolean;
+  activated_task_id?: string;
+}
+
+export async function getAvailableDepositIdeas(userId: string, limit: number = 20): Promise<DepositIdea[]> {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('0008-ap-deposit-ideas')
+    .select('*')
+    .eq('user_id', userId)
+    .is('activated_at', null)
+    .eq('archived', false)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching deposit ideas:', error);
+    throw error;
+  }
+
+  return (data || []) as DepositIdea[];
+}
+
+export async function activateDepositIdeas(
+  userId: string,
+  selectedIdeas: DepositIdea[]
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const today = new Date().toISOString().split('T')[0];
+
+  for (const idea of selectedIdeas) {
+    const { data: taskData, error: taskError } = await supabase
+      .from('0008-ap-tasks')
+      .insert({
+        user_id: userId,
+        type: 'task',
+        title: idea.title,
+        start_date: today,
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (taskError) {
+      console.error('Error creating task from deposit idea:', taskError);
+      throw taskError;
+    }
+
+    const { error: updateError } = await supabase
+      .from('0008-ap-deposit-ideas')
+      .update({
+        activated_at: new Date().toISOString(),
+        activated_task_id: taskData.id,
+      })
+      .eq('id', idea.id);
+
+    if (updateError) {
+      console.error('Error updating deposit idea:', updateError);
+      throw updateError;
+    }
+  }
+}
+
+export function calculateDaysAgo(dateString: string): number {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - date.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
+
+export function formatDaysAgo(dateString: string): string {
+  const days = calculateDaysAgo(dateString);
+
+  if (days === 0) {
+    return 'Today';
+  } else if (days === 1) {
+    return 'Yesterday';
+  } else if (days < 7) {
+    return `${days} days ago`;
+  } else if (days < 30) {
+    const weeks = Math.floor(days / 7);
+    return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+  } else if (days < 365) {
+    const months = Math.floor(days / 30);
+    return months === 1 ? '1 month ago' : `${months} months ago`;
+  } else {
+    const years = Math.floor(days / 365);
+    return years === 1 ? '1 year ago' : `${years} years ago`;
+  }
+}
+
+export function getDepositIdeasMessage(fuelLevel: 1 | 2 | 3): string {
+  switch (fuelLevel) {
+    case 1:
+      return 'Only add what feels energizing, not draining. You can skip this entirely.';
+    case 2:
+      return 'Want to activate any saved ideas for today?';
+    case 3:
+      return "Great time to activate some of those ideas you've been saving!";
+  }
+}
