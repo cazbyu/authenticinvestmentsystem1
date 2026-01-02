@@ -229,9 +229,6 @@ export default function SparkScreen() {
                 <Text style={[styles.modeLabel, { color: getFuelColor(fuelLevel) }]}>
                   {getFuelMode(fuelLevel)} Mode
                 </Text>
-                <Text style={[styles.targetScore, { color: colors.text }]}>
-                  Today's Target: {calculateTargetScore(fuelLevel)} points
-                </Text>
                 <Text style={[styles.modeDescription, { color: colors.textSecondary }]}>
                   {getModeDescription(fuelLevel)}
                 </Text>
