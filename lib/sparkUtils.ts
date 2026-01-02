@@ -31,11 +31,11 @@ export function calculateTargetScore(fuelLevel: 1 | 2 | 3): 20 | 35 | 55 {
 export function getFuelMode(fuelLevel: 1 | 2 | 3): 'Recovery' | 'Steady' | 'Sprint' {
   switch (fuelLevel) {
     case 1:
-      return 'Recovery';
+      return 'recovery';
     case 2:
-      return 'Steady';
+      return 'steady';
     case 3:
-      return 'Sprint';
+      return 'sprint';
   }
 }
 
