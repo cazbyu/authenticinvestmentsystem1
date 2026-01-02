@@ -186,7 +186,7 @@ export async function getScheduledActions(userId: string): Promise<ScheduledActi
     .in('type', ['task', 'event'])
     .is('completed_at', null)
     .is('deleted_at', null)
-    .or(`start_date.eq.${today},due_date.eq.${today},due_date.lt.${today}`)
+    .or(`start_date.eq.${today},start_date.lt.${today},due_date.eq.${today},due_date.lt.${today}`)
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('start_time', { ascending: true, nullsFirst: false });
 
@@ -198,14 +198,17 @@ export async function getScheduledActions(userId: string): Promise<ScheduledActi
   const actions = (data || []) as ScheduledAction[];
 
   const overdue = actions.filter(
-    (action) => action.due_date && action.due_date < today
+    (action) => {
+      const checkDate = action.type === 'event' ? action.start_date : action.due_date;
+      return checkDate && checkDate < today;
+    }
   );
 
   const todayActions = actions.filter(
-    (action) =>
-      !action.due_date ||
-      action.due_date === today ||
-      action.start_date === today
+    (action) => {
+      const checkDate = action.type === 'event' ? action.start_date : action.due_date;
+      return checkDate === today || (!checkDate && action.start_date === today);
+    }
   );
 
   const totalTasks = actions.filter((a) => a.type === 'task').length;
