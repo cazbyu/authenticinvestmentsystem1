@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase';
+import { calculateTaskPoints } from './taskUtils';
 
 export interface DailySpark {
   id: string;
@@ -164,6 +165,7 @@ export interface ScheduledAction {
   is_important: boolean;
   is_all_day: boolean;
   completed_at?: string;
+  points?: number;
 }
 
 export interface ScheduledActionsData {
@@ -193,7 +195,63 @@ export async function getScheduledActions(userId: string): Promise<ScheduledActi
     throw error;
   }
 
-  const actions = (data || []) as ScheduledAction[];
+  let actions = (data || []) as ScheduledAction[];
+
+  if (actions.length === 0) {
+    return {
+      overdue: [],
+      today: [],
+      totalTasks: 0,
+      totalEvents: 0,
+    };
+  }
+
+  const taskIds = actions.map((a) => a.id);
+
+  const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+    supabase
+      .from('0008-ap-universal-roles-join')
+      .select('parent_id')
+      .in('parent_id', taskIds)
+      .eq('parent_type', 'task'),
+    supabase
+      .from('0008-ap-universal-domains-join')
+      .select('parent_id')
+      .in('parent_id', taskIds)
+      .eq('parent_type', 'task'),
+    supabase
+      .from('0008-ap-universal-goals-join')
+      .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+      .in('parent_id', taskIds)
+      .eq('parent_type', 'task'),
+  ]);
+
+  const rolesCount = new Map<string, number>();
+  (rolesRes.data || []).forEach((r: any) => {
+    rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+  });
+
+  const domainsCount = new Map<string, number>();
+  (domainsRes.data || []).forEach((d: any) => {
+    domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+  });
+
+  const goalsCount = new Map<string, number>();
+  (goalsRes.data || []).forEach((g: any) => {
+    const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+    if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+      goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+    }
+  });
+
+  actions = actions.map((action) => {
+    const roles = Array(rolesCount.get(action.id) || 0).fill({});
+    const domains = Array(domainsCount.get(action.id) || 0).fill({});
+    const goals = Array(goalsCount.get(action.id) || 0).fill({});
+    const points = calculateTaskPoints(action as any, roles, domains, goals);
+
+    return { ...action, points };
+  });
 
   const overdue = actions.filter(
     (action) => {

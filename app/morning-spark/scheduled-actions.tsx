@@ -75,72 +75,54 @@ export default function ScheduledActionsScreen() {
     );
   }
 
-  function renderActionCard(action: ScheduledAction, isOverdue: boolean) {
+  function renderActionRow(action: ScheduledAction, isOverdue: boolean) {
     const isTask = action.type === 'task';
     const isDueToday = action.due_date === new Date().toISOString().split('T')[0];
-
-    let statusBadge = null;
-    if (isOverdue) {
-      statusBadge = (
-        <View style={[styles.badge, styles.badgeOverdue]}>
-          <Text style={styles.badgeText}>Overdue</Text>
-        </View>
-      );
-    } else if (isDueToday && action.due_date) {
-      statusBadge = (
-        <View style={[styles.badge, styles.badgeDueToday]}>
-          <Text style={styles.badgeText}>Due Today</Text>
-        </View>
-      );
-    } else if (action.start_date) {
-      statusBadge = (
-        <View style={[styles.badge, { backgroundColor: isDarkMode ? '#4B5563' : '#E5E7EB' }]}>
-          <Text style={[styles.badgeText, { color: colors.textSecondary }]}>Scheduled</Text>
-        </View>
-      );
-    }
 
     const timeDisplay = action.start_time
       ? formatTimeDisplay(action.start_time)
       : action.due_date
-      ? 'Due: ' + new Date(action.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      ? new Date(action.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : '';
 
     const iconColor = isOverdue ? '#EF4444' : isDueToday ? '#F59E0B' : colors.textSecondary;
+    const titleColor = isOverdue ? '#EF4444' : isDueToday ? '#F59E0B' : colors.text;
 
     return (
-      <View key={action.id} style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.actionHeader}>
-          <View style={styles.actionIconContainer}>
-            {isTask ? (
-              <CheckSquare size={20} color={iconColor} />
-            ) : (
-              <Calendar size={20} color={iconColor} />
-            )}
-          </View>
-          {statusBadge}
+      <View
+        key={action.id}
+        style={[
+          styles.actionRow,
+          { borderBottomColor: colors.border }
+        ]}
+      >
+        <View style={styles.iconContainer}>
+          {isTask ? (
+            <CheckSquare size={16} color={iconColor} />
+          ) : (
+            <Calendar size={16} color={iconColor} />
+          )}
         </View>
 
-        <Text style={[styles.actionTitle, { color: colors.text }]} numberOfLines={2}>
-          {action.title}
-        </Text>
-
-        {action.description && (
-          <Text style={[styles.actionDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-            {action.description}
+        <View style={styles.actionContent}>
+          <Text style={[styles.actionTitle, { color: titleColor }]} numberOfLines={1}>
+            {action.title}
           </Text>
+          <Text style={[styles.actionMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+            {timeDisplay}
+            {action.is_all_day && ' • All Day'}
+          </Text>
+        </View>
+
+        {isOverdue && (
+          <View style={styles.overdueBadge}>
+            <Text style={styles.overdueBadgeText}>OVERDUE</Text>
+          </View>
         )}
 
-        <View style={styles.actionFooter}>
-          {timeDisplay && (
-            <Text style={[styles.actionTime, { color: colors.textSecondary }]}>
-              {timeDisplay}
-            </Text>
-          )}
-          {action.is_all_day && (
-            <Text style={[styles.allDayBadge, { color: colors.textSecondary }]}>All Day</Text>
-          )}
-        </View>
+        <Text style={[styles.points, { color: '#10B981' }]}>
+          +{action.points ? action.points.toFixed(1) : '2.5'}
+        </Text>
       </View>
     );
   }
@@ -204,26 +186,23 @@ export default function ScheduledActionsScreen() {
             {actionsData.overdue.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <View style={[styles.sectionHeaderLine, { backgroundColor: '#EF4444' }]} />
+                  <View style={[styles.redLine, { backgroundColor: '#EF4444' }]} />
                   <Text style={[styles.sectionTitle, { color: '#EF4444' }]}>
                     Overdue ({actionsData.overdue.length})
                   </Text>
-                  <View style={[styles.sectionHeaderLine, { backgroundColor: '#EF4444' }]} />
+                  <View style={[styles.redLine, { backgroundColor: '#EF4444' }]} />
                 </View>
-                {actionsData.overdue.map((action) => renderActionCard(action, true))}
+                <View style={[styles.actionsTable, { backgroundColor: colors.card }]}>
+                  {actionsData.overdue.map((action) => renderActionRow(action, true))}
+                </View>
               </View>
             )}
 
             {actionsData.today.length > 0 && (
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View style={[styles.sectionHeaderLine, { backgroundColor: colors.border }]} />
-                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                    Today's Schedule ({actionsData.today.length})
-                  </Text>
-                  <View style={[styles.sectionHeaderLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.actionsTable, { backgroundColor: colors.card }]}>
+                  {actionsData.today.map((action) => renderActionRow(action, false))}
                 </View>
-                {actionsData.today.map((action) => renderActionCard(action, false))}
               </View>
             )}
           </>
@@ -328,81 +307,70 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 12,
+    gap: 8,
   },
-  sectionHeaderLine: {
+  redLine: {
     flex: 1,
-    height: 1,
+    height: 2,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  actionCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
+  actionsTable: {
+    borderRadius: 8,
+    overflow: 'hidden',
   },
-  actionHeader: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    gap: 10,
   },
-  actionIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+  iconContainer: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+  actionContent: {
+    flex: 1,
+    gap: 2,
   },
-  badgeOverdue: {
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  actionMeta: {
+    fontSize: 13,
+  },
+  overdueBadge: {
     backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
-  badgeDueToday: {
-    backgroundColor: '#F59E0B',
-  },
-  badgeText: {
+  overdueBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 6,
-    lineHeight: 22,
-  },
-  actionDescription: {
+  points: {
     fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  actionFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  actionTime: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  allDayBadge: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+    minWidth: 40,
+    textAlign: 'right',
   },
   footer: {
     paddingHorizontal: 20,

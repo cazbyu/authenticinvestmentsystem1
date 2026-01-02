@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -49,11 +49,11 @@ export default function MorningSparkFuelCheck() {
   const [saving, setSaving] = useState(false);
   const [selectedFuel, setSelectedFuel] = useState<FuelLevel | null>(null);
   const [existingSparkId, setExistingSparkId] = useState<string | null>(null);
-  const [scaleAnims] = useState([
-    new Animated.Value(1),
-    new Animated.Value(1),
-    new Animated.Value(1),
-  ]);
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  const thumbPosition = useRef(new Animated.Value(0)).current;
+  const gaugeContainerRef = useRef<View>(null);
+  const [gaugeWidth, setGaugeWidth] = useState(0);
 
   useEffect(() => {
     checkExistingSpark();
@@ -83,25 +83,77 @@ export default function MorningSparkFuelCheck() {
     }
   }
 
-  function animateButton(index: number) {
-    Animated.sequence([
-      Animated.timing(scaleAnims[index], {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnims[index], {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }
+  useEffect(() => {
+    if (selectedFuel && gaugeWidth > 0) {
+      const zoneWidth = gaugeWidth / 3;
+      const targetPosition = (selectedFuel - 1) * zoneWidth + zoneWidth / 2 - 24;
 
-  async function handleFuelSelection(fuelLevel: FuelLevel, index: number) {
+      Animated.spring(thumbPosition, {
+        toValue: targetPosition,
+        useNativeDriver: false,
+        tension: 50,
+        friction: 7,
+      }).start();
+    }
+  }, [selectedFuel, gaugeWidth]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        setHasInteracted(true);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (gaugeWidth === 0) return;
+
+        const newPosition = Math.max(0, Math.min(gaugeWidth - 48, gestureState.moveX - 20));
+        thumbPosition.setValue(newPosition);
+
+        const zoneWidth = gaugeWidth / 3;
+        const centerPosition = newPosition + 24;
+        let newFuel: FuelLevel;
+
+        if (centerPosition < zoneWidth) {
+          newFuel = 1;
+        } else if (centerPosition < zoneWidth * 2) {
+          newFuel = 2;
+        } else {
+          newFuel = 3;
+        }
+
+        if (newFuel !== selectedFuel) {
+          setSelectedFuel(newFuel);
+          if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+        }
+      },
+      onPanResponderRelease: () => {
+        if (selectedFuel && gaugeWidth > 0) {
+          const zoneWidth = gaugeWidth / 3;
+          const targetPosition = (selectedFuel - 1) * zoneWidth + zoneWidth / 2 - 24;
+
+          Animated.spring(thumbPosition, {
+            toValue: targetPosition,
+            useNativeDriver: false,
+            tension: 50,
+            friction: 7,
+          }).start();
+
+          if (Platform.OS !== 'web') {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          }
+        }
+      },
+    })
+  ).current;
+
+  async function handleNext() {
+    if (!selectedFuel) return;
+
     try {
       setSaving(true);
-      animateButton(index);
 
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -121,14 +173,14 @@ export default function MorningSparkFuelCheck() {
         3: 'sprint',
       } as const;
 
-      const mode = modeMap[fuelLevel];
+      const mode = modeMap[selectedFuel];
       const today = new Date().toISOString().split('T')[0];
 
       if (existingSparkId) {
         const { error } = await supabase
           .from('0008-ap-daily-sparks')
           .update({
-            fuel_level: fuelLevel,
+            fuel_level: selectedFuel,
             mode: mode,
             updated_at: new Date().toISOString(),
           })
@@ -141,7 +193,7 @@ export default function MorningSparkFuelCheck() {
           .insert({
             user_id: user.id,
             spark_date: today,
-            fuel_level: fuelLevel,
+            fuel_level: selectedFuel,
             mode: mode,
           })
           .select()
@@ -150,8 +202,6 @@ export default function MorningSparkFuelCheck() {
         if (error) throw error;
         if (data) setExistingSparkId(data.id);
       }
-
-      setSelectedFuel(fuelLevel);
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -212,6 +262,18 @@ export default function MorningSparkFuelCheck() {
     return today.toLocaleDateString('en-US', options);
   }
 
+  function getCurrentDescription() {
+    if (!selectedFuel) return 'Drag the indicator to select your energy level';
+
+    const descriptions = {
+      1: 'Need Recovery - I need to focus on essentials and rest',
+      2: 'Steady Pace - I can maintain momentum today',
+      3: 'Full Energy - I\'m ready to maximize today!',
+    };
+
+    return descriptions[selectedFuel];
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -248,57 +310,87 @@ export default function MorningSparkFuelCheck() {
           <Text style={[styles.question, { color: colors.text }]}>
             How's your fuel level today?
           </Text>
-          <Text style={[styles.explanation, { color: colors.textSecondary }]}>
-            This helps us adjust your day's approach to match your energy.
+        </View>
+
+        <View style={styles.gaugeSection}>
+          <View
+            ref={gaugeContainerRef}
+            onLayout={(event) => {
+              const { width } = event.nativeEvent.layout;
+              setGaugeWidth(width);
+            }}
+            style={styles.gaugeContainer}
+            {...panResponder.panHandlers}
+          >
+            <View style={styles.gaugeTrack}>
+              <View style={[styles.zone, styles.zoneLow, selectedFuel === 1 && styles.zoneActive]} />
+              <View style={[styles.zone, styles.zoneMedium, selectedFuel === 2 && styles.zoneActive]} />
+              <View style={[styles.zone, styles.zoneHigh, selectedFuel === 3 && styles.zoneActive]} />
+            </View>
+
+            {gaugeWidth > 0 && (
+              <Animated.View
+                style={[
+                  styles.gaugeThumb,
+                  {
+                    left: thumbPosition,
+                    backgroundColor: selectedFuel === 1 ? fuelOptions[0].color : selectedFuel === 2 ? fuelOptions[1].color : fuelOptions[2].color,
+                  },
+                ]}
+              >
+                <Text style={styles.thumbEmoji}>
+                  {selectedFuel === 1 ? fuelOptions[0].emoji : selectedFuel === 2 ? fuelOptions[1].emoji : fuelOptions[2].emoji}
+                </Text>
+              </Animated.View>
+            )}
+          </View>
+
+          <View style={styles.labelsContainer}>
+            <View style={styles.labelItem}>
+              <Text style={[styles.zoneEmoji, selectedFuel === 1 && styles.zoneEmojiActive]}>{fuelOptions[0].emoji}</Text>
+              <Text style={[styles.zoneLabel, { color: selectedFuel === 1 ? fuelOptions[0].color : colors.textSecondary }]}>
+                {fuelOptions[0].label}
+              </Text>
+            </View>
+            <View style={styles.labelItem}>
+              <Text style={[styles.zoneEmoji, selectedFuel === 2 && styles.zoneEmojiActive]}>{fuelOptions[1].emoji}</Text>
+              <Text style={[styles.zoneLabel, { color: selectedFuel === 2 ? fuelOptions[1].color : colors.textSecondary }]}>
+                {fuelOptions[1].label}
+              </Text>
+            </View>
+            <View style={styles.labelItem}>
+              <Text style={[styles.zoneEmoji, selectedFuel === 3 && styles.zoneEmojiActive]}>{fuelOptions[2].emoji}</Text>
+              <Text style={[styles.zoneLabel, { color: selectedFuel === 3 ? fuelOptions[2].color : colors.textSecondary }]}>
+                {fuelOptions[2].label}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={[styles.descriptionText, { color: selectedFuel ? colors.text : colors.textSecondary }]}>
+            {getCurrentDescription()}
           </Text>
         </View>
 
-        <View style={styles.buttonsContainer}>
-          {fuelOptions.map((option, index) => (
-            <Animated.View
-              key={option.level}
-              style={{ transform: [{ scale: scaleAnims[index] }] }}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.fuelButton,
-                  {
-                    backgroundColor: isDarkMode
-                      ? `${option.color}20`
-                      : `${option.color}15`,
-                    borderColor: selectedFuel === option.level ? option.color : colors.border,
-                    borderWidth: selectedFuel === option.level ? 3 : 1,
-                  },
-                ]}
-                onPress={() => handleFuelSelection(option.level, index)}
-                disabled={saving}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.fuelEmoji}>{option.emoji}</Text>
-                <Text style={[styles.fuelLabel, { color: option.color }]}>
-                  {option.label}
-                </Text>
-                <Text style={[styles.fuelDescription, { color: colors.text }]}>
-                  {option.description}
-                </Text>
-                {selectedFuel === option.level && (
-                  <View style={[styles.selectedBadge, { backgroundColor: option.color }]}>
-                    <Text style={styles.selectedText}>Selected</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </Animated.View>
-          ))}
-        </View>
-
-        {saving && (
-          <View style={styles.savingContainer}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.savingText, { color: colors.textSecondary }]}>
-              Saving your fuel level...
+        <TouchableOpacity
+          style={[
+            styles.nextButton,
+            {
+              backgroundColor: hasInteracted && selectedFuel ? colors.primary : colors.border,
+              opacity: hasInteracted && selectedFuel ? 1 : 0.5,
+            },
+          ]}
+          onPress={handleNext}
+          disabled={!hasInteracted || !selectedFuel || saving}
+          activeOpacity={0.8}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.nextButtonText}>
+              Next →
             </Text>
-          </View>
-        )}
+          )}
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.devResetButton}
@@ -364,67 +456,98 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   questionSection: {
-    marginBottom: 32,
+    marginBottom: 40,
     alignItems: 'center',
   },
   question: {
     fontSize: 24,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 12,
   },
-  explanation: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
+  gaugeSection: {
+    marginBottom: 32,
   },
-  buttonsContainer: {
-    gap: 16,
-  },
-  fuelButton: {
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-    minHeight: 140,
+  gaugeContainer: {
+    height: 80,
+    marginBottom: 20,
     justifyContent: 'center',
-    position: 'relative',
   },
-  fuelEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
+  gaugeTrack: {
+    flexDirection: 'row',
+    height: 60,
+    borderRadius: 30,
+    overflow: 'hidden',
   },
-  fuelLabel: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
+  zone: {
+    flex: 1,
+    opacity: 0.3,
   },
-  fuelDescription: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
+  zoneLow: {
+    backgroundColor: '#F59E0B',
   },
-  selectedBadge: {
+  zoneMedium: {
+    backgroundColor: '#3B82F6',
+  },
+  zoneHigh: {
+    backgroundColor: '#10B981',
+  },
+  zoneActive: {
+    opacity: 1,
+  },
+  gaugeThumb: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  selectedText: {
-    color: '#FFFFFF',
+  thumbEmoji: {
+    fontSize: 24,
+  },
+  labelsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  labelItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  zoneEmoji: {
+    fontSize: 20,
+    marginBottom: 4,
+    opacity: 0.5,
+  },
+  zoneEmojiActive: {
+    opacity: 1,
+  },
+  zoneLabel: {
     fontSize: 12,
     fontWeight: '600',
   },
-  savingContainer: {
-    flexDirection: 'row',
+  descriptionText: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    minHeight: 48,
+  },
+  nextButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
-    gap: 8,
+    marginBottom: 16,
   },
-  savingText: {
-    fontSize: 14,
+  nextButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
   },
   devResetButton: {
     height: 40,
