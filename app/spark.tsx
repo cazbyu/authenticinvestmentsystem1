@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import { ArrowLeft } from 'lucide-react-native';
@@ -30,9 +30,11 @@ export default function SparkScreen() {
   const [scaleAnim] = useState(new Animated.Value(1));
   const [fadeAnim] = useState(new Animated.Value(1));
 
-  useEffect(() => {
-    checkExistingSpark();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      checkExistingSpark();
+    }, [])
+  );
 
   useEffect(() => {
     if (fuelLevel) {
@@ -53,6 +55,7 @@ export default function SparkScreen() {
 
   async function checkExistingSpark() {
     try {
+      setLoading(true);
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -67,6 +70,11 @@ export default function SparkScreen() {
       if (spark) {
         setTodaysSpark(spark);
         setAlreadyCommitted(true);
+      } else {
+        setTodaysSpark(null);
+        setAlreadyCommitted(false);
+        setFuelLevel(null);
+        setSliderTouched(false);
       }
     } catch (error) {
       console.error('Error checking spark:', error);
