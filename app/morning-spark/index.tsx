@@ -300,17 +300,15 @@ export default function MorningSparkFuelCheck() {
           </View>
         )}
 
-        {__DEV__ && (
-          <TouchableOpacity
-            style={styles.devResetButton}
-            onPress={handleDevReset}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.devResetText}>
-              Reset Today's Spark (Dev Only)
-            </Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.devResetButton}
+          onPress={handleDevReset}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.devResetText}>
+            Reset Today's Spark (Dev)
+          </Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
