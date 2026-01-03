@@ -368,12 +368,12 @@ export default function MorningSparkFuelCheck() {
                   styles.needleContainer,
                   {
                     transform: [
-                      { translateY: 85 },
+                      { translateY: 50 },
                       { rotate: needleRotation.interpolate({
                         inputRange: [-90, 90],
                         outputRange: ['-90deg', '90deg'],
                       }) },
-                      { translateY: -85 },
+                      { translateY: -50 },
                     ],
                   },
                 ]}
