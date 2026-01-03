@@ -3,7 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckSquare, Calendar, Check, UserCircle, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, CheckSquare, Calendar, Check, UserCircle, Trash2, X, Info } from 'lucide-react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate } from '@/lib/dateUtils';
@@ -24,11 +26,10 @@ export default function ScheduledActionsScreen() {
   const [actionsData, setActionsData] = useState<ScheduledActionsData | null>(null);
 
   const [isAdjustModalVisible, setIsAdjustModalVisible] = useState(false);
-  const [unsortedTasks, setUnsortedTasks] = useState<ScheduledAction[]>([]);
   const [tasksInKeepZone, setTasksInKeepZone] = useState<ScheduledAction[]>([]);
   const [tasksInRescheduleZone, setTasksInRescheduleZone] = useState<ScheduledAction[]>([]);
   const [tasksInCancelZone, setTasksInCancelZone] = useState<ScheduledAction[]>([]);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -83,60 +84,60 @@ export default function ScheduledActionsScreen() {
     ];
 
     setTasksInKeepZone(allActions);
-    setUnsortedTasks([]);
     setTasksInRescheduleZone([]);
     setTasksInCancelZone([]);
-    setSelectedTaskIds([]);
+    setSelectedTaskId(null);
     setIsAdjustModalVisible(true);
   }
 
-  const toggleTaskSelection = (taskId: string) => {
-    setSelectedTaskIds(prev =>
-      prev.includes(taskId)
-        ? prev.filter(id => id !== taskId)
-        : [...prev, taskId]
-    );
+  const handleTaskSelect = (taskId: string) => {
+    setSelectedTaskId(prev => prev === taskId ? null : taskId);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
   };
 
-  const moveSelectedTasksToZone = (zone: 'keep' | 'reschedule' | 'cancel') => {
-    const allTasks = [...tasksInKeepZone, ...tasksInRescheduleZone, ...tasksInCancelZone];
-    const selectedTasks = allTasks.filter(t => selectedTaskIds.includes(t.id));
+  const moveTaskToZone = (targetZone: 'keep' | 'reschedule' | 'cancel') => {
+    if (!selectedTaskId) return;
 
-    setTasksInKeepZone(prev => prev.filter(t => !selectedTaskIds.includes(t.id)));
-    setTasksInRescheduleZone(prev => prev.filter(t => !selectedTaskIds.includes(t.id)));
-    setTasksInCancelZone(prev => prev.filter(t => !selectedTaskIds.includes(t.id)));
+    let task: ScheduledAction | undefined;
 
-    if (zone === 'keep') {
-      setTasksInKeepZone(prev => [...prev, ...selectedTasks]);
-    } else if (zone === 'reschedule') {
-      setTasksInRescheduleZone(prev => [...prev, ...selectedTasks]);
-    } else if (zone === 'cancel') {
-      setTasksInCancelZone(prev => [...prev, ...selectedTasks]);
+    setTasksInKeepZone(prev => {
+      const found = prev.find(t => t.id === selectedTaskId);
+      if (found) task = found;
+      return prev.filter(t => t.id !== selectedTaskId);
+    });
+
+    setTasksInRescheduleZone(prev => {
+      if (!task) {
+        const found = prev.find(t => t.id === selectedTaskId);
+        if (found) task = found;
+      }
+      return prev.filter(t => t.id !== selectedTaskId);
+    });
+
+    setTasksInCancelZone(prev => {
+      if (!task) {
+        const found = prev.find(t => t.id === selectedTaskId);
+        if (found) task = found;
+      }
+      return prev.filter(t => t.id !== selectedTaskId);
+    });
+
+    if (task) {
+      if (targetZone === 'keep') {
+        setTasksInKeepZone(prev => [...prev, task!]);
+      } else if (targetZone === 'reschedule') {
+        setTasksInRescheduleZone(prev => [...prev, task!]);
+      } else if (targetZone === 'cancel') {
+        setTasksInCancelZone(prev => [...prev, task!]);
+      }
     }
 
-    setSelectedTaskIds([]);
+    setSelectedTaskId(null);
 
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  };
-
-  const removeTaskFromZone = (taskId: string) => {
-    let removedTask: ScheduledAction | undefined;
-
-    setTasksInRescheduleZone(prev => {
-      const task = prev.find(t => t.id === taskId);
-      if (task) removedTask = task;
-      return prev.filter(t => t.id !== taskId);
-    });
-    setTasksInCancelZone(prev => {
-      const task = prev.find(t => t.id === taskId);
-      if (task) removedTask = task;
-      return prev.filter(t => t.id !== taskId);
-    });
-
-    if (removedTask) {
-      setTasksInKeepZone(prev => [...prev, removedTask!]);
     }
   };
 
@@ -146,7 +147,7 @@ export default function ScheduledActionsScreen() {
 
       Alert.alert(
         'Confirm Deletion',
-        `The following tasks will be deleted:\n\n${taskNames}\n\nAre you sure?`,
+        `The following tasks will be permanently deleted:\n\n${taskNames}\n\nThis cannot be undone. Are you sure?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -201,7 +202,7 @@ export default function ScheduledActionsScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert('Success', 'Schedule adjusted!');
+      Alert.alert('Success', 'Your schedule has been updated!');
       setIsAdjustModalVisible(false);
 
       await loadData();
@@ -347,68 +348,99 @@ export default function ScheduledActionsScreen() {
     );
   }
 
-  const TaskSelectionCard = ({ task, isSelected }: { task: ScheduledAction; isSelected: boolean }) => (
-    <TouchableOpacity
-      style={[
-        styles.taskSelectionCard,
-        isSelected && styles.taskSelectionCardSelected
-      ]}
-      onPress={() => toggleTaskSelection(task.id)}
-    >
-      <View style={[
-        styles.checkbox,
-        isSelected && styles.checkboxSelected
-      ]}>
-        {isSelected && <Check size={16} color="#fff" />}
-      </View>
-      <View style={styles.taskInfo}>
-        <Text style={styles.taskTitle}>{task.title}</Text>
-        <Text style={styles.taskTime}>
-          {task.start_time ? formatTimeDisplay(task.start_time) : 'No time'}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const ZoneTooltip = ({ message }: { message: string }) => {
+    const [visible, setVisible] = useState(false);
 
-  const DropZone = ({
+    return (
+      <View style={styles.tooltipContainer}>
+        <TouchableOpacity
+          onPress={() => setVisible(!visible)}
+          style={styles.tooltipButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Info size={18} color="#6b7280" />
+        </TouchableOpacity>
+        {visible && (
+          <View style={styles.tooltipBubble}>
+            <Text style={styles.tooltipText}>{message}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const DraggableTaskCard = ({ item, drag, isActive }: RenderItemParams<ScheduledAction>) => {
+    const isSelected = selectedTaskId === item.id;
+
+    return (
+      <ScaleDecorator>
+        <View
+          style={[
+            styles.draggableCard,
+            isActive && styles.draggableCardActive,
+            isSelected && styles.draggableCardSelected,
+          ]}
+        >
+          <TouchableOpacity
+            onLongPress={drag}
+            disabled={isActive}
+            style={styles.dragHandle}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.dragHandleIcon}>⋮⋮</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleTaskSelect(item.id)}
+            disabled={isActive}
+            style={styles.taskContent}
+          >
+            <Text style={styles.taskTitle}>{item.title}</Text>
+            <Text style={styles.taskTime}>
+              {item.start_time ? formatTimeDisplay(item.start_time) : 'No time'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScaleDecorator>
+    );
+  };
+
+  const DraggableDropZone = ({
     title,
     subtitle,
     color,
     tasks,
-    infoMessage
+    tooltipMessage,
+    onReorder,
   }: {
     title: string;
     subtitle: string;
     color: string;
     tasks: ScheduledAction[];
-    infoMessage?: string;
+    tooltipMessage: string;
+    onReorder: (data: ScheduledAction[]) => void;
   }) => (
     <View style={[styles.dropZone, { borderColor: color }]}>
       <View style={[styles.dropZoneHeader, { backgroundColor: color + '20' }]}>
-        <Text style={[styles.dropZoneTitle, { color }]}>{title}</Text>
+        <View style={styles.headerRow}>
+          <Text style={[styles.dropZoneTitle, { color }]}>{title}</Text>
+          <ZoneTooltip message={tooltipMessage} />
+        </View>
         <Text style={styles.dropZoneSubtitle}>{subtitle}</Text>
       </View>
 
-      {infoMessage && (
-        <TouchableOpacity
-          style={styles.infoButton}
-          onPress={() => Alert.alert('Custom Date', infoMessage)}
-        >
-          <Text style={styles.infoText}>Need a different date? 📅</Text>
-        </TouchableOpacity>
-      )}
-
       <View style={styles.dropZoneContent}>
         {tasks.length === 0 ? (
-          <Text style={styles.emptyZoneText}>No tasks here yet</Text>
+          <View style={styles.emptyDropZone}>
+            <Text style={styles.emptyZoneText}>Drag tasks here</Text>
+          </View>
         ) : (
-          tasks.map(task => (
-            <TaskSelectionCard
-              key={task.id}
-              task={task}
-              isSelected={selectedTaskIds.includes(task.id)}
-            />
-          ))
+          <DraggableFlatList
+            data={tasks}
+            onDragEnd={({ data }) => onReorder(data)}
+            keyExtractor={(item) => item.id}
+            renderItem={DraggableTaskCard}
+            containerStyle={styles.draggableListContainer}
+          />
         )}
       </View>
     </View>
@@ -524,81 +556,87 @@ export default function ScheduledActionsScreen() {
         presentationStyle="formSheet"
         onRequestClose={() => setIsAdjustModalVisible(false)}
       >
-        <SafeAreaView style={styles.adjustModalContainer}>
-          <View style={styles.adjustHeader}>
-            <TouchableOpacity onPress={() => setIsAdjustModalVisible(false)}>
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.adjustTitle, { color: colors.text }]}>Adjust Today's Schedule</Text>
-            <View style={{ width: 24 }} />
-          </View>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <SafeAreaView style={styles.adjustModalContainer}>
+            <View style={styles.adjustHeader}>
+              <Text style={[styles.adjustTitle, { color: colors.text }]}>Adjust Today's Schedule</Text>
+              <TouchableOpacity onPress={() => setIsAdjustModalVisible(false)}>
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
 
-          <ScrollView style={styles.adjustContent}>
-            <Text style={[styles.sortInstructions, { color: colors.textSecondary }]}>
-              Sort as desired. Select tasks and move them between zones.
-            </Text>
+            <ScrollView style={styles.adjustContent}>
+              <Text style={[styles.sortInstructions, { color: colors.textSecondary }]}>
+                Tap a task to select it, then use the buttons to move between zones. Long-press the grip icon (⋮⋮) to reorder within a zone.
+              </Text>
 
-            <DropZone
-              title="KEEP AS IS"
-              subtitle="✓ These will stay on today"
-              color="#10B981"
-              tasks={tasksInKeepZone}
-            />
+              <DraggableDropZone
+                title="KEEP AS IS"
+                subtitle="✓ These will stay on today"
+                color="#10B981"
+                tasks={tasksInKeepZone}
+                tooltipMessage="These tasks will remain scheduled for today."
+                onReorder={(data) => setTasksInKeepZone(data)}
+              />
 
-            <DropZone
-              title="RESCHEDULE (+1 Day)"
-              subtitle="📅 Tomorrow"
-              color="#3B82F6"
-              tasks={tasksInRescheduleZone}
-              infoMessage="Need a different date? Let's finish the morning spark, then we can reschedule these tasks and events."
-            />
+              <DraggableDropZone
+                title="RESCHEDULE (+1 Day)"
+                subtitle="📅 Tomorrow"
+                color="#3B82F6"
+                tasks={tasksInRescheduleZone}
+                tooltipMessage="These tasks will be rescheduled for tomorrow. You can change to a different date after completing the Morning Spark."
+                onReorder={(data) => setTasksInRescheduleZone(data)}
+              />
 
-            <DropZone
-              title="CANCEL"
-              subtitle="🗑️ These will be deleted"
-              color="#EF4444"
-              tasks={tasksInCancelZone}
-            />
+              <DraggableDropZone
+                title="CANCEL"
+                subtitle="🗑️ These will be deleted"
+                color="#EF4444"
+                tasks={tasksInCancelZone}
+                tooltipMessage="These tasks will be permanently deleted. This cannot be undone."
+                onReorder={(data) => setTasksInCancelZone(data)}
+              />
+            </ScrollView>
 
-            {selectedTaskIds.length > 0 && (
-              <View style={styles.actionButtons}>
+            {selectedTaskId && (
+              <View style={styles.zoneMoveButtons}>
                 <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: '#10B981' }]}
-                  onPress={() => moveSelectedTasksToZone('keep')}
+                  style={[styles.zoneMoveButton, { backgroundColor: '#10B981' }]}
+                  onPress={() => moveTaskToZone('keep')}
                 >
-                  <Text style={styles.actionButtonText}>Move to Keep</Text>
+                  <Text style={styles.zoneMoveText}>Move to Keep</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: '#3B82F6' }]}
-                  onPress={() => moveSelectedTasksToZone('reschedule')}
+                  style={[styles.zoneMoveButton, { backgroundColor: '#3B82F6' }]}
+                  onPress={() => moveTaskToZone('reschedule')}
                 >
-                  <Text style={styles.actionButtonText}>Move to Reschedule</Text>
+                  <Text style={styles.zoneMoveText}>Move to Reschedule</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: '#EF4444' }]}
-                  onPress={() => moveSelectedTasksToZone('cancel')}
+                  style={[styles.zoneMoveButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => moveTaskToZone('cancel')}
                 >
-                  <Text style={styles.actionButtonText}>Move to Cancel</Text>
+                  <Text style={styles.zoneMoveText}>Move to Cancel</Text>
                 </TouchableOpacity>
               </View>
             )}
-          </ScrollView>
 
-          <View style={[styles.adjustFooter, { borderTopColor: colors.border }]}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setIsAdjustModalVisible(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSaveAdjustments}
-            >
-              <Text style={styles.saveButtonText}>Save Changes</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+            <View style={[styles.adjustFooter, { borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setIsAdjustModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveAdjustments}
+              >
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </GestureHandlerRootView>
       </Modal>
     </SafeAreaView>
   );
@@ -813,9 +851,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   dropZoneHeader: {
     padding: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   dropZoneTitle: {
     fontSize: 14,
@@ -828,70 +873,86 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dropZoneContent: {
-    padding: 12,
-    minHeight: 80,
+    minHeight: 100,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  emptyDropZone: {
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
   },
   emptyZoneText: {
     fontSize: 14,
     color: '#9ca3af',
     fontStyle: 'italic',
-    textAlign: 'center',
-    paddingVertical: 20,
   },
-  infoButton: {
-    padding: 8,
-    backgroundColor: '#eff6ff',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#dbeafe',
+  tooltipContainer: {
+    position: 'relative',
   },
-  infoText: {
+  tooltipButton: {
+    padding: 4,
+  },
+  tooltipBubble: {
+    position: 'absolute',
+    right: 0,
+    top: 30,
+    backgroundColor: '#1f2937',
+    padding: 12,
+    borderRadius: 8,
+    width: 220,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  tooltipText: {
+    color: '#fff',
     fontSize: 12,
-    color: '#3b82f6',
-    textAlign: 'center',
+    lineHeight: 18,
   },
-  tasksToSortSection: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-  },
-  sectionTitleAdjust: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#6b7280',
-    marginBottom: 12,
-    letterSpacing: 0.5,
-  },
-  taskSelectionCard: {
+  draggableCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     backgroundColor: '#fff',
     borderRadius: 8,
     marginBottom: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  taskSelectionCardSelected: {
+  draggableCardActive: {
+    backgroundColor: '#f3f4f6',
     borderColor: '#3b82f6',
+    shadowOpacity: 0.3,
+    elevation: 4,
+  },
+  draggableCardSelected: {
     backgroundColor: '#eff6ff',
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#d1d5db',
-    marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxSelected: {
-    backgroundColor: '#3b82f6',
     borderColor: '#3b82f6',
+    borderWidth: 2,
   },
-  taskInfo: {
+  dragHandle: {
+    marginRight: 12,
+    paddingVertical: 4,
+  },
+  dragHandleIcon: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  taskContent: {
     flex: 1,
   },
   taskTitle: {
@@ -904,36 +965,26 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
-  zonedTaskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 10,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    marginBottom: 6,
-  },
-  zonedTaskTitle: {
-    fontSize: 14,
-    color: '#1f2937',
+  draggableListContainer: {
     flex: 1,
   },
-  removeButton: {
-    padding: 4,
-  },
-  actionButtons: {
-    marginTop: 16,
+  zoneMoveButtons: {
+    flexDirection: 'row',
     gap: 8,
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
   },
-  actionButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  zoneMoveButton: {
+    flex: 1,
+    paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
   },
-  actionButtonText: {
+  zoneMoveText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   adjustFooter: {
