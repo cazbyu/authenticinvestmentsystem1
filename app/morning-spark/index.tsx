@@ -232,7 +232,16 @@ export default function MorningSparkFuelCheck() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert('Success', 'Spark reset! You can now test the flow again.');
+      Alert.alert(
+        'Success',
+        'Spark reset! Returning to dashboard...',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/(tabs)/dashboard')
+          }
+        ]
+      );
     } catch (error) {
       console.error('Error in dev reset:', error);
       Alert.alert('Error', `Failed to reset spark: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -359,10 +368,12 @@ export default function MorningSparkFuelCheck() {
                   styles.needleContainer,
                   {
                     transform: [
+                      { translateY: 85 },
                       { rotate: needleRotation.interpolate({
                         inputRange: [-90, 90],
                         outputRange: ['-90deg', '90deg'],
                       }) },
+                      { translateY: -85 },
                     ],
                   },
                 ]}
