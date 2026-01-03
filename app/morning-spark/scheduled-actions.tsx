@@ -82,8 +82,8 @@ export default function ScheduledActionsScreen() {
       ...(actionsData?.today || []),
     ];
 
-    setUnsortedTasks(allActions);
-    setTasksInKeepZone([]);
+    setTasksInKeepZone(allActions);
+    setUnsortedTasks([]);
     setTasksInRescheduleZone([]);
     setTasksInCancelZone([]);
     setSelectedTaskIds([]);
@@ -99,13 +99,12 @@ export default function ScheduledActionsScreen() {
   };
 
   const moveSelectedTasksToZone = (zone: 'keep' | 'reschedule' | 'cancel') => {
-    const selectedTasks = unsortedTasks.filter(t =>
-      selectedTaskIds.includes(t.id)
-    );
+    const allTasks = [...tasksInKeepZone, ...tasksInRescheduleZone, ...tasksInCancelZone];
+    const selectedTasks = allTasks.filter(t => selectedTaskIds.includes(t.id));
 
-    setUnsortedTasks(prev =>
-      prev.filter(t => !selectedTaskIds.includes(t.id))
-    );
+    setTasksInKeepZone(prev => prev.filter(t => !selectedTaskIds.includes(t.id)));
+    setTasksInRescheduleZone(prev => prev.filter(t => !selectedTaskIds.includes(t.id)));
+    setTasksInCancelZone(prev => prev.filter(t => !selectedTaskIds.includes(t.id)));
 
     if (zone === 'keep') {
       setTasksInKeepZone(prev => [...prev, ...selectedTasks]);
@@ -125,11 +124,6 @@ export default function ScheduledActionsScreen() {
   const removeTaskFromZone = (taskId: string) => {
     let removedTask: ScheduledAction | undefined;
 
-    setTasksInKeepZone(prev => {
-      const task = prev.find(t => t.id === taskId);
-      if (task) removedTask = task;
-      return prev.filter(t => t.id !== taskId);
-    });
     setTasksInRescheduleZone(prev => {
       const task = prev.find(t => t.id === taskId);
       if (task) removedTask = task;
@@ -142,7 +136,7 @@ export default function ScheduledActionsScreen() {
     });
 
     if (removedTask) {
-      setUnsortedTasks(prev => [...prev, removedTask!]);
+      setTasksInKeepZone(prev => [...prev, removedTask!]);
     }
   };
 
@@ -409,15 +403,11 @@ export default function ScheduledActionsScreen() {
           <Text style={styles.emptyZoneText}>No tasks here yet</Text>
         ) : (
           tasks.map(task => (
-            <View key={task.id} style={styles.zonedTaskCard}>
-              <Text style={styles.zonedTaskTitle}>{task.title}</Text>
-              <TouchableOpacity
-                onPress={() => removeTaskFromZone(task.id)}
-                style={styles.removeButton}
-              >
-                <X size={16} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
+            <TaskSelectionCard
+              key={task.id}
+              task={task}
+              isSelected={selectedTaskIds.includes(task.id)}
+            />
           ))
         )}
       </View>
@@ -544,6 +534,10 @@ export default function ScheduledActionsScreen() {
           </View>
 
           <ScrollView style={styles.adjustContent}>
+            <Text style={[styles.sortInstructions, { color: colors.textSecondary }]}>
+              Sort as desired. Select tasks and move them between zones.
+            </Text>
+
             <DropZone
               title="KEEP AS IS"
               subtitle="✓ These will stay on today"
@@ -565,19 +559,6 @@ export default function ScheduledActionsScreen() {
               color="#EF4444"
               tasks={tasksInCancelZone}
             />
-
-            {unsortedTasks.length > 0 && (
-              <View style={styles.tasksToSortSection}>
-                <Text style={styles.sectionTitleAdjust}>TASKS TO SORT</Text>
-                {unsortedTasks.map(task => (
-                  <TaskSelectionCard
-                    key={task.id}
-                    task={task}
-                    isSelected={selectedTaskIds.includes(task.id)}
-                  />
-                ))}
-              </View>
-            )}
 
             {selectedTaskIds.length > 0 && (
               <View style={styles.actionButtons}>
@@ -820,6 +801,12 @@ const styles = StyleSheet.create({
   adjustContent: {
     flex: 1,
     padding: 16,
+  },
+  sortInstructions: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 16,
   },
   dropZone: {
     borderWidth: 2,
