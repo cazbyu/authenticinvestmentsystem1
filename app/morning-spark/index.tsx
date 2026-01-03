@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform, Image, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -265,7 +265,12 @@ export default function MorningSparkFuelCheck() {
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
         <View style={styles.titleSection}>
           <Text style={styles.sparkEmoji}>✨</Text>
           <Text style={[styles.pageTitle, { color: colors.text }]}>Morning Spark</Text>
@@ -280,10 +285,10 @@ export default function MorningSparkFuelCheck() {
 
         <View style={styles.gaugeSection}>
           <View style={styles.gaugeContainer}>
-            {/* SVG Gauge Background */}
+            {/* PNG Gauge Background */}
             <View style={styles.gaugeSvgContainer}>
               <Image
-                source={require('@/assets/images/gauge-bg.svg')}
+                source={require('@/assets/images/gauge-bg.png')}
                 style={styles.gaugeBg}
                 resizeMode="contain"
               />
@@ -453,7 +458,10 @@ export default function MorningSparkFuelCheck() {
             Reset Today's Spark (Dev)
           </Text>
         </TouchableOpacity>
-      </View>
+
+        <View style={{ height: 40 }} />
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -461,6 +469,12 @@ export default function MorningSparkFuelCheck() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -486,7 +500,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   content: {
-    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 32,
   },
