@@ -6,8 +6,9 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { CheckSquare, Calendar } from 'lucide-react-native';
+import { CheckSquare, Calendar, Check, UserCircle, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
@@ -37,6 +38,10 @@ interface ActionsTableViewProps {
   period: TimePeriod;
   userId: string;
   onRefresh?: () => void;
+  onTaskPress?: (taskId: string) => void;
+  onComplete?: (taskId: string) => void;
+  onDelegate?: (taskId: string) => void;
+  onDelete?: (taskId: string) => void;
 }
 
 function getDateRange(period: TimePeriod): { start: Date; end: Date } {
@@ -74,6 +79,10 @@ export function ActionsTableView({
   period,
   userId,
   onRefresh,
+  onTaskPress,
+  onComplete,
+  onDelegate,
+  onDelete,
 }: ActionsTableViewProps) {
   const { colors } = useTheme();
   const [dateGroups, setDateGroups] = useState<DateWithActions[]>([]);
@@ -317,31 +326,98 @@ export function ActionsTableView({
     }
   };
 
+  const handleComplete = (action: ActionItem) => {
+    if (onComplete) {
+      onComplete(action.id);
+      loadActions();
+      if (onRefresh) onRefresh();
+    }
+  };
+
+  const handleDelegate = (action: ActionItem) => {
+    if (onDelegate) {
+      onDelegate(action.id);
+    }
+  };
+
+  const handleDelete = (action: ActionItem) => {
+    Alert.alert(
+      'Delete Action',
+      `Are you sure you want to delete "${action.title}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            if (onDelete) {
+              onDelete(action.id);
+              loadActions();
+              if (onRefresh) onRefresh();
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderActionItem = (action: ActionItem) => {
     const priorityColor = getPriorityColor(action);
 
     return (
       <View key={action.id} style={styles.actionRow}>
-        <View style={styles.iconContainer}>
-          {action.type === 'task' ? (
-            <CheckSquare size={16} color={colors.primary} />
-          ) : (
-            <Calendar size={16} color={colors.primary} />
-          )}
+        <View style={styles.quickActionsContainer}>
+          <TouchableOpacity
+            onPress={() => handleComplete(action)}
+            style={styles.quickActionButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Check size={18} color="#22c55e" strokeWidth={2.5} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleDelegate(action)}
+            style={styles.quickActionButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <UserCircle size={18} color="#3b82f6" strokeWidth={2} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleDelete(action)}
+            style={styles.quickActionButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Trash2 size={18} color="#ef4444" strokeWidth={2} />
+          </TouchableOpacity>
         </View>
-        <View style={styles.actionContent}>
-          <Text style={[styles.actionText, { color: priorityColor }]} numberOfLines={1}>
-            {action.title}
-            {action.isOverdue && action.originalDate && (
-              <Text style={styles.overdueText}>
-                {' '}(Overdue - {formatOverdueDate(action.originalDate)})
-              </Text>
+        <TouchableOpacity
+          style={styles.taskInfoContainer}
+          onPress={() => onTaskPress && onTaskPress(action.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconContainer}>
+            {action.type === 'task' ? (
+              <CheckSquare size={16} color={colors.primary} />
+            ) : (
+              <Calendar size={16} color={colors.primary} />
             )}
-          </Text>
-        </View>
-        <View style={styles.valueContainer}>
-          <Text style={styles.valueText}>+{action.depositValue.toFixed(1)}</Text>
-        </View>
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={[styles.actionText, { color: priorityColor }]} numberOfLines={1}>
+              {action.title}
+              {action.isOverdue && action.originalDate && (
+                <Text style={styles.overdueText}>
+                  {' '}(Overdue - {formatOverdueDate(action.originalDate)})
+                </Text>
+              )}
+            </Text>
+          </View>
+          <View style={styles.valueContainer}>
+            <Text style={styles.valueText}>+{action.depositValue.toFixed(1)}</Text>
+          </View>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -455,6 +531,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  quickActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginRight: 8,
+  },
+  quickActionButton: {
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  taskInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
   iconContainer: {
     width: 16,

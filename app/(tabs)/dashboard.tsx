@@ -1185,6 +1185,71 @@ export default function Dashboard() {
               refreshScore();
               loadJournalPeriodScore();
             }}
+            onTaskPress={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  setSelectedTask(task as Task);
+                  setIsDetailModalVisible(true);
+                }
+              } catch (error) {
+                console.error('Error loading task:', error);
+              }
+            }}
+            onComplete={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  await handleCompleteTask(task as Task);
+                }
+              } catch (error) {
+                console.error('Error completing task:', error);
+                Alert.alert('Error', 'Failed to complete task');
+              }
+            }}
+            onDelegate={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  await handleDelegateTask(task as Task);
+                  setIsDelegateModalVisible(true);
+                }
+              } catch (error) {
+                console.error('Error delegating task:', error);
+                Alert.alert('Error', 'Failed to delegate task');
+              }
+            }}
+            onDelete={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  await handleDeleteTask(task as Task);
+                }
+              } catch (error) {
+                console.error('Error deleting task:', error);
+                Alert.alert('Error', 'Failed to delete task');
+              }
+            }}
           />
         ) : activeTab === 'journal' ? (
           <JournalView
