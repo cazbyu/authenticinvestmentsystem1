@@ -89,9 +89,9 @@ export default function MorningSparkFuelCheck() {
   useEffect(() => {
     if (selectedFuel) {
       const rotationMap = {
-        1: -60,
+        1: -90,
         2: 0,
-        3: 60,
+        3: 90,
       };
 
       Animated.spring(needleRotation, {
@@ -334,42 +334,26 @@ export default function MorningSparkFuelCheck() {
                 </TouchableOpacity>
               </Animated.View>
 
-              {/* Animated Needle */}
+              {/* Animated Needle SVG */}
               <Animated.View
                 style={[
                   styles.needleContainer,
                   {
                     transform: [
                       { rotate: needleRotation.interpolate({
-                        inputRange: [-60, 60],
-                        outputRange: ['-60deg', '60deg'],
+                        inputRange: [-90, 90],
+                        outputRange: ['-90deg', '90deg'],
                       }) },
                     ],
                   },
                 ]}
               >
-                <View
-                  style={[
-                    styles.needle,
-                    {
-                      backgroundColor: selectedFuel
-                        ? fuelOptions[selectedFuel - 1].color
-                        : isDarkMode
-                        ? '#6B7280'
-                        : '#9CA3AF',
-                    },
-                  ]}
+                <Image
+                  source={require('@/assets/images/gauge-needle.svg')}
+                  style={styles.needleSvg}
+                  resizeMode="contain"
                 />
               </Animated.View>
-
-              {/* Needle pivot center */}
-              <View style={[styles.needleCenter, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={[styles.needleCenterDot, {
-                  backgroundColor: selectedFuel
-                    ? fuelOptions[selectedFuel - 1].color
-                    : colors.border,
-                }]} />
-              </View>
             </View>
 
             {/* E and F labels */}
@@ -585,37 +569,16 @@ const styles = StyleSheet.create({
   },
   needleContainer: {
     position: 'absolute',
-    bottom: 20,
-    width: 6,
-    height: 90,
+    bottom: 16,
+    width: 40,
+    height: 100,
     alignItems: 'center',
+    justifyContent: 'flex-end',
     zIndex: 5,
   },
-  needle: {
-    width: 6,
-    height: '100%',
-    borderRadius: 3,
-  },
-  needleCenter: {
-    position: 'absolute',
-    bottom: 20,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  needleCenterDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  needleSvg: {
+    width: 40,
+    height: 100,
   },
   gaugeLabels: {
     flexDirection: 'row',
