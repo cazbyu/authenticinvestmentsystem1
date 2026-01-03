@@ -193,6 +193,10 @@ export default function MorningSparkFuelCheck() {
 
   async function handleDevReset() {
     try {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -211,17 +215,27 @@ export default function MorningSparkFuelCheck() {
 
       if (error) {
         console.error('Error resetting spark:', error);
-        Alert.alert('Error', 'Failed to reset spark. Please try again.');
+        Alert.alert('Error', `Failed to reset spark: ${error.message}`);
         return;
       }
 
       setExistingSparkId(null);
       setSelectedFuel(null);
+      setHasInteracted(false);
+
+      needleRotation.setValue(0);
+      iconScales[1].setValue(1);
+      iconScales[2].setValue(1);
+      iconScales[3].setValue(1);
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
 
       Alert.alert('Success', 'Spark reset! You can now test the flow again.');
     } catch (error) {
       console.error('Error in dev reset:', error);
-      Alert.alert('Error', 'Failed to reset spark. Please try again.');
+      Alert.alert('Error', `Failed to reset spark: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
