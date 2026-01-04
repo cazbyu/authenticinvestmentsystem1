@@ -23,9 +23,12 @@ interface ActionItem {
   start_date: string | null;
   is_urgent: boolean;
   is_important: boolean;
+  is_deposit_idea: boolean;
   depositValue: number;
   isOverdue?: boolean;
   originalDate?: string;
+  roles?: any[];
+  domains?: any[];
 }
 
 interface DateWithActions {
@@ -105,7 +108,7 @@ export function ActionsTableView({
       if (filter === 'task') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'task')
           .in('status', ['pending', 'in_progress'])
@@ -124,7 +127,7 @@ export function ActionsTableView({
       } else if (filter === 'event') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'event')
           .in('status', ['pending', 'in_progress'])
@@ -143,7 +146,7 @@ export function ActionsTableView({
       } else {
         const tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'task')
           .in('status', ['pending', 'in_progress'])
@@ -152,7 +155,7 @@ export function ActionsTableView({
 
         const eventsQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important')
+          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'event')
           .in('status', ['pending', 'in_progress'])
@@ -246,9 +249,12 @@ export function ActionsTableView({
             start_date: task.start_date,
             is_urgent: task.is_urgent,
             is_important: task.is_important,
+            is_deposit_idea: task.is_deposit_idea || false,
             depositValue: score,
             isOverdue,
             originalDate: isOverdue ? displayDate : undefined,
+            roles: roles,
+            domains: domains,
           };
         });
 
@@ -413,9 +419,23 @@ export function ActionsTableView({
                 </Text>
               )}
             </Text>
+            {(action.roles && action.roles.length > 0) || (action.domains && action.domains.length > 0) ? (
+              <View style={styles.tagsContainer}>
+                {action.roles?.map((role: any, idx: number) => (
+                  <View key={`role-${idx}`} style={[styles.tag, styles.roleTag]}>
+                    <Text style={styles.tagText}>{role.label}</Text>
+                  </View>
+                ))}
+                {action.domains?.map((domain: any, idx: number) => (
+                  <View key={`domain-${idx}`} style={[styles.tag, styles.domainTag]}>
+                    <Text style={styles.tagText}>{domain.name}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
           <View style={styles.valueContainer}>
-            <Text style={styles.valueText}>+{action.depositValue.toFixed(1)}</Text>
+            <Text style={styles.valueText}>+{Math.round(action.depositValue)}</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -593,5 +613,30 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     flexGrow: 1,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  tag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  roleTag: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  domainTag: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#10B981',
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1F2937',
   },
 });

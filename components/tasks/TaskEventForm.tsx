@@ -1328,6 +1328,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         is_urgent: formData.isUrgent,
         is_important: formData.isImportant,
         is_twelve_week_goal: formData.isGoal,
+        is_deposit_idea: initialData?.is_deposit_idea || false,
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
         // Parent relationship for follow-through items

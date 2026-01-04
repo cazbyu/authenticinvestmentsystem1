@@ -843,6 +843,7 @@ export default function Dashboard() {
           type: 'task',
           status: 'pending',
           due_date: formatLocalDate(new Date()),
+          is_deposit_idea: true,
         })
         .select()
         .single();
