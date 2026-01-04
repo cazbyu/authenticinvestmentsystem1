@@ -3,10 +3,14 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckSquare, Calendar, Check, UserCircle, Trash2, X, Info, GripVertical } from 'lucide-react-native';
+// Renamed Calendar to CalendarIcon to avoid collision with the new Calendar component
+import { ArrowLeft, CheckSquare, Calendar as CalendarIcon, Check, UserCircle, Trash2, X, Info, GripVertical } from 'lucide-react-native';
+import { Calendar } from 'react-native-calendars';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
+// Added parseLocalDate to imports
+import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
+import { TimePickerDropdown } from '@/components/tasks/TimePickerDropdown';
 import {
   checkTodaysSpark,
   getScheduledActions,
@@ -32,6 +36,10 @@ export default function ScheduledActionsScreen() {
   // Date/time state for rescheduling
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
   const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, { start?: string; end?: string; due?: string }>>({});
+
+  // Calendar State
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [activeCalendarTaskId, setActiveCalendarTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -67,6 +75,22 @@ export default function ScheduledActionsScreen() {
       setLoading(false);
     }
   }
+
+  // Helper for displaying dates
+  const formatDateForDisplay = (dateString: string) => {
+    if (!dateString) return 'Select Date';
+    try {
+      // Ensure parseLocalDate exists in your dateUtils, otherwise use new Date(dateString)
+      const date = parseLocalDate ? parseLocalDate(dateString) : new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
 
   function handleAccept() {
     if (Platform.OS !== 'web') {
@@ -238,10 +262,16 @@ export default function ScheduledActionsScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert('Success', 'Your schedule has been updated!');
-      setIsAdjustModalVisible(false);
-
-      await loadData();
+      // SUCCESS FEEDBACK - Close modal and refresh
+      Alert.alert('Success', 'Your schedule has been updated!', [
+        {
+          text: 'OK',
+          onPress: async () => {
+            setIsAdjustModalVisible(false);
+            await loadData(); // Refresh the main screen
+          }
+        }
+      ]);
     } catch (error) {
       console.error('Error adjusting schedule:', error);
       Alert.alert('Error', 'Failed to adjust schedule');
@@ -363,7 +393,7 @@ export default function ScheduledActionsScreen() {
           {isTask ? (
             <CheckSquare size={16} color={iconColor} />
           ) : (
-            <Calendar size={16} color={iconColor} />
+            <CalendarIcon size={16} color={iconColor} />
           )}
         </View>
 
@@ -428,7 +458,7 @@ export default function ScheduledActionsScreen() {
           {isTask ? (
             <CheckSquare size={16} color="#6b7280" />
           ) : (
-            <Calendar size={16} color="#6b7280" />
+            <CalendarIcon size={16} color="#6b7280" />
           )}
         </View>
 
@@ -445,41 +475,50 @@ export default function ScheduledActionsScreen() {
         {/* Date/Time Pickers for Reschedule Zone */}
         {zone === 'reschedule' && (
           <View style={styles.rescheduleInputs}>
-            <TextInput
-              style={styles.dateInput}
-              placeholder="Date (YYYY-MM-DD)"
-              value={rescheduleDates[item.id] || ''}
-              onChangeText={(text) => setRescheduleDates({ ...rescheduleDates, [item.id]: text })}
-            />
+            {/* Date Picker Button */}
+            <TouchableOpacity
+              style={styles.datePickerButton}
+              onPress={() => {
+                setActiveCalendarTaskId(item.id);
+                setShowCalendar(true);
+              }}
+            >
+              <CalendarIcon size={14} color="#6b7280" />
+              <Text style={styles.datePickerText}>
+                {formatDateForDisplay(rescheduleDates[item.id] || item.due_date || item.start_date || '')}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Time Pickers */}
             {isTask ? (
-              <TextInput
-                style={styles.timeInput}
-                placeholder="Due Time"
+              <TimePickerDropdown
                 value={rescheduleTimes[item.id]?.due || ''}
-                onChangeText={(text) => setRescheduleTimes({
+                onChange={(time) => setRescheduleTimes({
                   ...rescheduleTimes,
-                  [item.id]: { due: text }
+                  [item.id]: { due: time }
                 })}
+                placeholder="Due time"
+                isDark={isDarkMode}
               />
             ) : (
               <View style={styles.eventTimes}>
-                <TextInput
-                  style={styles.timeInput}
-                  placeholder="Start"
+                <TimePickerDropdown
                   value={rescheduleTimes[item.id]?.start || ''}
-                  onChangeText={(text) => setRescheduleTimes({
+                  onChange={(time) => setRescheduleTimes({
                     ...rescheduleTimes,
-                    [item.id]: { ...rescheduleTimes[item.id], start: text }
+                    [item.id]: { ...rescheduleTimes[item.id], start: time }
                   })}
+                  placeholder="Start"
+                  isDark={isDarkMode}
                 />
-                <TextInput
-                  style={styles.timeInput}
-                  placeholder="End"
+                <TimePickerDropdown
                   value={rescheduleTimes[item.id]?.end || ''}
-                  onChangeText={(text) => setRescheduleTimes({
+                  onChange={(time) => setRescheduleTimes({
                     ...rescheduleTimes,
-                    [item.id]: { ...rescheduleTimes[item.id], end: text }
+                    [item.id]: { ...rescheduleTimes[item.id], end: time }
                   })}
+                  placeholder="End"
+                  isDark={isDarkMode}
                 />
               </View>
             )}
@@ -711,6 +750,58 @@ export default function ScheduledActionsScreen() {
             </TouchableOpacity>
           </View>
         </SafeAreaView>
+      </Modal>
+
+      {/* Calendar Modal for Reschedule Dates */}
+      <Modal visible={showCalendar} transparent animationType="fade">
+        <View style={styles.calendarOverlay}>
+          <View style={[styles.calendarContainer, { backgroundColor: colors.surface }]}>
+            <View style={[styles.calendarHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.calendarTitle, { color: colors.text }]}>
+                Select New Date
+              </Text>
+              <TouchableOpacity onPress={() => setShowCalendar(false)}>
+                <X size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Calendar
+              onDayPress={(day: any) => {
+                if (activeCalendarTaskId) {
+                  setRescheduleDates({
+                    ...rescheduleDates,
+                    [activeCalendarTaskId]: day.dateString
+                  });
+                }
+                setShowCalendar(false);
+                setActiveCalendarTaskId(null);
+              }}
+              markedDates={
+                activeCalendarTaskId
+                  ? {
+                    [rescheduleDates[activeCalendarTaskId] || '']: {
+                      selected: true,
+                      selectedColor: colors.primary
+                    }
+                  }
+                  : {}
+              }
+              theme={{
+                backgroundColor: colors.surface,
+                calendarBackground: colors.surface,
+                textSectionTitleColor: colors.textSecondary,
+                selectedDayBackgroundColor: colors.primary,
+                selectedDayTextColor: '#ffffff',
+                todayTextColor: colors.primary,
+                dayTextColor: colors.text,
+                textDisabledColor: colors.textSecondary,
+                dotColor: colors.primary,
+                selectedDotColor: '#ffffff',
+                arrowColor: colors.primary,
+                monthTextColor: colors.text,
+              }}
+            />
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1094,5 +1185,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#fff',
+    minWidth: 130,
+  },
+  datePickerText: {
+    fontSize: 12,
+    color: '#1f2937',
+  },
+  calendarOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  calendarContainer: {
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+    maxWidth: 350,
+    width: '100%',
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  calendarTitle: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
