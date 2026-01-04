@@ -758,7 +758,7 @@ const formatTimeForDatabase = (time12h: string): string | null => {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.saveButton}
-              onPress={handleSaveAdjustments}
+              onPress={performAdjustments}
             >
               <Text style={styles.saveButtonText}>Save Changes</Text>
             </TouchableOpacity>
