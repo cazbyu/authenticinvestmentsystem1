@@ -120,7 +120,8 @@ export default function ScheduledActionsScreen() {
     allActions.forEach(task => {
       initialDates[task.id] = tomorrowStr;
       if (task.type === 'task') {
-        initialTimes[task.id] = { due: task.due_date || '' };
+        // ✅ FIXED: Use due_time instead of due_date
+        initialTimes[task.id] = { due: task.due_time || '' };
       } else {
         initialTimes[task.id] = {
           start: task.start_time || '',
@@ -228,7 +229,8 @@ export default function ScheduledActionsScreen() {
             .from('0008-ap-tasks')
             .update({
               due_date: newDate,
-              due_time: newTimes?.due || task.due_date,
+              // ✅ FIXED: Use due_time instead of due_date
+              due_time: newTimes?.due || task.due_time,
               updated_at: toLocalISOString(new Date())
             })
             .eq('id', task.id);
