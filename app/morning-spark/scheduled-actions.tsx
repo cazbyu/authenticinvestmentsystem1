@@ -347,10 +347,6 @@ export default function ScheduledActionsScreen() {
               </Text>
             )}
           </Text>
-          <Text style={[styles.actionMeta, { color: colors.textSecondary }]} numberOfLines={1}>
-            {timeDisplay}
-            {action.is_all_day && ' • All Day'}
-          </Text>
         </View>
 
         <Text style={[styles.points, { color: '#10B981' }]}>

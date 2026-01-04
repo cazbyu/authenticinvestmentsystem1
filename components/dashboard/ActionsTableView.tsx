@@ -474,8 +474,9 @@ export function ActionsTableView({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerDate, { color: colors.text }]}>Date</Text>
+        <Text style={[styles.headerActions, { color: colors.text }]}>Actions</Text>
         <Text style={[styles.headerContent, { color: colors.text }]}>
-          Actions & Events
+          Tasks & Events
         </Text>
       </View>
 
@@ -504,6 +505,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     width: 120,
+  },
+  headerActions: {
+    fontSize: 14,
+    fontWeight: '600',
+    width: 120,
+    textAlign: 'center',
   },
   headerContent: {
     fontSize: 14,
