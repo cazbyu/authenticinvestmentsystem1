@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Alert, Platform, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckSquare, Calendar, Check, UserCircle, Trash2, X, Info } from 'lucide-react-native';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ArrowLeft, CheckSquare, Calendar, Check, UserCircle, Trash2, X, Info, GripVertical } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
@@ -30,6 +28,10 @@ export default function ScheduledActionsScreen() {
   const [tasksInRescheduleZone, setTasksInRescheduleZone] = useState<ScheduledAction[]>([]);
   const [tasksInCancelZone, setTasksInCancelZone] = useState<ScheduledAction[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  // Date/time state for rescheduling
+  const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, { start?: string; end?: string; due?: string }>>({});
 
   useEffect(() => {
     loadData();
@@ -83,10 +85,32 @@ export default function ScheduledActionsScreen() {
       ...(actionsData?.today || []),
     ];
 
+    // Initialize with tomorrow's date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = formatLocalDate(tomorrow);
+
+    const initialDates: Record<string, string> = {};
+    const initialTimes: Record<string, { start?: string; end?: string; due?: string }> = {};
+
+    allActions.forEach(task => {
+      initialDates[task.id] = tomorrowStr;
+      if (task.type === 'task') {
+        initialTimes[task.id] = { due: task.due_date || '' };
+      } else {
+        initialTimes[task.id] = {
+          start: task.start_time || '',
+          end: task.end_time || ''
+        };
+      }
+    });
+
     setTasksInKeepZone(allActions);
     setTasksInRescheduleZone([]);
     setTasksInCancelZone([]);
     setSelectedTaskId(null);
+    setRescheduleDates(initialDates);
+    setRescheduleTimes(initialTimes);
     setIsAdjustModalVisible(true);
   }
 
@@ -170,24 +194,34 @@ export default function ScheduledActionsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = formatLocalDate(tomorrow);
-
+      // RESCHEDULE ZONE - Update dates/times
       for (const task of tasksInRescheduleZone) {
+        const newDate = rescheduleDates[task.id];
+        const newTimes = rescheduleTimes[task.id];
+
         if (task.type === 'task') {
           await supabase
             .from('0008-ap-tasks')
-            .update({ due_date: tomorrowStr, updated_at: toLocalISOString(new Date()) })
+            .update({
+              due_date: newDate,
+              due_time: newTimes?.due || task.due_date,
+              updated_at: toLocalISOString(new Date())
+            })
             .eq('id', task.id);
         } else {
           await supabase
             .from('0008-ap-tasks')
-            .update({ start_date: tomorrowStr, updated_at: toLocalISOString(new Date()) })
+            .update({
+              start_date: newDate,
+              start_time: newTimes?.start || task.start_time,
+              end_time: newTimes?.end || task.end_time,
+              updated_at: toLocalISOString(new Date())
+            })
             .eq('id', task.id);
         }
       }
 
+      // CANCEL ZONE - Mark as deleted
       for (const task of tasksInCancelZone) {
         await supabase
           .from('0008-ap-tasks')
@@ -197,6 +231,8 @@ export default function ScheduledActionsScreen() {
           })
           .eq('id', task.id);
       }
+
+      // KEEP ZONE - No changes needed!
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -274,13 +310,6 @@ export default function ScheduledActionsScreen() {
 
   function renderActionRow(action: ScheduledAction, isOverdue: boolean) {
     const isTask = action.type === 'task';
-    const isDueToday = action.due_date === toLocalISOString(new Date()).split('T')[0];
-
-    const timeDisplay = action.start_time
-      ? formatTimeDisplay(action.start_time)
-      : action.due_date
-      ? new Date(action.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      : '';
 
     const getPriorityColor = () => {
       if (action.is_urgent && action.is_important) {
@@ -363,6 +392,9 @@ export default function ScheduledActionsScreen() {
       <View style={styles.tooltipContainer}>
         <TouchableOpacity
           onPress={() => setVisible(!visible)}
+          // @ts-ignore - Web-only hover events
+          onMouseEnter={() => setVisible(true)}
+          onMouseLeave={() => setVisible(false)}
           style={styles.tooltipButton}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
@@ -377,55 +409,100 @@ export default function ScheduledActionsScreen() {
     );
   };
 
-  const DraggableTaskCard = ({ item, drag, isActive }: RenderItemParams<ScheduledAction>) => {
+  const SimpleTaskCard = ({ item, zone }: { item: ScheduledAction; zone: 'keep' | 'reschedule' | 'cancel' }) => {
     const isSelected = selectedTaskId === item.id;
+    const isTask = item.type === 'task';
 
     return (
-      <ScaleDecorator>
-        <View
-          style={[
-            styles.draggableCard,
-            isActive && styles.draggableCardActive,
-            isSelected && styles.draggableCardSelected,
-          ]}
-        >
-          <TouchableOpacity
-            onLongPress={drag}
-            disabled={isActive}
-            style={styles.dragHandle}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.dragHandleIcon}>⋮⋮</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => handleTaskSelect(item.id)}
-            disabled={isActive}
-            style={styles.taskContent}
-          >
-            <Text style={styles.taskTitle}>{item.title}</Text>
-            <Text style={styles.taskTime}>
-              {item.start_time ? formatTimeDisplay(item.start_time) : 'No time'}
-            </Text>
-          </TouchableOpacity>
+      <View
+        style={[
+          styles.draggableCard,
+          isSelected && styles.draggableCardSelected,
+        ]}
+      >
+        <View style={styles.dragHandle}>
+          <GripVertical size={16} color="#9ca3af" />
         </View>
-      </ScaleDecorator>
+
+        <View style={styles.taskIconContainer}>
+          {isTask ? (
+            <CheckSquare size={16} color="#6b7280" />
+          ) : (
+            <Calendar size={16} color="#6b7280" />
+          )}
+        </View>
+
+        <TouchableOpacity
+          onPress={() => handleTaskSelect(item.id)}
+          style={styles.taskContent}
+        >
+          <Text style={styles.taskTitle}>{item.title}</Text>
+          <Text style={styles.taskTime}>
+            {item.start_time ? formatTimeDisplay(item.start_time) : 'No time'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Date/Time Pickers for Reschedule Zone */}
+        {zone === 'reschedule' && (
+          <View style={styles.rescheduleInputs}>
+            <TextInput
+              style={styles.dateInput}
+              placeholder="Date (YYYY-MM-DD)"
+              value={rescheduleDates[item.id] || ''}
+              onChangeText={(text) => setRescheduleDates({ ...rescheduleDates, [item.id]: text })}
+            />
+            {isTask ? (
+              <TextInput
+                style={styles.timeInput}
+                placeholder="Due Time"
+                value={rescheduleTimes[item.id]?.due || ''}
+                onChangeText={(text) => setRescheduleTimes({
+                  ...rescheduleTimes,
+                  [item.id]: { due: text }
+                })}
+              />
+            ) : (
+              <View style={styles.eventTimes}>
+                <TextInput
+                  style={styles.timeInput}
+                  placeholder="Start"
+                  value={rescheduleTimes[item.id]?.start || ''}
+                  onChangeText={(text) => setRescheduleTimes({
+                    ...rescheduleTimes,
+                    [item.id]: { ...rescheduleTimes[item.id], start: text }
+                  })}
+                />
+                <TextInput
+                  style={styles.timeInput}
+                  placeholder="End"
+                  value={rescheduleTimes[item.id]?.end || ''}
+                  onChangeText={(text) => setRescheduleTimes({
+                    ...rescheduleTimes,
+                    [item.id]: { ...rescheduleTimes[item.id], end: text }
+                  })}
+                />
+              </View>
+            )}
+          </View>
+        )}
+      </View>
     );
   };
 
-  const DraggableDropZone = ({
+  const SimpleDropZone = ({
     title,
     subtitle,
     color,
     tasks,
     tooltipMessage,
-    onReorder,
+    zone,
   }: {
     title: string;
     subtitle: string;
     color: string;
     tasks: ScheduledAction[];
     tooltipMessage: string;
-    onReorder: (data: ScheduledAction[]) => void;
+    zone: 'keep' | 'reschedule' | 'cancel';
   }) => (
     <View style={[styles.dropZone, { borderColor: color }]}>
       <View style={[styles.dropZoneHeader, { backgroundColor: color + '20' }]}>
@@ -439,16 +516,14 @@ export default function ScheduledActionsScreen() {
       <View style={styles.dropZoneContent}>
         {tasks.length === 0 ? (
           <View style={styles.emptyDropZone}>
-            <Text style={styles.emptyZoneText}>Drag tasks here</Text>
+            <Text style={styles.emptyZoneText}>Tap tasks below to move here</Text>
           </View>
         ) : (
-          <DraggableFlatList
-            data={tasks}
-            onDragEnd={({ data }) => onReorder(data)}
-            keyExtractor={(item) => item.id}
-            renderItem={DraggableTaskCard}
-            containerStyle={styles.draggableListContainer}
-          />
+          <View>
+            {tasks.map(task => (
+              <SimpleTaskCard key={task.id} item={task} zone={zone} />
+            ))}
+          </View>
         )}
       </View>
     </View>
@@ -465,7 +540,6 @@ export default function ScheduledActionsScreen() {
   }
 
   const hasActions = actionsData && (actionsData.overdue.length > 0 || actionsData.today.length > 0);
-  const totalCount = actionsData ? actionsData.totalTasks + actionsData.totalEvents : 0;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -564,87 +638,79 @@ export default function ScheduledActionsScreen() {
         presentationStyle="formSheet"
         onRequestClose={() => setIsAdjustModalVisible(false)}
       >
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <SafeAreaView style={styles.adjustModalContainer}>
-            <View style={styles.adjustHeader}>
-              <Text style={[styles.adjustTitle, { color: colors.text }]}>Adjust Today's Schedule</Text>
-              <TouchableOpacity onPress={() => setIsAdjustModalVisible(false)}>
-                <X size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
+        <SafeAreaView style={styles.adjustModalContainer}>
+          <View style={styles.adjustHeader}>
+            <Text style={[styles.adjustTitle, { color: colors.text }]}>Adjust Today's Schedule</Text>
+            <TouchableOpacity onPress={() => setIsAdjustModalVisible(false)}>
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
 
-            <ScrollView style={styles.adjustContent}>
-              <Text style={[styles.sortInstructions, { color: colors.textSecondary }]}>
-                Tap a task to select it, then use the buttons to move between zones. Long-press the grip icon (⋮⋮) to reorder within a zone.
-              </Text>
+          <ScrollView style={styles.adjustContent}>
+            <Text style={[styles.sortInstructions, { color: colors.textSecondary }]}>
+              Tap a task to select it, then use the buttons below to move between zones.
+            </Text>
 
-              <DraggableDropZone
-                title="KEEP AS IS"
-                subtitle="✓ These will stay on today"
-                color="#10B981"
-                tasks={tasksInKeepZone}
-                tooltipMessage="These tasks will remain scheduled for today."
-                onReorder={(data) => setTasksInKeepZone(data)}
-              />
+            <SimpleDropZone
+              title="KEEP AS IS"
+              subtitle="✓ These will stay on today"
+              color="#10B981"
+              tasks={tasksInKeepZone}
+              tooltipMessage="These tasks will remain scheduled for today."
+              zone="keep"
+            />
 
-              <DraggableDropZone
-                title="RESCHEDULE (+1 Day)"
-                subtitle="📅 Tomorrow"
-                color="#3B82F6"
-                tasks={tasksInRescheduleZone}
-                tooltipMessage="These tasks will be rescheduled for tomorrow. You can change to a different date after completing the Morning Spark."
-                onReorder={(data) => setTasksInRescheduleZone(data)}
-              />
+            <SimpleDropZone
+              title="RESCHEDULE"
+              subtitle="📅 Adjust date and time"
+              color="#3B82F6"
+              tasks={tasksInRescheduleZone}
+              tooltipMessage="Update the date and time for these tasks."
+              zone="reschedule"
+            />
 
-              <DraggableDropZone
-                title="CANCEL"
-                subtitle="🗑️ These will be deleted"
-                color="#EF4444"
-                tasks={tasksInCancelZone}
-                tooltipMessage="These tasks will be permanently deleted. This cannot be undone."
-                onReorder={(data) => setTasksInCancelZone(data)}
-              />
-            </ScrollView>
+            <SimpleDropZone
+              title="CANCEL"
+              subtitle="🗑️ These will be deleted"
+              color="#EF4444"
+              tasks={tasksInCancelZone}
+              tooltipMessage="These tasks will be permanently deleted. This cannot be undone."
+              zone="cancel"
+            />
+          </ScrollView>
 
-            {selectedTaskId && (
-              <View style={styles.zoneMoveButtons}>
-                <TouchableOpacity
-                  style={[styles.zoneMoveButton, { backgroundColor: '#10B981' }]}
-                  onPress={() => moveTaskToZone('keep')}
-                >
-                  <Text style={styles.zoneMoveText}>Move to Keep</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.zoneMoveButton, { backgroundColor: '#3B82F6' }]}
-                  onPress={() => moveTaskToZone('reschedule')}
-                >
-                  <Text style={styles.zoneMoveText}>Move to Reschedule</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.zoneMoveButton, { backgroundColor: '#EF4444' }]}
-                  onPress={() => moveTaskToZone('cancel')}
-                >
-                  <Text style={styles.zoneMoveText}>Move to Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <View style={[styles.adjustFooter, { borderTopColor: colors.border }]}>
+          {selectedTaskId && (
+            <View style={styles.zoneMoveButtons}>
               <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setIsAdjustModalVisible(false)}
+                style={[styles.zoneMoveButton, { backgroundColor: '#3B82F6' }]}
+                onPress={() => moveTaskToZone('reschedule')}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.zoneMoveText}>Move to Reschedule</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSaveAdjustments}
+                style={[styles.zoneMoveButton, { backgroundColor: '#EF4444' }]}
+                onPress={() => moveTaskToZone('cancel')}
               >
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+                <Text style={styles.zoneMoveText}>Move to Cancel</Text>
               </TouchableOpacity>
             </View>
-          </SafeAreaView>
-        </GestureHandlerRootView>
+          )}
+
+          <View style={[styles.adjustFooter, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setIsAdjustModalVisible(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSaveAdjustments}
+            >
+              <Text style={styles.saveButtonText}>Save Changes</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -766,21 +832,6 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: 15,
     fontWeight: '600',
-  },
-  actionMeta: {
-    fontSize: 13,
-  },
-  overdueBadge: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  overdueBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
   },
   overdueText: {
     fontSize: 12,
@@ -913,8 +964,8 @@ const styles = StyleSheet.create({
   },
   tooltipBubble: {
     position: 'absolute',
-    right: 0,
-    top: 30,
+    right: 30,
+    top: 0,
     backgroundColor: '#1f2937',
     padding: 12,
     borderRadius: 8,
@@ -940,17 +991,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  draggableCardActive: {
-    backgroundColor: '#f3f4f6',
-    borderColor: '#3b82f6',
-    shadowOpacity: 0.3,
-    elevation: 4,
   },
   draggableCardSelected: {
     backgroundColor: '#eff6ff',
@@ -958,12 +998,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   dragHandle: {
-    marginRight: 12,
+    marginRight: 8,
     paddingVertical: 4,
   },
-  dragHandleIcon: {
-    fontSize: 16,
-    color: '#9ca3af',
+  taskIconContainer: {
+    marginRight: 12,
   },
   taskContent: {
     flex: 1,
@@ -978,8 +1017,33 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
-  draggableListContainer: {
-    flex: 1,
+  rescheduleInputs: {
+    marginLeft: 12,
+    gap: 8,
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    backgroundColor: '#fff',
+    width: 140,
+  },
+  timeInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    backgroundColor: '#fff',
+    width: 100,
+  },
+  eventTimes: {
+    flexDirection: 'row',
+    gap: 8,
   },
   zoneMoveButtons: {
     flexDirection: 'row',
