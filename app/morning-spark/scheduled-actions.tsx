@@ -282,8 +282,21 @@ export default function ScheduledActionsScreen() {
       ? new Date(action.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : '';
 
-    const iconColor = isOverdue ? '#EF4444' : isDueToday ? '#F59E0B' : colors.textSecondary;
-    const titleColor = isOverdue ? '#EF4444' : isDueToday ? '#F59E0B' : colors.text;
+    const getPriorityColor = () => {
+      if (action.is_urgent && action.is_important) {
+        return '#ef4444';
+      } else if (!action.is_urgent && action.is_important) {
+        return '#22c55e';
+      } else if (action.is_urgent && !action.is_important) {
+        return '#eab308';
+      } else {
+        return '#9ca3af';
+      }
+    };
+
+    const priorityColor = getPriorityColor();
+    const iconColor = colors.primary;
+    const titleColor = priorityColor;
 
     return (
       <View
@@ -328,6 +341,11 @@ export default function ScheduledActionsScreen() {
         <View style={styles.actionContent}>
           <Text style={[styles.actionTitle, { color: titleColor }]} numberOfLines={1}>
             {action.title}
+            {isOverdue && action.due_date && (
+              <Text style={styles.overdueText}>
+                {' '}(Overdue - {new Date(action.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+              </Text>
+            )}
           </Text>
           <Text style={[styles.actionMeta, { color: colors.textSecondary }]} numberOfLines={1}>
             {timeDisplay}
@@ -335,14 +353,8 @@ export default function ScheduledActionsScreen() {
           </Text>
         </View>
 
-        {isOverdue && (
-          <View style={styles.overdueBadge}>
-            <Text style={styles.overdueBadgeText}>OVERDUE</Text>
-          </View>
-        )}
-
         <Text style={[styles.points, { color: '#10B981' }]}>
-          +{action.points ? action.points.toFixed(1) : '2.5'}
+          +{Math.round(action.points || 3)}
         </Text>
       </View>
     );
@@ -511,7 +523,7 @@ export default function ScheduledActionsScreen() {
                   </Text>
                   <View style={[styles.redLine, { backgroundColor: '#EF4444' }]} />
                 </View>
-                <View style={[styles.actionsTable, { backgroundColor: colors.card }]}>
+                <View style={[styles.actionsTable, { backgroundColor: colors.surface }]}>
                   {actionsData.overdue.map((action) => renderActionRow(action, true))}
                 </View>
               </View>
@@ -519,7 +531,7 @@ export default function ScheduledActionsScreen() {
 
             {actionsData.today.length > 0 && (
               <View style={styles.section}>
-                <View style={[styles.actionsTable, { backgroundColor: colors.card }]}>
+                <View style={[styles.actionsTable, { backgroundColor: colors.surface }]}>
                   {actionsData.today.map((action) => renderActionRow(action, false))}
                 </View>
               </View>
@@ -773,6 +785,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
+  },
+  overdueText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '400',
   },
   points: {
     fontSize: 14,

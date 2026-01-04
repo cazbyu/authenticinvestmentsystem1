@@ -971,10 +971,13 @@ export default function Dashboard() {
   const handleFormSubmitSuccess = async () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
-    fetchData();
-    // Trigger Journal refresh if we're on Journal view
+
+    // Force complete data refresh
+    await fetchData();
+
     setJournalRefreshKey(prev => prev + 1);
-    // Refresh the authentic score
+
+    // Refresh score with force flag
     await refreshScore(true);
   };
 

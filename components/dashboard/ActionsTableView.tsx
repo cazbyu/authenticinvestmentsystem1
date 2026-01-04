@@ -419,20 +419,6 @@ export function ActionsTableView({
                 </Text>
               )}
             </Text>
-            {(action.roles && action.roles.length > 0) || (action.domains && action.domains.length > 0) ? (
-              <View style={styles.tagsContainer}>
-                {action.roles?.map((role: any, idx: number) => (
-                  <View key={`role-${idx}`} style={[styles.tag, styles.roleTag]}>
-                    <Text style={styles.tagText}>{role.label}</Text>
-                  </View>
-                ))}
-                {action.domains?.map((domain: any, idx: number) => (
-                  <View key={`domain-${idx}`} style={[styles.tag, styles.domainTag]}>
-                    <Text style={styles.tagText}>{domain.name}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
           </View>
           <View style={styles.valueContainer}>
             <Text style={styles.valueText}>+{Math.round(action.depositValue)}</Text>

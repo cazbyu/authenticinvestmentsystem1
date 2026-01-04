@@ -57,10 +57,16 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
   const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
   const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
 
+  // Metadata state
+  const [roles, setRoles] = useState<any[]>([]);
+  const [domains, setDomains] = useState<any[]>([]);
+  const [loadingMetadata, setLoadingMetadata] = useState(false);
+
   useEffect(() => {
     if (visible && task?.id) {
       fetchTaskNotes();
       loadAssociatedItems();
+      fetchTaskMetadata();
     }
   }, [visible, task?.id]);
 
@@ -126,6 +132,35 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
       console.error('Error fetching associated items:', error);
     } finally {
       setLoadingAssociatedItems(false);
+    }
+  };
+
+  const fetchTaskMetadata = async () => {
+    if (!task?.id) return;
+
+    setLoadingMetadata(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      const [rolesRes, domainsRes] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('role:0008-ap-roles(id, label)')
+          .eq('parent_id', task.id)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('domain:0008-ap-domains(id, name)')
+          .eq('parent_id', task.id)
+          .eq('parent_type', 'task'),
+      ]);
+
+      setRoles(rolesRes.data?.map(r => r.role).filter(Boolean) || []);
+      setDomains(domainsRes.data?.map(d => d.domain).filter(Boolean) || []);
+    } catch (error) {
+      console.error('Error fetching task metadata:', error);
+    } finally {
+      setLoadingMetadata(false);
     }
   };
 
@@ -582,28 +617,36 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
                task.is_urgent && !task.is_important ? 'Urgent' : 'Normal'}
             </Text>
           </View>
-          {task.roles?.length > 0 && (
+          {(roles.length > 0 || (task.roles && task.roles.length > 0)) && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Roles:</Text>
-              <View style={styles.detailTagContainer}>
-                {task.roles.map(role => (
-                  <View key={role.id} style={[styles.tag, styles.roleTag]}>
-                    <Text style={styles.tagText}>{role.label}</Text>
-                  </View>
-                ))}
-              </View>
+              {loadingMetadata ? (
+                <Text style={styles.detailValue}>Loading...</Text>
+              ) : (
+                <View style={styles.detailTagContainer}>
+                  {(roles.length > 0 ? roles : task.roles || []).map(role => (
+                    <View key={role.id} style={[styles.tag, styles.roleTag]}>
+                      <Text style={styles.tagText}>{role.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           )}
-          {task.domains?.length > 0 && (
+          {(domains.length > 0 || (task.domains && task.domains.length > 0)) && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Domains:</Text>
-              <View style={styles.detailTagContainer}>
-                {task.domains.map(domain => (
-                  <View key={domain.id} style={[styles.tag, styles.domainTag]}>
-                    <Text style={styles.tagText}>{domain.name}</Text>
-                  </View>
-                ))}
-              </View>
+              {loadingMetadata ? (
+                <Text style={styles.detailValue}>Loading...</Text>
+              ) : (
+                <View style={styles.detailTagContainer}>
+                  {(domains.length > 0 ? domains : task.domains || []).map(domain => (
+                    <View key={domain.id} style={[styles.tag, styles.domainTag]}>
+                      <Text style={styles.tagText}>{domain.name}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           )}
           {/* Goals Section */}
