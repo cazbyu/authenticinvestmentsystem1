@@ -114,6 +114,21 @@ const formatTimeForDatabase = (time12h: string): string | null => {
     return null;
   }
 };
+
+// Helper for converting 24-hour time to 12-hour display format
+const formatTimeFor12Hour = (time24h: string): string => {
+  if (!time24h) return '';
+  
+  try {
+    const [hours24, minutes] = time24h.split(':').map(s => parseInt(s, 10));
+    const period = hours24 >= 12 ? 'pm' : 'am';
+    const hours12 = hours24 === 0 ? 12 : hours24 > 12 ? hours24 - 12 : hours24;
+    return `${hours12}:${String(minutes).padStart(2, '0')} ${period}`;
+  } catch (e) {
+    console.error('Error formatting time for 12-hour display:', e);
+    return time24h;
+  }
+};
   
   function handleAccept() {
     if (Platform.OS !== 'web') {
@@ -141,17 +156,18 @@ const formatTimeForDatabase = (time12h: string): string | null => {
     const initialTimes: Record<string, { start?: string; end?: string; due?: string }> = {};
 
     allActions.forEach(task => {
-      initialDates[task.id] = tomorrowStr;
-      if (task.type === 'task') {
-        // ✅ FIXED: Use due_time instead of due_date
-        initialTimes[task.id] = { due: task.due_time || '' };
-      } else {
-        initialTimes[task.id] = {
-          start: task.start_time || '',
-          end: task.end_time || ''
-        };
-      }
-    });
+  initialDates[task.id] = tomorrowStr;
+  if (task.type === 'task') {
+    initialTimes[task.id] = { 
+      due: task.due_time ? formatTimeFor12Hour(task.due_time) : '' 
+    };
+  } else {
+    initialTimes[task.id] = {
+      start: task.start_time ? formatTimeFor12Hour(task.start_time) : '',
+      end: task.end_time ? formatTimeFor12Hour(task.end_time) : ''
+    };
+  }
+});
 
     setTasksInKeepZone(allActions);
     setTasksInRescheduleZone([]);
