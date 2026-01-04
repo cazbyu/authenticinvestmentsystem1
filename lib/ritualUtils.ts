@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './supabase';
 import { calculateTaskPoints } from './taskUtils';
 import { getUserPreferences } from './userPreferences';
+import { formatLocalDate } from './dateUtils';
 
 export type RitualType = 'morning_spark' | 'evening_review' | 'weekly_alignment';
 
@@ -145,7 +146,7 @@ export async function hasCompletedRitualToday(
 ): Promise<boolean> {
   try {
     const supabase = getSupabaseClient();
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatLocalDate(new Date());
 
     if (ritualType === 'morning_spark') {
       const { data, error } = await supabase
@@ -183,7 +184,7 @@ export async function hasCompletedRitualToday(
       const now = new Date();
       const startOfWeek = new Date(now);
       startOfWeek.setDate(now.getDate() - now.getDay());
-      const weekStartDate = startOfWeek.toISOString().split('T')[0];
+      const weekStartDate = formatLocalDate(startOfWeek);
 
       const { data, error } = await supabase
         .from('0008-ap-weekly-alignments')
@@ -274,7 +275,7 @@ export async function shouldShowRitual(
 export async function hasCompletedEveningReviewToday(userId: string): Promise<boolean> {
   try {
     const supabase = getSupabaseClient();
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatLocalDate(new Date());
 
     const { data, error } = await supabase
       .from('0008-ap-daily-reviews')
@@ -315,7 +316,7 @@ export async function hasCompletedWeeklyAlignmentThisWeek(userId: string): Promi
     weekStart.setDate(today.getDate() + daysToWeekStart);
     weekStart.setHours(0, 0, 0, 0);
 
-    const weekStartDate = weekStart.toISOString().split('T')[0];
+    const weekStartDate = formatLocalDate(weekStart);
 
     const { data, error } = await supabase
       .from('0008-ap-weekly-alignments')
@@ -588,8 +589,8 @@ export async function calculateWeekBounds(userId: string): Promise<{ weekStart: 
     weekEnd.setHours(23, 59, 59, 999);
 
     return {
-      weekStart: weekStart.toISOString().split('T')[0],
-      weekEnd: weekEnd.toISOString().split('T')[0]
+      weekStart: formatLocalDate(weekStart),
+      weekEnd: formatLocalDate(weekEnd)
     };
   } catch (error) {
     console.error('Exception in calculateWeekBounds:', error);
@@ -606,8 +607,8 @@ export async function calculateWeekBounds(userId: string): Promise<{ weekStart: 
     weekEnd.setHours(23, 59, 59, 999);
 
     return {
-      weekStart: weekStart.toISOString().split('T')[0],
-      weekEnd: weekEnd.toISOString().split('T')[0]
+      weekStart: formatLocalDate(weekStart),
+      weekEnd: formatLocalDate(weekEnd)
     };
   }
 }
