@@ -158,14 +158,18 @@ const formatTimeFor12Hour = (time24h: string): string => {
     allActions.forEach(task => {
   initialDates[task.id] = tomorrowStr;
   if (task.type === 'task') {
-    initialTimes[task.id] = { 
-      due: task.due_time ? formatTimeFor12Hour(task.due_time) : '' 
+   
+      initialTimes[task.id] = { due: task.due_time ? formatTimeFor12Hour(task.due_time) : '' };
+console.log('DEBUG Task:', task.title, '| Raw time:', task.due_time, '| Converted:', initialTimes[task.id].due);
+      
     };
   } else {
     initialTimes[task.id] = {
-      start: task.start_time ? formatTimeFor12Hour(task.start_time) : '',
-      end: task.end_time ? formatTimeFor12Hour(task.end_time) : ''
-    };
+  start: task.start_time ? formatTimeFor12Hour(task.start_time) : '',
+  end: task.end_time ? formatTimeFor12Hour(task.end_time) : ''
+};
+console.log('DEBUG Event:', task.title, '| Raw start:', task.start_time, '| Converted:', initialTimes[task.id].start);
+```
   }
 });
 
