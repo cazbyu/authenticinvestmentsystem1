@@ -169,15 +169,6 @@ const formatTimeFor12Hour = (time24h: string): string => {
   }
 });
                        
-    initialTimes[task.id] = {
-  start: task.start_time ? formatTimeFor12Hour(task.start_time) : '',
-  end: task.end_time ? formatTimeFor12Hour(task.end_time) : ''
-};
-console.log('DEBUG Event:', task.title, '| Raw start:', task.start_time, '| Converted:', initialTimes[task.id].start);
-```
-  }
-});
-
     setTasksInKeepZone(allActions);
     setTasksInRescheduleZone([]);
     setTasksInCancelZone([]);
