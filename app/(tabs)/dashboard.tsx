@@ -563,8 +563,8 @@ export default function Dashboard() {
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Today\'s spark has been reset');
-      checkRitualAvailability();
+      await checkRitualAvailability();
+      Alert.alert('Success', 'Today\'s spark has been reset and Morning Spark button should now appear');
     } catch (error) {
       console.error('Error resetting spark:', error);
       Alert.alert('Error', 'Failed to reset spark');

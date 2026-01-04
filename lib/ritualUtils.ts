@@ -213,7 +213,7 @@ export function getDefaultRitualSettings(ritualType: RitualType): Pick<RitualSet
       return {
         is_enabled: true,
         available_from: '00:00:00',
-        available_until: '12:00:00',
+        available_until: '23:59:59',
       };
     case 'evening_review':
       return {
