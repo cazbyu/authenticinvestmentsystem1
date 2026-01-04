@@ -92,6 +92,29 @@ export default function ScheduledActionsScreen() {
     }
   };
 
+  // Helper for converting 12-hour time to database format
+const formatTimeForDatabase = (time12h: string): string | null => {
+  if (!time12h) return null;
+  
+  try {
+    const timeLower = time12h.toLowerCase().trim();
+    const isPM = timeLower.includes('pm');
+    const timeOnly = timeLower.replace(/am|pm/g, '').trim();
+    const [h, m] = timeOnly.split(':').map(s => parseInt(s.trim(), 10));
+    
+    let hours = h === 12 ? (isPM ? 12 : 0) : (isPM ? h + 12 : h);
+    const minutes = m || 0;
+    
+    const hoursStr = String(hours).padStart(2, '0');
+    const minutesStr = String(minutes).padStart(2, '0');
+    
+    return `${hoursStr}:${minutesStr}:00`;
+  } catch (e) {
+    console.error('Error formatting time:', e);
+    return null;
+  }
+};
+  
   function handleAccept() {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -190,97 +213,86 @@ export default function ScheduledActionsScreen() {
     }
   };
 
-  const handleSaveAdjustments = async () => {
-    if (tasksInCancelZone.length > 0) {
-      const taskNames = tasksInCancelZone.map(t => `• ${t.title}`).join('\n');
-
-      Alert.alert(
-        'Confirm Deletion',
-        `The following tasks will be permanently deleted:\n\n${taskNames}\n\nThis cannot be undone. Are you sure?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              await performAdjustments();
-            }
-          }
-        ]
-      );
-    } else {
-      await performAdjustments();
-    }
-  };
-
   const performAdjustments = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
 
-      // RESCHEDULE ZONE - Update dates/times
-      for (const task of tasksInRescheduleZone) {
-        const newDate = rescheduleDates[task.id];
-        const newTimes = rescheduleTimes[task.id];
+    // RESCHEDULE ZONE - Update dates/times
+    for (const task of tasksInRescheduleZone) {
+      const newDate = rescheduleDates[task.id];
+      const newTimes = rescheduleTimes[task.id];
 
-        if (task.type === 'task') {
-          await supabase
-            .from('0008-ap-tasks')
-            .update({
-              due_date: newDate,
-              // ✅ FIXED: Use due_time instead of due_date
-              due_time: newTimes?.due || task.due_time,
-              updated_at: toLocalISOString(new Date())
-            })
-            .eq('id', task.id);
-        } else {
-          await supabase
-            .from('0008-ap-tasks')
-            .update({
-              start_date: newDate,
-              start_time: newTimes?.start || task.start_time,
-              end_time: newTimes?.end || task.end_time,
-              updated_at: toLocalISOString(new Date())
-            })
-            .eq('id', task.id);
-        }
-      }
+      if (task.type === 'task') {
+        // ✅ Convert 12-hour to 24-hour format
+        const dueTime24h = newTimes?.due 
+          ? formatTimeForDatabase(newTimes.due) 
+          : task.due_time;
 
-      // CANCEL ZONE - Mark as deleted
-      for (const task of tasksInCancelZone) {
         await supabase
           .from('0008-ap-tasks')
           .update({
-            deleted_at: toLocalISOString(new Date()),
-            status: 'cancelled'
+            due_date: newDate,
+            due_time: dueTime24h,
+            updated_at: toLocalISOString(new Date())
+          })
+          .eq('id', task.id);
+      } else {
+        // ✅ Convert event times to 24-hour format
+        const startTime24h = newTimes?.start 
+          ? formatTimeForDatabase(newTimes.start) 
+          : task.start_time;
+        const endTime24h = newTimes?.end 
+          ? formatTimeForDatabase(newTimes.end) 
+          : task.end_time;
+
+        await supabase
+          .from('0008-ap-tasks')
+          .update({
+            start_date: newDate,
+            start_time: startTime24h,
+            end_time: endTime24h,
+            updated_at: toLocalISOString(new Date())
           })
           .eq('id', task.id);
       }
-
-      // KEEP ZONE - No changes needed!
-
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      // SUCCESS FEEDBACK - Close modal and refresh
-      Alert.alert('Success', 'Your schedule has been updated!', [
-        {
-          text: 'OK',
-          onPress: async () => {
-            setIsAdjustModalVisible(false);
-            await loadData(); // Refresh the main screen
-          }
-        }
-      ]);
-    } catch (error) {
-      console.error('Error adjusting schedule:', error);
-      Alert.alert('Error', 'Failed to adjust schedule');
     }
-  };
 
-  const handleCompleteTask = async (taskId: string) => {
+    // CANCEL ZONE - Mark as deleted
+    for (const task of tasksInCancelZone) {
+      await supabase
+        .from('0008-ap-tasks')
+        .update({
+          deleted_at: toLocalISOString(new Date()),
+          status: 'cancelled'
+        })
+        .eq('id', task.id);
+    }
+
+    // KEEP ZONE - No changes needed!
+
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+
+    // SUCCESS FEEDBACK - Close modal and refresh
+    Alert.alert('Success', 'Your schedule has been updated!', [
+      {
+        text: 'OK',
+        onPress: async () => {
+          setIsAdjustModalVisible(false);
+          await loadData(); // Refresh the main screen
+        }
+      }
+    ]);
+  } catch (error) {
+    console.error('Error adjusting schedule:', error);
+    Alert.alert('Error', 'Failed to adjust schedule');
+  }
+};
+
+   const handleCompleteTask = async (taskId: string) => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
