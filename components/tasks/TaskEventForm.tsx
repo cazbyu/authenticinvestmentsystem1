@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Platform, Image, Linking } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { formatLocalDate, parseLocalDate, formatTimeString, convert12HourTo24Hour } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, parseLocalDate, formatTimeString, convert12HourTo24Hour } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
 import { RecurrenceDropdown } from './RecurrenceDropdown';
@@ -1017,7 +1017,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             // Parent relationship for follow-through items
             parent_id: formData.parentId || null,
             parent_type: formData.parentType || null,
-            ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
+            ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
           };
 
           if (mode === 'edit' && initialData?.id) {
@@ -1114,7 +1114,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             // Parent relationship for follow-through items
             parent_id: formData.parentId || null,
             parent_type: formData.parentType || null,
-            ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
+            ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
           };
 
           if (mode === 'edit' && initialData?.id) {
@@ -1339,7 +1339,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           // Explicitly preserve completed status - never change it back to pending
           status: initialData.status === 'completed' ? 'completed' : (initialData.status || 'pending'),
           completed_at: initialData.completed_at || null,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         } : {
           status: 'pending'
         })

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
@@ -542,7 +543,7 @@ export default function Wellness() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
         .eq('id', taskId);
 
       if (error) throw error;
@@ -563,7 +564,7 @@ export default function Wellness() {
       const { error } = await supabase
         .from('0008-ap-tasks')
         .update({
-          deleted_at: new Date().toISOString(),
+          deleted_at: toLocalISOString(new Date()),
           status: 'cancelled'
         })
         .eq('id', taskId);
@@ -617,7 +618,7 @@ export default function Wellness() {
         .update({
           is_active: false,
           archived: true,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', depositIdea.id);
 

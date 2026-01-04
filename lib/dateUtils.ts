@@ -23,6 +23,27 @@ export function formatLocalDate(date: Date): string {
 }
 
 /**
+ * Formats a date as an ISO string with local timezone offset
+ * Example: 2025-01-04T15:30:00-05:00 (instead of UTC: 2025-01-04T20:30:00Z)
+ */
+export function toLocalISOString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  const timezoneOffset = -date.getTimezoneOffset();
+  const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+  const offsetMinutes = Math.abs(timezoneOffset) % 60;
+  const offsetSign = timezoneOffset >= 0 ? '+' : '-';
+  const offsetString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`;
+}
+
+/**
  * Parses a YYYY-MM-DD string as a local date (no timezone conversion)
  */
 export function parseLocalDate(dateString: string): Date {

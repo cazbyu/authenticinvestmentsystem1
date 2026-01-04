@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import {
   View,
   Text,
@@ -213,7 +214,7 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
           name: name.trim(),
           description: description.trim() || null,
           image_path: imagePath,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', keyRelationship.id);
 

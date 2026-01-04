@@ -23,7 +23,7 @@ import { fetchAttachmentsForNotes, NoteAttachment } from '@/lib/noteAttachmentUt
 import AttachmentBadge from '../attachments/AttachmentBadge';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import { Linking } from 'react-native';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import ImageViewerModal, { ImageAttachment } from './ImageViewerModal';
 
@@ -232,7 +232,7 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
         .select('id, title')
         .in('id', withdrawalIds);
       withdrawalsData?.forEach((w: any) => {
-        parentItemsMap.set(w.id, { ...w, completed_at: new Date().toISOString() });
+        parentItemsMap.set(w.id, { ...w, completed_at: toLocalISOString(new Date()) });
       });
     }
 

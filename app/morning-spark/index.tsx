@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform, Image, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -147,7 +148,7 @@ export default function MorningSparkFuelCheck() {
       } as const;
 
       const mode = modeMap[selectedFuel];
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalISOString(new Date()).split('T')[0];
 
       if (existingSparkId) {
         const { error } = await supabase
@@ -155,7 +156,7 @@ export default function MorningSparkFuelCheck() {
           .update({
             fuel_level: selectedFuel,
             mode: mode,
-            updated_at: new Date().toISOString(),
+            updated_at: toLocalISOString(new Date()),
           })
           .eq('id', existingSparkId);
 
@@ -205,7 +206,7 @@ export default function MorningSparkFuelCheck() {
         return;
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalISOString(new Date()).split('T')[0];
 
       const { error } = await supabase
         .from('0008-ap-daily-sparks')

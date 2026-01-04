@@ -1,4 +1,5 @@
 // hooks/useGoals.ts
+import { toLocalISOString } from '@/lib/dateUtils';
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '../lib/supabase';
 import { Alert } from 'react-native';
@@ -503,7 +504,7 @@ export function useGoals(options: UseGoalsOptions = {}) {
         const updateTaskPayload: any = {
           title: taskData.title,
           recurrence_rule: taskData.recurrenceRule,
-          updated_at: new Date().toISOString(),
+          updated_at: toLocalISOString(new Date()),
         };
 
         const { error: taskError } = await supabase
@@ -648,7 +649,7 @@ export function useGoals(options: UseGoalsOptions = {}) {
       const { error: deleteError } = await supabase
         .from(DB.TASKS)
         .update({
-          deleted_at: new Date().toISOString(),
+          deleted_at: toLocalISOString(new Date()),
           status: 'cancelled'
         })
         .eq('id', taskId);
@@ -677,7 +678,7 @@ export function useGoals(options: UseGoalsOptions = {}) {
       // Soft delete the week plan by setting deleted_at timestamp
       const { error: deleteError } = await supabase
         .from(DB.TASK_WEEK_PLAN)
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: toLocalISOString(new Date()) })
         .eq('task_id', taskId)
         .eq('week_number', weekNumber)
         .eq(timelineColumn, timeline.id);
@@ -795,7 +796,7 @@ export function useGoals(options: UseGoalsOptions = {}) {
         .from(tableName)
         .update({ 
           status: 'cancelled',
-          updated_at: new Date().toISOString() 
+          updated_at: toLocalISOString(new Date()) 
         })
         .eq('id', goalId);
 

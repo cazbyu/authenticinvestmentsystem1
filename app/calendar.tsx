@@ -16,7 +16,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
 import { getVisibleWindow } from '@/lib/recurrenceUtils';
-import { formatLocalDate, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
 import { DraggableFab } from '@/components/DraggableFab';
 import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/useRecurrenceCache';
 import { eventBus, EVENTS } from '@/lib/eventBus';
@@ -414,7 +414,7 @@ export default function CalendarScreen() {
       } else {
         const { error } = await supabase
           .from('0008-ap-tasks')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
           .eq('id', taskId);
 
         if (error) throw error;

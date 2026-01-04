@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { toLocalISOString } from '@/lib/dateUtils';
 
 export interface FollowUpItem {
   id: string;
@@ -166,7 +167,7 @@ export async function markFollowUpDone(followUpId: string, userId: string): Prom
     .from('0008-ap-universal-follow-up-join')
     .update({
       status: 'done',
-      completed_at: new Date().toISOString(),
+      completed_at: toLocalISOString(new Date()),
     })
     .eq('id', followUpId)
     .eq('user_id', userId);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import {
   View,
   Text,
@@ -166,7 +167,7 @@ export function EditGoalModal({ visible, onClose, onUpdate, goal, deleteGoal }: 
         .update({
           title: title.trim(),
           description: description.trim() || null,
-          updated_at: new Date().toISOString(),
+          updated_at: toLocalISOString(new Date()),
         })
         .eq('id', goal.id);
 

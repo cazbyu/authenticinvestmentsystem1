@@ -352,7 +352,7 @@ export function ManageGlobalTimelinesModal({ visible, onClose, onUpdate }: Manag
         .from('0008-ap-user-global-timelines')
         .update({
           status: 'archived',
-          updated_at: new Date().toISOString(),
+          updated_at: toLocalISOString(new Date()),
         })
         .eq('id', archiveConfirmTimeline.id);
 

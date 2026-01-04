@@ -141,7 +141,7 @@ export function ArchivedTimelinesView({ onUpdate }: ArchivedTimelinesViewProps) 
                 .from(tableName)
                 .update({
                   status: 'active',
-                  updated_at: new Date().toISOString(),
+                  updated_at: toLocalISOString(new Date()),
                 })
                 .eq('id', timeline.id);
 

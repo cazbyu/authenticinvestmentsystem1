@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { checkOccurrenceExists } from '@/lib/taskUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
@@ -49,7 +49,7 @@ export async function handleActionCompletion(
       type: 'task',
       status: 'completed',
       due_date: dueDate,
-      completed_at: new Date().toISOString(),
+      completed_at: toLocalISOString(new Date()),
       parent_task_id: actionId,
       is_twelve_week_goal: !!(parent.user_global_timeline_id || (timeline?.source === 'global')),
     };
@@ -200,7 +200,7 @@ export async function handleRecurringTaskCompletion(
       end_date: parentTask.end_date,
       start_time: sourceTask.start_time,
       end_time: sourceTask.end_time,
-      completed_at: new Date().toISOString(),
+      completed_at: toLocalISOString(new Date()),
       parent_task_id: sourceTaskId,
       is_urgent: sourceTask.is_urgent,
       is_important: sourceTask.is_important,

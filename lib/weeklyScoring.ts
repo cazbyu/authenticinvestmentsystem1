@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { toLocalISOString } from '@/lib/dateUtils';
 
 /**
  * Weekly Scoring System
@@ -227,7 +228,7 @@ export async function updateWeeklyAlignment(
         milestones_hit: stats.milestonesHit,
         execution_percentage: stats.twelveWeekGoalExecution,
         total_weekly_points: weeklyBonus,
-        completed_at: new Date().toISOString(),
+        completed_at: toLocalISOString(new Date()),
       })
       .eq('id', alignmentId);
 

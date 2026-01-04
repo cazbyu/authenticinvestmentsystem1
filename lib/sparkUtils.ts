@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase';
+import { toLocalISOString } from '@/lib/dateUtils';
 import { calculateTaskPoints } from './taskUtils';
 
 export interface DailySpark {
@@ -75,7 +76,7 @@ export function getModeDescription(fuelLevel: 1 | 2 | 3): string {
 
 export async function checkTodaysSpark(userId: string): Promise<DailySpark | null> {
   const supabase = getSupabaseClient();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISOString(new Date()).split('T')[0];
 
   const { data, error } = await supabase
     .from('0008-ap-daily-sparks')
@@ -142,7 +143,7 @@ export async function updateSparkFuelLevel(sparkId: string, fuelLevel: 1 | 2 | 3
     .from('0008-ap-daily-sparks')
     .update({
       fuel_level: fuelLevel,
-      updated_at: new Date().toISOString(),
+      updated_at: toLocalISOString(new Date()),
     })
     .eq('id', sparkId);
 
@@ -177,7 +178,7 @@ export interface ScheduledActionsData {
 
 export async function getScheduledActions(userId: string): Promise<ScheduledActionsData> {
   const supabase = getSupabaseClient();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISOString(new Date()).split('T')[0];
 
   const { data, error } = await supabase
     .from('0008-ap-tasks')
@@ -335,7 +336,7 @@ export async function getBrainDumpItems(userId: string): Promise<BrainDumpItem[]
 
 export async function convertBrainDumpToTask(brainDumpId: string, userId: string, content: string): Promise<void> {
   const supabase = getSupabaseClient();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISOString(new Date()).split('T')[0];
 
   const { error } = await supabase
     .from('0008-ap-tasks')
@@ -398,7 +399,7 @@ export async function addReflectionToBrainDump(
       parent_type: 'brain_dump',
       parent_id: brainDumpId,
       content: reflectionContent,
-      reflection_date: new Date().toISOString().split('T')[0],
+      reflection_date: toLocalISOString(new Date()).split('T')[0],
     });
 
   if (error) {
@@ -479,7 +480,7 @@ export async function activateDepositIdeas(
   selectedIdeas: DepositIdea[]
 ): Promise<void> {
   const supabase = getSupabaseClient();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISOString(new Date()).split('T')[0];
 
   for (const idea of selectedIdeas) {
     const { data: taskData, error: taskError } = await supabase
@@ -502,7 +503,7 @@ export async function activateDepositIdeas(
     const { error: updateError } = await supabase
       .from('0008-ap-deposit-ideas')
       .update({
-        activated_at: new Date().toISOString(),
+        activated_at: toLocalISOString(new Date()),
         activated_task_id: taskData.id,
       })
       .eq('id', idea.id);
@@ -556,7 +557,7 @@ export function getDepositIdeasMessage(fuelLevel: 1 | 2 | 3): string {
 
 export async function getTodayTargetScore(userId: string): Promise<number> {
   const supabase = getSupabaseClient();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISOString(new Date()).split('T')[0];
 
   const { data, error } = await supabase
     .from('0008-ap-tasks')
@@ -582,12 +583,12 @@ export async function commitDailySpark(
   targetScore: number
 ): Promise<void> {
   const supabase = getSupabaseClient();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalISOString(new Date()).split('T')[0];
 
   const { error } = await supabase
     .from('0008-ap-daily-sparks')
     .update({
-      committed_at: new Date().toISOString(),
+      committed_at: toLocalISOString(new Date()),
       initial_target_score: targetScore,
     })
     .eq('user_id', userId)

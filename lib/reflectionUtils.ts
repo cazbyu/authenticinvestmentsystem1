@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { formatLocalDate, getWeekStart, getWeekEnd } from './dateUtils';
+import { formatLocalDate, toLocalISOString, getWeekStart, getWeekEnd } from './dateUtils';
 
 export interface ReflectionAttachment {
   id: string;
@@ -605,7 +605,7 @@ export async function updateReflection(
         follow_up: followUp,
         follow_up_date: followUpDate || null,
         reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
-        updated_at: new Date().toISOString(),
+        updated_at: toLocalISOString(new Date()),
       })
       .eq('id', reflectionId)
       .eq('user_id', userId);
@@ -719,7 +719,7 @@ export async function archiveReflection(
   try {
     const { error } = await supabase
       .from('0008-ap-reflections')
-      .update({ archived: true, updated_at: new Date().toISOString() })
+      .update({ archived: true, updated_at: toLocalISOString(new Date()) })
       .eq('id', reflectionId)
       .eq('user_id', userId);
 

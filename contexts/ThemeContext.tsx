@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabaseClient } from '@/lib/supabase';
 
@@ -114,7 +115,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
       await supabase
         .from('0008-ap-users')
-        .update({ theme_color: color, updated_at: new Date().toISOString() })
+        .update({ theme_color: color, updated_at: toLocalISOString(new Date()) })
         .eq('id', user.id);
     } catch (error) {
       console.error('Error saving theme color to database:', error);

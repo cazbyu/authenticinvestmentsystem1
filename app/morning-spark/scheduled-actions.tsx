@@ -8,7 +8,7 @@ import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-nativ
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import {
   checkTodaysSpark,
   getScheduledActions,
@@ -178,12 +178,12 @@ export default function ScheduledActionsScreen() {
         if (task.type === 'task') {
           await supabase
             .from('0008-ap-tasks')
-            .update({ due_date: tomorrowStr, updated_at: new Date().toISOString() })
+            .update({ due_date: tomorrowStr, updated_at: toLocalISOString(new Date()) })
             .eq('id', task.id);
         } else {
           await supabase
             .from('0008-ap-tasks')
-            .update({ start_date: tomorrowStr, updated_at: new Date().toISOString() })
+            .update({ start_date: tomorrowStr, updated_at: toLocalISOString(new Date()) })
             .eq('id', task.id);
         }
       }
@@ -192,7 +192,7 @@ export default function ScheduledActionsScreen() {
         await supabase
           .from('0008-ap-tasks')
           .update({
-            deleted_at: new Date().toISOString(),
+            deleted_at: toLocalISOString(new Date()),
             status: 'cancelled'
           })
           .eq('id', task.id);
@@ -220,7 +220,7 @@ export default function ScheduledActionsScreen() {
 
       await supabase
         .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
         .eq('id', taskId);
 
       if (Platform.OS !== 'web') {
@@ -252,7 +252,7 @@ export default function ScheduledActionsScreen() {
               await supabase
                 .from('0008-ap-tasks')
                 .update({
-                  deleted_at: new Date().toISOString(),
+                  deleted_at: toLocalISOString(new Date()),
                   status: 'cancelled'
                 })
                 .eq('id', taskId);
@@ -274,7 +274,7 @@ export default function ScheduledActionsScreen() {
 
   function renderActionRow(action: ScheduledAction, isOverdue: boolean) {
     const isTask = action.type === 'task';
-    const isDueToday = action.due_date === new Date().toISOString().split('T')[0];
+    const isDueToday = action.due_date === toLocalISOString(new Date()).split('T')[0];
 
     const timeDisplay = action.start_time
       ? formatTimeDisplay(action.start_time)

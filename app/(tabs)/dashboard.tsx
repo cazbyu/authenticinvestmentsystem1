@@ -16,7 +16,7 @@ import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetai
 import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
 import { DraggableFab } from '@/components/DraggableFab';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
@@ -677,7 +677,7 @@ export default function Dashboard() {
         // Regular standalone task - just update status
         const { error } = await supabase
           .from('0008-ap-tasks')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
           .eq('id', task.id);
 
         if (error) throw error;
@@ -800,7 +800,7 @@ export default function Dashboard() {
         .update({
           is_active: false,
           archived: true,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', depositIdea.id);
 
@@ -908,9 +908,9 @@ export default function Dashboard() {
         .update({
           is_active: false,
           archived: true,
-          activated_at: new Date().toISOString(),
+          activated_at: toLocalISOString(new Date()),
           activated_task_id: taskId,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', depositIdea.id);
 

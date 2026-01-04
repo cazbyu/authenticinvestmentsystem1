@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import {
   View,
   Text,
@@ -227,7 +228,7 @@ export function EditRoleModal({ visible, onClose, onUpdate, role }: EditRoleModa
           label: label.trim(),
           image_path: imagePath,
           color: selectedColor,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', role.id);
 
