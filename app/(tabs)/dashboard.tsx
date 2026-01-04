@@ -1111,57 +1111,63 @@ export default function Dashboard() {
 
         <View style={styles.content} pointerEvents="box-none">
 
-  {activeTab === 'home' && (showMorningSpark || showEveningReview || showWeeklyAlignment) && (
-    <View style={{ gap: 12, marginHorizontal: 16, marginTop: 16 }}>
-      {showMorningSpark && (
-        <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
-          <TouchableOpacity
-            onPress={() => router.push('/morning-spark')}
-            style={styles.ritualButton}
-            activeOpacity={0.8}
-          >
-            <Text style={{ fontSize: 32 }}>🔥</Text>
-            <Text style={styles.ritualButtonText}>Set Morning Spark</Text>
-          </TouchableOpacity>
-        </Animated.View>
+  {activeTab === 'home' && (
+    <>
+      {(showMorningSpark || showEveningReview || showWeeklyAlignment) && (
+        <View style={{ gap: 12, marginHorizontal: 16, marginTop: 16 }}>
+          {showMorningSpark && (
+            <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
+              <TouchableOpacity
+                onPress={() => router.push('/morning-spark')}
+                style={styles.ritualButton}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 32 }}>🔥</Text>
+                <Text style={styles.ritualButtonText}>Set Morning Spark</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {showEveningReview && (
+            <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
+              <TouchableOpacity
+                onPress={() => router.push('/evening-review')}
+                style={[styles.ritualButton, { backgroundColor: '#8B5CF6' }]}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 32 }}>🌙</Text>
+                <Text style={styles.ritualButtonText}>Complete Evening Review</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {showWeeklyAlignment && (
+            <Animated.View style={{ transform: [{ scale: alignmentAnimation }] }}>
+              <TouchableOpacity
+                onPress={() => router.push('/weekly-alignment')}
+                style={[styles.ritualButton, { backgroundColor: '#10B981' }]}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 32 }}>🎯</Text>
+                <Text style={styles.ritualButtonText}>Set Weekly Focus</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        </View>
       )}
 
-      {showEveningReview && (
-        <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
-          <TouchableOpacity
-            onPress={() => router.push('/evening-review')}
-            style={[styles.ritualButton, { backgroundColor: '#8B5CF6' }]}
-            activeOpacity={0.8}
-          >
-            <Text style={{ fontSize: 32 }}>🌙</Text>
-            <Text style={styles.ritualButtonText}>Complete Evening Review</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      {showWeeklyAlignment && (
-        <Animated.View style={{ transform: [{ scale: alignmentAnimation }] }}>
-          <TouchableOpacity
-            onPress={() => router.push('/weekly-alignment')}
-            style={[styles.ritualButton, { backgroundColor: '#10B981' }]}
-            activeOpacity={0.8}
-          >
-            <Text style={{ fontSize: 32 }}>🎯</Text>
-            <Text style={styles.ritualButtonText}>Set Weekly Focus</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      <TouchableOpacity
-        style={styles.devResetButton}
-        onPress={handleDevResetSpark}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.devResetText}>
-          Reset Morning Spark (Dev)
-        </Text>
-      </TouchableOpacity>
-    </View>
+      <View style={{ marginHorizontal: 16, marginTop: (showMorningSpark || showEveningReview || showWeeklyAlignment) ? 12 : 16 }}>
+        <TouchableOpacity
+          style={styles.devResetButton}
+          onPress={handleDevResetSpark}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.devResetText}>
+            Reset Morning Spark (Dev)
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </>
   )}
 
   {activeTab === 'home' ? (
