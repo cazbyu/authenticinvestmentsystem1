@@ -292,16 +292,15 @@ const formatTimeFor12Hour = (time24h: string): string => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
 
-    // SUCCESS FEEDBACK - Close modal and refresh
-    Alert.alert('Success', 'Your schedule has been updated!', [
-      {
-        text: 'OK',
-        onPress: async () => {
-          setIsAdjustModalVisible(false);
-          await loadData(); // Refresh the main screen
-        }
-      }
-    ]);
+   // SUCCESS FEEDBACK - Auto-close modal and refresh
+setIsAdjustModalVisible(false);
+await loadData();
+
+// Optional: Show brief success message after returning to main screen
+setTimeout(() => {
+  Alert.alert('Success', 'Your schedule has been updated!');
+}, 300);
+    
   } catch (error) {
     console.error('Error adjusting schedule:', error);
     Alert.alert('Error', 'Failed to adjust schedule');
