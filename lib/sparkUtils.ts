@@ -550,10 +550,77 @@ export function getDepositIdeasMessage(fuelLevel: 1 | 2 | 3): string {
     case 1:
       return 'Only add what feels energizing, not draining. You can skip this entirely.';
     case 2:
-      return 'Want to activate any saved ideas for today?';
+      return "Here are some opportunities you've created for yourself. Are there any that would best fit into today?";
     case 3:
-      return "Great time to activate some of those ideas you've been saving!";
+      return 'You have fuel to burn. Who can you serve?';
   }
+}
+
+export async function getDepositIdeasByRole(
+  userId: string,
+  topRoleIds: string[],
+  limit: number = 5
+): Promise<DepositIdea[]> {
+  const supabase = getSupabaseClient();
+
+  const { data: ideas, error } = await supabase
+    .from('0008-ap-deposit-ideas')
+    .select('*')
+    .eq('user_id', userId)
+    .is('activated_at', null)
+    .eq('archived', false)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching deposit ideas by role:', error);
+    throw error;
+  }
+
+  const ideasWithScores = await Promise.all(
+    (ideas || []).map(async (idea) => {
+      const { data: roleJoins } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('role_id')
+        .eq('parent_id', idea.id)
+        .eq('parent_type', 'deposit_idea');
+
+      const roleMatches = (roleJoins || []).filter((r) =>
+        topRoleIds.includes(r.role_id)
+      ).length;
+
+      return { ...idea, roleScore: roleMatches };
+    })
+  );
+
+  return ideasWithScores
+    .sort((a, b) => {
+      if (b.roleScore !== a.roleScore) return b.roleScore - a.roleScore;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    })
+    .slice(0, limit);
+}
+
+export async function getDepositIdeasByZone(
+  userId: string,
+  limit: number = 5
+): Promise<DepositIdea[]> {
+  const supabase = getSupabaseClient();
+
+  const { data: ideas, error } = await supabase
+    .from('0008-ap-deposit-ideas')
+    .select('*')
+    .eq('user_id', userId)
+    .is('activated_at', null)
+    .eq('archived', false)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching deposit ideas by zone:', error);
+    throw error;
+  }
+
+  return (ideas || []) as DepositIdea[];
 }
 
 export async function getTodayTargetScore(userId: string): Promise<number> {

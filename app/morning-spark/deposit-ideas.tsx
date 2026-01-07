@@ -13,12 +13,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckSquare, Square } from 'lucide-react-native';
+import { ArrowLeft, CheckSquare, Square, User, Heart } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import {
   checkTodaysSpark,
-  getAvailableDepositIdeas,
+  getDepositIdeasByRole,
+  getDepositIdeasByZone,
   activateDepositIdeas,
   formatDaysAgo,
   getDepositIdeasMessage,
@@ -30,6 +31,8 @@ interface ToastMessage {
   visible: boolean;
 }
 
+type ViewMode = 'role' | 'zone';
+
 export default function DepositIdeasScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
@@ -39,6 +42,8 @@ export default function DepositIdeasScreen() {
   const [depositIdeas, setDepositIdeas] = useState<DepositIdea[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [userId, setUserId] = useState<string>('');
+  const [viewMode, setViewMode] = useState<ViewMode>('role');
+  const [topRoleIds, setTopRoleIds] = useState<string[]>([]);
 
   const [toast, setToast] = useState<ToastMessage>({ message: '', visible: false });
   const toastOpacity = useRef(new Animated.Value(0)).current;
@@ -46,6 +51,12 @@ export default function DepositIdeasScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (userId && !loading) {
+      loadIdeas();
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     if (toast.visible) {
@@ -80,23 +91,53 @@ export default function DepositIdeasScreen() {
 
       setUserId(user.id);
 
-      const [spark, ideas] = await Promise.all([
-        checkTodaysSpark(user.id),
-        getAvailableDepositIdeas(user.id, 20),
-      ]);
+      const spark = await checkTodaysSpark(user.id);
 
       if (!spark) {
         router.replace('/morning-spark');
         return;
       }
 
+      if (spark.fuel_level === 1) {
+        router.replace('/morning-spark/commit');
+        return;
+      }
+
       setFuelLevel(spark.fuel_level);
-      setDepositIdeas(ideas);
+
+      const { data: prefs } = await supabase
+        .from('0008-ap-user-preferences')
+        .select('top_three_roles')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const roleIds = prefs?.top_three_roles || [];
+      setTopRoleIds(roleIds);
+
+      await loadIdeas(user.id, roleIds);
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load deposit ideas. Please try again.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadIdeas(uid?: string, roles?: string[]) {
+    try {
+      const targetUserId = uid || userId;
+      const targetRoles = roles || topRoleIds;
+
+      let ideas: DepositIdea[];
+      if (viewMode === 'role') {
+        ideas = await getDepositIdeasByRole(targetUserId, targetRoles, 5);
+      } else {
+        ideas = await getDepositIdeasByZone(targetUserId, 5);
+      }
+
+      setDepositIdeas(ideas);
+    } catch (error) {
+      console.error('Error loading ideas:', error);
     }
   }
 
@@ -187,6 +228,13 @@ export default function DepositIdeasScreen() {
     router.push('/morning-spark/commit');
   }
 
+  function toggleViewMode(mode: ViewMode) {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setViewMode(mode);
+  }
+
   function renderDepositIdeaCard(idea: DepositIdea) {
     const isSelected = selectedIds.has(idea.id);
 
@@ -196,7 +244,7 @@ export default function DepositIdeasScreen() {
         style={[
           styles.ideaCard,
           {
-            backgroundColor: colors.card,
+            backgroundColor: colors.surface,
             borderColor: isSelected ? colors.primary : colors.border,
           },
           isSelected && styles.ideaCardSelected,
@@ -221,6 +269,10 @@ export default function DepositIdeasScreen() {
             Saved {formatDaysAgo(idea.created_at)}
           </Text>
         </View>
+
+        <View style={[styles.pointsBadge, { backgroundColor: isDarkMode ? '#10B98120' : '#10B98110' }]}>
+          <Text style={[styles.pointsText, { color: '#10B981' }]}>+5</Text>
+        </View>
       </TouchableOpacity>
     );
   }
@@ -238,6 +290,7 @@ export default function DepositIdeasScreen() {
   const hasIdeas = depositIdeas.length > 0;
   const selectedCount = selectedIds.size;
   const canActivate = selectedCount > 0 && !activating;
+  const pointsPreview = selectedCount * 5;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -250,31 +303,70 @@ export default function DepositIdeasScreen() {
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Add Deposit Ideas?</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Deposit Ideas</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
         <View style={styles.titleSection}>
-          <Text style={[styles.pageTitle, { color: colors.text }]}>Add Deposit Ideas?</Text>
+          <Text style={[styles.pageTitle, { color: colors.text }]}>Activate Deposit Ideas</Text>
           {fuelLevel && (
             <Text style={[styles.subheading, { color: colors.textSecondary }]}>
               {getDepositIdeasMessage(fuelLevel)}
             </Text>
           )}
-          {hasIdeas && (
-            <Text style={[styles.explanation, { color: colors.textSecondary }]}>
-              These are actions you've saved for when you have capacity. Select any you want to add to today's plan.
-            </Text>
-          )}
         </View>
+
+        {hasIdeas && (
+          <View style={styles.viewToggle}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                viewMode === 'role' && { backgroundColor: colors.primary },
+                viewMode !== 'role' && { borderColor: colors.border, borderWidth: 1 },
+              ]}
+              onPress={() => toggleViewMode('role')}
+              activeOpacity={0.7}
+            >
+              <User size={16} color={viewMode === 'role' ? '#FFFFFF' : colors.textSecondary} />
+              <Text
+                style={[
+                  styles.toggleText,
+                  { color: viewMode === 'role' ? '#FFFFFF' : colors.textSecondary },
+                ]}
+              >
+                View by Role
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                viewMode === 'zone' && { backgroundColor: colors.primary },
+                viewMode !== 'zone' && { borderColor: colors.border, borderWidth: 1 },
+              ]}
+              onPress={() => toggleViewMode('zone')}
+              activeOpacity={0.7}
+            >
+              <Heart size={16} color={viewMode === 'zone' ? '#FFFFFF' : colors.textSecondary} />
+              <Text
+                style={[
+                  styles.toggleText,
+                  { color: viewMode === 'zone' ? '#FFFFFF' : colors.textSecondary },
+                ]}
+              >
+                View by Zone
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {!hasIdeas ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>💡</Text>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No deposit ideas yet!</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No deposit ideas yet</Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              You can create them anytime during your day. Brain dump items and reflections can become deposit ideas.
+              You can create some in the Idea Bank.
             </Text>
           </View>
         ) : (
@@ -316,9 +408,9 @@ export default function DepositIdeasScreen() {
 
       <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
         {hasIdeas && selectedCount > 0 && (
-          <View style={[styles.impactMessage, { backgroundColor: isDarkMode ? '#1F2937' : '#F3F4F6' }]}>
-            <Text style={[styles.impactText, { color: colors.textSecondary }]}>
-              These ideas will boost your day!
+          <View style={[styles.pointsPreview, { backgroundColor: isDarkMode ? '#10B98120' : '#10B98110' }]}>
+            <Text style={[styles.pointsPreviewText, { color: '#10B981' }]}>
+              This will add +{pointsPreview} to your target
             </Text>
           </View>
         )}
@@ -338,7 +430,7 @@ export default function DepositIdeasScreen() {
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <Text style={[styles.primaryButtonText, { opacity: canActivate ? 1 : 0.5 }]}>
-              ✓ {selectedCount > 0 ? `Activate ${selectedCount}` : 'Activate Selected'}
+              {selectedCount > 0 ? `Activate ${selectedCount} Idea${selectedCount > 1 ? 's' : ''}` : 'Continue'}
             </Text>
           )}
         </TouchableOpacity>
@@ -349,7 +441,7 @@ export default function DepositIdeasScreen() {
           activeOpacity={0.8}
           disabled={activating}
         >
-          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Skip for Now</Text>
+          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Skip</Text>
         </TouchableOpacity>
       </View>
 
@@ -415,11 +507,26 @@ const styles = StyleSheet.create({
   subheading: {
     fontSize: 16,
     lineHeight: 24,
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  explanation: {
-    fontSize: 15,
-    lineHeight: 22,
+  viewToggle: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  toggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    gap: 8,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
@@ -497,21 +604,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
+  pointsBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  pointsText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   footer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
     gap: 12,
   },
-  impactMessage: {
+  pointsPreview: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
-  impactText: {
+  pointsPreviewText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   primaryButton: {
     paddingVertical: 16,
