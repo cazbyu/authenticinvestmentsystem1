@@ -44,6 +44,9 @@ export default function BrainDumpScreen() {
   const [brainDumpItems, setBrainDumpItems] = useState<BrainDumpItem[]>([]);
   const [userId, setUserId] = useState<string>('');
 
+  const [showDeferGate, setShowDeferGate] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+
   const [reflectionModalVisible, setReflectionModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<BrainDumpItem | null>(null);
   const [reflectionText, setReflectionText] = useState('');
@@ -105,12 +108,35 @@ export default function BrainDumpScreen() {
       items.forEach(item => {
         itemAnimations[item.id] = new Animated.Value(1);
       });
+
+      if (spark.fuel_level === 1 && items.length > 0) {
+        setShowDeferGate(true);
+        setShowNotes(false);
+      } else {
+        setShowDeferGate(false);
+        setShowNotes(true);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load brain dump items. Please try again.');
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleDefer() {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    router.push('/morning-spark/deposit-ideas');
+  }
+
+  function handleViewNotes() {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setShowDeferGate(false);
+    setShowNotes(true);
   }
 
   function showToast(message: string) {
@@ -253,7 +279,7 @@ export default function BrainDumpScreen() {
     const isProcessing = processing === item.id;
 
     return (
-      <Animated.View key={item.id} style={[styles.brainDumpCard, { backgroundColor: colors.card, borderColor: colors.border }, animatedStyle]}>
+      <Animated.View key={item.id} style={[styles.brainDumpCard, { backgroundColor: colors.surface, borderColor: colors.border }, animatedStyle]}>
         <View style={styles.cardHeader}>
           <Text style={[styles.cardContent, { color: colors.text }]}>{item.content}</Text>
           <Text style={[styles.cardTime, { color: colors.textSecondary }]}>
@@ -268,8 +294,8 @@ export default function BrainDumpScreen() {
             disabled={isProcessing}
             activeOpacity={0.7}
           >
-            <FileText size={16} color="#3B82F6" />
-            <Text style={[styles.actionButtonText, { color: '#3B82F6' }]}>Make Task</Text>
+            <FileText size={18} color="#3B82F6" />
+            <Text style={[styles.actionButtonText, { color: '#3B82F6' }]}>📋 Create Task</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -278,28 +304,18 @@ export default function BrainDumpScreen() {
             disabled={isProcessing}
             activeOpacity={0.7}
           >
-            <Lightbulb size={16} color="#F59E0B" />
-            <Text style={[styles.actionButtonText, { color: '#F59E0B' }]}>Save Idea</Text>
+            <Lightbulb size={18} color="#F59E0B" />
+            <Text style={[styles.actionButtonText, { color: '#F59E0B' }]}>💡 Save as Idea</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: isDarkMode ? '#10B98120' : '#10B98110' }]}
-            onPress={() => handleReflect(item)}
-            disabled={isProcessing}
-            activeOpacity={0.7}
-          >
-            <MessageSquare size={16} color="#10B981" />
-            <Text style={[styles.actionButtonText, { color: '#10B981' }]}>Reflect</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: isDarkMode ? '#6B728020' : '#6B728010' }]}
             onPress={() => handleAcknowledge(item)}
             disabled={isProcessing}
             activeOpacity={0.7}
           >
-            <CheckCircle size={16} color="#6B7280" />
-            <Text style={[styles.actionButtonText, { color: '#6B7280' }]}>Acknowledge</Text>
+            <CheckCircle size={18} color="#10B981" />
+            <Text style={[styles.actionButtonText, { color: '#10B981' }]}>✓ Acknowledge</Text>
           </TouchableOpacity>
         </View>
 
@@ -335,61 +351,77 @@ export default function BrainDumpScreen() {
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Brain Dump</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Yesterday's Notes</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
         <View style={styles.titleSection}>
           <Text style={[styles.pageTitle, { color: colors.text }]}>Yesterday's Brain Dump</Text>
-          {fuelLevel && (
+          {fuelLevel && showDeferGate && (
+            <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+              You created some notes yesterday. Would you like to defer them so they don't weigh on you?
+            </Text>
+          )}
+          {fuelLevel && !showDeferGate && (
             <Text style={[styles.subheading, { color: colors.textSecondary }]}>
               {getBrainDumpMessage(fuelLevel)}
             </Text>
           )}
-          {hasItems && (
+          {hasItems && showNotes && (
             <Text style={[styles.countText, { color: colors.textSecondary }]}>
               {brainDumpItems.length} thought{brainDumpItems.length > 1 ? 's' : ''} from yesterday
             </Text>
           )}
         </View>
 
-        {!hasItems ? (
+        {showDeferGate && (
+          <View style={styles.deferGateContainer}>
+            <TouchableOpacity
+              style={[styles.deferButton, { backgroundColor: colors.primary }]}
+              onPress={handleDefer}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.deferButtonText}>Yes, defer them</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.viewNotesButton, { borderColor: colors.border, backgroundColor: 'transparent' }]}
+              onPress={handleViewNotes}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.viewNotesButtonText, { color: colors.text }]}>No, let me review</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!hasItems && !showDeferGate ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>☀️</Text>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No brain dump from yesterday</Text>
+            <Text style={styles.emptyEmoji}>✨</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No notes from yesterday</Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              You're starting fresh!
+              You're all clear!
             </Text>
           </View>
-        ) : (
+        ) : showNotes ? (
           <View style={styles.cardsContainer}>
             {brainDumpItems.map((item) => renderBrainDumpCard(item))}
           </View>
-        )}
+        ) : null}
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-          onPress={handleContinue}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.primaryButtonText}>✓ Accept & Continue</Text>
-        </TouchableOpacity>
-
-        {hasItems && (
+      {!showDeferGate && (
+        <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
           <TouchableOpacity
-            style={[styles.secondaryButton, { borderColor: colors.border }]}
-            onPress={handleAdjust}
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+            onPress={handleContinue}
             activeOpacity={0.8}
           >
-            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>✏️ Adjust</Text>
+            <Text style={styles.primaryButtonText}>Continue →</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
       <Modal
         visible={reflectionModalVisible}
@@ -398,7 +430,7 @@ export default function BrainDumpScreen() {
         onRequestClose={() => setReflectionModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Add Reflection</Text>
               <TouchableOpacity
@@ -522,6 +554,33 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  deferGateContainer: {
+    gap: 12,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  deferButton: {
+    paddingVertical: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deferButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  viewNotesButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  viewNotesButtonText: {
+    fontSize: 16,
     fontWeight: '600',
   },
   emptyState: {
