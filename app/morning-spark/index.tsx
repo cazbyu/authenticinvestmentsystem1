@@ -77,6 +77,22 @@ export default function MorningSparkFuelCheck() {
       const spark = await checkTodaysSpark(user.id);
 
       if (spark) {
+        // Check if spark is already committed (flow completed)
+        if (spark.committed_at) {
+          Alert.alert(
+            'Already Complete',
+            "You've already completed your Morning Spark today! Check back tomorrow.",
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/(tabs)/dashboard')
+              }
+            ]
+          );
+          return;
+        }
+
+        // Spark exists but not committed - allow continuing
         setExistingSparkId(spark.id);
         setSelectedFuel(spark.fuel_level);
       }

@@ -159,6 +159,7 @@ export interface ScheduledAction {
   title: string;
   description?: string;
   due_date?: string;
+  due_time?: string;
   start_date?: string;
   start_time?: string;
   end_time?: string;
