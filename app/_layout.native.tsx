@@ -8,6 +8,7 @@ import { SideMenu } from '@/components/SideMenu';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthenticScoreProvider } from '@/contexts/AuthenticScoreContext';
 import { TabResetProvider } from '@/contexts/TabResetContext';
+import { MorningSparkProvider } from '@/contexts/MorningSparkContext';
 import React from 'react';
 
 console.log('[App] _layout.native.tsx loaded');
@@ -20,7 +21,8 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthenticScoreProvider>
         <TabResetProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
+          <MorningSparkProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
             <Drawer
               drawerContent={() => <SideMenu />}
               screenOptions={{
@@ -49,6 +51,7 @@ export default function RootLayout() {
             </Drawer>
             <StatusBar style="auto" />
           </GestureHandlerRootView>
+          </MorningSparkProvider>
         </TabResetProvider>
       </AuthenticScoreProvider>
     </ThemeProvider>

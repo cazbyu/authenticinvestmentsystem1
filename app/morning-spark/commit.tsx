@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  TextInput,
   Alert,
   Animated,
   Platform,
@@ -13,71 +14,50 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, Sparkles, Target, TrendingUp, FileText, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useMorningSpark } from '@/contexts/MorningSparkContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import {
   checkTodaysSpark,
-  getTodayTargetScore,
   commitDailySpark,
-  getRandomAspiration,
-  getDefaultInspiration,
-  Aspiration,
+  getFuelEmoji,
+  getFuelColor,
+  getModeDescription,
 } from '@/lib/sparkUtils';
-
-type CommitStage = 'pre-commit' | 'loading' | 'post-commit';
 
 export default function CommitScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
+  const {
+    fuelLevel,
+    acceptedEvents,
+    acceptedTasks,
+    activatedDepositIdeas,
+    calculateTargetScore,
+    reset,
+  } = useMorningSpark();
 
-  const [stage, setStage] = useState<CommitStage>('pre-commit');
-  const [userId, setUserId] = useState<string>('');
-  const [targetScore, setTargetScore] = useState<number>(0);
-  const [aspiration, setAspiration] = useState<Aspiration | null>(null);
-  const [inspirationText, setInspirationText] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [committing, setCommitting] = useState(false);
+  const [userId, setUserId] = useState<string>('');
+  const [sparkId, setSparkId] = useState<string>('');
+  const [reflection, setReflection] = useState('');
+  const [showCelebration, setShowCelebration] = useState(false);
 
-  const scoreScale = useRef(new Animated.Value(0)).current;
-  const contentOpacity = useRef(new Animated.Value(0)).current;
-  const inspirationOpacity = useRef(new Animated.Value(0)).current;
+  const celebrationScale = useRef(new Animated.Value(0)).current;
+  const celebrationOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    if (!loading && stage === 'pre-commit') {
-      Animated.spring(scoreScale, {
-        toValue: 1,
-        tension: 40,
-        friction: 7,
-        useNativeDriver: true,
-      }).start();
-
-      Animated.timing(contentOpacity, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [loading, stage]);
-
-  useEffect(() => {
-    if (stage === 'post-commit') {
-      Animated.timing(inspirationOpacity, {
-        toValue: 1,
-        duration: 800,
-        delay: 200,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [stage]);
-
   async function loadData() {
     try {
       const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!user) {
         Alert.alert('Error', 'You must be logged in.');
@@ -88,56 +68,101 @@ export default function CommitScreen() {
       setUserId(user.id);
 
       const spark = await checkTodaysSpark(user.id);
+
       if (!spark) {
         router.replace('/morning-spark');
         return;
       }
 
-      const score = await getTodayTargetScore(user.id);
-      setTargetScore(score);
+      setSparkId(spark.id);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load data. Please try again.');
+      Alert.alert('Error', 'Failed to load commitment screen. Please try again.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleCommit() {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  function getToneMessage(): string {
+    if (!fuelLevel) return '';
+
+    switch (fuelLevel) {
+      case 1:
+        return "A solid, manageable target. You've got this.";
+      case 2:
+        return "A balanced target. Let's make it happen.";
+      case 3:
+        return 'An ambitious target. Challenge accepted!';
     }
+  }
 
+  function getCommitButtonText(): string {
+    if (!fuelLevel) return 'Commit';
+
+    switch (fuelLevel) {
+      case 1:
+        return "I'm Committed";
+      case 2:
+        return 'Accept Challenge';
+      case 3:
+        return "Let's Do It";
+    }
+  }
+
+  async function handleCommit() {
     try {
-      setStage('loading');
+      setCommitting(true);
 
-      await commitDailySpark(userId, targetScore);
+      const supabase = getSupabaseClient();
+      let finalScore = calculateTargetScore();
 
-      const userAspiration = await getRandomAspiration(userId);
-      if (userAspiration) {
-        setAspiration(userAspiration);
-        setInspirationText(userAspiration.aspiration_text);
-      } else {
-        setInspirationText(getDefaultInspiration());
+      if (reflection.trim()) {
+        const { error: reflectionError } = await supabase.from('0008-ap-reflections').insert({
+          user_id: userId,
+          reflection_type: 'morning_spark',
+          parent_id: sparkId,
+          parent_type: 'daily_spark',
+          content: reflection.trim(),
+          points_awarded: 1,
+        });
+
+        if (reflectionError) {
+          console.error('Error saving reflection:', reflectionError);
+        } else {
+          finalScore += 1;
+        }
       }
+
+      await commitDailySpark(userId, finalScore);
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      setStage('post-commit');
-    } catch (error) {
-      console.error('Error committing:', error);
-      Alert.alert('Error', "Couldn't save your commitment. Please try again.");
-      setStage('pre-commit');
-    }
-  }
+      setShowCelebration(true);
 
-  function handleStartDay() {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Animated.parallel([
+        Animated.spring(celebrationScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          friction: 5,
+        }),
+        Animated.timing(celebrationOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      setTimeout(() => {
+        reset();
+        router.replace('/(tabs)/dashboard');
+      }, 2000);
+    } catch (error) {
+      console.error('Error committing spark:', error);
+      Alert.alert('Error', 'Could not commit your Morning Spark. Please try again.');
+      setCommitting(false);
     }
-    router.replace('/(tabs)/dashboard');
   }
 
   if (loading) {
@@ -150,6 +175,14 @@ export default function CommitScreen() {
     );
   }
 
+  const targetScore = calculateTargetScore();
+  const reflectionBonus = reflection.trim() ? 1 : 0;
+  const finalScore = targetScore + reflectionBonus;
+
+  const eventsPoints = acceptedEvents.reduce((sum, e) => sum + e.points, 0);
+  const tasksPoints = acceptedTasks.reduce((sum, t) => sum + t.points, 0);
+  const ideasPoints = activatedDepositIdeas.length * 5;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -158,167 +191,182 @@ export default function CommitScreen() {
           style={styles.backButton}
           accessible={true}
           accessibilityLabel="Go back"
-          disabled={stage === 'loading'}
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          {stage === 'post-commit' ? "You're Set!" : 'Ready to Act?'}
-        </Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Your Commitment</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {stage === 'pre-commit' && (
-        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
-          <Animated.View
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+        {fuelLevel && (
+          <View style={styles.fuelSection}>
+            <Text style={styles.fuelEmoji}>{getFuelEmoji(fuelLevel)}</Text>
+            <Text style={[styles.fuelMode, { color: getFuelColor(fuelLevel) }]}>
+              {getModeDescription(fuelLevel)}
+            </Text>
+          </View>
+        )}
+
+        <View style={[styles.scoreboardCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.scoreLabel, { color: colors.textSecondary }]}>Your Target</Text>
+          <Text
             style={[
-              styles.contentSection,
-              {
-                opacity: contentOpacity,
-              },
+              styles.scoreValue,
+              { color: fuelLevel ? getFuelColor(fuelLevel) : colors.primary },
             ]}
           >
-            <View style={styles.titleSection}>
-              <View style={styles.titleWithIcon}>
-                <Target size={32} color={colors.primary} />
-                <Text style={[styles.pageTitle, { color: colors.text }]}>Ready to Act? 🎯</Text>
-              </View>
-              <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
-                Here's what you're committing to today
-              </Text>
-            </View>
-
-            <Animated.View
-              style={[
-                styles.scoreCard,
-                {
-                  backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
-                  borderColor: colors.primary,
-                  transform: [{ scale: scoreScale }],
-                },
-              ]}
-            >
-              <View style={styles.scoreHeader}>
-                <Sparkles size={24} color={colors.primary} />
-                <Text style={[styles.scoreLabel, { color: colors.textSecondary }]}>
-                  Your Target Score for Today
-                </Text>
-              </View>
-              <Text style={[styles.scoreValue, { color: colors.primary }]}>{targetScore}</Text>
-              {targetScore === 0 && (
-                <Text style={[styles.scoreNote, { color: colors.textSecondary }]}>
-                  No scheduled tasks yet, but you can earn points throughout the day!
-                </Text>
-              )}
-            </Animated.View>
-
-            <View style={[styles.bonusSection, { backgroundColor: isDarkMode ? '#1F2937' : '#F9FAFB' }]}>
-              <View style={styles.bonusHeader}>
-                <TrendingUp size={20} color={colors.primary} />
-                <Text style={[styles.bonusTitle, { color: colors.text }]}>
-                  Plus, earn bonus points for:
-                </Text>
-              </View>
-              <View style={styles.bonusList}>
-                <View style={styles.bonusItem}>
-                  <Text style={styles.bonusEmoji}>✨</Text>
-                  <Text style={[styles.bonusText, { color: colors.text }]}>
-                    Creating new Deposit Ideas throughout the day
-                  </Text>
-                </View>
-                <View style={styles.bonusItem}>
-                  <Text style={styles.bonusEmoji}>📝</Text>
-                  <Text style={[styles.bonusText, { color: colors.text }]}>
-                    Capturing Reflections (quick or deep)
-                  </Text>
-                </View>
-                <View style={styles.bonusItem}>
-                  <Text style={styles.bonusEmoji}>🎯</Text>
-                  <Text style={[styles.bonusText, { color: colors.text }]}>
-                    Completing additional unscheduled tasks
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={{ height: 120 }} />
-          </Animated.View>
-        </ScrollView>
-      )}
-
-      {stage === 'post-commit' && (
-        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
-          <View style={styles.contentSection}>
-            <View style={styles.successSection}>
-              <CheckCircle2 size={64} color="#10B981" />
-              <Text style={[styles.successTitle, { color: colors.text }]}>
-                ✓ You're committed for today!
-              </Text>
-              <Text style={[styles.targetReminder, { color: colors.textSecondary }]}>
-                Today's Target: {targetScore} points
-              </Text>
-            </View>
-
-            <Animated.View
-              style={[
-                styles.inspirationCard,
-                {
-                  backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
-                  opacity: inspirationOpacity,
-                },
-              ]}
-            >
-              <View style={styles.inspirationHeader}>
-                <FileText size={24} color={colors.primary} />
-                <Text style={[styles.inspirationTitle, { color: colors.text }]}>
-                  Today's Inspiration
-                </Text>
-              </View>
-
-              <View style={styles.quoteContainer}>
-                <Text style={[styles.quoteText, { color: colors.text }]}>{inspirationText}</Text>
-              </View>
-
-              {aspiration && (
-                <Text style={[styles.inspirationDate, { color: colors.textSecondary }]}>
-                  From your aspirations library
-                </Text>
-              )}
-            </Animated.View>
-
-            <View style={{ height: 120 }} />
-          </View>
-        </ScrollView>
-      )}
-
-      {stage === 'loading' && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.text }]}>Committing to your day...</Text>
+            {finalScore}
+          </Text>
+          <Text style={[styles.scoreUnit, { color: colors.textSecondary }]}>points</Text>
         </View>
-      )}
+
+        <View style={[styles.manifestCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.manifestTitle, { color: colors.text }]}>Breakdown</Text>
+
+          {acceptedEvents.length > 0 && (
+            <View style={styles.manifestRow}>
+              <Text style={[styles.manifestLabel, { color: colors.text }]}>
+                {acceptedEvents.length} event{acceptedEvents.length > 1 ? 's' : ''}
+              </Text>
+              <Text style={[styles.manifestValue, { color: colors.textSecondary }]}>
+                +{eventsPoints}
+              </Text>
+            </View>
+          )}
+
+          {acceptedTasks.length > 0 && (
+            <View style={styles.manifestRow}>
+              <Text style={[styles.manifestLabel, { color: colors.text }]}>
+                {acceptedTasks.length} task{acceptedTasks.length > 1 ? 's' : ''}
+              </Text>
+              <Text style={[styles.manifestValue, { color: colors.textSecondary }]}>
+                +{tasksPoints}
+              </Text>
+            </View>
+          )}
+
+          {activatedDepositIdeas.length > 0 && (
+            <View style={styles.manifestRow}>
+              <Text style={[styles.manifestLabel, { color: colors.text }]}>
+                {activatedDepositIdeas.length} deposit idea{activatedDepositIdeas.length > 1 ? 's' : ''}
+              </Text>
+              <Text style={[styles.manifestValue, { color: colors.textSecondary }]}>
+                +{ideasPoints}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.manifestRow}>
+            <Text style={[styles.manifestLabel, { color: colors.text }]}>Morning Spark</Text>
+            <Text style={[styles.manifestValue, { color: colors.textSecondary }]}>+10</Text>
+          </View>
+
+          {reflectionBonus > 0 && (
+            <View style={styles.manifestRow}>
+              <Text style={[styles.manifestLabel, { color: colors.text }]}>Final Reflection</Text>
+              <Text style={[styles.manifestValue, { color: colors.textSecondary }]}>+1</Text>
+            </View>
+          )}
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.manifestRow}>
+            <Text style={[styles.manifestTotal, { color: colors.text }]}>Total Target</Text>
+            <Text
+              style={[
+                styles.manifestTotalValue,
+                { color: fuelLevel ? getFuelColor(fuelLevel) : colors.primary },
+              ]}
+            >
+              {finalScore}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.toneCard, { backgroundColor: isDarkMode ? '#1F2937' : '#F3F4F6' }]}>
+          <Text style={[styles.toneText, { color: colors.text }]}>{getToneMessage()}</Text>
+        </View>
+
+        <View style={[styles.victoryCard, { backgroundColor: isDarkMode ? '#10B98120' : '#10B98110' }]}>
+          <Sparkles size={20} color="#10B981" />
+          <Text style={[styles.victoryText, { color: '#10B981' }]}>
+            Beat this score by midnight to earn +10 Victory Bonus!
+          </Text>
+        </View>
+
+        <View style={styles.reflectionSection}>
+          <Text style={[styles.reflectionLabel, { color: colors.textSecondary }]}>
+            Any final thoughts or reflections to capture? (+1 point)
+          </Text>
+          <TextInput
+            style={[
+              styles.reflectionInput,
+              {
+                backgroundColor: colors.surface,
+                color: colors.text,
+                borderColor: colors.border,
+              },
+            ]}
+            placeholder="Optional..."
+            placeholderTextColor={colors.textSecondary}
+            value={reflection}
+            onChangeText={setReflection}
+            multiline
+            textAlignVertical="top"
+            maxLength={500}
+          />
+        </View>
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
 
       <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-        {stage === 'pre-commit' && (
-          <TouchableOpacity
-            style={[styles.commitButton, { backgroundColor: colors.primary }]}
-            onPress={handleCommit}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.commitButtonText}>✓ I'm Ready to Act!</Text>
-          </TouchableOpacity>
-        )}
-
-        {stage === 'post-commit' && (
-          <TouchableOpacity
-            style={[styles.startButton, { backgroundColor: colors.primary }]}
-            onPress={handleStartDay}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.startButtonText}>Start My Day →</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[
+            styles.commitButton,
+            {
+              backgroundColor: fuelLevel ? getFuelColor(fuelLevel) : colors.primary,
+            },
+          ]}
+          onPress={handleCommit}
+          disabled={committing}
+          activeOpacity={0.8}
+        >
+          {committing ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.commitButtonText}>{getCommitButtonText()}</Text>
+          )}
+        </TouchableOpacity>
       </View>
+
+      {showCelebration && (
+        <Animated.View
+          style={[
+            styles.celebration,
+            {
+              opacity: celebrationOpacity,
+              transform: [{ scale: celebrationScale }],
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.celebrationContent,
+              { backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF' },
+            ]}
+          >
+            <CheckCircle size={80} color="#10B981" />
+            <Text style={[styles.celebrationText, { color: colors.text }]}>
+              Commitment Locked In!
+            </Text>
+            <Text style={[styles.celebrationSubtext, { color: colors.textSecondary }]}>
+              Let's make it a great day
+            </Text>
+          </View>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -355,156 +403,122 @@ const styles = StyleSheet.create({
   },
   scrollContentContainer: {
     paddingHorizontal: 20,
-  },
-  contentSection: {
     paddingTop: 24,
   },
-  titleSection: {
-    marginBottom: 32,
-  },
-  titleWithIcon: {
-    flexDirection: 'row',
+  fuelSection: {
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  pageSubtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginTop: 8,
-  },
-  scoreCard: {
-    padding: 32,
-    borderRadius: 20,
-    borderWidth: 3,
     marginBottom: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
   },
-  scoreHeader: {
-    flexDirection: 'row',
+  fuelEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  fuelMode: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  scoreboardCard: {
+    borderRadius: 16,
+    padding: 32,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   scoreLabel: {
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 12,
   },
   scoreValue: {
-    fontSize: 80,
-    fontWeight: '800',
-    lineHeight: 88,
+    fontSize: 72,
+    fontWeight: '700',
+    lineHeight: 80,
   },
-  scoreNote: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 12,
-    fontWeight: '500',
+  scoreUnit: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 4,
   },
-  bonusSection: {
+  manifestCard: {
+    borderRadius: 12,
     padding: 20,
-    borderRadius: 16,
-    marginBottom: 24,
-  },
-  bonusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     marginBottom: 16,
   },
-  bonusTitle: {
+  manifestTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  manifestRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  manifestLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  manifestValue: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  manifestTotal: {
     fontSize: 17,
     fontWeight: '700',
   },
-  bonusList: {
-    gap: 12,
+  manifestTotalValue: {
+    fontSize: 24,
+    fontWeight: '700',
   },
-  bonusItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+  toneCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
   },
-  bonusEmoji: {
-    fontSize: 20,
-    marginTop: 2,
-  },
-  bonusText: {
-    flex: 1,
-    fontSize: 15,
+  toneText: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
     lineHeight: 22,
   },
-  successSection: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    marginBottom: 24,
-  },
-  successTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    marginTop: 20,
-    textAlign: 'center',
-  },
-  targetReminder: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  inspirationCard: {
-    padding: 28,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  inspirationHeader: {
+  victoryCard: {
+    borderRadius: 12,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginBottom: 24,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
-  inspirationTitle: {
-    fontSize: 20,
+  victoryText: {
+    fontSize: 14,
     fontWeight: '700',
-  },
-  quoteContainer: {
-    paddingVertical: 8,
-  },
-  quoteText: {
-    fontSize: 22,
-    lineHeight: 34,
-    fontWeight: '500',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  inspirationDate: {
-    fontSize: 13,
-    marginTop: 20,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  loadingOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
+    lineHeight: 20,
   },
-  loadingText: {
-    fontSize: 16,
+  reflectionSection: {
+    marginBottom: 20,
+  },
+  reflectionLabel: {
+    fontSize: 14,
     fontWeight: '600',
+    marginBottom: 8,
+  },
+  reflectionInput: {
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    minHeight: 100,
+    borderWidth: 1,
   },
   footer: {
     paddingHorizontal: 20,
@@ -513,34 +527,44 @@ const styles = StyleSheet.create({
   },
   commitButton: {
     paddingVertical: 18,
-    borderRadius: 16,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    minHeight: 56,
   },
   commitButtonText: {
     color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
   },
-  startButton: {
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
+  celebration: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '800',
+  celebrationContent: {
+    borderRadius: 20,
+    padding: 40,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  celebrationText: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  celebrationSubtext: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
