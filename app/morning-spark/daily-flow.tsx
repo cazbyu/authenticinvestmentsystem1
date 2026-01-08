@@ -53,7 +53,6 @@ export default function DailyFlowScreen() {
   const [itemsInKeepZone, setItemsInKeepZone] = useState<ScheduledAction[]>([]);
   const [itemsInRescheduleZone, setItemsInRescheduleZone] = useState<ScheduledAction[]>([]);
   const [itemsInCancelZone, setItemsInCancelZone] = useState<ScheduledAction[]>([]);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
   const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
 
@@ -346,56 +345,27 @@ export default function DailyFlowScreen() {
   }
 
   function getTimeOptions(item: ScheduledAction): Array<{label: string, value: string}> {
-    // Generate 30-min increment times for 24 hours
     const times: Array<{label: string, value: string}> = [
       { label: 'Anytime', value: 'anytime' }
     ];
     
-    // Determine the "top" time (first visible option after "Anytime")
-    let startHour = 0;
-    let startMinute = 0;
-    
-    if (item.due_time || item.start_time) {
-      // Use task's existing time
-      const taskTime = item.due_time || item.start_time;
-      const [h, m] = taskTime.split(':').map(Number);
-      startHour = h;
-      startMinute = m;
-    } else {
-      // Use 24 hours from current time
-      const now = new Date();
-      now.setHours(now.getHours() + 24);
-      startHour = now.getHours();
-      startMinute = Math.floor(now.getMinutes() / 30) * 30; // Round to nearest 30min
-    }
-    
-    // Generate all times, but with the calculated start time first
-    for (let i = 0; i < 48; i++) {
-      const hour = Math.floor(i / 2);
-      const minute = (i % 2) * 30;
-      const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
-      const displayTime = new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      times.push({ label: displayTime, value: timeStr });
-    }
-    
-    // Sort so that the start time appears right after "Anytime"
-    const targetTimeStr = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
-    const targetIndex = times.findIndex(t => t.value === targetTimeStr);
-    
-    if (targetIndex > 1) {
-      // Move target time to position 1 (right after Anytime)
-      const [targetTime] = times.splice(targetIndex, 1);
-      times.splice(1, 0, targetTime);
+    // Generate all times in 15-minute increments (96 slots in 24 hours)
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+        const displayTime = new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        times.push({ label: displayTime, value: timeStr });
+      }
     }
     
     return times;
   }
 
-  function moveItemToBin(itemId: string, targetBin: 'keep' | 'reschedule' | 'cancel') {
+  function handleBinTap(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
     const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
     const item = allItems.find(i => i.id === itemId);
     
@@ -418,8 +388,49 @@ export default function DailyFlowScreen() {
     setSelectedItemId(null);
   }
 
-  function toggleItemSelection(itemId: string) {
-    setSelectedItemId(prev => prev === itemId ? null : itemId);
+  function handleItemTap(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
+    // Cycle through bins: keep → reschedule → cancel → keep
+    let targetBin: 'keep' | 'reschedule' | 'cancel';
+    
+    if (currentBin === 'keep') {
+      targetBin = 'reschedule';
+    } else if (currentBin === 'reschedule') {
+      targetBin = 'cancel';
+    } else {
+      targetBin = 'keep';
+    }
+
+    // Find the item
+    const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
+    const item = allItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Remove from current bin
+    if (currentBin === 'keep') {
+      setItemsInKeepZone(prev => prev.filter(i => i.id !== itemId));
+    } else if (currentBin === 'reschedule') {
+      setItemsInRescheduleZone(prev => prev.filter(i => i.id !== itemId));
+    } else {
+      setItemsInCancelZone(prev => prev.filter(i => i.id !== itemId));
+    }
+
+    // Add to target bin
+    if (targetBin === 'keep') {
+      setItemsInKeepZone(prev => [...prev, item]);
+    } else if (targetBin === 'reschedule') {
+      setItemsInRescheduleZone(prev => [...prev, item]);
+      // Set default reschedule values if not already set
+      if (!rescheduleDates[itemId]) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setRescheduleDates(prev => ({...prev, [itemId]: toLocalISOString(tomorrow).split('T')[0]}));
+      }
+      if (!rescheduleTimes[itemId]) {
+        setRescheduleTimes(prev => ({...prev, [itemId]: 'anytime'}));
+      }
+    } else {
+      setItemsInCancelZone(prev => [...prev, item]);
+    }
   }
 
   async function applyAdjustments() {
@@ -1145,17 +1156,20 @@ export default function DailyFlowScreen() {
                       style={[
                         styles.binItem,
                         { 
-                          backgroundColor: selectedItemId === item.id ? colors.primary + '20' : 'transparent',
-                          borderColor: selectedItemId === item.id ? colors.primary : colors.border
+                          backgroundColor: colors.background,
+                          borderColor: colors.border
                         }
                       ]}
-                      onPress={() => toggleItemSelection(item.id)}
+                      onPress={() => handleItemTap(item.id, 'keep')}
                     >
                       <Text style={[
                         styles.binItemText,
                         { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
                       ]}>
                         {item.title}
+                      </Text>
+                      <Text style={[styles.binItemHint, { color: colors.textSecondary }]}>
+                        Tap to reschedule →
                       </Text>
                     </TouchableOpacity>
                   ))
@@ -1183,12 +1197,12 @@ export default function DailyFlowScreen() {
                         style={[
                           styles.binItem,
                           { 
-                            backgroundColor: selectedItemId === item.id ? colors.primary + '20' : 'transparent',
-                            borderColor: selectedItemId === item.id ? colors.primary : colors.border,
+                            backgroundColor: colors.background,
+                            borderColor: colors.border,
                             marginBottom: 8
                           }
                         ]}
-                        onPress={() => toggleItemSelection(item.id)}
+                        onPress={() => handleItemTap(item.id, 'reschedule')}
                       >
                         <Text style={[
                           styles.binItemText,
@@ -1196,20 +1210,23 @@ export default function DailyFlowScreen() {
                         ]}>
                           {item.title}
                         </Text>
+                        <Text style={[styles.binItemHint, { color: colors.textSecondary }]}>
+                          Tap to cancel →
+                        </Text>
                       </TouchableOpacity>
 
-                      {/* Date Picker - Real Dropdown */}
+                      {/* Date Picker - Inline like TaskEventForm */}
                       <View style={styles.pickerRow}>
                         <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Date:</Text>
-                        <View style={[styles.pickerWrapper, { borderColor: '#3B82F6' }]}>
+                        <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                           <Picker
                             selectedValue={rescheduleDates[item.id]}
                             onValueChange={(value) => setRescheduleDates(prev => ({...prev, [item.id]: value}))}
-                            style={[styles.picker, { color: '#3B82F6' }]}
+                            style={[styles.picker, { color: colors.text }]}
                           >
                             {Array.from({length: 14}, (_, i) => {
                               const date = new Date();
-                              date.setDate(date.getDate() + i + 1); // Start from tomorrow
+                              date.setDate(date.getDate() + i + 1);
                               const dateStr = toLocalISOString(date).split('T')[0];
                               const label = i === 0 ? 'Tomorrow' : 
                                            i === 1 ? 'Day After Tomorrow' :
@@ -1220,14 +1237,14 @@ export default function DailyFlowScreen() {
                         </View>
                       </View>
 
-                      {/* Time Picker - Real Dropdown with Smart Default */}
+                      {/* Time Picker - Inline like TaskEventForm */}
                       <View style={styles.pickerRow}>
                         <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Time:</Text>
-                        <View style={[styles.pickerWrapper, { borderColor: '#3B82F6' }]}>
+                        <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                           <Picker
                             selectedValue={rescheduleTimes[item.id]}
                             onValueChange={(value) => setRescheduleTimes(prev => ({...prev, [item.id]: value}))}
-                            style={[styles.picker, { color: '#3B82F6' }]}
+                            style={[styles.picker, { color: colors.text }]}
                           >
                             {getTimeOptions(item).map(opt => (
                               <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
@@ -1261,11 +1278,11 @@ export default function DailyFlowScreen() {
                       style={[
                         styles.binItem,
                         { 
-                          backgroundColor: selectedItemId === item.id ? colors.primary + '20' : 'transparent',
-                          borderColor: selectedItemId === item.id ? colors.primary : colors.border
+                          backgroundColor: colors.background,
+                          borderColor: colors.border
                         }
                       ]}
-                      onPress={() => toggleItemSelection(item.id)}
+                      onPress={() => handleItemTap(item.id, 'cancel')}
                     >
                       <Text style={[
                         styles.binItemText,
@@ -1273,35 +1290,14 @@ export default function DailyFlowScreen() {
                       ]}>
                         {item.title}
                       </Text>
+                      <Text style={[styles.binItemHint, { color: colors.textSecondary }]}>
+                        Tap to keep →
+                      </Text>
                     </TouchableOpacity>
                   ))
                 )}
               </View>
             </View>
-
-            {/* Movement Buttons */}
-            {selectedItemId && (
-              <View style={styles.movementButtons}>
-                <TouchableOpacity
-                  style={[styles.movementButton, { backgroundColor: '#10B981' }]}
-                  onPress={() => moveItemToBin(selectedItemId, 'keep')}
-                >
-                  <Text style={styles.movementButtonText}>→ Keep</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.movementButton, { backgroundColor: '#3B82F6' }]}
-                  onPress={() => moveItemToBin(selectedItemId, 'reschedule')}
-                >
-                  <Text style={styles.movementButtonText}>→ Reschedule</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.movementButton, { backgroundColor: '#EF4444' }]}
-                  onPress={() => moveItemToBin(selectedItemId, 'cancel')}
-                >
-                  <Text style={styles.movementButtonText}>→ Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </ScrollView>
 
           <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
@@ -1698,6 +1694,11 @@ const styles = StyleSheet.create({
   binItemText: {
     fontSize: 15,
     fontWeight: '500',
+  },
+  binItemHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   rescheduleItemContainer: {
     marginBottom: 16,
