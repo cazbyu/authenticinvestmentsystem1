@@ -10,7 +10,6 @@ import {
   Platform,
   Modal,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -1148,47 +1147,85 @@ export default function DailyFlowScreen() {
                         </Text>
                       </TouchableOpacity>
 
-                      {/* Date Picker */}
-                      <View style={[styles.pickerContainer, { backgroundColor: colors.background }]}>
-                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Date:</Text>
-                        <Picker
-                          selectedValue={rescheduleDates[item.id]}
-                          onValueChange={(value) => setRescheduleDates(prev => ({...prev, [item.id]: value}))}
-                          style={[styles.picker, { color: colors.text }]}
+                      {/* Date Selector */}
+                      <View style={styles.selectorRow}>
+                        <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Date:</Text>
+                        <TouchableOpacity
+                          style={[styles.selectorButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
+                          onPress={() => {
+                            // Show date options
+                            const options = Array.from({length: 7}, (_, i) => {
+                              const date = new Date();
+                              date.setDate(date.getDate() + i + 1);
+                              const dateStr = toLocalISOString(date).split('T')[0];
+                              const label = i === 0 ? 'Tomorrow' : 
+                                           i === 1 ? 'Day After Tomorrow' :
+                                           date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                              return { label, value: dateStr };
+                            });
+                            
+                            Alert.alert(
+                              'Select Date',
+                              '',
+                              options.map(opt => ({
+                                text: opt.label,
+                                onPress: () => setRescheduleDates(prev => ({...prev, [item.id]: opt.value}))
+                              })).concat([{ text: 'Cancel', style: 'cancel' }])
+                            );
+                          }}
                         >
-                          {Array.from({length: 14}, (_, i) => {
-                            const date = new Date();
-                            date.setDate(date.getDate() + i + 1); // Start from tomorrow
-                            const dateStr = toLocalISOString(date).split('T')[0];
-                            const label = i === 0 ? 'Tomorrow' : 
-                                         i === 1 ? 'Day After Tomorrow' :
-                                         date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                            return <Picker.Item key={dateStr} label={label} value={dateStr} />;
-                          })}
-                        </Picker>
+                          <Text style={[styles.selectorButtonText, { color: '#3B82F6' }]}>
+                            {(() => {
+                              const date = new Date(rescheduleDates[item.id]);
+                              const tomorrow = new Date();
+                              tomorrow.setDate(tomorrow.getDate() + 1);
+                              if (rescheduleDates[item.id] === toLocalISOString(tomorrow).split('T')[0]) {
+                                return 'Tomorrow';
+                              }
+                              return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                            })()} ▼
+                          </Text>
+                        </TouchableOpacity>
                       </View>
 
-                      {/* Time Picker */}
-                      <View style={[styles.pickerContainer, { backgroundColor: colors.background }]}>
-                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Time:</Text>
-                        <Picker
-                          selectedValue={rescheduleTimes[item.id]}
-                          onValueChange={(value) => setRescheduleTimes(prev => ({...prev, [item.id]: value}))}
-                          style={[styles.picker, { color: colors.text }]}
+                      {/* Time Selector */}
+                      <View style={styles.selectorRow}>
+                        <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Time:</Text>
+                        <TouchableOpacity
+                          style={[styles.selectorButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
+                          onPress={() => {
+                            const timeOptions = [
+                              { label: 'Anytime', value: 'anytime' },
+                              { label: '8:00 AM', value: '08:00:00' },
+                              { label: '9:00 AM', value: '09:00:00' },
+                              { label: '10:00 AM', value: '10:00:00' },
+                              { label: '11:00 AM', value: '11:00:00' },
+                              { label: '12:00 PM', value: '12:00:00' },
+                              { label: '1:00 PM', value: '13:00:00' },
+                              { label: '2:00 PM', value: '14:00:00' },
+                              { label: '3:00 PM', value: '15:00:00' },
+                              { label: '4:00 PM', value: '16:00:00' },
+                              { label: '5:00 PM', value: '17:00:00' },
+                              { label: '6:00 PM', value: '18:00:00' },
+                            ];
+                            
+                            Alert.alert(
+                              'Select Time',
+                              '',
+                              timeOptions.map(opt => ({
+                                text: opt.label,
+                                onPress: () => setRescheduleTimes(prev => ({...prev, [item.id]: opt.value}))
+                              })).concat([{ text: 'Cancel', style: 'cancel' }])
+                            );
+                          }}
                         >
-                          <Picker.Item label="Anytime" value="anytime" />
-                          {Array.from({length: 48}, (_, i) => {
-                            const hour = Math.floor(i / 2);
-                            const minute = (i % 2) * 30;
-                            const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
-                            const displayTime = new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              hour12: true
-                            });
-                            return <Picker.Item key={timeStr} label={displayTime} value={timeStr} />;
-                          })}
-                        </Picker>
+                          <Text style={[styles.selectorButtonText, { color: '#3B82F6' }]}>
+                            {rescheduleTimes[item.id] === 'anytime' ? 'Anytime' : (() => {
+                              const time = new Date(`2000-01-01T${rescheduleTimes[item.id]}`);
+                              return time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                            })()} ▼
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   ))
@@ -1656,22 +1693,31 @@ const styles = StyleSheet.create({
   },
   rescheduleItemContainer: {
     marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  pickerContainer: {
+  selectorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 4,
+    marginTop: 12,
   },
-  pickerLabel: {
-    fontSize: 13,
+  selectorLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    width: 50,
+    width: 60,
   },
-  picker: {
+  selectorButton: {
     flex: 1,
-    height: 40,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  selectorButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   movementButtons: {
     flexDirection: 'row',
