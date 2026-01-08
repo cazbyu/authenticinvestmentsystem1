@@ -363,36 +363,23 @@ export default function DailyFlowScreen() {
     return times;
   }
 
-  function handleItemTap(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
-    // Cycle through bins: keep → reschedule → cancel → keep
-    let targetBin: 'keep' | 'reschedule' | 'cancel';
-    
-    if (currentBin === 'keep') {
-      targetBin = 'reschedule';
-    } else if (currentBin === 'reschedule') {
-      targetBin = 'cancel';
-    } else {
-      targetBin = 'keep';
-    }
+  function moveItemToNextBin(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
+    // Single tap cycles: keep → reschedule → cancel → keep
+    const nextBin = currentBin === 'keep' ? 'reschedule' : currentBin === 'reschedule' ? 'cancel' : 'keep';
 
-    // Find the item
     const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
     const item = allItems.find(i => i.id === itemId);
     if (!item) return;
 
-    // Remove from current bin
-    if (currentBin === 'keep') {
-      setItemsInKeepZone(prev => prev.filter(i => i.id !== itemId));
-    } else if (currentBin === 'reschedule') {
-      setItemsInRescheduleZone(prev => prev.filter(i => i.id !== itemId));
-    } else {
-      setItemsInCancelZone(prev => prev.filter(i => i.id !== itemId));
-    }
+    // Remove from all bins
+    setItemsInKeepZone(prev => prev.filter(i => i.id !== itemId));
+    setItemsInRescheduleZone(prev => prev.filter(i => i.id !== itemId));
+    setItemsInCancelZone(prev => prev.filter(i => i.id !== itemId));
 
-    // Add to target bin
-    if (targetBin === 'keep') {
+    // Add to next bin
+    if (nextBin === 'keep') {
       setItemsInKeepZone(prev => [...prev, item]);
-    } else if (targetBin === 'reschedule') {
+    } else if (nextBin === 'reschedule') {
       setItemsInRescheduleZone(prev => [...prev, item]);
       // Set default reschedule values if not already set
       if (!rescheduleDates[itemId]) {
@@ -1135,16 +1122,13 @@ export default function DailyFlowScreen() {
                           borderColor: colors.border
                         }
                       ]}
-                      onPress={() => handleItemTap(item.id, 'keep')}
+                      onPress={() => moveItemToNextBin(item.id, 'keep')}
                     >
                       <Text style={[
                         styles.binItemText,
                         { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
                       ]}>
                         {item.title}
-                      </Text>
-                      <Text style={[styles.binItemHint, { color: colors.textSecondary }]}>
-                        Tap to reschedule →
                       </Text>
                     </TouchableOpacity>
                   ))
@@ -1177,16 +1161,13 @@ export default function DailyFlowScreen() {
                             marginBottom: 8
                           }
                         ]}
-                        onPress={() => handleItemTap(item.id, 'reschedule')}
+                        onPress={() => moveItemToNextBin(item.id, 'reschedule')}
                       >
                         <Text style={[
                           styles.binItemText,
                           { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
                         ]}>
                           {item.title}
-                        </Text>
-                        <Text style={[styles.binItemHint, { color: colors.textSecondary }]}>
-                          Tap to cancel →
                         </Text>
                       </TouchableOpacity>
 
@@ -1257,16 +1238,13 @@ export default function DailyFlowScreen() {
                           borderColor: colors.border
                         }
                       ]}
-                      onPress={() => handleItemTap(item.id, 'cancel')}
+                      onPress={() => moveItemToNextBin(item.id, 'cancel')}
                     >
                       <Text style={[
                         styles.binItemText,
                         { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
                       ]}>
                         {item.title}
-                      </Text>
-                      <Text style={[styles.binItemHint, { color: colors.textSecondary }]}>
-                        Tap to keep →
                       </Text>
                     </TouchableOpacity>
                   ))
