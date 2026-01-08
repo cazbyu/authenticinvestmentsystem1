@@ -10,6 +10,7 @@ import {
   Platform,
   Modal,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -342,6 +343,56 @@ export default function DailyFlowScreen() {
     } else {
       return '#9ca3af'; // Gray - Neither Urgent nor Important
     }
+  }
+
+  function getTimeOptions(item: ScheduledAction): Array<{label: string, value: string}> {
+    // Generate 30-min increment times for 24 hours
+    const times: Array<{label: string, value: string}> = [
+      { label: 'Anytime', value: 'anytime' }
+    ];
+    
+    // Determine the "top" time (first visible option after "Anytime")
+    let startHour = 0;
+    let startMinute = 0;
+    
+    if (item.due_time || item.start_time) {
+      // Use task's existing time
+      const taskTime = item.due_time || item.start_time;
+      const [h, m] = taskTime.split(':').map(Number);
+      startHour = h;
+      startMinute = m;
+    } else {
+      // Use 24 hours from current time
+      const now = new Date();
+      now.setHours(now.getHours() + 24);
+      startHour = now.getHours();
+      startMinute = Math.floor(now.getMinutes() / 30) * 30; // Round to nearest 30min
+    }
+    
+    // Generate all times, but with the calculated start time first
+    for (let i = 0; i < 48; i++) {
+      const hour = Math.floor(i / 2);
+      const minute = (i % 2) * 30;
+      const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+      const displayTime = new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      times.push({ label: displayTime, value: timeStr });
+    }
+    
+    // Sort so that the start time appears right after "Anytime"
+    const targetTimeStr = `${startHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}:00`;
+    const targetIndex = times.findIndex(t => t.value === targetTimeStr);
+    
+    if (targetIndex > 1) {
+      // Move target time to position 1 (right after Anytime)
+      const [targetTime] = times.splice(targetIndex, 1);
+      times.splice(1, 0, targetTime);
+    }
+    
+    return times;
   }
 
   function moveItemToBin(itemId: string, targetBin: 'keep' | 'reschedule' | 'cancel') {
@@ -1147,85 +1198,42 @@ export default function DailyFlowScreen() {
                         </Text>
                       </TouchableOpacity>
 
-                      {/* Date Selector */}
-                      <View style={styles.selectorRow}>
-                        <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Date:</Text>
-                        <TouchableOpacity
-                          style={[styles.selectorButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
-                          onPress={() => {
-                            // Show date options
-                            const options = Array.from({length: 7}, (_, i) => {
+                      {/* Date Picker - Real Dropdown */}
+                      <View style={styles.pickerRow}>
+                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Date:</Text>
+                        <View style={[styles.pickerWrapper, { borderColor: '#3B82F6' }]}>
+                          <Picker
+                            selectedValue={rescheduleDates[item.id]}
+                            onValueChange={(value) => setRescheduleDates(prev => ({...prev, [item.id]: value}))}
+                            style={[styles.picker, { color: '#3B82F6' }]}
+                          >
+                            {Array.from({length: 14}, (_, i) => {
                               const date = new Date();
-                              date.setDate(date.getDate() + i + 1);
+                              date.setDate(date.getDate() + i + 1); // Start from tomorrow
                               const dateStr = toLocalISOString(date).split('T')[0];
                               const label = i === 0 ? 'Tomorrow' : 
                                            i === 1 ? 'Day After Tomorrow' :
                                            date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                              return { label, value: dateStr };
-                            });
-                            
-                            Alert.alert(
-                              'Select Date',
-                              '',
-                              options.map(opt => ({
-                                text: opt.label,
-                                onPress: () => setRescheduleDates(prev => ({...prev, [item.id]: opt.value}))
-                              })).concat([{ text: 'Cancel', style: 'cancel' }])
-                            );
-                          }}
-                        >
-                          <Text style={[styles.selectorButtonText, { color: '#3B82F6' }]}>
-                            {(() => {
-                              const date = new Date(rescheduleDates[item.id]);
-                              const tomorrow = new Date();
-                              tomorrow.setDate(tomorrow.getDate() + 1);
-                              if (rescheduleDates[item.id] === toLocalISOString(tomorrow).split('T')[0]) {
-                                return 'Tomorrow';
-                              }
-                              return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                            })()} ▼
-                          </Text>
-                        </TouchableOpacity>
+                              return <Picker.Item key={dateStr} label={label} value={dateStr} />;
+                            })}
+                          </Picker>
+                        </View>
                       </View>
 
-                      {/* Time Selector */}
-                      <View style={styles.selectorRow}>
-                        <Text style={[styles.selectorLabel, { color: colors.textSecondary }]}>Time:</Text>
-                        <TouchableOpacity
-                          style={[styles.selectorButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
-                          onPress={() => {
-                            const timeOptions = [
-                              { label: 'Anytime', value: 'anytime' },
-                              { label: '8:00 AM', value: '08:00:00' },
-                              { label: '9:00 AM', value: '09:00:00' },
-                              { label: '10:00 AM', value: '10:00:00' },
-                              { label: '11:00 AM', value: '11:00:00' },
-                              { label: '12:00 PM', value: '12:00:00' },
-                              { label: '1:00 PM', value: '13:00:00' },
-                              { label: '2:00 PM', value: '14:00:00' },
-                              { label: '3:00 PM', value: '15:00:00' },
-                              { label: '4:00 PM', value: '16:00:00' },
-                              { label: '5:00 PM', value: '17:00:00' },
-                              { label: '6:00 PM', value: '18:00:00' },
-                            ];
-                            
-                            Alert.alert(
-                              'Select Time',
-                              '',
-                              timeOptions.map(opt => ({
-                                text: opt.label,
-                                onPress: () => setRescheduleTimes(prev => ({...prev, [item.id]: opt.value}))
-                              })).concat([{ text: 'Cancel', style: 'cancel' }])
-                            );
-                          }}
-                        >
-                          <Text style={[styles.selectorButtonText, { color: '#3B82F6' }]}>
-                            {rescheduleTimes[item.id] === 'anytime' ? 'Anytime' : (() => {
-                              const time = new Date(`2000-01-01T${rescheduleTimes[item.id]}`);
-                              return time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                            })()} ▼
-                          </Text>
-                        </TouchableOpacity>
+                      {/* Time Picker - Real Dropdown with Smart Default */}
+                      <View style={styles.pickerRow}>
+                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Time:</Text>
+                        <View style={[styles.pickerWrapper, { borderColor: '#3B82F6' }]}>
+                          <Picker
+                            selectedValue={rescheduleTimes[item.id]}
+                            onValueChange={(value) => setRescheduleTimes(prev => ({...prev, [item.id]: value}))}
+                            style={[styles.picker, { color: '#3B82F6' }]}
+                          >
+                            {getTimeOptions(item).map(opt => (
+                              <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
+                            ))}
+                          </Picker>
+                        </View>
                       </View>
                     </View>
                   ))
@@ -1697,27 +1705,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  selectorRow: {
+  pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 12,
   },
-  selectorLabel: {
+  pickerLabel: {
     fontSize: 14,
     fontWeight: '600',
     width: 60,
   },
-  selectorButton: {
+  pickerWrapper: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
     borderWidth: 2,
-    alignItems: 'center',
+    borderRadius: 8,
+    backgroundColor: '#3B82F608',
+    overflow: 'hidden',
   },
-  selectorButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
+  picker: {
+    height: 50,
   },
   movementButtons: {
     flexDirection: 'row',
