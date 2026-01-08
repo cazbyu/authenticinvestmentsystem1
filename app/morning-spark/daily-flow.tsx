@@ -367,23 +367,28 @@ export default function DailyFlowScreen() {
 
   // Drag handlers for desktop
   function handleDragStart(itemId: string, sourceBin: 'keep' | 'reschedule' | 'cancel') {
+    console.log('🚀 Drag started:', itemId, sourceBin);
     setDraggedItem({ id: itemId, sourceBin });
   }
 
   function handleDragEnd() {
+    console.log('🏁 Drag ended');
     setDraggedItem(null);
     setDragOverBin(null);
   }
 
   function handleDragEnter(targetBin: 'keep' | 'reschedule' | 'cancel') {
+    console.log('👉 Drag enter:', targetBin);
     setDragOverBin(targetBin);
   }
 
   function handleDragLeave() {
+    console.log('👈 Drag leave');
     setDragOverBin(null);
   }
 
   function handleDrop(targetBin: 'keep' | 'reschedule' | 'cancel') {
+    console.log('💧 Drop in:', targetBin, draggedItem);
     if (!draggedItem) return;
 
     const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
@@ -1161,14 +1166,26 @@ export default function DailyFlowScreen() {
             {/* KEEP ZONE */}
             <View 
               style={styles.binContainer}
+              // @ts-ignore - React Native Web supports these props
               onDragOver={(e: any) => {
-                e.preventDefault();
-                handleDragEnter('keep');
+                if (Platform.OS === 'web') {
+                  e.preventDefault();
+                  console.log('👉 Drag over KEEP');
+                  handleDragEnter('keep');
+                }
               }}
-              onDragLeave={handleDragLeave}
+              onDragLeave={(e: any) => {
+                if (Platform.OS === 'web') {
+                  console.log('👈 Drag leave KEEP');
+                  handleDragLeave();
+                }
+              }}
               onDrop={(e: any) => {
-                e.preventDefault();
-                handleDrop('keep');
+                if (Platform.OS === 'web') {
+                  e.preventDefault();
+                  console.log('💧 Drop in KEEP');
+                  handleDrop('keep');
+                }
               }}
             >
               <View style={[
@@ -1190,9 +1207,21 @@ export default function DailyFlowScreen() {
                   itemsInKeepZone.map(item => (
                     <View
                       key={item.id}
+                      // @ts-ignore - React Native Web supports these props
                       draggable={Platform.OS === 'web'}
-                      onDragStart={() => handleDragStart(item.id, 'keep')}
-                      onDragEnd={handleDragEnd}
+                      onDragStart={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          console.log('🚀 Drag started:', item.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          handleDragStart(item.id, 'keep');
+                        }
+                      }}
+                      onDragEnd={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          console.log('🏁 Drag ended');
+                          handleDragEnd();
+                        }
+                      }}
                       style={[
                         styles.binItem,
                         { 
@@ -1206,6 +1235,7 @@ export default function DailyFlowScreen() {
                       <TouchableOpacity
                         onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'keep')}
                         style={{ flex: 1 }}
+                        activeOpacity={Platform.OS === 'web' ? 1 : 0.7}
                       >
                         <Text style={[
                           styles.binItemText,
@@ -1249,75 +1279,79 @@ export default function DailyFlowScreen() {
                     {Platform.OS === 'web' ? 'Drop items here' : 'No items here'}
                   </Text>
                 ) : (
-                  itemsInRescheduleZone.map(item => (
-                    <View key={item.id} style={styles.rescheduleItemContainer}>
-                      <View
-                        draggable={Platform.OS === 'web'}
-                        onDragStart={() => handleDragStart(item.id, 'reschedule')}
-                        onDragEnd={handleDragEnd}
-                        style={[
-                          styles.binItem,
-                          { 
-                            backgroundColor: colors.background,
-                            borderColor: colors.border,
-                            marginBottom: 8,
-                            opacity: draggedItem?.id === item.id ? 0.4 : 1,
-                            cursor: Platform.OS === 'web' ? 'grab' : 'default'
-                          }
-                        ]}
-                      >
-                        <TouchableOpacity
-                          onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'reschedule')}
-                          style={{ flex: 1 }}
+                  itemsInRescheduleZone.map(item => {
+                    const DragWrapper = Platform.OS === 'web' ? 'div' : View;
+                    return (
+                      <View key={item.id} style={styles.rescheduleItemContainer}>
+                        <DragWrapper
+                          draggable={Platform.OS === 'web'}
+                          onDragStart={() => handleDragStart(item.id, 'reschedule')}
+                          onDragEnd={handleDragEnd}
+                          style={[
+                            styles.binItem,
+                            { 
+                              backgroundColor: colors.background,
+                              borderColor: colors.border,
+                              marginBottom: 8,
+                              opacity: draggedItem?.id === item.id ? 0.4 : 1,
+                              cursor: Platform.OS === 'web' ? 'grab' : 'default'
+                            }
+                          ]}
                         >
-                          <Text style={[
-                            styles.binItemText,
-                            { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
-                          ]}>
-                            {item.title}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Date Picker - Inline like TaskEventForm */}
-                      <View style={styles.pickerRow}>
-                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Date:</Text>
-                        <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-                          <Picker
-                            selectedValue={rescheduleDates[item.id]}
-                            onValueChange={(value) => setRescheduleDates(prev => ({...prev, [item.id]: value}))}
-                            style={[styles.picker, { color: colors.text }]}
+                          <TouchableOpacity
+                            onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'reschedule')}
+                            style={{ flex: 1 }}
+                            activeOpacity={Platform.OS === 'web' ? 1 : 0.7}
                           >
-                            {Array.from({length: 14}, (_, i) => {
-                              const date = new Date();
-                              date.setDate(date.getDate() + i + 1);
-                              const dateStr = toLocalISOString(date).split('T')[0];
-                              const label = i === 0 ? 'Tomorrow' : 
-                                           i === 1 ? 'Day After Tomorrow' :
-                                           date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                              return <Picker.Item key={dateStr} label={label} value={dateStr} />;
-                            })}
-                          </Picker>
+                            <Text style={[
+                              styles.binItemText,
+                              { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                            ]}>
+                              {item.title}
+                            </Text>
+                          </TouchableOpacity>
+                        </DragWrapper>
+
+                        {/* Date Picker - Inline like TaskEventForm */}
+                        <View style={styles.pickerRow}>
+                          <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Date:</Text>
+                          <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                            <Picker
+                              selectedValue={rescheduleDates[item.id]}
+                              onValueChange={(value) => setRescheduleDates(prev => ({...prev, [item.id]: value}))}
+                              style={[styles.picker, { color: colors.text }]}
+                            >
+                              {Array.from({length: 14}, (_, i) => {
+                                const date = new Date();
+                                date.setDate(date.getDate() + i + 1);
+                                const dateStr = toLocalISOString(date).split('T')[0];
+                                const label = i === 0 ? 'Tomorrow' : 
+                                             i === 1 ? 'Day After Tomorrow' :
+                                             date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                return <Picker.Item key={dateStr} label={label} value={dateStr} />;
+                              })}
+                            </Picker>
+                          </View>
+                        </View>
+
+                        {/* Time Picker - Inline like TaskEventForm */}
+                        <View style={styles.pickerRow}>
+                          <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Time:</Text>
+                          <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                            <Picker
+                              selectedValue={rescheduleTimes[item.id]}
+                              onValueChange={(value) => setRescheduleTimes(prev => ({...prev, [item.id]: value}))}
+                              style={[styles.picker, { color: colors.text }]}
+                            >
+                              {getTimeOptions(item).map(opt => (
+                                <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
+                              ))}
+                            </Picker>
+                          </View>
                         </View>
                       </View>
-
-                      {/* Time Picker - Inline like TaskEventForm */}
-                      <View style={styles.pickerRow}>
-                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Time:</Text>
-                        <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-                          <Picker
-                            selectedValue={rescheduleTimes[item.id]}
-                            onValueChange={(value) => setRescheduleTimes(prev => ({...prev, [item.id]: value}))}
-                            style={[styles.picker, { color: colors.text }]}
-                          >
-                            {getTimeOptions(item).map(opt => (
-                              <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
-                            ))}
-                          </Picker>
-                        </View>
-                      </View>
-                    </View>
-                  ))
+                    );
+                  })
                 )}
               </View>
             </View>
@@ -1351,35 +1385,39 @@ export default function DailyFlowScreen() {
                     {Platform.OS === 'web' ? 'Drop items here' : 'No items here'}
                   </Text>
                 ) : (
-                  itemsInCancelZone.map(item => (
-                    <View
-                      key={item.id}
-                      draggable={Platform.OS === 'web'}
-                      onDragStart={() => handleDragStart(item.id, 'cancel')}
-                      onDragEnd={handleDragEnd}
-                      style={[
-                        styles.binItem,
-                        { 
-                          backgroundColor: colors.background,
-                          borderColor: colors.border,
-                          opacity: draggedItem?.id === item.id ? 0.4 : 1,
-                          cursor: Platform.OS === 'web' ? 'grab' : 'default'
-                        }
-                      ]}
-                    >
-                      <TouchableOpacity
-                        onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'cancel')}
-                        style={{ flex: 1 }}
+                  itemsInCancelZone.map(item => {
+                    const DragWrapper = Platform.OS === 'web' ? 'div' : View;
+                    return (
+                      <DragWrapper
+                        key={item.id}
+                        draggable={Platform.OS === 'web'}
+                        onDragStart={() => handleDragStart(item.id, 'cancel')}
+                        onDragEnd={handleDragEnd}
+                        style={[
+                          styles.binItem,
+                          { 
+                            backgroundColor: colors.background,
+                            borderColor: colors.border,
+                            opacity: draggedItem?.id === item.id ? 0.4 : 1,
+                            cursor: Platform.OS === 'web' ? 'grab' : 'default'
+                          }
+                        ]}
                       >
-                        <Text style={[
-                          styles.binItemText,
-                          { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
-                        ]}>
-                          {item.title}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))
+                        <TouchableOpacity
+                          onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'cancel')}
+                          style={{ flex: 1 }}
+                          activeOpacity={Platform.OS === 'web' ? 1 : 0.7}
+                        >
+                          <Text style={[
+                            styles.binItemText,
+                            { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                          ]}>
+                            {item.title}
+                          </Text>
+                        </TouchableOpacity>
+                      </DragWrapper>
+                    );
+                  })
                 )}
               </View>
             </View>
