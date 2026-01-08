@@ -456,21 +456,22 @@ export default function DailyFlowScreen() {
           const newDate = rescheduleDates[item.id];
           const newTime = rescheduleTimes[item.id];
 
-          console.log('Rescheduling item:', {
-            itemId: item.id,
-            itemTitle: item.title,
-            adjustType,
-            newDate,
-            newTime,
-            itemType: item.type,
-            hasStartDate: !!item.start_date,
-            hasDueDate: !!item.due_date
-          });
+          console.log('=== RESCHEDULE DEBUG ===');
+          console.log('Full item object:', JSON.stringify(item, null, 2));
+          console.log('item.start_date:', item.start_date);
+          console.log('item.due_date:', item.due_date);
+          console.log('!!item.start_date:', !!item.start_date);
+          console.log('!!item.due_date:', !!item.due_date);
+          console.log('======================');
 
           // Determine if it's an event or task based on which date field is populated
           const isEvent = !!item.start_date;
           
+          console.log('isEvent:', isEvent);
+          console.log('Will update columns:', isEvent ? 'start_date/start_time' : 'due_date/due_time');
+          
           if (isEvent) {
+            console.log('Updating as EVENT');
             await supabase
               .from('0008-ap-tasks')
               .update({
@@ -479,6 +480,7 @@ export default function DailyFlowScreen() {
               })
               .eq('id', item.id);
           } else {
+            console.log('Updating as TASK');
             await supabase
               .from('0008-ap-tasks')
               .update({
