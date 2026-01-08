@@ -198,7 +198,7 @@ export default function MorningSparkFuelCheck() {
       }
 
       setTimeout(() => {
-        router.push('/morning-spark/scheduled-actions');
+        router.push('/morning-spark/daily-flow');
       }, 300);
     } catch (error) {
       console.error('Error saving fuel level:', error);
