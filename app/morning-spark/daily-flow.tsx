@@ -515,6 +515,11 @@ export default function DailyFlowScreen() {
       Alert.alert('Success', message);
       setShowAdjustModal(false);
       await loadData(); // Reload everything
+      
+      // If "All Tasks" was expanded, reload it too
+      if (showAllTasks) {
+        await loadAllTasks();
+      }
     } catch (error) {
       console.error('Error applying adjustments:', error);
       Alert.alert('Error', 'Failed to apply changes. Please try again.');
