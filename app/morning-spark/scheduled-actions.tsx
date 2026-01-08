@@ -625,6 +625,17 @@ setTimeout(() => {
       </View>
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+        
+        {/* Coach Comments Section */}
+        <View style={[styles.coachSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.coachLabel, { color: colors.textSecondary }]}>
+            Coach Comments
+          </Text>
+          <Text style={[styles.coachText, { color: colors.text }]}>
+            Our goal is to reduce overwhelm and prevent spirals.
+          </Text>
+        </View>
+        
         <View style={styles.titleSection}>
           <Text style={[styles.pageTitle, { color: colors.text }]}>Your Schedule Today</Text>
           {fuelLevel && (
