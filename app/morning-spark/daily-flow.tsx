@@ -501,7 +501,18 @@ export default function DailyFlowScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert('Success', 'Changes applied successfully!');
+      // Build success message
+      let message = 'Changes applied successfully!';
+      if (itemsInRescheduleZone.length > 0) {
+        const rescheduledCount = itemsInRescheduleZone.length;
+        message += `\n\n${rescheduledCount} item${rescheduledCount > 1 ? 's' : ''} rescheduled and will appear on the new date.`;
+      }
+      if (itemsInCancelZone.length > 0) {
+        const cancelledCount = itemsInCancelZone.length;
+        message += `\n\n${cancelledCount} item${cancelledCount > 1 ? 's' : ''} cancelled.`;
+      }
+
+      Alert.alert('Success', message);
       setShowAdjustModal(false);
       await loadData(); // Reload everything
     } catch (error) {
