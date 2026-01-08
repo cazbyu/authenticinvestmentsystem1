@@ -8,11 +8,12 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckSquare, Calendar, Check, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, CheckSquare, Calendar, Check, Trash2, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
@@ -37,6 +38,11 @@ export default function DailyFlowScreen() {
   const [actionsData, setActionsData] = useState<ScheduledActionsData | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [mindsetPoints, setMindsetPoints] = useState(0);
+  const [eventsAccepted, setEventsAccepted] = useState(false);
+  const [tasksAccepted, setTasksAccepted] = useState(false);
+  const [urgentTasks, setUrgentTasks] = useState<ScheduledAction[]>([]);
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustType, setAdjustType] = useState<'events' | 'tasks'>('events');
 
   useEffect(() => {
     loadData();
@@ -68,12 +74,65 @@ export default function DailyFlowScreen() {
       setSparkId(spark.id);
       setFuelLevel(spark.fuel_level);
       setActionsData(actions);
+
+      // Load urgent tasks for EL1
+      if (spark.fuel_level === 1) {
+        await loadUrgentTasks(user.id);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load Morning Spark. Please try again.');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadUrgentTasks(uid: string) {
+    try {
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('type', 'task')
+        .eq('is_urgent', true)
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`)
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+
+      setUrgentTasks((data || []) as ScheduledAction[]);
+    } catch (error) {
+      console.error('Error loading urgent tasks:', error);
+    }
+  }
+
+  function handleAcceptEvents() {
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    setEventsAccepted(true);
+  }
+
+  function handleAdjustEvents() {
+    setAdjustType('events');
+    setShowAdjustModal(true);
+  }
+
+  function handleAcceptTasks() {
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    setTasksAccepted(true);
+  }
+
+  function handleAdjustTasks() {
+    setAdjustType('tasks');
+    setShowAdjustModal(true);
   }
 
   async function handleCompleteEvent(eventId: string) {
@@ -360,6 +419,118 @@ export default function DailyFlowScreen() {
           )}
         </View>
 
+        {/* Accept/Adjust Buttons for Events */}
+        {hasEvents && !eventsAccepted && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.acceptButton, { backgroundColor: getFuelColor(fuelLevel || 2) }]}
+              onPress={handleAcceptEvents}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.acceptButtonText}>Accept Schedule</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={handleAdjustEvents}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {eventsAccepted && hasEvents && (
+          <View style={[styles.acceptedBanner, { backgroundColor: '#10B98110', borderColor: '#10B981' }]}>
+            <Check size={20} color="#10B981" />
+            <Text style={[styles.acceptedText, { color: '#10B981' }]}>Schedule Accepted</Text>
+          </View>
+        )}
+
+        {/* Urgent Tasks Section - EL1 Only */}
+        {fuelLevel === 1 && urgentTasks.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Urgent Tasks</Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              These need attention today. Accept or adjust to protect your energy.
+            </Text>
+
+            <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
+              {urgentTasks.map((task) => (
+                <View
+                  key={task.id}
+                  style={[styles.eventRow, { borderBottomColor: colors.border }]}
+                >
+                  <View style={styles.quickActions}>
+                    <TouchableOpacity
+                      onPress={() => handleCompleteEvent(task.id)}
+                      style={styles.quickActionButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Check size={18} color="#22c55e" strokeWidth={2.5} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteEvent(task.id, task.title)}
+                      style={styles.quickActionButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Trash2 size={18} color="#ef4444" strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.iconContainer}>
+                    <CheckSquare size={16} color={colors.primary} />
+                  </View>
+
+                  <View style={styles.eventContent}>
+                    <Text style={[styles.eventTitle, { color: '#EF4444' }]} numberOfLines={1}>
+                      {task.title}
+                    </Text>
+                    {task.due_date && (
+                      <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+                        Due: {new Date(task.due_date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                    )}
+                  </View>
+
+                  <Text style={[styles.points, { color: '#10B981' }]}>
+                    +{Math.round(task.points || 3)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Accept/Adjust Buttons for Tasks */}
+            {!tasksAccepted && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.acceptButton, { backgroundColor: getFuelColor(fuelLevel) }]}
+                  onPress={handleAcceptTasks}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.acceptButtonText}>Accept Tasks</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  onPress={handleAdjustTasks}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {tasksAccepted && (
+              <View style={[styles.acceptedBanner, { backgroundColor: '#10B98110', borderColor: '#10B981' }]}>
+                <Check size={20} color="#10B981" />
+                <Text style={[styles.acceptedText, { color: '#10B981' }]}>Tasks Accepted</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Mindset Capture Section */}
         {fuelLevel && sparkId && (
           <View style={styles.section}>
@@ -417,6 +588,39 @@ export default function DailyFlowScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Adjust Modal - Placeholder */}
+      <Modal
+        visible={showAdjustModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAdjustModal(false)}
+      >
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Adjust {adjustType === 'events' ? 'Schedule' : 'Tasks'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowAdjustModal(false)}
+              style={styles.closeButton}
+            >
+              <Text style={[styles.closeButtonText, { color: colors.primary }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
+              Adjustment interface coming next.
+              {'\n\n'}
+              You'll be able to:
+              {'\n'}• Reschedule items
+              {'\n'}• Cancel items
+              {'\n'}• Move items to different dates
+            </Text>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -623,5 +827,77 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  acceptButton: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  adjustButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  adjustButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  acceptedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  acceptedText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  modalMessage: {
+    fontSize: 15,
+    lineHeight: 24,
   },
 });
