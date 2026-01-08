@@ -462,10 +462,15 @@ export default function DailyFlowScreen() {
             adjustType,
             newDate,
             newTime,
-            itemType: item.type
+            itemType: item.type,
+            hasStartDate: !!item.start_date,
+            hasDueDate: !!item.due_date
           });
 
-          if (adjustType === 'events') {
+          // Determine if it's an event or task based on which date field is populated
+          const isEvent = !!item.start_date;
+          
+          if (isEvent) {
             await supabase
               .from('0008-ap-tasks')
               .update({
