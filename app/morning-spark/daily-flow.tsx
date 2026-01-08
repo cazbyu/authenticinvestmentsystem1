@@ -55,6 +55,8 @@ export default function DailyFlowScreen() {
   const [itemsInCancelZone, setItemsInCancelZone] = useState<ScheduledAction[]>([]);
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
   const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
+  const [draggedItem, setDraggedItem] = useState<{id: string, sourceBin: 'keep' | 'reschedule' | 'cancel'} | null>(null);
+  const [dragOverBin, setDragOverBin] = useState<'keep' | 'reschedule' | 'cancel' | null>(null);
 
   useEffect(() => {
     loadData();
@@ -363,6 +365,64 @@ export default function DailyFlowScreen() {
     return times;
   }
 
+  // Drag handlers for desktop
+  function handleDragStart(itemId: string, sourceBin: 'keep' | 'reschedule' | 'cancel') {
+    setDraggedItem({ id: itemId, sourceBin });
+  }
+
+  function handleDragEnd() {
+    setDraggedItem(null);
+    setDragOverBin(null);
+  }
+
+  function handleDragEnter(targetBin: 'keep' | 'reschedule' | 'cancel') {
+    setDragOverBin(targetBin);
+  }
+
+  function handleDragLeave() {
+    setDragOverBin(null);
+  }
+
+  function handleDrop(targetBin: 'keep' | 'reschedule' | 'cancel') {
+    if (!draggedItem) return;
+
+    const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
+    const item = allItems.find(i => i.id === draggedItem.id);
+    if (!item) return;
+
+    // Don't do anything if dropping in same bin
+    if (draggedItem.sourceBin === targetBin) {
+      handleDragEnd();
+      return;
+    }
+
+    // Remove from all bins
+    setItemsInKeepZone(prev => prev.filter(i => i.id !== draggedItem.id));
+    setItemsInRescheduleZone(prev => prev.filter(i => i.id !== draggedItem.id));
+    setItemsInCancelZone(prev => prev.filter(i => i.id !== draggedItem.id));
+
+    // Add to target bin
+    if (targetBin === 'keep') {
+      setItemsInKeepZone(prev => [...prev, item]);
+    } else if (targetBin === 'reschedule') {
+      setItemsInRescheduleZone(prev => [...prev, item]);
+      // Set default reschedule values if not already set
+      if (!rescheduleDates[draggedItem.id]) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setRescheduleDates(prev => ({...prev, [draggedItem.id]: toLocalISOString(tomorrow).split('T')[0]}));
+      }
+      if (!rescheduleTimes[draggedItem.id]) {
+        setRescheduleTimes(prev => ({...prev, [draggedItem.id]: 'anytime'}));
+      }
+    } else {
+      setItemsInCancelZone(prev => [...prev, item]);
+    }
+
+    handleDragEnd();
+  }
+
+  // Mobile tap fallback (cycle through bins)
   function moveItemToNextBin(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
     // Single tap cycles: keep → reschedule → cancel → keep
     const nextBin = currentBin === 'keep' ? 'reschedule' : currentBin === 'reschedule' ? 'cancel' : 'keep';
@@ -1095,12 +1155,27 @@ export default function DailyFlowScreen() {
 
           <ScrollView style={styles.modalContent}>
             <Text style={[styles.modalInstructions, { color: colors.textSecondary }]}>
-              Tap an item to select it, then use the buttons below to move between zones.
+              {Platform.OS === 'web' ? 'Drag items between bins to organize your schedule' : 'Tap items to move them between bins'}
             </Text>
 
             {/* KEEP ZONE */}
-            <View style={styles.binContainer}>
-              <View style={[styles.binHeader, { backgroundColor: '#10B98120' }]}>
+            <View 
+              style={styles.binContainer}
+              onDragOver={(e: any) => {
+                e.preventDefault();
+                handleDragEnter('keep');
+              }}
+              onDragLeave={handleDragLeave}
+              onDrop={(e: any) => {
+                e.preventDefault();
+                handleDrop('keep');
+              }}
+            >
+              <View style={[
+                styles.binHeader, 
+                { backgroundColor: '#10B98120' },
+                dragOverBin === 'keep' && { backgroundColor: '#10B98140', borderWidth: 2, borderColor: '#10B981' }
+              ]}>
                 <Text style={[styles.binTitle, { color: '#10B981' }]}>KEEP AS IS</Text>
                 <Text style={[styles.binSubtitle, { color: '#10B981' }]}>
                   ✓ These will stay scheduled for today
@@ -1109,59 +1184,28 @@ export default function DailyFlowScreen() {
               <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#10B981' }]}>
                 {itemsInKeepZone.length === 0 ? (
                   <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
-                    No items here
+                    {Platform.OS === 'web' ? 'Drop items here' : 'No items here'}
                   </Text>
                 ) : (
                   itemsInKeepZone.map(item => (
-                    <TouchableOpacity
+                    <View
                       key={item.id}
+                      draggable={Platform.OS === 'web'}
+                      onDragStart={() => handleDragStart(item.id, 'keep')}
+                      onDragEnd={handleDragEnd}
                       style={[
                         styles.binItem,
                         { 
                           backgroundColor: colors.background,
-                          borderColor: colors.border
+                          borderColor: colors.border,
+                          opacity: draggedItem?.id === item.id ? 0.4 : 1,
+                          cursor: Platform.OS === 'web' ? 'grab' : 'default'
                         }
                       ]}
-                      onPress={() => moveItemToNextBin(item.id, 'keep')}
                     >
-                      <Text style={[
-                        styles.binItemText,
-                        { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
-                      ]}>
-                        {item.title}
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
-            </View>
-
-            {/* RESCHEDULE ZONE */}
-            <View style={styles.binContainer}>
-              <View style={[styles.binHeader, { backgroundColor: '#3B82F620' }]}>
-                <Text style={[styles.binTitle, { color: '#3B82F6' }]}>RESCHEDULE</Text>
-                <Text style={[styles.binSubtitle, { color: '#3B82F6' }]}>
-                  📅 Adjust date and time
-                </Text>
-              </View>
-              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#3B82F6' }]}>
-                {itemsInRescheduleZone.length === 0 ? (
-                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
-                    No items here
-                  </Text>
-                ) : (
-                  itemsInRescheduleZone.map(item => (
-                    <View key={item.id} style={styles.rescheduleItemContainer}>
                       <TouchableOpacity
-                        style={[
-                          styles.binItem,
-                          { 
-                            backgroundColor: colors.background,
-                            borderColor: colors.border,
-                            marginBottom: 8
-                          }
-                        ]}
-                        onPress={() => moveItemToNextBin(item.id, 'reschedule')}
+                        onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'keep')}
+                        style={{ flex: 1 }}
                       >
                         <Text style={[
                           styles.binItemText,
@@ -1170,6 +1214,70 @@ export default function DailyFlowScreen() {
                           {item.title}
                         </Text>
                       </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+
+            {/* RESCHEDULE ZONE */}
+            <View 
+              style={styles.binContainer}
+              onDragOver={(e: any) => {
+                e.preventDefault();
+                handleDragEnter('reschedule');
+              }}
+              onDragLeave={handleDragLeave}
+              onDrop={(e: any) => {
+                e.preventDefault();
+                handleDrop('reschedule');
+              }}
+            >
+              <View style={[
+                styles.binHeader, 
+                { backgroundColor: '#3B82F620' },
+                dragOverBin === 'reschedule' && { backgroundColor: '#3B82F640', borderWidth: 2, borderColor: '#3B82F6' }
+              ]}>
+                <Text style={[styles.binTitle, { color: '#3B82F6' }]}>RESCHEDULE</Text>
+                <Text style={[styles.binSubtitle, { color: '#3B82F6' }]}>
+                  📅 Adjust date and time
+                </Text>
+              </View>
+              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#3B82F6' }]}>
+                {itemsInRescheduleZone.length === 0 ? (
+                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
+                    {Platform.OS === 'web' ? 'Drop items here' : 'No items here'}
+                  </Text>
+                ) : (
+                  itemsInRescheduleZone.map(item => (
+                    <View key={item.id} style={styles.rescheduleItemContainer}>
+                      <View
+                        draggable={Platform.OS === 'web'}
+                        onDragStart={() => handleDragStart(item.id, 'reschedule')}
+                        onDragEnd={handleDragEnd}
+                        style={[
+                          styles.binItem,
+                          { 
+                            backgroundColor: colors.background,
+                            borderColor: colors.border,
+                            marginBottom: 8,
+                            opacity: draggedItem?.id === item.id ? 0.4 : 1,
+                            cursor: Platform.OS === 'web' ? 'grab' : 'default'
+                          }
+                        ]}
+                      >
+                        <TouchableOpacity
+                          onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'reschedule')}
+                          style={{ flex: 1 }}
+                        >
+                          <Text style={[
+                            styles.binItemText,
+                            { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                          ]}>
+                            {item.title}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
 
                       {/* Date Picker - Inline like TaskEventForm */}
                       <View style={styles.pickerRow}>
@@ -1215,8 +1323,23 @@ export default function DailyFlowScreen() {
             </View>
 
             {/* CANCEL ZONE */}
-            <View style={styles.binContainer}>
-              <View style={[styles.binHeader, { backgroundColor: '#EF444420' }]}>
+            <View 
+              style={styles.binContainer}
+              onDragOver={(e: any) => {
+                e.preventDefault();
+                handleDragEnter('cancel');
+              }}
+              onDragLeave={handleDragLeave}
+              onDrop={(e: any) => {
+                e.preventDefault();
+                handleDrop('cancel');
+              }}
+            >
+              <View style={[
+                styles.binHeader, 
+                { backgroundColor: '#EF444420' },
+                dragOverBin === 'cancel' && { backgroundColor: '#EF444440', borderWidth: 2, borderColor: '#EF4444' }
+              ]}>
                 <Text style={[styles.binTitle, { color: '#EF4444' }]}>CANCEL</Text>
                 <Text style={[styles.binSubtitle, { color: '#EF4444' }]}>
                   🗑️ These will be deleted
@@ -1225,28 +1348,37 @@ export default function DailyFlowScreen() {
               <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#EF4444' }]}>
                 {itemsInCancelZone.length === 0 ? (
                   <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
-                    No items here
+                    {Platform.OS === 'web' ? 'Drop items here' : 'No items here'}
                   </Text>
                 ) : (
                   itemsInCancelZone.map(item => (
-                    <TouchableOpacity
+                    <View
                       key={item.id}
+                      draggable={Platform.OS === 'web'}
+                      onDragStart={() => handleDragStart(item.id, 'cancel')}
+                      onDragEnd={handleDragEnd}
                       style={[
                         styles.binItem,
                         { 
                           backgroundColor: colors.background,
-                          borderColor: colors.border
+                          borderColor: colors.border,
+                          opacity: draggedItem?.id === item.id ? 0.4 : 1,
+                          cursor: Platform.OS === 'web' ? 'grab' : 'default'
                         }
                       ]}
-                      onPress={() => moveItemToNextBin(item.id, 'cancel')}
                     >
-                      <Text style={[
-                        styles.binItemText,
-                        { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
-                      ]}>
-                        {item.title}
-                      </Text>
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => Platform.OS !== 'web' && moveItemToNextBin(item.id, 'cancel')}
+                        style={{ flex: 1 }}
+                      >
+                        <Text style={[
+                          styles.binItemText,
+                          { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                        ]}>
+                          {item.title}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   ))
                 )}
               </View>
