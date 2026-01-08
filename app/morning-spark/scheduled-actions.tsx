@@ -640,7 +640,9 @@ setTimeout(() => {
           <Text style={[styles.pageTitle, { color: colors.text }]}>Your Schedule Today</Text>
           {fuelLevel && (
             <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-              {getFuelLevelMessage(fuelLevel)}
+              {hasActions 
+                ? "Should we reschedule any of these to protect your energy?"
+                : "Nothing is currently on your calendar. Let's focus on doing something though."}
             </Text>
           )}
           {hasActions && (
