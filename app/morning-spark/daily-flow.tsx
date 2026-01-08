@@ -1283,7 +1283,6 @@ export default function DailyFlowScreen() {
                         </View>
                       </View>
                     ))
-                  )
                 )}
               </View>
             </View>
