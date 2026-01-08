@@ -41,6 +41,9 @@ export default function DailyFlowScreen() {
   const [eventsAccepted, setEventsAccepted] = useState(false);
   const [tasksAccepted, setTasksAccepted] = useState(false);
   const [urgentTasks, setUrgentTasks] = useState<ScheduledAction[]>([]);
+  const [allTasks, setAllTasks] = useState<ScheduledAction[]>([]);
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [loadingAllTasks, setLoadingAllTasks] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustType, setAdjustType] = useState<'events' | 'tasks'>('events');
 
@@ -108,6 +111,37 @@ export default function DailyFlowScreen() {
       setUrgentTasks((data || []) as ScheduledAction[]);
     } catch (error) {
       console.error('Error loading urgent tasks:', error);
+    }
+  }
+
+  async function loadAllTasks() {
+    if (loadingAllTasks) return;
+    
+    try {
+      setLoadingAllTasks(true);
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('type', 'task')
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`)
+        .order('is_urgent', { ascending: false })
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+
+      setAllTasks((data || []) as ScheduledAction[]);
+      setShowAllTasks(true);
+    } catch (error) {
+      console.error('Error loading all tasks:', error);
+      Alert.alert('Error', 'Failed to load tasks. Please try again.');
+    } finally {
+      setLoadingAllTasks(false);
     }
   }
 
@@ -464,17 +498,16 @@ export default function DailyFlowScreen() {
                 </Text>
                 <TouchableOpacity
                   style={[styles.viewAllTasksButton, { borderColor: colors.border }]}
-                  onPress={() => {
-                    Alert.alert(
-                      'View All Tasks',
-                      'This will show all your tasks (not just urgent ones). Coming soon!',
-                      [{ text: 'OK' }]
-                    );
-                  }}
+                  onPress={loadAllTasks}
+                  disabled={loadingAllTasks}
                 >
-                  <Text style={[styles.viewAllTasksText, { color: colors.text }]}>
-                    View All Tasks
-                  </Text>
+                  {loadingAllTasks ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={[styles.viewAllTasksText, { color: colors.text }]}>
+                      View All Tasks
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             ) : (
@@ -554,6 +587,118 @@ export default function DailyFlowScreen() {
               </View>
             )}
               </>
+            )}
+          </View>
+        )}
+
+        {/* All Tasks Section - When user clicks "View All Tasks" */}
+        {fuelLevel === 1 && showAllTasks && allTasks.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.allTasksHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>All Tasks for Today</Text>
+              <TouchableOpacity
+                onPress={() => setShowAllTasks(false)}
+                style={styles.hideButton}
+              >
+                <Text style={[styles.hideButtonText, { color: colors.primary }]}>Hide</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              All tasks due today or overdue. Urgent tasks are marked in red.
+            </Text>
+
+            <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
+              {allTasks.map((task) => {
+                const isUrgent = task.is_urgent;
+                const isOverdue = task.due_date && task.due_date < toLocalISOString(new Date()).split('T')[0];
+                
+                return (
+                  <View
+                    key={task.id}
+                    style={[styles.eventRow, { borderBottomColor: colors.border }]}
+                  >
+                    <View style={styles.quickActions}>
+                      <TouchableOpacity
+                        onPress={() => handleCompleteEvent(task.id)}
+                        style={styles.quickActionButton}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Check size={18} color="#22c55e" strokeWidth={2.5} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteEvent(task.id, task.title)}
+                        style={styles.quickActionButton}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Trash2 size={18} color="#ef4444" strokeWidth={2} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.iconContainer}>
+                      <CheckSquare size={16} color={isUrgent ? '#EF4444' : colors.primary} />
+                    </View>
+
+                    <View style={styles.eventContent}>
+                      <View style={styles.taskTitleRow}>
+                        <Text 
+                          style={[
+                            styles.eventTitle, 
+                            { color: isUrgent ? '#EF4444' : colors.text }
+                          ]} 
+                          numberOfLines={1}
+                        >
+                          {task.title}
+                        </Text>
+                        {isUrgent && (
+                          <View style={styles.urgentBadge}>
+                            <Text style={styles.urgentBadgeText}>URGENT</Text>
+                          </View>
+                        )}
+                      </View>
+                      {task.due_date && (
+                        <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+                          Due: {new Date(task.due_date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                          {isOverdue && ' (Overdue)'}
+                        </Text>
+                      )}
+                    </View>
+
+                    <Text style={[styles.points, { color: '#10B981' }]}>
+                      +{Math.round(task.points || 3)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Accept/Adjust Buttons for All Tasks */}
+            {!tasksAccepted && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.acceptButton, { backgroundColor: getFuelColor(fuelLevel) }]}
+                  onPress={handleAcceptTasks}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.acceptButtonText}>Accept Tasks</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  onPress={handleAdjustTasks}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {tasksAccepted && (
+              <View style={[styles.acceptedBanner, { backgroundColor: '#10B98110', borderColor: '#10B981' }]}>
+                <Check size={20} color="#10B981" />
+                <Text style={[styles.acceptedText, { color: '#10B981' }]}>Tasks Accepted</Text>
+              </View>
             )}
           </View>
         )}
@@ -942,6 +1087,37 @@ const styles = StyleSheet.create({
   viewAllTasksText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  allTasksHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  hideButton: {
+    padding: 4,
+  },
+  hideButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  taskTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  urgentBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  urgentBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#EF4444',
+    letterSpacing: 0.5,
   },
   reviewButton: {
     paddingVertical: 14,
