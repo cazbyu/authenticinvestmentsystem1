@@ -456,22 +456,13 @@ export default function DailyFlowScreen() {
           const newDate = rescheduleDates[item.id];
           const newTime = rescheduleTimes[item.id];
 
-          console.log('=== RESCHEDULE DEBUG ===');
-          console.log('Full item object:', JSON.stringify(item, null, 2));
-          console.log('item.start_date:', item.start_date);
-          console.log('item.due_date:', item.due_date);
-          console.log('!!item.start_date:', !!item.start_date);
-          console.log('!!item.due_date:', !!item.due_date);
-          console.log('======================');
+          console.log('Rescheduling:', item.title, 'to', newDate, newTime);
 
           // Determine if it's an event or task based on which date field is populated
           const isEvent = !!item.start_date;
           
-          console.log('isEvent:', isEvent);
-          console.log('Will update columns:', isEvent ? 'start_date/start_time' : 'due_date/due_time');
-          
           if (isEvent) {
-            console.log('Updating as EVENT');
+            // Events: update start_date and start_time
             await supabase
               .from('0008-ap-tasks')
               .update({
@@ -480,14 +471,28 @@ export default function DailyFlowScreen() {
               })
               .eq('id', item.id);
           } else {
-            console.log('Updating as TASK');
-            await supabase
-              .from('0008-ap-tasks')
-              .update({
-                due_date: newDate,
-                due_time: newTime === 'anytime' ? null : newTime,
-              })
-              .eq('id', item.id);
+            // Tasks: update due_date, is_anytime, start_time, and end_time
+            if (newTime === 'anytime') {
+              await supabase
+                .from('0008-ap-tasks')
+                .update({
+                  due_date: newDate,
+                  is_anytime: true,
+                  start_time: null,
+                  end_time: null,
+                })
+                .eq('id', item.id);
+            } else {
+              await supabase
+                .from('0008-ap-tasks')
+                .update({
+                  due_date: newDate,
+                  is_anytime: false,
+                  start_time: newTime,
+                  end_time: newTime,
+                })
+                .eq('id', item.id);
+            }
           }
         }
       }
