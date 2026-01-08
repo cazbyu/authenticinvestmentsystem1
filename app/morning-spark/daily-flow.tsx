@@ -456,6 +456,15 @@ export default function DailyFlowScreen() {
           const newDate = rescheduleDates[item.id];
           const newTime = rescheduleTimes[item.id];
 
+          console.log('Rescheduling item:', {
+            itemId: item.id,
+            itemTitle: item.title,
+            adjustType,
+            newDate,
+            newTime,
+            itemType: item.type
+          });
+
           if (adjustType === 'events') {
             await supabase
               .from('0008-ap-tasks')
