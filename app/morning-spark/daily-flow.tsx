@@ -291,7 +291,6 @@ export default function DailyFlowScreen() {
     setItemsInKeepZone(allEvents);
     setItemsInRescheduleZone([]);
     setItemsInCancelZone([]);
-    setSelectedItemId(null);
     setRescheduleDates(initialDates);
     setRescheduleTimes(initialTimes);
     setAdjustType('events');
@@ -325,7 +324,6 @@ export default function DailyFlowScreen() {
     setItemsInKeepZone(allTasksList);
     setItemsInRescheduleZone([]);
     setItemsInCancelZone([]);
-    setSelectedItemId(null);
     setRescheduleDates(initialDates);
     setRescheduleTimes(initialTimes);
     setAdjustType('tasks');
@@ -363,29 +361,6 @@ export default function DailyFlowScreen() {
     }
     
     return times;
-  }
-
-  function handleBinTap(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
-    const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
-    const item = allItems.find(i => i.id === itemId);
-    
-    if (!item) return;
-
-    // Remove from all zones
-    setItemsInKeepZone(prev => prev.filter(i => i.id !== itemId));
-    setItemsInRescheduleZone(prev => prev.filter(i => i.id !== itemId));
-    setItemsInCancelZone(prev => prev.filter(i => i.id !== itemId));
-
-    // Add to target zone
-    if (targetBin === 'keep') {
-      setItemsInKeepZone(prev => [...prev, item]);
-    } else if (targetBin === 'reschedule') {
-      setItemsInRescheduleZone(prev => [...prev, item]);
-    } else if (targetBin === 'cancel') {
-      setItemsInCancelZone(prev => [...prev, item]);
-    }
-
-    setSelectedItemId(null);
   }
 
   function handleItemTap(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
