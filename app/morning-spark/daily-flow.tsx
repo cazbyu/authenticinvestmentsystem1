@@ -447,15 +447,40 @@ export default function DailyFlowScreen() {
         )}
 
         {/* Urgent Tasks Section - EL1 Only */}
-        {fuelLevel === 1 && urgentTasks.length > 0 && (
+        {fuelLevel === 1 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Urgent Tasks</Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              These need attention today. Accept or adjust to protect your energy.
+              {urgentTasks.length > 0 
+                ? "These need attention today. Accept or adjust to protect your energy."
+                : "You don't show any Urgent actions listed for today."}
             </Text>
 
-            <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-              {urgentTasks.map((task) => (
+            {urgentTasks.length === 0 ? (
+              <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={styles.emptyEmoji}>✅</Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  No urgent tasks for today
+                </Text>
+                <TouchableOpacity
+                  style={[styles.viewAllTasksButton, { borderColor: colors.border }]}
+                  onPress={() => {
+                    Alert.alert(
+                      'View All Tasks',
+                      'This will show all your tasks (not just urgent ones). Coming soon!',
+                      [{ text: 'OK' }]
+                    );
+                  }}
+                >
+                  <Text style={[styles.viewAllTasksText, { color: colors.text }]}>
+                    View All Tasks
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
+                  {urgentTasks.map((task) => (
                 <View
                   key={task.id}
                   style={[styles.eventRow, { borderBottomColor: colors.border }]}
@@ -528,6 +553,8 @@ export default function DailyFlowScreen() {
                 <Text style={[styles.acceptedText, { color: '#10B981' }]}>Tasks Accepted</Text>
               </View>
             )}
+              </>
+            )}
           </View>
         )}
 
@@ -545,6 +572,37 @@ export default function DailyFlowScreen() {
               sparkId={sparkId}
               onPointsAdded={handleMindsetPointsAdded}
             />
+          </View>
+        )}
+
+        {/* Review Your Plan Section */}
+        {(eventsAccepted || (!hasEvents)) && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Review Your Plan</Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              Everything looking good? If you'd like to make any changes to your schedule or tasks, now's the time.
+            </Text>
+            
+            <TouchableOpacity
+              style={[styles.reviewButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={() => setShowAdjustModal(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.reviewButtonText, { color: colors.text }]}>
+                Make Changes to Schedule/Tasks
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.continueButton}
+              onPress={() => {
+                // Just scroll to bottom / do nothing - they can hit Complete
+              }}
+            >
+              <Text style={[styles.continueButtonText, { color: colors.textSecondary }]}>
+                No changes needed, continue →
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -872,6 +930,38 @@ const styles = StyleSheet.create({
   acceptedText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  viewAllTasksButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  viewAllTasksText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  reviewButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  reviewButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  continueButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  continueButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   modalHeader: {
     flexDirection: 'row',
