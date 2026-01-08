@@ -26,6 +26,7 @@ import {
   getFuelEmoji,
   getFuelColor,
 } from '@/lib/sparkUtils';
+import { calculateTaskPoints } from '@/lib/taskUtils';
 import { MindsetCapture } from '@/components/morning-spark/MindsetCapture';
 
 export default function DailyFlowScreen() {
@@ -108,7 +109,60 @@ export default function DailyFlowScreen() {
 
       if (error) throw error;
 
-      setUrgentTasks((data || []) as ScheduledAction[]);
+      let tasks = (data || []) as ScheduledAction[];
+
+      if (tasks.length > 0) {
+        const taskIds = tasks.map((t) => t.id);
+
+        // Fetch roles, domains, and goals for point calculation
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        // Calculate points for each task
+        tasks = tasks.map((task) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          const points = calculateTaskPoints(task as any, roles, domains, goals);
+
+          return { ...task, points };
+        });
+      }
+
+      setUrgentTasks(tasks);
     } catch (error) {
       console.error('Error loading urgent tasks:', error);
     }
@@ -135,7 +189,60 @@ export default function DailyFlowScreen() {
 
       if (error) throw error;
 
-      setAllTasks((data || []) as ScheduledAction[]);
+      let tasks = (data || []) as ScheduledAction[];
+
+      if (tasks.length > 0) {
+        const taskIds = tasks.map((t) => t.id);
+
+        // Fetch roles, domains, and goals for point calculation
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        // Calculate points for each task
+        tasks = tasks.map((task) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          const points = calculateTaskPoints(task as any, roles, domains, goals);
+
+          return { ...task, points };
+        });
+      }
+
+      setAllTasks(tasks);
       setShowAllTasks(true);
     } catch (error) {
       console.error('Error loading all tasks:', error);
@@ -167,6 +274,18 @@ export default function DailyFlowScreen() {
   function handleAdjustTasks() {
     setAdjustType('tasks');
     setShowAdjustModal(true);
+  }
+
+  function getPriorityColor(task: ScheduledAction): string {
+    if (task.is_urgent && task.is_important) {
+      return '#ef4444'; // Red - Urgent & Important
+    } else if (!task.is_urgent && task.is_important) {
+      return '#22c55e'; // Green - Not Urgent but Important
+    } else if (task.is_urgent && !task.is_important) {
+      return '#eab308'; // Yellow - Urgent but Not Important
+    } else {
+      return '#9ca3af'; // Gray - Neither Urgent nor Important
+    }
   }
 
   async function handleCompleteEvent(eventId: string) {
@@ -540,7 +659,7 @@ export default function DailyFlowScreen() {
                   </View>
 
                   <View style={styles.eventContent}>
-                    <Text style={[styles.eventTitle, { color: '#EF4444' }]} numberOfLines={1}>
+                    <Text style={[styles.eventTitle, { color: getPriorityColor(task) }]} numberOfLines={1}>
                       {task.title}
                     </Text>
                     {task.due_date && (
@@ -643,7 +762,7 @@ export default function DailyFlowScreen() {
                         <Text 
                           style={[
                             styles.eventTitle, 
-                            { color: isUrgent ? '#EF4444' : colors.text }
+                            { color: getPriorityColor(task) }
                           ]} 
                           numberOfLines={1}
                         >
@@ -792,7 +911,7 @@ export default function DailyFlowScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Adjust Modal - Placeholder */}
+      {/* Adjust Modal - Functional */}
       <Modal
         visible={showAdjustModal}
         animationType="slide"
@@ -808,20 +927,134 @@ export default function DailyFlowScreen() {
               onPress={() => setShowAdjustModal(false)}
               style={styles.closeButton}
             >
-              <Text style={[styles.closeButtonText, { color: colors.primary }]}>Done</Text>
+              <X size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.modalContent}>
-            <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
-              Adjustment interface coming next.
-              {'\n\n'}
-              You'll be able to:
-              {'\n'}• Reschedule items
-              {'\n'}• Cancel items
-              {'\n'}• Move items to different dates
+            <Text style={[styles.modalInstructions, { color: colors.textSecondary }]}>
+              Review your {adjustType === 'events' ? 'events' : 'tasks'} and make changes as needed.
             </Text>
+
+            {/* Show Events or Tasks based on adjustType */}
+            {adjustType === 'events' && actionsData && (
+              <View>
+                {[...actionsData.overdue, ...actionsData.today].map((event) => (
+                  <View
+                    key={event.id}
+                    style={[styles.adjustItemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  >
+                    <Text style={[styles.adjustItemTitle, { color: colors.text }]}>
+                      {event.title}
+                    </Text>
+                    {event.start_time && (
+                      <Text style={[styles.adjustItemTime, { color: colors.textSecondary }]}>
+                        {formatTimeDisplay(event.start_time)}
+                        {event.end_time && ` - ${formatTimeDisplay(event.end_time)}`}
+                      </Text>
+                    )}
+                    <View style={styles.adjustItemActions}>
+                      <TouchableOpacity
+                        style={[styles.adjustActionButton, { backgroundColor: '#EF444420', borderColor: '#EF4444' }]}
+                        onPress={() => {
+                          Alert.alert(
+                            'Cancel Event',
+                            `Cancel "${event.title}"?`,
+                            [
+                              { text: 'No', style: 'cancel' },
+                              {
+                                text: 'Yes, Cancel',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  await handleDeleteEvent(event.id, event.title);
+                                  setShowAdjustModal(false);
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <Text style={[styles.adjustActionText, { color: '#EF4444' }]}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.adjustActionButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
+                        onPress={() => {
+                          Alert.alert('Reschedule', 'Reschedule functionality coming soon!');
+                        }}
+                      >
+                        <Text style={[styles.adjustActionText, { color: '#3B82F6' }]}>Reschedule</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {adjustType === 'tasks' && (
+              <View>
+                {(showAllTasks ? allTasks : urgentTasks).map((task) => (
+                  <View
+                    key={task.id}
+                    style={[styles.adjustItemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  >
+                    <Text style={[styles.adjustItemTitle, { color: getPriorityColor(task) }]}>
+                      {task.title}
+                    </Text>
+                    {task.due_date && (
+                      <Text style={[styles.adjustItemTime, { color: colors.textSecondary }]}>
+                        Due: {new Date(task.due_date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                    )}
+                    <View style={styles.adjustItemActions}>
+                      <TouchableOpacity
+                        style={[styles.adjustActionButton, { backgroundColor: '#EF444420', borderColor: '#EF4444' }]}
+                        onPress={() => {
+                          Alert.alert(
+                            'Cancel Task',
+                            `Cancel "${task.title}"?`,
+                            [
+                              { text: 'No', style: 'cancel' },
+                              {
+                                text: 'Yes, Cancel',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  await handleDeleteEvent(task.id, task.title);
+                                  await loadData(); // Reload to refresh lists
+                                  setShowAdjustModal(false);
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <Text style={[styles.adjustActionText, { color: '#EF4444' }]}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.adjustActionButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
+                        onPress={() => {
+                          Alert.alert('Reschedule', 'Reschedule functionality coming soon!');
+                        }}
+                      >
+                        <Text style={[styles.adjustActionText, { color: '#3B82F6' }]}>Reschedule</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </ScrollView>
+
+          <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.modalDoneButton, { backgroundColor: colors.primary }]}
+              onPress={() => setShowAdjustModal(false)}
+            >
+              <Text style={styles.modalDoneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -1162,8 +1395,55 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  modalMessage: {
+  modalInstructions: {
     fontSize: 15,
-    lineHeight: 24,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  adjustItemCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  adjustItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  adjustItemTime: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  adjustItemActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  adjustActionButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  adjustActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+  },
+  modalDoneButton: {
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalDoneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
