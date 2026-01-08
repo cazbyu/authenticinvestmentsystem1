@@ -10,6 +10,7 @@ import {
   Platform,
   Modal,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -47,6 +48,14 @@ export default function DailyFlowScreen() {
   const [loadingAllTasks, setLoadingAllTasks] = useState(false);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustType, setAdjustType] = useState<'events' | 'tasks'>('events');
+  
+  // Adjustment bins
+  const [itemsInKeepZone, setItemsInKeepZone] = useState<ScheduledAction[]>([]);
+  const [itemsInRescheduleZone, setItemsInRescheduleZone] = useState<ScheduledAction[]>([]);
+  const [itemsInCancelZone, setItemsInCancelZone] = useState<ScheduledAction[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadData();
@@ -260,6 +269,32 @@ export default function DailyFlowScreen() {
   }
 
   function handleAdjustEvents() {
+    // Initialize bins with all events in Keep zone
+    const allEvents = [
+      ...(actionsData?.overdue || []),
+      ...(actionsData?.today || []),
+    ];
+    
+    // Set up tomorrow as default reschedule date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+    
+    const initialDates: Record<string, string> = {};
+    const initialTimes: Record<string, string> = {};
+    
+    allEvents.forEach(event => {
+      initialDates[event.id] = tomorrowStr;
+      // Default to same time or "anytime"
+      initialTimes[event.id] = event.start_time || 'anytime';
+    });
+    
+    setItemsInKeepZone(allEvents);
+    setItemsInRescheduleZone([]);
+    setItemsInCancelZone([]);
+    setSelectedItemId(null);
+    setRescheduleDates(initialDates);
+    setRescheduleTimes(initialTimes);
     setAdjustType('events');
     setShowAdjustModal(true);
   }
@@ -272,6 +307,28 @@ export default function DailyFlowScreen() {
   }
 
   function handleAdjustTasks() {
+    // Initialize bins with all tasks in Keep zone
+    const allTasksList = showAllTasks ? allTasks : urgentTasks;
+    
+    // Set up tomorrow as default reschedule date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+    
+    const initialDates: Record<string, string> = {};
+    const initialTimes: Record<string, string> = {};
+    
+    allTasksList.forEach(task => {
+      initialDates[task.id] = tomorrowStr;
+      initialTimes[task.id] = task.due_time || 'anytime';
+    });
+    
+    setItemsInKeepZone(allTasksList);
+    setItemsInRescheduleZone([]);
+    setItemsInCancelZone([]);
+    setSelectedItemId(null);
+    setRescheduleDates(initialDates);
+    setRescheduleTimes(initialTimes);
     setAdjustType('tasks');
     setShowAdjustModal(true);
   }
@@ -285,6 +342,88 @@ export default function DailyFlowScreen() {
       return '#eab308'; // Yellow - Urgent but Not Important
     } else {
       return '#9ca3af'; // Gray - Neither Urgent nor Important
+    }
+  }
+
+  function moveItemToBin(itemId: string, targetBin: 'keep' | 'reschedule' | 'cancel') {
+    const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
+    const item = allItems.find(i => i.id === itemId);
+    
+    if (!item) return;
+
+    // Remove from all zones
+    setItemsInKeepZone(prev => prev.filter(i => i.id !== itemId));
+    setItemsInRescheduleZone(prev => prev.filter(i => i.id !== itemId));
+    setItemsInCancelZone(prev => prev.filter(i => i.id !== itemId));
+
+    // Add to target zone
+    if (targetBin === 'keep') {
+      setItemsInKeepZone(prev => [...prev, item]);
+    } else if (targetBin === 'reschedule') {
+      setItemsInRescheduleZone(prev => [...prev, item]);
+    } else if (targetBin === 'cancel') {
+      setItemsInCancelZone(prev => [...prev, item]);
+    }
+
+    setSelectedItemId(null);
+  }
+
+  function toggleItemSelection(itemId: string) {
+    setSelectedItemId(prev => prev === itemId ? null : itemId);
+  }
+
+  async function applyAdjustments() {
+    try {
+      const supabase = getSupabaseClient();
+
+      // Handle cancellations
+      if (itemsInCancelZone.length > 0) {
+        const cancelIds = itemsInCancelZone.map(i => i.id);
+        await supabase
+          .from('0008-ap-tasks')
+          .update({ 
+            deleted_at: toLocalISOString(new Date()),
+            status: 'cancelled'
+          })
+          .in('id', cancelIds);
+      }
+
+      // Handle rescheduling
+      if (itemsInRescheduleZone.length > 0) {
+        for (const item of itemsInRescheduleZone) {
+          const newDate = rescheduleDates[item.id];
+          const newTime = rescheduleTimes[item.id];
+
+          if (adjustType === 'events') {
+            await supabase
+              .from('0008-ap-tasks')
+              .update({
+                start_date: newDate,
+                start_time: newTime === 'anytime' ? null : newTime,
+              })
+              .eq('id', item.id);
+          } else {
+            await supabase
+              .from('0008-ap-tasks')
+              .update({
+                due_date: newDate,
+                due_time: newTime === 'anytime' ? null : newTime,
+              })
+              .eq('id', item.id);
+          }
+        }
+      }
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      Alert.alert('Success', 'Changes applied successfully!');
+      setShowAdjustModal(false);
+      await loadData(); // Reload everything
+    } catch (error) {
+      console.error('Error applying adjustments:', error);
+      Alert.alert('Error', 'Failed to apply changes. Please try again.');
     }
   }
 
@@ -911,7 +1050,7 @@ export default function DailyFlowScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Adjust Modal - Functional */}
+      {/* Adjust Modal - Bin-based with Dropdowns */}
       <Modal
         visible={showAdjustModal}
         animationType="slide"
@@ -933,116 +1072,189 @@ export default function DailyFlowScreen() {
 
           <ScrollView style={styles.modalContent}>
             <Text style={[styles.modalInstructions, { color: colors.textSecondary }]}>
-              Review your {adjustType === 'events' ? 'events' : 'tasks'} and make changes as needed.
+              Tap an item to select it, then use the buttons below to move between zones.
             </Text>
 
-            {/* Show Events or Tasks based on adjustType */}
-            {adjustType === 'events' && actionsData && (
-              <View>
-                {[...actionsData.overdue, ...actionsData.today].map((event) => (
-                  <View
-                    key={event.id}
-                    style={[styles.adjustItemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  >
-                    <Text style={[styles.adjustItemTitle, { color: colors.text }]}>
-                      {event.title}
-                    </Text>
-                    {event.start_time && (
-                      <Text style={[styles.adjustItemTime, { color: colors.textSecondary }]}>
-                        {formatTimeDisplay(event.start_time)}
-                        {event.end_time && ` - ${formatTimeDisplay(event.end_time)}`}
-                      </Text>
-                    )}
-                    <View style={styles.adjustItemActions}>
-                      <TouchableOpacity
-                        style={[styles.adjustActionButton, { backgroundColor: '#EF444420', borderColor: '#EF4444' }]}
-                        onPress={() => {
-                          Alert.alert(
-                            'Cancel Event',
-                            `Cancel "${event.title}"?`,
-                            [
-                              { text: 'No', style: 'cancel' },
-                              {
-                                text: 'Yes, Cancel',
-                                style: 'destructive',
-                                onPress: async () => {
-                                  await handleDeleteEvent(event.id, event.title);
-                                  setShowAdjustModal(false);
-                                },
-                              },
-                            ]
-                          );
-                        }}
-                      >
-                        <Text style={[styles.adjustActionText, { color: '#EF4444' }]}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.adjustActionButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
-                        onPress={() => {
-                          Alert.alert('Reschedule', 'Reschedule functionality coming soon!');
-                        }}
-                      >
-                        <Text style={[styles.adjustActionText, { color: '#3B82F6' }]}>Reschedule</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
+            {/* KEEP ZONE */}
+            <View style={styles.binContainer}>
+              <View style={[styles.binHeader, { backgroundColor: '#10B98120' }]}>
+                <Text style={[styles.binTitle, { color: '#10B981' }]}>KEEP AS IS</Text>
+                <Text style={[styles.binSubtitle, { color: '#10B981' }]}>
+                  ✓ These will stay scheduled for today
+                </Text>
               </View>
-            )}
-
-            {adjustType === 'tasks' && (
-              <View>
-                {(showAllTasks ? allTasks : urgentTasks).map((task) => (
-                  <View
-                    key={task.id}
-                    style={[styles.adjustItemCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  >
-                    <Text style={[styles.adjustItemTitle, { color: getPriorityColor(task) }]}>
-                      {task.title}
-                    </Text>
-                    {task.due_date && (
-                      <Text style={[styles.adjustItemTime, { color: colors.textSecondary }]}>
-                        Due: {new Date(task.due_date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
+              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#10B981' }]}>
+                {itemsInKeepZone.length === 0 ? (
+                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
+                    No items here
+                  </Text>
+                ) : (
+                  itemsInKeepZone.map(item => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.binItem,
+                        { 
+                          backgroundColor: selectedItemId === item.id ? colors.primary + '20' : 'transparent',
+                          borderColor: selectedItemId === item.id ? colors.primary : colors.border
+                        }
+                      ]}
+                      onPress={() => toggleItemSelection(item.id)}
+                    >
+                      <Text style={[
+                        styles.binItemText,
+                        { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                      ]}>
+                        {item.title}
                       </Text>
-                    )}
-                    <View style={styles.adjustItemActions}>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            </View>
+
+            {/* RESCHEDULE ZONE */}
+            <View style={styles.binContainer}>
+              <View style={[styles.binHeader, { backgroundColor: '#3B82F620' }]}>
+                <Text style={[styles.binTitle, { color: '#3B82F6' }]}>RESCHEDULE</Text>
+                <Text style={[styles.binSubtitle, { color: '#3B82F6' }]}>
+                  📅 Adjust date and time
+                </Text>
+              </View>
+              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#3B82F6' }]}>
+                {itemsInRescheduleZone.length === 0 ? (
+                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
+                    No items here
+                  </Text>
+                ) : (
+                  itemsInRescheduleZone.map(item => (
+                    <View key={item.id} style={styles.rescheduleItemContainer}>
                       <TouchableOpacity
-                        style={[styles.adjustActionButton, { backgroundColor: '#EF444420', borderColor: '#EF4444' }]}
-                        onPress={() => {
-                          Alert.alert(
-                            'Cancel Task',
-                            `Cancel "${task.title}"?`,
-                            [
-                              { text: 'No', style: 'cancel' },
-                              {
-                                text: 'Yes, Cancel',
-                                style: 'destructive',
-                                onPress: async () => {
-                                  await handleDeleteEvent(task.id, task.title);
-                                  await loadData(); // Reload to refresh lists
-                                  setShowAdjustModal(false);
-                                },
-                              },
-                            ]
-                          );
-                        }}
+                        style={[
+                          styles.binItem,
+                          { 
+                            backgroundColor: selectedItemId === item.id ? colors.primary + '20' : 'transparent',
+                            borderColor: selectedItemId === item.id ? colors.primary : colors.border,
+                            marginBottom: 8
+                          }
+                        ]}
+                        onPress={() => toggleItemSelection(item.id)}
                       >
-                        <Text style={[styles.adjustActionText, { color: '#EF4444' }]}>Cancel</Text>
+                        <Text style={[
+                          styles.binItemText,
+                          { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                        ]}>
+                          {item.title}
+                        </Text>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.adjustActionButton, { backgroundColor: '#3B82F620', borderColor: '#3B82F6' }]}
-                        onPress={() => {
-                          Alert.alert('Reschedule', 'Reschedule functionality coming soon!');
-                        }}
-                      >
-                        <Text style={[styles.adjustActionText, { color: '#3B82F6' }]}>Reschedule</Text>
-                      </TouchableOpacity>
+
+                      {/* Date Picker */}
+                      <View style={[styles.pickerContainer, { backgroundColor: colors.background }]}>
+                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Date:</Text>
+                        <Picker
+                          selectedValue={rescheduleDates[item.id]}
+                          onValueChange={(value) => setRescheduleDates(prev => ({...prev, [item.id]: value}))}
+                          style={[styles.picker, { color: colors.text }]}
+                        >
+                          {Array.from({length: 14}, (_, i) => {
+                            const date = new Date();
+                            date.setDate(date.getDate() + i + 1); // Start from tomorrow
+                            const dateStr = toLocalISOString(date).split('T')[0];
+                            const label = i === 0 ? 'Tomorrow' : 
+                                         i === 1 ? 'Day After Tomorrow' :
+                                         date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                            return <Picker.Item key={dateStr} label={label} value={dateStr} />;
+                          })}
+                        </Picker>
+                      </View>
+
+                      {/* Time Picker */}
+                      <View style={[styles.pickerContainer, { backgroundColor: colors.background }]}>
+                        <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Time:</Text>
+                        <Picker
+                          selectedValue={rescheduleTimes[item.id]}
+                          onValueChange={(value) => setRescheduleTimes(prev => ({...prev, [item.id]: value}))}
+                          style={[styles.picker, { color: colors.text }]}
+                        >
+                          <Picker.Item label="Anytime" value="anytime" />
+                          {Array.from({length: 48}, (_, i) => {
+                            const hour = Math.floor(i / 2);
+                            const minute = (i % 2) * 30;
+                            const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+                            const displayTime = new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true
+                            });
+                            return <Picker.Item key={timeStr} label={displayTime} value={timeStr} />;
+                          })}
+                        </Picker>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  ))
+                )}
+              </View>
+            </View>
+
+            {/* CANCEL ZONE */}
+            <View style={styles.binContainer}>
+              <View style={[styles.binHeader, { backgroundColor: '#EF444420' }]}>
+                <Text style={[styles.binTitle, { color: '#EF4444' }]}>CANCEL</Text>
+                <Text style={[styles.binSubtitle, { color: '#EF4444' }]}>
+                  🗑️ These will be deleted
+                </Text>
+              </View>
+              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#EF4444' }]}>
+                {itemsInCancelZone.length === 0 ? (
+                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
+                    No items here
+                  </Text>
+                ) : (
+                  itemsInCancelZone.map(item => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.binItem,
+                        { 
+                          backgroundColor: selectedItemId === item.id ? colors.primary + '20' : 'transparent',
+                          borderColor: selectedItemId === item.id ? colors.primary : colors.border
+                        }
+                      ]}
+                      onPress={() => toggleItemSelection(item.id)}
+                    >
+                      <Text style={[
+                        styles.binItemText,
+                        { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                      ]}>
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            </View>
+
+            {/* Movement Buttons */}
+            {selectedItemId && (
+              <View style={styles.movementButtons}>
+                <TouchableOpacity
+                  style={[styles.movementButton, { backgroundColor: '#10B981' }]}
+                  onPress={() => moveItemToBin(selectedItemId, 'keep')}
+                >
+                  <Text style={styles.movementButtonText}>→ Keep</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.movementButton, { backgroundColor: '#3B82F6' }]}
+                  onPress={() => moveItemToBin(selectedItemId, 'reschedule')}
+                >
+                  <Text style={styles.movementButtonText}>→ Reschedule</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.movementButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => moveItemToBin(selectedItemId, 'cancel')}
+                >
+                  <Text style={styles.movementButtonText}>→ Cancel</Text>
+                </TouchableOpacity>
               </View>
             )}
           </ScrollView>
@@ -1050,9 +1262,9 @@ export default function DailyFlowScreen() {
           <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
             <TouchableOpacity
               style={[styles.modalDoneButton, { backgroundColor: colors.primary }]}
-              onPress={() => setShowAdjustModal(false)}
+              onPress={applyAdjustments}
             >
-              <Text style={styles.modalDoneButtonText}>Done</Text>
+              <Text style={styles.modalDoneButtonText}>Apply Changes</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -1399,6 +1611,84 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 20,
+  },
+  binContainer: {
+    marginBottom: 20,
+  },
+  binHeader: {
+    padding: 12,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+  },
+  binTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  binSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  binContent: {
+    minHeight: 80,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    padding: 12,
+  },
+  emptyBinText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  binItem: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  binItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  rescheduleItemContainer: {
+    marginBottom: 16,
+  },
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  pickerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    width: 50,
+  },
+  picker: {
+    flex: 1,
+    height: 40,
+  },
+  movementButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  movementButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  movementButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   adjustItemCard: {
     padding: 16,
