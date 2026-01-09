@@ -56,6 +56,10 @@ export default function DailyFlowScreen() {
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
   const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  
+  // Brain Dump state
+  const [brainDumpNotes, setBrainDumpNotes] = useState<Array<{id: string; content: string}>>([]);
+  const [loadingBrainDump, setLoadingBrainDump] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -88,6 +92,9 @@ export default function DailyFlowScreen() {
       setFuelLevel(spark.fuel_level);
       setActionsData(actions);
 
+      // Load brain dump after we have userId
+      await loadBrainDump(user.id);
+
       // Load urgent tasks for EL1
       if (spark.fuel_level === 1) {
         await loadUrgentTasks(user.id);
@@ -97,6 +104,72 @@ export default function DailyFlowScreen() {
       Alert.alert('Error', 'Failed to load Morning Spark. Please try again.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadBrainDump(uid: string) {
+    try {
+      setLoadingBrainDump(true);
+      const supabase = getSupabaseClient();
+      
+      // Query yesterday's brain dump reflections
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = toLocalISOString(yesterday).split('T')[0];
+
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .select('id, content')
+        .eq('user_id', uid)
+        .eq('reflection_type', 'brain_dump')
+        .gte('created_at', `${yesterdayStr}T00:00:00`)
+        .lt('created_at', `${yesterdayStr}T23:59:59`)
+        .eq('archived', false)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setBrainDumpNotes(data || []);
+    } catch (error) {
+      console.error('Error loading brain dump:', error);
+    } finally {
+      setLoadingBrainDump(false);
+    }
+  }
+
+  async function handleDeferNote(noteId: string) {
+    // Just remove from display - note stays in database for Journal view
+    setBrainDumpNotes(prev => prev.filter(note => note.id !== noteId));
+    
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  async function handleFollowUpNote(noteId: string) {
+    try {
+      const supabase = getSupabaseClient();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+
+      // Set follow_up date to tomorrow
+      await supabase
+        .from('0008-ap-reflections')
+        .update({ follow_up: tomorrowStr })
+        .eq('id', noteId);
+
+      // Remove from display
+      setBrainDumpNotes(prev => prev.filter(note => note.id !== noteId));
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      Alert.alert('Success', 'Note will appear in tomorrow\'s Follow Up section.');
+    } catch (error) {
+      console.error('Error setting follow-up:', error);
+      Alert.alert('Error', 'Failed to set follow-up. Please try again.');
     }
   }
 
@@ -836,6 +909,60 @@ export default function DailyFlowScreen() {
             <Text style={[styles.acceptedText, { color: '#10B981' }]}>Schedule Accepted</Text>
           </View>
         )}
+
+        {/* Yesterday's Brain Dump Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Yesterday's Brain Dump</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            {brainDumpNotes.length > 0
+              ? "You created some notes for yourself yesterday. Would you like to defer them so they don't weigh on you?"
+              : "No notes were left to review from yesterday"}
+          </Text>
+
+          {loadingBrainDump ? (
+            <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : brainDumpNotes.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={styles.emptyEmoji}>💭</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                No brain dump notes from yesterday
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.brainDumpContainer, { backgroundColor: colors.surface }]}>
+              {brainDumpNotes.map((note) => (
+                <View
+                  key={note.id}
+                  style={[styles.brainDumpNote, { backgroundColor: colors.background, borderColor: colors.border }]}
+                >
+                  <Text style={[styles.brainDumpContent, { color: colors.text }]} numberOfLines={3}>
+                    {note.content}
+                  </Text>
+                  <View style={styles.brainDumpActions}>
+                    <TouchableOpacity
+                      style={[styles.brainDumpButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                      onPress={() => handleDeferNote(note.id)}
+                    >
+                      <Text style={[styles.brainDumpButtonText, { color: colors.text }]}>
+                        Defer to Log
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.brainDumpButton, { backgroundColor: colors.primary }]}
+                      onPress={() => handleFollowUpNote(note.id)}
+                    >
+                      <Text style={[styles.brainDumpButtonText, { color: '#FFFFFF' }]}>
+                        Follow Up Tomorrow
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
 
         {/* Urgent Tasks Section - EL1 Only */}
         {fuelLevel === 1 && (
@@ -1879,5 +2006,36 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  brainDumpContainer: {
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+  },
+  brainDumpNote: {
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+  },
+  brainDumpContent: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  brainDumpActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  brainDumpButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  brainDumpButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
