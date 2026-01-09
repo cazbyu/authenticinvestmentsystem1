@@ -60,14 +60,13 @@ export function FinalCommitmentSection({
     }
   });
 
-  // Calculate target score
+  // ✅ Calculate target score WITHOUT overdue events
   const eventPoints = (actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0);
-  const overduePoints = (actionsData?.overdue || []).reduce((sum, e) => sum + (e.points || 3), 0);
   const taskPoints = allCommittedTasks.reduce((sum, t) => sum + (t.points || 3), 0);
   const reflectionPoints = Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10);
   const eveningReviewPoints = commitEveningReview ? 10 : 0;
   const completionBonus = 10;
-  const targetScore = eventPoints + overduePoints + taskPoints + mindsetPoints + reflectionPoints + eveningReviewPoints + completionBonus;
+  const targetScore = eventPoints + taskPoints + mindsetPoints + reflectionPoints + eveningReviewPoints + completionBonus;
 
   return (
     <View style={styles.section}>
@@ -81,31 +80,15 @@ export function FinalCommitmentSection({
       {/* Combined Tasks + Events Table */}
       <View style={[styles.commitmentTable, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.commitmentTableTitle, { color: colors.text }]}>
-          Your Daily Creation Menu
+          Today's Menu
         </Text>
 
-        {/* Events Section */}
-        {actionsData && (actionsData.today.length > 0 || actionsData.overdue.length > 0) && (
+        {/* ✅ Events Section - ONLY today's events, NO overdue */}
+        {actionsData && actionsData.today.length > 0 && (
           <>
             <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary }]}>
-              EVENTS ({actionsData.today.length + actionsData.overdue.length})
+              EVENTS ({actionsData.today.length})
             </Text>
-            {actionsData.overdue.map((event) => (
-              <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
-                <Calendar size={16} color="#EF4444" />
-                <Text style={[styles.commitmentItemTitle, { color: '#EF4444' }]} numberOfLines={1}>
-                  {event.title}
-                  {event.start_time && (
-                    <Text style={[styles.eventTime, { color: '#EF4444' }]}>
-                      {' '}({formatTimeDisplay(event.start_time)})
-                    </Text>
-                  )}
-                </Text>
-                <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
-                  +{event.points || 3}
-                </Text>
-              </View>
-            ))}
             {actionsData.today.map((event) => (
               <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
                 <Calendar size={16} color={colors.primary} />
@@ -173,7 +156,7 @@ export function FinalCommitmentSection({
           {targetScore} points
         </Text>
         <Text style={[styles.finalTargetBreakdown, { color: colors.textSecondary }]}>
-          {(actionsData?.today.length || 0) + (actionsData?.overdue.length || 0)} events
+          {actionsData?.today.length || 0} events
           {allCommittedTasks.length > 0 ? ` + ${allCommittedTasks.length} tasks` : ''}
         </Text>
       </View>
