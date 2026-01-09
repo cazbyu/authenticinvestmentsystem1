@@ -34,6 +34,15 @@ import { MindsetCapture } from '@/components/morning-spark/MindsetCapture';
 import { DraggableFab } from '@/components/DraggableFab';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 
+// Import Morning Spark Components
+import { ScheduleSection } from '@/components/morning-spark/ScheduleSection';
+import { UrgentTasksSection } from '@/components/morning-spark/UrgentTasksSection';
+import { BrainDumpSection } from '@/components/morning-spark/BrainDumpSection';
+import { FollowUpSection } from '@/components/morning-spark/FollowUpSection';
+import { RemainingTasksSection } from '@/components/morning-spark/RemainingTasksSection';
+import { FinalCommitmentSection } from '@/components/morning-spark/FinalCommitmentSection';
+import { ReflectionsSection } from '@/components/morning-spark/ReflectionsSection';
+
 export default function DailyFlowScreen() {
   const router = useRouter();
   const { colors } = useTheme();
