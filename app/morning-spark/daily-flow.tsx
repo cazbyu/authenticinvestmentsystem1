@@ -1799,7 +1799,6 @@ export default function DailyFlowScreen() {
               {' + 10 completion bonus'}
             </Text>
           </View>
-        </View>
 
         <View style={{ height: 20 }} />
       </ScrollView>
