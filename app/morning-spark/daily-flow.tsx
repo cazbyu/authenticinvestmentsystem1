@@ -1496,549 +1496,63 @@ export default function DailyFlowScreen() {
           </Text>
         </View>
 
-        {/* Scheduled Events Section - Collapsible */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => setShowSchedule(!showSchedule)}
-          >
-            <View style={styles.collapsibleTitleRow}>
-              <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                📅 Your Schedule Today
-              </Text>
-              <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
-                ({actionsData.today.length})
-              </Text>
-            </View>
-            <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
-              {showSchedule ? '▼' : '▶'}
-            </Text>
-          </TouchableOpacity>
+        {/* Scheduled Events Section */}
+        <ScheduleSection
+          events={actionsData.today}
+          colors={colors}
+          formatTimeDisplay={formatTimeDisplay}
+          getScheduleMessage={getScheduleMessage}
+          itemCommitmentStates={itemCommitmentStates}
+          handleCommitItem={handleCommitItem}
+          openRescheduleModal={openRescheduleModal}
+        />
 
-          {showSchedule && (
-            <>
-              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, marginTop: 8 }]}>
-                {getScheduleMessage()}
-              </Text>
+        {/* Urgent Tasks Section - EL1 Only */}
+        <UrgentTasksSection
+          fuelLevel={fuelLevel}
+          urgentTasks={urgentTasks}
+          colors={colors}
+          itemCommitmentStates={itemCommitmentStates}
+          handleCommitItem={handleCommitItem}
+          openRescheduleModal={openRescheduleModal}
+          getVisibleItems={getVisibleItems}
+          getCommittedItems={getCommittedItems}
+          getPriorityColor={getPriorityColor}
+        />
 
-              {actionsData.today.length === 0 ? (
-                <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={styles.emptyEmoji}>✨</Text>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    Your schedule is clear!
-                  </Text>
-                </View>
-              ) : (
-                <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-                  {actionsData.today.map((event) => renderEventRow(event, false))}
-                </View>
-              )}
-            </>
-          )}
-        </View>
+        {/* Brain Dump Section */}
+        <BrainDumpSection
+          brainDumpNotes={brainDumpNotes}
+          colors={colors}
+          loadingBrainDump={loadingBrainDump}
+          handleDeferNote={handleDeferNote}
+          handleFollowUpNote={handleFollowUpNote}
+        />
 
-        {/* Urgent Tasks Section - EL1 Only - Collapsible */}
-        {fuelLevel === 1 && (
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => setShowUrgentTasks(!showUrgentTasks)}
-            >
-              <View style={styles.collapsibleTitleRow}>
-                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                  ⚡ Urgent Tasks
-                </Text>
-                <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
-                  ({urgentTasks.length})
-                </Text>
-              </View>
-              <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
-                {showUrgentTasks ? '▼' : '▶'}
-              </Text>
-            </TouchableOpacity>
+        {/* Follow Up Section */}
+        <FollowUpSection
+          followUpItems={followUpItems}
+          colors={colors}
+          loadingFollowUp={loadingFollowUp}
+          handleCompleteFollowUp={handleCompleteFollowUp}
+          handleSnoozeFollowUp={handleSnoozeFollowUp}
+        />
 
-            {showUrgentTasks && urgentTasks.length > 0 && (
-              <>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, marginTop: 8 }]}>
-                  {Platform.OS === 'web' 
-                    ? "Click tasks to commit, or use the action buttons to reschedule."
-                    : "Tap to commit • Hold to reschedule"}
-                </Text>
-
-                {getVisibleItems(urgentTasks).length === 0 ? (
-                  <View style={[styles.emptyTasksState, { backgroundColor: colors.surface }]}>
-                    <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
-                      All urgent tasks handled
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-                      {getVisibleItems(urgentTasks).map((task) => {
-                        const isCommitted = itemCommitmentStates[task.id] === 'committed';
-                        
-                        return Platform.OS === 'web' ? (
-                          // Web version
-                          <View
-                            key={task.id}
-                            style={[
-                              styles.eventRow, 
-                              { borderBottomColor: colors.border },
-                              isCommitted && { 
-                                backgroundColor: '#10B98120',
-                                borderLeftWidth: 4,
-                                borderLeftColor: '#10B981'
-                              }
-                            ]}
-                          >
-                            <TouchableOpacity
-                              style={styles.webTaskClickArea}
-                              onPress={() => handleCommitItem(task.id)}
-                            >
-                              <View style={styles.iconContainer}>
-                                {isCommitted ? (
-                                  <Check size={20} color="#10B981" strokeWidth={3} />
-                                ) : (
-                                  <CheckSquare size={16} color={colors.primary} />
-                                )}
-                              </View>
-
-                              <View style={styles.eventContent}>
-                                <Text style={[
-                                  styles.eventTitle, 
-                                  { color: getPriorityColor(task) },
-                                  isCommitted && { fontWeight: '600' }
-                                ]} numberOfLines={1}>
-                                  {isCommitted && '✓ '}{task.title}
-                                </Text>
-                                {task.due_date && (
-                                  <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
-                                    Due: {new Date(task.due_date).toLocaleDateString('en-US', {
-                                      month: 'short',
-                                      day: 'numeric',
-                                    })}
-                                  </Text>
-                                )}
-                              </View>
-
-                              <Text style={[styles.points, { color: '#10B981' }]}>
-                                +{Math.round(task.points || 3)}
-                              </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              style={[styles.webRescheduleButton, { backgroundColor: colors.background }]}
-                              onPress={() => openRescheduleModal(task)}
-                            >
-                              <ChevronRight size={16} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          // Mobile version
-                          <TouchableOpacity
-                            key={task.id}
-                            style={[
-                              styles.eventRow,
-                              { borderBottomColor: colors.border },
-                              isCommitted && { 
-                                backgroundColor: '#10B98120',
-                                borderLeftWidth: 4,
-                                borderLeftColor: '#10B981'
-                              }
-                            ]}
-                            onPress={() => handleCommitItem(task.id)}
-                            onLongPress={() => openRescheduleModal(task)}
-                          >
-                            <View style={styles.iconContainer}>
-                              {isCommitted ? (
-                                <Check size={20} color="#10B981" strokeWidth={3} />
-                              ) : (
-                                <CheckSquare size={16} color={colors.primary} />
-                              )}
-                            </View>
-
-                            <View style={styles.eventContent}>
-                              <Text style={[
-                                styles.eventTitle, 
-                                { color: getPriorityColor(task) },
-                                isCommitted && { fontWeight: '600' }
-                              ]} numberOfLines={1}>
-                                {isCommitted && '✓ '}{task.title}
-                              </Text>
-                              {task.due_date && (
-                                <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
-                                  Due: {new Date(task.due_date).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                  })}
-                                </Text>
-                              )}
-                            </View>
-
-                            <Text style={[styles.points, { color: '#10B981' }]}>
-                              +{Math.round(task.points || 3)}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    {/* Show commitment summary */}
-                    {getCommittedItems(urgentTasks).length > 0 && (
-                      <Text style={[styles.commitmentSummary, { color: colors.primary }]}>
-                        ✓ {getCommittedItems(urgentTasks).length} of {getVisibleItems(urgentTasks).length} tasks committed
-                      </Text>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </View>
-        )}
-
-        {/* Brain Dump Section - Collapsible */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => {
-              if (!showBrainDump && brainDumpNotes.length > 0) {
-                // Already loaded
-                setShowBrainDump(true);
-              } else {
-                setShowBrainDump(!showBrainDump);
-              }
-            }}
-          >
-            <View style={styles.collapsibleTitleRow}>
-              <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                💭 Brain Dump
-              </Text>
-              <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
-                {brainDumpNotes.length === 0 ? '- none created yesterday' : '- ready for review'}
-              </Text>
-            </View>
-            <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
-              {showBrainDump ? '▼' : '▶'}
-            </Text>
-          </TouchableOpacity>
-
-          {showBrainDump && brainDumpNotes.length > 0 && (
-            <>
-              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, marginTop: 8 }]}>
-                You created some notes for yourself yesterday. Would you like to defer them so they don't weigh on you?
-              </Text>
-
-              {loadingBrainDump ? (
-                <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                </View>
-              ) : (
-                <View style={[styles.brainDumpContainer, { backgroundColor: colors.surface }]}>
-                  {brainDumpNotes.map((note) => (
-                    <View
-                      key={note.id}
-                      style={[styles.brainDumpNote, { backgroundColor: colors.background, borderColor: colors.border }]}
-                    >
-                      <Text style={[styles.brainDumpContent, { color: colors.text }]} numberOfLines={3}>
-                        {note.content}
-                      </Text>
-                      <View style={styles.brainDumpActions}>
-                        <TouchableOpacity
-                          style={[styles.brainDumpButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                          onPress={() => handleDeferNote(note.id)}
-                        >
-                          <Text style={[styles.brainDumpButtonText, { color: colors.text }]}>
-                            Defer to Log
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.brainDumpButton, { backgroundColor: colors.primary }]}
-                          onPress={() => handleFollowUpNote(note.id)}
-                        >
-                          <Text style={[styles.brainDumpButtonText, { color: '#FFFFFF' }]}>
-                            Follow Up Tomorrow
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </>
-          )}
-        </View>
-
-        {/* Follow Up Section - Collapsible */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => {
-              if (!showFollowUp && followUpItems.length > 0) {
-                setShowFollowUp(true);
-              } else {
-                setShowFollowUp(!showFollowUp);
-              }
-            }}
-          >
-            <View style={styles.collapsibleTitleRow}>
-              <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                🚩 Follow Up
-              </Text>
-              <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
-                ({followUpItems.length})
-              </Text>
-            </View>
-            <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
-              {showFollowUp ? '▼' : '▶'}
-            </Text>
-          </TouchableOpacity>
-
-          {showFollowUp && followUpItems.length > 0 && (
-            <>
-              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, marginTop: 8 }]}>
-                Items you've marked for follow-up today. Time to take action or reschedule.
-              </Text>
-
-              {loadingFollowUp ? (
-                <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                </View>
-              ) : (
-                <View style={[styles.followUpContainer, { backgroundColor: colors.surface }]}>
-                  {followUpItems.map((item) => (
-                    <View
-                      key={item.id}
-                      style={[styles.followUpItem, { backgroundColor: colors.background, borderColor: colors.border }]}
-                    >
-                      <View style={styles.followUpHeader}>
-                        <View style={styles.followUpFlag}>
-                          <Text style={styles.followUpFlagEmoji}>🚩</Text>
-                          <Text style={[styles.followUpType, { color: colors.textSecondary }]}>
-                            {item.parent_type === 'task' ? 'Task' :
-                             item.parent_type === 'event' ? 'Event' :
-                             item.parent_type === 'depositIdea' ? 'Idea' :
-                             item.parent_type === 'reflection' ? 'Note' :
-                             item.parent_type.includes('goal') ? 'Goal' : 'Item'}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.followUpTitle, { color: colors.text }]} numberOfLines={2}>
-                        {item.title}
-                      </Text>
-                      <View style={styles.followUpActions}>
-                        <TouchableOpacity
-                          style={[styles.followUpButton, { backgroundColor: '#10B981' }]}
-                          onPress={() => handleCompleteFollowUp(item)}
-                        >
-                          <Text style={[styles.followUpButtonText, { color: '#FFFFFF' }]}>
-                            ✓ Done
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.followUpButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
-                          onPress={() => handleSnoozeFollowUp(item)}
-                        >
-                          <Text style={[styles.followUpButtonText, { color: colors.text }]}>
-                            💤 Tomorrow
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </>
-          )}
-        </View>
-
-        {/* Remaining Tasks Section - EL1 Only - Collapsible */}
-        {fuelLevel === 1 && (
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => {
-                if (!showRemainingTasks) {
-                  loadAllTasks();
-                }
-                setShowRemainingTasks(!showRemainingTasks);
-              }}
-            >
-              <View style={styles.collapsibleTitleRow}>
-                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                  📋 Remaining Tasks
-                </Text>
-                <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
-                  {showRemainingTasks ? `(${allTasks.length})` : ''}
-                </Text>
-              </View>
-              <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
-                {showRemainingTasks ? '▼' : '▶'}
-              </Text>
-            </TouchableOpacity>
-
-            {showRemainingTasks && (
-              <>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, marginTop: 8 }]}>
-                  {Platform.OS === 'web' 
-                    ? "Click tasks to commit, or use the action buttons to reschedule."
-                    : "Tap to commit • Hold to reschedule"}
-                </Text>
-
-                {loadingAllTasks ? (
-                  <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  </View>
-                ) : allTasks.length === 0 ? (
-                  <View style={[styles.emptyTasksState, { backgroundColor: colors.surface }]}>
-                    <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
-                      No remaining tasks for today
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-                      {getVisibleItems(allTasks).map((task) => {
-                        const isUrgent = task.is_urgent;
-                        const isOverdue = task.due_date && task.due_date < toLocalISOString(new Date()).split('T')[0];
-                        const isCommitted = itemCommitmentStates[task.id] === 'committed';
-                        
-                        return Platform.OS === 'web' ? (
-                          <View
-                            key={task.id}
-                            style={[
-                              styles.eventRow,
-                              { borderBottomColor: colors.border },
-                              isCommitted && { 
-                                backgroundColor: '#10B98120',
-                                borderLeftWidth: 4,
-                                borderLeftColor: '#10B981'
-                              }
-                            ]}
-                          >
-                            <TouchableOpacity
-                              style={styles.webTaskClickArea}
-                              onPress={() => handleCommitItem(task.id)}
-                            >
-                              <View style={styles.iconContainer}>
-                                {isCommitted ? (
-                                  <Check size={20} color="#10B981" strokeWidth={3} />
-                                ) : (
-                                  <CheckSquare size={16} color={isUrgent ? '#EF4444' : colors.primary} />
-                                )}
-                              </View>
-
-                              <View style={styles.eventContent}>
-                                <View style={styles.taskTitleRow}>
-                                  <Text 
-                                    style={[
-                                      styles.eventTitle, 
-                                      { color: getPriorityColor(task) },
-                                      isCommitted && { fontWeight: '600' }
-                                    ]} 
-                                    numberOfLines={1}
-                                  >
-                                    {isCommitted && '✓ '}{task.title}
-                                  </Text>
-                                  {isUrgent && (
-                                    <View style={styles.urgentBadge}>
-                                      <Text style={styles.urgentBadgeText}>URGENT</Text>
-                                    </View>
-                                  )}
-                                </View>
-                                {task.due_date && (
-                                  <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
-                                    Due: {new Date(task.due_date).toLocaleDateString('en-US', {
-                                      month: 'short',
-                                      day: 'numeric',
-                                    })}
-                                    {isOverdue && ' (Overdue)'}
-                                  </Text>
-                                )}
-                              </View>
-
-                              <Text style={[styles.points, { color: '#10B981' }]}>
-                                +{Math.round(task.points || 3)}
-                              </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                              style={[styles.webRescheduleButton, { backgroundColor: colors.background }]}
-                              onPress={() => openRescheduleModal(task)}
-                            >
-                              <ChevronRight size={16} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <TouchableOpacity
-                            key={task.id}
-                            style={[
-                              styles.eventRow,
-                              { borderBottomColor: colors.border },
-                              isCommitted && { 
-                                backgroundColor: '#10B98120',
-                                borderLeftWidth: 4,
-                                borderLeftColor: '#10B981'
-                              }
-                            ]}
-                            onPress={() => handleCommitItem(task.id)}
-                            onLongPress={() => openRescheduleModal(task)}
-                          >
-                            <View style={styles.iconContainer}>
-                              {isCommitted ? (
-                                <Check size={20} color="#10B981" strokeWidth={3} />
-                              ) : (
-                                <CheckSquare size={16} color={isUrgent ? '#EF4444' : colors.primary} />
-                              )}
-                            </View>
-
-                            <View style={styles.eventContent}>
-                              <View style={styles.taskTitleRow}>
-                                <Text 
-                                  style={[
-                                    styles.eventTitle, 
-                                    { color: getPriorityColor(task) },
-                                    isCommitted && { fontWeight: '600' }
-                                  ]} 
-                                  numberOfLines={1}
-                                >
-                                  {isCommitted && '✓ '}{task.title}
-                                </Text>
-                                {isUrgent && (
-                                  <View style={styles.urgentBadge}>
-                                    <Text style={styles.urgentBadgeText}>URGENT</Text>
-                                  </View>
-                                )}
-                              </View>
-                              {task.due_date && (
-                                <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
-                                  Due: {new Date(task.due_date).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                  })}
-                                  {isOverdue && ' (Overdue)'}
-                                </Text>
-                              )}
-                            </View>
-
-                            <Text style={[styles.points, { color: '#10B981' }]}>
-                              +{Math.round(task.points || 3)}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    {getCommittedItems(allTasks).length > 0 && (
-                      <Text style={[styles.commitmentSummary, { color: colors.primary }]}>
-                        ✓ {getCommittedItems(allTasks).length} of {getVisibleItems(allTasks).length} tasks committed
-                      </Text>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </View>
-        )}
+        {/* Remaining Tasks Section - EL1 Only */}
+        <RemainingTasksSection
+          fuelLevel={fuelLevel}
+          allTasks={allTasks}
+          colors={colors}
+          loadingAllTasks={loadingAllTasks}
+          itemCommitmentStates={itemCommitmentStates}
+          handleCommitItem={handleCommitItem}
+          openRescheduleModal={openRescheduleModal}
+          getVisibleItems={getVisibleItems}
+          getCommittedItems={getCommittedItems}
+          getPriorityColor={getPriorityColor}
+          loadAllTasks={loadAllTasks}
+          toLocalISOString={toLocalISOString}
+        />
 
         {/* EL1 Only: Collapsible Review Sections */}
         {fuelLevel === 1 && (
