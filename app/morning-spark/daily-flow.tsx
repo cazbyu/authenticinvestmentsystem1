@@ -1498,7 +1498,7 @@ export default function DailyFlowScreen() {
 
         {/* Scheduled Events Section */}
         <ScheduleSection
-          events={actionsData.today}
+          events={actionsData?.today || []}
           colors={colors}
           formatTimeDisplay={formatTimeDisplay}
           getScheduleMessage={getScheduleMessage}
@@ -1510,7 +1510,7 @@ export default function DailyFlowScreen() {
         {/* Urgent Tasks Section - EL1 Only */}
         <UrgentTasksSection
           fuelLevel={fuelLevel}
-          urgentTasks={urgentTasks}
+          urgentTasks={urgentTasks || []}
           colors={colors}
           itemCommitmentStates={itemCommitmentStates}
           handleCommitItem={handleCommitItem}
@@ -1522,7 +1522,7 @@ export default function DailyFlowScreen() {
 
         {/* Brain Dump Section */}
         <BrainDumpSection
-          brainDumpNotes={brainDumpNotes}
+          brainDumpNotes={brainDumpNotes || []}
           colors={colors}
           loadingBrainDump={loadingBrainDump}
           handleDeferNote={handleDeferNote}
@@ -1531,7 +1531,7 @@ export default function DailyFlowScreen() {
 
         {/* Follow Up Section */}
         <FollowUpSection
-          followUpItems={followUpItems}
+          followUpItems={followUpItems || []}
           colors={colors}
           loadingFollowUp={loadingFollowUp}
           handleCompleteFollowUp={handleCompleteFollowUp}
@@ -1541,7 +1541,7 @@ export default function DailyFlowScreen() {
         {/* Remaining Tasks Section - EL1 Only */}
         <RemainingTasksSection
           fuelLevel={fuelLevel}
-          allTasks={allTasks}
+          allTasks={allTasks || []}
           colors={colors}
           loadingAllTasks={loadingAllTasks}
           itemCommitmentStates={itemCommitmentStates}
