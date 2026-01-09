@@ -60,6 +60,20 @@ export default function DailyFlowScreen() {
   // Brain Dump state
   const [brainDumpNotes, setBrainDumpNotes] = useState<Array<{id: string; content: string}>>([]);
   const [loadingBrainDump, setLoadingBrainDump] = useState(false);
+  
+  // Follow Up state
+  interface FollowUpItem {
+    id: string;
+    user_id: string;
+    parent_type: string;
+    parent_id: string;
+    follow_up_date: string;
+    title: string;
+    completed_at?: string;
+    archived: boolean;
+  }
+  const [followUpItems, setFollowUpItems] = useState<FollowUpItem[]>([]);
+  const [loadingFollowUp, setLoadingFollowUp] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -94,6 +108,9 @@ export default function DailyFlowScreen() {
 
       // Load brain dump after we have userId
       await loadBrainDump(user.id);
+      
+      // Load follow-ups
+      await loadFollowUps(user.id);
 
       // Load urgent tasks for EL1
       if (spark.fuel_level === 1) {
@@ -170,6 +187,117 @@ export default function DailyFlowScreen() {
     } catch (error) {
       console.error('Error setting follow-up:', error);
       Alert.alert('Error', 'Failed to set follow-up. Please try again.');
+    }
+  }
+
+  async function loadFollowUps(uid: string) {
+    try {
+      setLoadingFollowUp(true);
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      // Use the view we created
+      const { data, error } = await supabase
+        .from('v_morning_spark_follow_ups')
+        .select('*')
+        .eq('user_id', uid);
+
+      if (error) throw error;
+
+      setFollowUpItems(data || []);
+    } catch (error) {
+      console.error('Error loading follow-ups:', error);
+    } finally {
+      setLoadingFollowUp(false);
+    }
+  }
+
+  async function handleCompleteFollowUp(item: FollowUpItem) {
+    try {
+      const supabase = getSupabaseClient();
+      const now = toLocalISOString(new Date());
+
+      // Determine which table to update based on parent_type
+      let tableName = '';
+      if (item.parent_type === 'task' || item.parent_type === 'event') {
+        tableName = '0008-ap-tasks';
+      } else if (item.parent_type === 'depositIdea') {
+        tableName = '0008-ap-deposit-ideas';
+      } else if (item.parent_type === 'reflection') {
+        tableName = '0008-ap-reflections';
+      } else if (item.parent_type === 'goal_12wk') {
+        tableName = '0008-ap-goals-12wk';
+      } else if (item.parent_type === 'goal_1y') {
+        tableName = '0008-ap-goals-1y';
+      } else if (item.parent_type === 'goal_custom') {
+        tableName = '0008-ap-goals-custom';
+      }
+
+      if (tableName) {
+        // Clear follow_up and set followed_up_at
+        await supabase
+          .from(tableName)
+          .update({
+            follow_up: null,
+            followed_up_at: now,
+          })
+          .eq('id', item.id);
+
+        // Remove from display
+        setFollowUpItems(prev => prev.filter(i => i.id !== item.id));
+
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    } catch (error) {
+      console.error('Error completing follow-up:', error);
+      Alert.alert('Error', 'Failed to mark as followed up. Please try again.');
+    }
+  }
+
+  async function handleSnoozeFollowUp(item: FollowUpItem) {
+    try {
+      const supabase = getSupabaseClient();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+
+      // Determine which table to update
+      let tableName = '';
+      if (item.parent_type === 'task' || item.parent_type === 'event') {
+        tableName = '0008-ap-tasks';
+      } else if (item.parent_type === 'depositIdea') {
+        tableName = '0008-ap-deposit-ideas';
+      } else if (item.parent_type === 'reflection') {
+        tableName = '0008-ap-reflections';
+      } else if (item.parent_type === 'goal_12wk') {
+        tableName = '0008-ap-goals-12wk';
+      } else if (item.parent_type === 'goal_1y') {
+        tableName = '0008-ap-goals-1y';
+      } else if (item.parent_type === 'goal_custom') {
+        tableName = '0008-ap-goals-custom';
+      }
+
+      if (tableName) {
+        // Update follow_up to tomorrow
+        await supabase
+          .from(tableName)
+          .update({ follow_up: tomorrowStr })
+          .eq('id', item.id);
+
+        // Remove from display
+        setFollowUpItems(prev => prev.filter(i => i.id !== item.id));
+
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+
+        Alert.alert('Success', 'Follow-up snoozed until tomorrow.');
+      }
+    } catch (error) {
+      console.error('Error snoozing follow-up:', error);
+      Alert.alert('Error', 'Failed to snooze follow-up. Please try again.');
     }
   }
 
@@ -955,6 +1083,72 @@ export default function DailyFlowScreen() {
                     >
                       <Text style={[styles.brainDumpButtonText, { color: '#FFFFFF' }]}>
                         Follow Up Tomorrow
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Follow Up Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Follow Up</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            {followUpItems.length > 0
+              ? "Items you've marked for follow-up today. Time to take action or reschedule."
+              : "No items marked for follow-up today"}
+          </Text>
+
+          {loadingFollowUp ? (
+            <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : followUpItems.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={styles.emptyEmoji}>✅</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                No follow-ups scheduled for today
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.followUpContainer, { backgroundColor: colors.surface }]}>
+              {followUpItems.map((item) => (
+                <View
+                  key={item.id}
+                  style={[styles.followUpItem, { backgroundColor: colors.background, borderColor: colors.border }]}
+                >
+                  <View style={styles.followUpHeader}>
+                    <View style={styles.followUpFlag}>
+                      <Text style={styles.followUpFlagEmoji}>🚩</Text>
+                      <Text style={[styles.followUpType, { color: colors.textSecondary }]}>
+                        {item.parent_type === 'task' ? 'Task' :
+                         item.parent_type === 'event' ? 'Event' :
+                         item.parent_type === 'depositIdea' ? 'Idea' :
+                         item.parent_type === 'reflection' ? 'Note' :
+                         item.parent_type.includes('goal') ? 'Goal' : 'Item'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.followUpTitle, { color: colors.text }]} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <View style={styles.followUpActions}>
+                    <TouchableOpacity
+                      style={[styles.followUpButton, { backgroundColor: '#10B981' }]}
+                      onPress={() => handleCompleteFollowUp(item)}
+                    >
+                      <Text style={[styles.followUpButtonText, { color: '#FFFFFF' }]}>
+                        ✓ Done
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.followUpButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                      onPress={() => handleSnoozeFollowUp(item)}
+                    >
+                      <Text style={[styles.followUpButtonText, { color: colors.text }]}>
+                        💤 Tomorrow
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -2035,6 +2229,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brainDumpButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  followUpContainer: {
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+  },
+  followUpItem: {
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+  },
+  followUpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  followUpFlag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  followUpFlagEmoji: {
+    fontSize: 16,
+  },
+  followUpType: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  followUpTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  followUpActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  followUpButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  followUpButtonText: {
     fontSize: 13,
     fontWeight: '600',
   },
