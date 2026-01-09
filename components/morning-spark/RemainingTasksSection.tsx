@@ -14,6 +14,7 @@ interface Task {
 interface RemainingTasksSectionProps {
   fuelLevel: number | null;
   allTasks: Task[];
+  allTasksCount: number; // ✅ NEW: separate count prop
   colors: any;
   loadingAllTasks: boolean;
   itemCommitmentStates: Record<string, 'uncommitted' | 'committed' | 'rescheduled'>;
@@ -29,6 +30,7 @@ interface RemainingTasksSectionProps {
 export function RemainingTasksSection({
   fuelLevel,
   allTasks,
+  allTasksCount, // ✅ NEW
   colors,
   loadingAllTasks,
   itemCommitmentStates,
@@ -190,7 +192,7 @@ export function RemainingTasksSection({
             📋 Remaining Tasks
           </Text>
           <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
-            ({allTasks.length})
+            ({allTasksCount})
           </Text>
         </View>
         <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
