@@ -16,7 +16,7 @@ import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckSquare, Calendar, Check, Trash2, X, ChevronRight, ChevronLeft } from 'lucide-react-native';
+import { ArrowLeft, CheckSquare, Calendar, Check, Trash2, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
@@ -31,6 +31,8 @@ import {
 } from '@/lib/sparkUtils';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { MindsetCapture } from '@/components/morning-spark/MindsetCapture';
+import { DraggableFab } from '@/components/DraggableFab';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
 
 export default function DailyFlowScreen() {
   const router = useRouter();
@@ -109,6 +111,9 @@ export default function DailyFlowScreen() {
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('anytime');
   const [isRescheduling, setIsRescheduling] = useState(false);
+  
+  // FAB modal state
+  const [isFabModalVisible, setIsFabModalVisible] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -1442,19 +1447,6 @@ export default function DailyFlowScreen() {
           )}
         </View>
 
-        {/* Adjust Button for Events */}
-        {hasEvents && (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-              onPress={handleAdjustEvents}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust Schedule</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Yesterday's Brain Dump Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Yesterday's Brain Dump</Text>
@@ -1749,38 +1741,110 @@ export default function DailyFlowScreen() {
               </TouchableOpacity>
             </View>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              All tasks due today or overdue. Urgent tasks are marked in red.
+              {Platform.OS === 'web' 
+                ? "Click tasks to commit, or use the action buttons to reschedule."
+                : "Swipe → to commit, ← to reschedule."}
             </Text>
 
             <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-              {allTasks.map((task) => {
+              {getVisibleItems(allTasks).map((task) => {
                 const isUrgent = task.is_urgent;
                 const isOverdue = task.due_date && task.due_date < toLocalISOString(new Date()).split('T')[0];
+                const isCommitted = itemCommitmentStates[task.id] === 'committed';
                 
-                return (
+                return Platform.OS === 'web' ? (
+                  // Web version
                   <View
                     key={task.id}
-                    style={[styles.eventRow, { borderBottomColor: colors.border }]}
+                    style={[
+                      styles.eventRow,
+                      { borderBottomColor: colors.border },
+                      isCommitted && { 
+                        backgroundColor: '#10B98120',
+                        borderLeftWidth: 4,
+                        borderLeftColor: '#10B981'
+                      }
+                    ]}
                   >
-                    <View style={styles.quickActions}>
-                      <TouchableOpacity
-                        onPress={() => handleCompleteEvent(task.id)}
-                        style={styles.quickActionButton}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Check size={18} color="#22c55e" strokeWidth={2.5} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleDeleteEvent(task.id, task.title)}
-                        style={styles.quickActionButton}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Trash2 size={18} color="#ef4444" strokeWidth={2} />
-                      </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                      style={styles.webTaskClickArea}
+                      onPress={() => {
+                        console.log('Clicking all task:', task.id);
+                        handleCommitItem(task.id);
+                      }}
+                    >
+                      <View style={styles.iconContainer}>
+                        {isCommitted ? (
+                          <Check size={20} color="#10B981" strokeWidth={3} />
+                        ) : (
+                          <CheckSquare size={16} color={isUrgent ? '#EF4444' : colors.primary} />
+                        )}
+                      </View>
 
+                      <View style={styles.eventContent}>
+                        <View style={styles.taskTitleRow}>
+                          <Text 
+                            style={[
+                              styles.eventTitle, 
+                              { color: getPriorityColor(task) },
+                              isCommitted && { fontWeight: '600' }
+                            ]} 
+                            numberOfLines={1}
+                          >
+                            {isCommitted && '✓ '}{task.title}
+                          </Text>
+                          {isUrgent && (
+                            <View style={styles.urgentBadge}>
+                              <Text style={styles.urgentBadgeText}>URGENT</Text>
+                            </View>
+                          )}
+                        </View>
+                        {task.due_date && (
+                          <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+                            Due: {new Date(task.due_date).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                            {isOverdue && ' (Overdue)'}
+                          </Text>
+                        )}
+                      </View>
+
+                      <Text style={[styles.points, { color: '#10B981' }]}>
+                        +{Math.round(task.points || 3)}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Reschedule button for web */}
+                    <TouchableOpacity
+                      style={[styles.webRescheduleButton, { backgroundColor: colors.background }]}
+                      onPress={() => openRescheduleModal(task)}
+                    >
+                      <ChevronRight size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  // Mobile version
+                  <TouchableOpacity
+                    key={task.id}
+                    style={[
+                      styles.eventRow,
+                      { borderBottomColor: colors.border },
+                      isCommitted && { 
+                        backgroundColor: '#10B98120',
+                        borderLeftWidth: 4,
+                        borderLeftColor: '#10B981'
+                      }
+                    ]}
+                    onPress={() => handleCommitItem(task.id)}
+                    onLongPress={() => openRescheduleModal(task)}
+                  >
                     <View style={styles.iconContainer}>
-                      <CheckSquare size={16} color={isUrgent ? '#EF4444' : colors.primary} />
+                      {isCommitted ? (
+                        <Check size={20} color="#10B981" strokeWidth={3} />
+                      ) : (
+                        <CheckSquare size={16} color={isUrgent ? '#EF4444' : colors.primary} />
+                      )}
                     </View>
 
                     <View style={styles.eventContent}>
@@ -1788,11 +1852,12 @@ export default function DailyFlowScreen() {
                         <Text 
                           style={[
                             styles.eventTitle, 
-                            { color: getPriorityColor(task) }
+                            { color: getPriorityColor(task) },
+                            isCommitted && { fontWeight: '600' }
                           ]} 
                           numberOfLines={1}
                         >
-                          {task.title}
+                          {isCommitted && '✓ '}{task.title}
                         </Text>
                         {isUrgent && (
                           <View style={styles.urgentBadge}>
@@ -1814,21 +1879,17 @@ export default function DailyFlowScreen() {
                     <Text style={[styles.points, { color: '#10B981' }]}>
                       +{Math.round(task.points || 3)}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
 
-            {/* Adjust Button for All Tasks */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                onPress={handleAdjustTasks}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust Tasks</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Show commitment summary */}
+            {getCommittedItems(allTasks).length > 0 && (
+              <Text style={[styles.commitmentSummary, { color: colors.primary }]}>
+                ✓ {getCommittedItems(allTasks).length} of {getVisibleItems(allTasks).length} tasks committed
+              </Text>
+            )}
           </View>
         )}
 
@@ -2632,6 +2693,24 @@ export default function DailyFlowScreen() {
             </TouchableOpacity>
           </View>
         </SafeAreaView>
+      </Modal>
+
+      {/* Draggable FAB for quick task/event creation */}
+      <DraggableFab onPress={() => setIsFabModalVisible(true)} size={56}>
+        <Plus size={28} color="#ffffff" />
+      </DraggableFab>
+
+      {/* TaskEventForm Modal */}
+      <Modal visible={isFabModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={async () => {
+            setIsFabModalVisible(false);
+            // Reload data after creating task/event
+            await loadData();
+          }}
+          onClose={() => setIsFabModalVisible(false)}
+        />
       </Modal>
     </SafeAreaView>
   );
