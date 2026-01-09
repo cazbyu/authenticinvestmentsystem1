@@ -923,27 +923,27 @@ export default function DailyFlowScreen() {
     }
   }
 
-async function loadAllTasksCount() {
-  try {
-    const supabase = getSupabaseClient();
-    const today = toLocalISOString(new Date()).split('T')[0];
+  async function loadAllTasksCount() {
+    try {
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
 
-    const { count, error } = await supabase
-      .from('0008-ap-tasks')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('type', 'task')
-      .is('completed_at', null)
-      .is('deleted_at', null)
-      .or(`due_date.eq.${today},due_date.lt.${today}`);
+      const { count, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('type', 'task')
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    setAllTasksCount(count || 0);
-  } catch (error) {
-    console.error('Error loading all tasks count:', error);
+      setAllTasksCount(count || 0);
+    } catch (error) {
+      console.error('Error loading all tasks count:', error);
+    }
   }
-}
   
   function handleAdjustEvents() {
     // Initialize bins with all events in Keep zone
