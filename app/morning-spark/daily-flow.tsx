@@ -1616,23 +1616,6 @@ export default function DailyFlowScreen() {
           </View>
         )}
 
-        {/* Mindset Capture Section */}
-        {fuelLevel && sparkId && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {fuelLevel === 1 && 'Release Something'}
-              {fuelLevel === 2 && 'Clear Your Mind'}
-              {fuelLevel === 3 && 'Capture the Spark'}
-            </Text>
-            <MindsetCapture
-              fuelLevel={fuelLevel}
-              userId={userId}
-              sparkId={sparkId}
-              onPointsAdded={handleMindsetPointsAdded}
-            />
-          </View>
-        )}
-
         {/* EL1 Only: Collapsible Review Sections */}
         {fuelLevel === 1 && (
           <>
@@ -1826,6 +1809,11 @@ export default function DailyFlowScreen() {
                     <Calendar size={16} color="#EF4444" />
                     <Text style={[styles.commitmentItemTitle, { color: '#EF4444' }]} numberOfLines={1}>
                       {event.title}
+                      {event.start_time && (
+                        <Text style={[styles.eventTime, { color: '#EF4444' }]}>
+                          {' '}({formatTimeDisplay(event.start_time)})
+                        </Text>
+                      )}
                     </Text>
                     <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
                       +{event.points || 3}
@@ -1837,6 +1825,11 @@ export default function DailyFlowScreen() {
                     <Calendar size={16} color={colors.primary} />
                     <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
                       {event.title}
+                      {event.start_time && (
+                        <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+                          {' '}({formatTimeDisplay(event.start_time)})
+                        </Text>
+                      )}
                     </Text>
                     <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
                       +{event.points || 3}
@@ -1846,8 +1839,8 @@ export default function DailyFlowScreen() {
               </>
             )}
 
-            {/* Tasks Section - EL1 only */}
-            {fuelLevel === 1 && (urgentTasks.length > 0 || includeAllTasks) && (
+            {/* Tasks Section - EL1 only - ALWAYS show for EL1 */}
+            {fuelLevel === 1 && (
               <>
                 <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
                   TASKS ({includeAllTasks ? finalCommitmentTasks.length : urgentTasks.length})
@@ -1870,6 +1863,12 @@ export default function DailyFlowScreen() {
                 {loadingFinalTasks ? (
                   <View style={[styles.commitmentItem, { borderBottomColor: colors.border, justifyContent: 'center' }]}>
                     <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : (includeAllTasks ? finalCommitmentTasks : urgentTasks).length === 0 ? (
+                  <View style={[styles.emptyTasksState, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                    <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
+                      {includeAllTasks ? 'No tasks for today' : 'No urgent tasks'}
+                    </Text>
                   </View>
                 ) : (
                   <>
@@ -2917,6 +2916,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  eventTime: {
+    fontSize: 13,
+    fontWeight: '400',
+    fontStyle: 'italic',
+  },
   optionalCommitments: {
     borderRadius: 12,
     borderWidth: 1,
@@ -2987,6 +2991,17 @@ const styles = StyleSheet.create({
   },
   includeAllTasksLabel: {
     fontSize: 13,
+    fontStyle: 'italic',
+  },
+  emptyTasksState: {
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  emptyTasksText: {
+    fontSize: 14,
     fontStyle: 'italic',
   },
 });
