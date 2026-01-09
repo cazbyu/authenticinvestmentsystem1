@@ -85,6 +85,13 @@ export default function DailyFlowScreen() {
   const [loadingDepositIdeas, setLoadingDepositIdeas] = useState(false);
   const [loadingGoals, setLoadingGoals] = useState(false);
   const [loadingDelegations, setLoadingDelegations] = useState(false);
+  
+  // Final Commitment state
+  const [commitReflection, setCommitReflection] = useState(false);
+  const [commitRose, setCommitRose] = useState(false);
+  const [commitThorn, setCommitThorn] = useState(false);
+  const [commitEveningReview, setCommitEveningReview] = useState(false);
+  const [showFinalCommitment, setShowFinalCommitment] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -919,15 +926,30 @@ export default function DailyFlowScreen() {
         (sum, event) => sum + (event.points || 3),
         0
       );
+      
+      // Calculate commitment points (max 10 from reflections, separate 10 from evening review)
+      const reflectionPoints = Math.min(
+        (commitReflection ? 1 : 0) + 
+        (commitRose ? 2 : 0) + 
+        (commitThorn ? 1 : 0),
+        10
+      );
+      const eveningReviewPoints = commitEveningReview ? 10 : 0;
+      const commitmentPoints = reflectionPoints + eveningReviewPoints;
+      
       const sparkCompletionBonus = 10;
-      const totalTarget = eventPoints + overduePoints + mindsetPoints + sparkCompletionBonus;
+      const totalTarget = eventPoints + overduePoints + mindsetPoints + commitmentPoints + sparkCompletionBonus;
 
-      // Update the spark with completion data
+      // Update the spark with completion data and commitment flags
       await supabase
         .from('0008-ap-daily-sparks')
         .update({
           initial_target_score: totalTarget,
           committed_at: toLocalISOString(new Date()),
+          commit_reflection: commitReflection,
+          commit_rose: commitRose,
+          commit_thorn: commitThorn,
+          commit_evening_review: commitEveningReview,
         })
         .eq('id', sparkId);
 
@@ -1709,22 +1731,158 @@ export default function DailyFlowScreen() {
           </>
         )}
 
-        {/* Summary Card */}
-        <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-            Your Target Today
+        {/* Final Commitment View */}
+        <View style={styles.section}>
+          <Text style={[styles.commitmentHeader, { color: colors.text }]}>
+            Final Commitment
           </Text>
-          <Text style={[styles.summaryPoints, { color: getFuelColor(fuelLevel || 2) }]}>
-            {((actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0) +
-              (actionsData?.overdue || []).reduce((sum, e) => sum + (e.points || 3), 0) +
-              mindsetPoints +
-              10)}{' '}
-            points
+          <Text style={[styles.commitmentSubtitle, { color: colors.textSecondary }]}>
+            This is your contract with yourself today - you ready?
           </Text>
-          <Text style={[styles.summaryBreakdown, { color: colors.textSecondary }]}>
-            {actionsData?.today.length || 0} event{(actionsData?.today.length || 0) !== 1 ? 's' : ''} 
-            {mindsetPoints > 0 && ` + ${mindsetPoints} mindset`} + 10 completion bonus
-          </Text>
+
+          {/* Combined Tasks + Events Table */}
+          <View style={[styles.commitmentTable, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.commitmentTableTitle, { color: colors.text }]}>
+              Your Daily Creation Menu
+            </Text>
+
+            {/* Events Section */}
+            {actionsData && (actionsData.today.length > 0 || actionsData.overdue.length > 0) && (
+              <>
+                <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary }]}>
+                  EVENTS ({actionsData.today.length + actionsData.overdue.length})
+                </Text>
+                {actionsData.overdue.map((event) => (
+                  <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
+                    <Calendar size={16} color="#EF4444" />
+                    <Text style={[styles.commitmentItemTitle, { color: '#EF4444' }]} numberOfLines={1}>
+                      {event.title}
+                    </Text>
+                    <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
+                      +{event.points || 3}
+                    </Text>
+                  </View>
+                ))}
+                {actionsData.today.map((event) => (
+                  <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
+                    <Calendar size={16} color={colors.primary} />
+                    <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
+                      {event.title}
+                    </Text>
+                    <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
+                      +{event.points || 3}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+
+            {/* Tasks Section (if EL1) */}
+            {fuelLevel === 1 && urgentTasks.length > 0 && (
+              <>
+                <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
+                  URGENT TASKS ({urgentTasks.length})
+                </Text>
+                {urgentTasks.map((task) => (
+                  <View key={task.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
+                    <CheckSquare size={16} color={getPriorityColor(task)} />
+                    <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
+                      {task.title}
+                    </Text>
+                    <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
+                      +{Math.round(task.points || 3)}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+
+          {/* Optional Commitment Checkboxes */}
+          <View style={[styles.optionalCommitments, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.optionalTitle, { color: colors.text }]}>
+              Spice up your day with reflections
+            </Text>
+            <Text style={[styles.optionalSubtitle, { color: colors.textSecondary }]}>
+              Reflections are a great way to capture ideas, emotions and inspirations that help you improve. Would you like to commit to capturing your thoughts today?
+            </Text>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setCommitReflection(!commitReflection)}
+            >
+              <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitReflection ? colors.primary : 'transparent' }]}>
+                {commitReflection && <Check size={16} color="#FFFFFF" />}
+              </View>
+              <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                Add a Reflection (+1 point)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setCommitRose(!commitRose)}
+            >
+              <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitRose ? colors.primary : 'transparent' }]}>
+                {commitRose && <Check size={16} color="#FFFFFF" />}
+              </View>
+              <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                Add a Rose (+2 points for first of day)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setCommitThorn(!commitThorn)}
+            >
+              <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitThorn ? colors.primary : 'transparent' }]}>
+                {commitThorn && <Check size={16} color="#FFFFFF" />}
+              </View>
+              <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                Add a Thorn (+1 point)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setCommitEveningReview(!commitEveningReview)}
+            >
+              <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitEveningReview ? colors.primary : 'transparent' }]}>
+                {commitEveningReview && <Check size={16} color="#FFFFFF" />}
+              </View>
+              <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                Evening Review ritual (+10 points)
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.optionalNote, { color: colors.textSecondary }]}>
+              Max 10 points from reflections (Reflection, Rose, Thorn combined)
+            </Text>
+          </View>
+
+          {/* Final Target Display */}
+          <View style={[styles.finalTargetCard, { backgroundColor: colors.surface, borderColor: getFuelColor(fuelLevel || 2) }]}>
+            <Text style={[styles.finalTargetLabel, { color: colors.textSecondary }]}>
+              🎯 Your Target Score Today
+            </Text>
+            <Text style={[styles.finalTargetPoints, { color: getFuelColor(fuelLevel || 2) }]}>
+              {((actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0) +
+                (actionsData?.overdue || []).reduce((sum, e) => sum + (e.points || 3), 0) +
+                mindsetPoints +
+                Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10) +
+                (commitEveningReview ? 10 : 0) +
+                10)}{' '}
+              points
+            </Text>
+            <Text style={[styles.finalTargetBreakdown, { color: colors.textSecondary }]}>
+              {(actionsData?.today.length || 0) + (actionsData?.overdue.length || 0)} events
+              {fuelLevel === 1 && urgentTasks.length > 0 && ` + ${urgentTasks.length} tasks`}
+              {mindsetPoints > 0 && ` + ${mindsetPoints} mindset`}
+              {(commitReflection || commitRose || commitThorn) && ` + ${Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10)} reflections`}
+              {commitEveningReview && ' + 10 evening review'}
+              {' + 10 completion bonus'}
+            </Text>
+          </View>
         </View>
 
         <View style={{ height: 20 }} />
@@ -2614,5 +2772,109 @@ const styles = StyleSheet.create({
   },
   delegationInfo: {
     fontSize: 13,
+  },
+  commitmentHeader: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  commitmentSubtitle: {
+    fontSize: 15,
+    marginBottom: 16,
+    lineHeight: 22,
+  },
+  commitmentTable: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+  },
+  commitmentTableTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  commitmentSectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  commitmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  commitmentItemTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  commitmentItemPoints: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  optionalCommitments: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
+  },
+  optionalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  optionalSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  optionalNote: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
+  finalTargetCard: {
+    borderRadius: 12,
+    borderWidth: 2,
+    padding: 20,
+    alignItems: 'center',
+  },
+  finalTargetLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  finalTargetPoints: {
+    fontSize: 42,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  finalTargetBreakdown: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
