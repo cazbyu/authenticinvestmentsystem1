@@ -40,8 +40,6 @@ export default function DailyFlowScreen() {
   const [actionsData, setActionsData] = useState<ScheduledActionsData | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [mindsetPoints, setMindsetPoints] = useState(0);
-  const [eventsAccepted, setEventsAccepted] = useState(false);
-  const [tasksAccepted, setTasksAccepted] = useState(false);
   const [urgentTasks, setUrgentTasks] = useState<ScheduledAction[]>([]);
   const [allTasks, setAllTasks] = useState<ScheduledAction[]>([]);
   const [showAllTasks, setShowAllTasks] = useState(false);
@@ -582,13 +580,6 @@ export default function DailyFlowScreen() {
     }
   }
 
-  function handleAcceptEvents() {
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    setEventsAccepted(true);
-  }
-
   function handleAdjustEvents() {
     // Initialize bins with all events in Keep zone
     const allEvents = [
@@ -617,13 +608,6 @@ export default function DailyFlowScreen() {
     setRescheduleTimes(initialTimes);
     setAdjustType('events');
     setShowAdjustModal(true);
-  }
-
-  function handleAcceptTasks() {
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    setTasksAccepted(true);
   }
 
   function handleAdjustTasks() {
@@ -1074,12 +1058,6 @@ export default function DailyFlowScreen() {
   }
 
   const hasEvents = actionsData && (actionsData.overdue.length > 0 || actionsData.today.length > 0);
-  
-  // Debug logging
-  console.log('DEBUG - actionsData:', actionsData);
-  console.log('DEBUG - hasEvents:', hasEvents);
-  console.log('DEBUG - actionsData.today.length:', actionsData?.today?.length);
-  console.log('DEBUG - actionsData.overdue.length:', actionsData?.overdue?.length);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -1152,30 +1130,16 @@ export default function DailyFlowScreen() {
           )}
         </View>
 
-        {/* Accept/Adjust Buttons for Events */}
-        {hasEvents && !eventsAccepted && (
+        {/* Adjust Button for Events */}
+        {hasEvents && (
           <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.acceptButton, { backgroundColor: getFuelColor(fuelLevel || 2) }]}
-              onPress={handleAcceptEvents}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.acceptButtonText}>Accept Schedule</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
               onPress={handleAdjustEvents}
               activeOpacity={0.8}
             >
-              <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust</Text>
+              <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust Schedule</Text>
             </TouchableOpacity>
-          </View>
-        )}
-
-        {eventsAccepted && hasEvents && (
-          <View style={[styles.acceptedBanner, { backgroundColor: '#10B98110', borderColor: '#10B981' }]}>
-            <Check size={20} color="#10B981" />
-            <Text style={[styles.acceptedText, { color: '#10B981' }]}>Schedule Accepted</Text>
           </View>
         )}
 
@@ -1379,32 +1343,16 @@ export default function DailyFlowScreen() {
               ))}
             </View>
 
-            {/* Accept/Adjust Buttons for Tasks */}
-            {!tasksAccepted && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.acceptButton, { backgroundColor: getFuelColor(fuelLevel) }]}
-                  onPress={handleAcceptTasks}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.acceptButtonText}>Accept Tasks</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                  onPress={handleAdjustTasks}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {tasksAccepted && (
-              <View style={[styles.acceptedBanner, { backgroundColor: '#10B98110', borderColor: '#10B981' }]}>
-                <Check size={20} color="#10B981" />
-                <Text style={[styles.acceptedText, { color: '#10B981' }]}>Tasks Accepted</Text>
-              </View>
-            )}
+            {/* Adjust Button for Tasks */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={handleAdjustTasks}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust Tasks</Text>
+              </TouchableOpacity>
+            </View>
               </>
             )}
           </View>
@@ -1493,32 +1441,16 @@ export default function DailyFlowScreen() {
               })}
             </View>
 
-            {/* Accept/Adjust Buttons for All Tasks */}
-            {!tasksAccepted && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.acceptButton, { backgroundColor: getFuelColor(fuelLevel) }]}
-                  onPress={handleAcceptTasks}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.acceptButtonText}>Accept Tasks</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                  onPress={handleAdjustTasks}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {tasksAccepted && (
-              <View style={[styles.acceptedBanner, { backgroundColor: '#10B98110', borderColor: '#10B981' }]}>
-                <Check size={20} color="#10B981" />
-                <Text style={[styles.acceptedText, { color: '#10B981' }]}>Tasks Accepted</Text>
-              </View>
-            )}
+            {/* Adjust Button for All Tasks */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={handleAdjustTasks}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust Tasks</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1540,35 +1472,33 @@ export default function DailyFlowScreen() {
         )}
 
         {/* Review Your Plan Section */}
-        {(eventsAccepted || (!hasEvents)) && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Review Your Plan</Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Everything looking good? If you'd like to make any changes to your schedule or tasks, now's the time.
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Review Your Plan</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            Everything looking good? If you'd like to make any changes to your schedule or tasks, now's the time.
+          </Text>
+          
+          <TouchableOpacity
+            style={[styles.reviewButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            onPress={() => setShowAdjustModal(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.reviewButtonText, { color: colors.text }]}>
+              Make Changes to Schedule/Tasks
             </Text>
-            
-            <TouchableOpacity
-              style={[styles.reviewButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-              onPress={() => setShowAdjustModal(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.reviewButtonText, { color: colors.text }]}>
-                Make Changes to Schedule/Tasks
-              </Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.continueButton}
-              onPress={() => {
-                // Just scroll to bottom / do nothing - they can hit Complete
-              }}
-            >
-              <Text style={[styles.continueButtonText, { color: colors.textSecondary }]}>
-                No changes needed, continue →
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => {
+              // Just scroll to bottom / do nothing - they can hit Complete
+            }}
+          >
+            <Text style={[styles.continueButtonText, { color: colors.textSecondary }]}>
+              No changes needed, continue →
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* EL1 Only: Collapsible Review Sections */}
         {fuelLevel === 1 && (
