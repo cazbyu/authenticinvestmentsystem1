@@ -55,9 +55,9 @@ export default function DailyFlowScreen() {
   const [mindsetPoints, setMindsetPoints] = useState(0);
   const [urgentTasks, setUrgentTasks] = useState<ScheduledAction[]>([]);
   const [allTasks, setAllTasks] = useState<ScheduledAction[]>([]);
+   const [allTasksCount, setAllTasksCount] = useState(0);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [loadingAllTasks, setLoadingAllTasks] = useState(false);
-  const [allTasksCount, setAllTasksCount] = useState(0);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustType, setAdjustType] = useState<'events' | 'tasks'>('events');
   
