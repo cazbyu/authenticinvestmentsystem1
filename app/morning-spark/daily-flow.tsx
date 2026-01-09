@@ -595,10 +595,15 @@ export default function DailyFlowScreen() {
   }
 
   function handleCommitItem(itemId: string) {
-    setItemCommitmentStates(prev => ({
-      ...prev,
-      [itemId]: 'committed'
-    }));
+    console.log('Committing item:', itemId);
+    setItemCommitmentStates(prev => {
+      const newState = {
+        ...prev,
+        [itemId]: 'committed' as CommitmentState
+      };
+      console.log('New commitment states:', newState);
+      return newState;
+    });
     
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1607,6 +1612,7 @@ export default function DailyFlowScreen() {
                 <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
                   {getVisibleItems(urgentTasks).map((task) => {
                     const isCommitted = itemCommitmentStates[task.id] === 'committed';
+                    console.log(`Task ${task.id} committed state:`, isCommitted);
                     
                     return Platform.OS === 'web' ? (
                       // Web version with click and buttons
@@ -1615,24 +1621,35 @@ export default function DailyFlowScreen() {
                         style={[
                           styles.eventRow, 
                           { borderBottomColor: colors.border },
-                          isCommitted && { backgroundColor: '#10B98110' }
+                          isCommitted && { 
+                            backgroundColor: '#10B98120',
+                            borderLeftWidth: 4,
+                            borderLeftColor: '#10B981'
+                          }
                         ]}
                       >
                         <TouchableOpacity
                           style={styles.webTaskClickArea}
-                          onPress={() => handleCommitItem(task.id)}
+                          onPress={() => {
+                            console.log('Clicking task:', task.id);
+                            handleCommitItem(task.id);
+                          }}
                         >
                           <View style={styles.iconContainer}>
                             {isCommitted ? (
-                              <Check size={16} color="#10B981" strokeWidth={3} />
+                              <Check size={20} color="#10B981" strokeWidth={3} />
                             ) : (
                               <CheckSquare size={16} color={colors.primary} />
                             )}
                           </View>
 
                           <View style={styles.eventContent}>
-                            <Text style={[styles.eventTitle, { color: getPriorityColor(task) }]} numberOfLines={1}>
-                              {task.title}
+                            <Text style={[
+                              styles.eventTitle, 
+                              { color: getPriorityColor(task) },
+                              isCommitted && { fontWeight: '600' }
+                            ]} numberOfLines={1}>
+                              {isCommitted && '✓ '}{task.title}
                             </Text>
                             {task.due_date && (
                               <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
