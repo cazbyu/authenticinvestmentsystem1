@@ -74,6 +74,17 @@ export default function DailyFlowScreen() {
   }
   const [followUpItems, setFollowUpItems] = useState<FollowUpItem[]>([]);
   const [loadingFollowUp, setLoadingFollowUp] = useState(false);
+  
+  // EL1 Collapsible Sections state
+  const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
+  const [activeGoals, setActiveGoals] = useState<any[]>([]);
+  const [delegations, setDelegations] = useState<any[]>([]);
+  const [showDepositIdeas, setShowDepositIdeas] = useState(false);
+  const [showGoals, setShowGoals] = useState(false);
+  const [showDelegations, setShowDelegations] = useState(false);
+  const [loadingDepositIdeas, setLoadingDepositIdeas] = useState(false);
+  const [loadingGoals, setLoadingGoals] = useState(false);
+  const [loadingDelegations, setLoadingDelegations] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -298,6 +309,108 @@ export default function DailyFlowScreen() {
     } catch (error) {
       console.error('Error snoozing follow-up:', error);
       Alert.alert('Error', 'Failed to snooze follow-up. Please try again.');
+    }
+  }
+
+  async function loadDepositIdeas() {
+    if (loadingDepositIdeas) return;
+    
+    try {
+      setLoadingDepositIdeas(true);
+      const supabase = getSupabaseClient();
+
+      const { data, error } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .select('id, title, created_at, activated_at')
+        .eq('user_id', userId)
+        .eq('archived', false)
+        .eq('is_active', true)
+        .is('activated_at', null)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      setDepositIdeas(data || []);
+      setShowDepositIdeas(true);
+    } catch (error) {
+      console.error('Error loading deposit ideas:', error);
+      Alert.alert('Error', 'Failed to load deposit ideas. Please try again.');
+    } finally {
+      setLoadingDepositIdeas(false);
+    }
+  }
+
+  async function loadActiveGoals() {
+    if (loadingGoals) return;
+    
+    try {
+      setLoadingGoals(true);
+      const supabase = getSupabaseClient();
+
+      // Load from all 3 goal tables
+      const [goals12wk, goals1y, goalsCustom] = await Promise.all([
+        supabase
+          .from('0008-ap-goals-12wk')
+          .select('id, title, status, progress, start_date, end_date')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .eq('archived', false)
+          .order('start_date', { ascending: false }),
+        supabase
+          .from('0008-ap-goals-1y')
+          .select('id, title, status, year_target_date')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .is('archived_at', null)
+          .order('year_target_date', { ascending: true }),
+        supabase
+          .from('0008-ap-goals-custom')
+          .select('id, title, status, progress, start_date, end_date')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .eq('archived', false)
+          .order('start_date', { ascending: false }),
+      ]);
+
+      const combined = [
+        ...(goals12wk.data || []).map(g => ({ ...g, type: '12-Week' })),
+        ...(goals1y.data || []).map(g => ({ ...g, type: '1-Year' })),
+        ...(goalsCustom.data || []).map(g => ({ ...g, type: 'Custom' })),
+      ];
+
+      setActiveGoals(combined);
+      setShowGoals(true);
+    } catch (error) {
+      console.error('Error loading goals:', error);
+      Alert.alert('Error', 'Failed to load goals. Please try again.');
+    } finally {
+      setLoadingGoals(false);
+    }
+  }
+
+  async function loadDelegations() {
+    if (loadingDelegations) return;
+    
+    try {
+      setLoadingDelegations(true);
+      const supabase = getSupabaseClient();
+
+      // Use the view we have
+      const { data, error } = await supabase
+        .from('v_morning_spark_delegations')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      setDelegations(data || []);
+      setShowDelegations(true);
+    } catch (error) {
+      console.error('Error loading delegations:', error);
+      Alert.alert('Error', 'Failed to load delegations. Please try again.');
+    } finally {
+      setLoadingDelegations(false);
     }
   }
 
@@ -1429,6 +1542,173 @@ export default function DailyFlowScreen() {
           </View>
         )}
 
+        {/* EL1 Only: Collapsible Review Sections */}
+        {fuelLevel === 1 && (
+          <>
+            {/* Deposit Ideas Section */}
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => {
+                  if (!showDepositIdeas) {
+                    loadDepositIdeas();
+                  } else {
+                    setShowDepositIdeas(false);
+                  }
+                }}
+              >
+                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
+                  💡 Review Deposit Ideas ({depositIdeas.length})
+                </Text>
+                <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
+                  {showDepositIdeas ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showDepositIdeas && (
+                loadingDepositIdeas ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : depositIdeas.length === 0 ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No active deposit ideas
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {depositIdeas.map((idea) => (
+                      <View key={idea.id} style={[styles.reviewItem, { borderColor: colors.border }]}>
+                        <Text style={[styles.reviewItemTitle, { color: colors.text }]}>
+                          {idea.title}
+                        </Text>
+                        <Text style={[styles.reviewItemDate, { color: colors.textSecondary }]}>
+                          Added {new Date(idea.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )
+              )}
+            </View>
+
+            {/* Goals Section */}
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => {
+                  if (!showGoals) {
+                    loadActiveGoals();
+                  } else {
+                    setShowGoals(false);
+                  }
+                }}
+              >
+                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
+                  🎯 Review Active Goals ({activeGoals.length})
+                </Text>
+                <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
+                  {showGoals ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showGoals && (
+                loadingGoals ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : activeGoals.length === 0 ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No active goals
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {activeGoals.map((goal) => (
+                      <View key={goal.id} style={[styles.reviewItem, { borderColor: colors.border }]}>
+                        <View style={styles.goalHeader}>
+                          <Text style={[styles.reviewItemTitle, { color: colors.text }]}>
+                            {goal.title}
+                          </Text>
+                          <Text style={[styles.goalType, { color: colors.textSecondary }]}>
+                            {goal.type}
+                          </Text>
+                        </View>
+                        {goal.progress !== undefined && (
+                          <Text style={[styles.goalProgress, { color: colors.primary }]}>
+                            {goal.progress}% complete
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )
+              )}
+            </View>
+
+            {/* Delegations Section */}
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => {
+                  if (!showDelegations) {
+                    loadDelegations();
+                  } else {
+                    setShowDelegations(false);
+                  }
+                }}
+              >
+                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
+                  👥 Review Delegations ({delegations.length})
+                </Text>
+                <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
+                  {showDelegations ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showDelegations && (
+                loadingDelegations ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : delegations.length === 0 ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No pending delegations
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {delegations.map((delegation) => (
+                      <View key={delegation.delegation_id} style={[styles.reviewItem, { borderColor: colors.border }]}>
+                        <Text style={[styles.reviewItemTitle, { color: colors.text }]}>
+                          {delegation.task_title}
+                        </Text>
+                        <Text style={[styles.delegationInfo, { color: colors.textSecondary }]}>
+                          Delegated to: {delegation.delegate_name}
+                        </Text>
+                        {delegation.due_date && (
+                          <Text style={[styles.reviewItemDate, { color: colors.textSecondary }]}>
+                            Due: {new Date(delegation.due_date).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )
+              )}
+            </View>
+          </>
+        )}
+
         {/* Summary Card */}
         <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
@@ -2281,5 +2561,58 @@ const styles = StyleSheet.create({
   followUpButtonText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  collapsibleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  collapsibleArrow: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  collapsibleContent: {
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  reviewItem: {
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    gap: 4,
+  },
+  reviewItemTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  reviewItemDate: {
+    fontSize: 13,
+  },
+  goalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  goalType: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  goalProgress: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  delegationInfo: {
+    fontSize: 13,
   },
 });
