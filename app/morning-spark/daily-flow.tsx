@@ -912,7 +912,9 @@ export default function DailyFlowScreen() {
       }
 
       setAllTasks(tasks);
+      setAllTasksCount(tasks.length);
       setShowAllTasks(true);
+      
     } catch (error) {
       console.error('Error loading all tasks:', error);
       Alert.alert('Error', 'Failed to load tasks. Please try again.');
