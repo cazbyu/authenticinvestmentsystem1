@@ -2065,190 +2065,34 @@ export default function DailyFlowScreen() {
         )}
 
         {/* Final Commitment View */}
-        <View style={styles.section}>
-          <Text style={[styles.commitmentHeader, { color: colors.text }]}>
-            Final Commitment
-          </Text>
-          <Text style={[styles.commitmentSubtitle, { color: colors.textSecondary }]}>
-            This is your contract with yourself today - you ready?
-          </Text>
+        <FinalCommitmentSection
+          actionsData={actionsData}
+          fuelLevel={fuelLevel}
+          urgentTasks={urgentTasks}
+          allTasks={allTasks}
+          colors={colors}
+          formatTimeDisplay={formatTimeDisplay}
+          getPriorityColor={getPriorityColor}
+          getCommittedItems={getCommittedItems}
+          commitReflection={commitReflection}
+          commitRose={commitRose}
+          commitThorn={commitThorn}
+          commitEveningReview={commitEveningReview}
+          mindsetPoints={mindsetPoints}
+        />
 
-          {/* Combined Tasks + Events Table */}
-          <View style={[styles.commitmentTable, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.commitmentTableTitle, { color: colors.text }]}>
-              Your Daily Creation Menu
-            </Text>
-
-            {/* Events Section */}
-            {actionsData && (actionsData.today.length > 0 || actionsData.overdue.length > 0) && (
-              <>
-                <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary }]}>
-                  EVENTS ({actionsData.today.length + actionsData.overdue.length})
-                </Text>
-                {actionsData.overdue.map((event) => (
-                  <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
-                    <Calendar size={16} color="#EF4444" />
-                    <Text style={[styles.commitmentItemTitle, { color: '#EF4444' }]} numberOfLines={1}>
-                      {event.title}
-                      {event.start_time && (
-                        <Text style={[styles.eventTime, { color: '#EF4444' }]}>
-                          {' '}({formatTimeDisplay(event.start_time)})
-                        </Text>
-                      )}
-                    </Text>
-                    <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
-                      +{event.points || 3}
-                    </Text>
-                  </View>
-                ))}
-                {actionsData.today.map((event) => (
-                  <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
-                    <Calendar size={16} color={colors.primary} />
-                    <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
-                      {event.title}
-                      {event.start_time && (
-                        <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
-                          {' '}({formatTimeDisplay(event.start_time)})
-                        </Text>
-                      )}
-                    </Text>
-                    <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
-                      +{event.points || 3}
-                    </Text>
-                  </View>
-                ))}
-              </>
-            )}
-
-            {/* Tasks Section - EL1 only - Show COMMITTED tasks */}
-            {fuelLevel === 1 && (
-              <>
-                {(() => {
-                  // Get all committed tasks from urgentTasks and allTasks
-                  const committedUrgent = getCommittedItems(urgentTasks);
-                  const committedFromAll = getCommittedItems(allTasks);
-                  
-                  // Combine and deduplicate (some tasks might be in both lists)
-                  const allCommittedTasks = [...committedUrgent];
-                  committedFromAll.forEach(task => {
-                    if (!allCommittedTasks.find(t => t.id === task.id)) {
-                      allCommittedTasks.push(task);
-                    }
-                  });
-                  
-                  const taskCount = allCommittedTasks.length;
-                  
-                  return (
-                    <>
-                      <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
-                        TASKS ({taskCount})
-                      </Text>
-                      
-                      {taskCount === 0 ? (
-                        <View style={[styles.emptyTasksState, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                          <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
-                            No tasks committed yet. {urgentTasks.length > 0 ? 'Click/tap tasks above to commit.' : ''}
-                          </Text>
-                        </View>
-                      ) : (
-                        <>
-                          {/* Show committed tasks */}
-                          {allCommittedTasks.map((task) => (
-                            <View key={task.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
-                              <CheckSquare size={16} color={getPriorityColor(task)} />
-                              <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
-                                {task.title}
-                              </Text>
-                              <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
-                                +{Math.round(task.points || 3)}
-                              </Text>
-                            </View>
-                          ))}
-                        </>
-                      )}
-                    </>
-                  );
-                })()}
-              </>
-            )}
-          </View>
-
-          {/* Optional Commitment Checkboxes - Collapsible */}
-          <View style={[styles.optionalCommitments, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <TouchableOpacity
-              style={styles.collapsibleHeaderInline}
-              onPress={() => setShowReflections(!showReflections)}
-            >
-              <View style={styles.collapsibleTitleRow}>
-                <Text style={[styles.optionalTitle, { color: colors.text }]}>
-                  ✨ Spice up your day with reflections
-                </Text>
-              </View>
-              <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
-                {showReflections ? '▼' : '▶'}
-              </Text>
-            </TouchableOpacity>
-
-            {showReflections && (
-              <>
-                <Text style={[styles.optionalSubtitle, { color: colors.textSecondary }]}>
-                  Reflections are a great way to capture ideas, emotions and inspirations that help you improve. Would you like to commit to capturing your thoughts today?
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setCommitReflection(!commitReflection)}
-                >
-                  <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitReflection ? colors.primary : 'transparent' }]}>
-                    {commitReflection && <Check size={16} color="#FFFFFF" />}
-                  </View>
-                  <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                    Add a Reflection (+1 point)
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setCommitRose(!commitRose)}
-                >
-                  <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitRose ? colors.primary : 'transparent' }]}>
-                    {commitRose && <Check size={16} color="#FFFFFF" />}
-                  </View>
-                  <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                    Add a Rose (+2 points for first of day)
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setCommitThorn(!commitThorn)}
-                >
-                  <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitThorn ? colors.primary : 'transparent' }]}>
-                    {commitThorn && <Check size={16} color="#FFFFFF" />}
-                  </View>
-                  <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                    Add a Thorn (+1 point)
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => setCommitEveningReview(!commitEveningReview)}
-                >
-                  <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: commitEveningReview ? colors.primary : 'transparent' }]}>
-                    {commitEveningReview && <Check size={16} color="#FFFFFF" />}
-                  </View>
-                  <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                    Evening Review ritual (+10 points)
-                  </Text>
-                </TouchableOpacity>
-
-                <Text style={[styles.optionalNote, { color: colors.textSecondary }]}>
-                  Max 10 points from reflections (Reflection, Rose, Thorn combined)
-                </Text>
-              </>
-            )}
-          </View>
+          {/* Reflections Section */}
+        <ReflectionsSection
+          colors={colors}
+          commitReflection={commitReflection}
+          setCommitReflection={setCommitReflection}
+          commitRose={commitRose}
+          setCommitRose={setCommitRose}
+          commitThorn={commitThorn}
+          setCommitThorn={setCommitThorn}
+          commitEveningReview={commitEveningReview}
+          setCommitEveningReview={setCommitEveningReview}
+        />
 
           {/* Final Target Display */}
           <View style={[styles.finalTargetCard, { backgroundColor: colors.surface, borderColor: getFuelColor(fuelLevel || 2) }]}>
