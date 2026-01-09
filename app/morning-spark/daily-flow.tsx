@@ -129,7 +129,7 @@ export default function DailyFlowScreen() {
   const [showUrgentTasks, setShowUrgentTasks] = useState(false);
   const [showBrainDump, setShowBrainDump] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
-  const [showSchedule, setShowSchedule] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(true);
   const [showRemainingTasks, setShowRemainingTasks] = useState(false);
 
   useEffect(() => {
