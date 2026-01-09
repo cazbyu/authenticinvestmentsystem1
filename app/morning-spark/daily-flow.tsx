@@ -77,6 +77,9 @@ export default function DailyFlowScreen() {
   const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
   const [activeGoals, setActiveGoals] = useState<any[]>([]);
   const [delegations, setDelegations] = useState<any[]>([]);
+  const [depositIdeasCount, setDepositIdeasCount] = useState(0);
+  const [activeGoalsCount, setActiveGoalsCount] = useState(0);
+  const [delegationsCount, setDelegationsCount] = useState(0);
   const [showDepositIdeas, setShowDepositIdeas] = useState(false);
   const [showGoals, setShowGoals] = useState(false);
   const [showDelegations, setShowDelegations] = useState(false);
@@ -127,6 +130,11 @@ export default function DailyFlowScreen() {
       
       // Load follow-ups
       await loadFollowUps(user.id);
+      
+      // Load counts for EL1 dropdowns (don't load full data yet)
+      if (spark.fuel_level === 1) {
+        await loadDropdownCounts(user.id);
+      }
 
       // Load urgent tasks for EL1
       if (spark.fuel_level === 1) {
@@ -416,6 +424,57 @@ export default function DailyFlowScreen() {
       Alert.alert('Error', 'Failed to load delegations. Please try again.');
     } finally {
       setLoadingDelegations(false);
+    }
+  }
+
+  async function loadDropdownCounts(uid: string) {
+    try {
+      const supabase = getSupabaseClient();
+
+      // Count deposit ideas
+      const { count: ideasCount } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid)
+        .eq('archived', false)
+        .eq('is_active', true)
+        .is('activated_at', null);
+
+      // Count goals from all 3 tables
+      const [goals12wkCount, goals1yCount, goalsCustomCount] = await Promise.all([
+        supabase
+          .from('0008-ap-goals-12wk')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .eq('archived', false),
+        supabase
+          .from('0008-ap-goals-1y')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .is('archived_at', null),
+        supabase
+          .from('0008-ap-goals-custom')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .eq('archived', false),
+      ]);
+
+      const totalGoals = (goals12wkCount.count || 0) + (goals1yCount.count || 0) + (goalsCustomCount.count || 0);
+
+      // Count delegations
+      const { count: delegationsCount } = await supabase
+        .from('v_morning_spark_delegations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid);
+
+      setDepositIdeasCount(ideasCount || 0);
+      setActiveGoalsCount(totalGoals);
+      setDelegationsCount(delegationsCount || 0);
+    } catch (error) {
+      console.error('Error loading dropdown counts:', error);
     }
   }
 
@@ -1471,35 +1530,6 @@ export default function DailyFlowScreen() {
           </View>
         )}
 
-        {/* Review Your Plan Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Review Your Plan</Text>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            Everything looking good? If you'd like to make any changes to your schedule or tasks, now's the time.
-          </Text>
-          
-          <TouchableOpacity
-            style={[styles.reviewButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            onPress={() => setShowAdjustModal(true)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.reviewButtonText, { color: colors.text }]}>
-              Make Changes to Schedule/Tasks
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.continueButton}
-            onPress={() => {
-              // Just scroll to bottom / do nothing - they can hit Complete
-            }}
-          >
-            <Text style={[styles.continueButtonText, { color: colors.textSecondary }]}>
-              No changes needed, continue →
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {/* EL1 Only: Collapsible Review Sections */}
         {fuelLevel === 1 && (
           <>
@@ -1516,7 +1546,7 @@ export default function DailyFlowScreen() {
                 }}
               >
                 <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                  💡 Review Deposit Ideas ({depositIdeas.length})
+                  💡 Review Deposit Ideas ({depositIdeasCount})
                 </Text>
                 <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
                   {showDepositIdeas ? '▼' : '▶'}
@@ -1567,7 +1597,7 @@ export default function DailyFlowScreen() {
                 }}
               >
                 <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                  🎯 Review Active Goals ({activeGoals.length})
+                  🎯 Review Active Goals ({activeGoalsCount})
                 </Text>
                 <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
                   {showGoals ? '▼' : '▶'}
@@ -1622,7 +1652,7 @@ export default function DailyFlowScreen() {
                 }}
               >
                 <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-                  👥 Review Delegations ({delegations.length})
+                  👥 Review Delegations ({delegationsCount})
                 </Text>
                 <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
                   {showDelegations ? '▼' : '▶'}
@@ -1713,13 +1743,13 @@ export default function DailyFlowScreen() {
               </>
             )}
 
-            {/* Tasks Section (if EL1) */}
-            {fuelLevel === 1 && urgentTasks.length > 0 && (
+            {/* Tasks Section - EL1 only */}
+            {fuelLevel === 1 && (urgentTasks.length > 0 || (showAllTasks && allTasks.length > 0)) && (
               <>
                 <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
-                  URGENT TASKS ({urgentTasks.length})
+                  TASKS ({showAllTasks && allTasks.length > 0 ? allTasks.length : urgentTasks.length})
                 </Text>
-                {urgentTasks.map((task) => (
+                {(showAllTasks && allTasks.length > 0 ? allTasks : urgentTasks).map((task) => (
                   <View key={task.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
                     <CheckSquare size={16} color={getPriorityColor(task)} />
                     <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
