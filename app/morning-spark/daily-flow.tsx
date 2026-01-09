@@ -175,10 +175,14 @@ export default function DailyFlowScreen() {
         await loadDropdownCounts(user.id);
       }
 
-      // Load urgent tasks for EL1
+      // Load urgent tasks for EL1 (AND the count)
       if (spark.fuel_level === 1) {
-        await loadUrgentTasks(user.id);
+        await Promise.all([
+          loadUrgentTasks(user.id),
+          loadAllTasksCount() // ✅ NEW: Load count on initial load
+        ]);
       }
+      
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load Morning Spark. Please try again.');
@@ -917,6 +921,28 @@ export default function DailyFlowScreen() {
     }
   }
 
+async function loadAllTasksCount() {
+  try {
+    const supabase = getSupabaseClient();
+    const today = toLocalISOString(new Date()).split('T')[0];
+
+    const { count, error } = await supabase
+      .from('0008-ap-tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('type', 'task')
+      .is('completed_at', null)
+      .is('deleted_at', null)
+      .or(`due_date.eq.${today},due_date.lt.${today}`);
+
+    if (error) throw error;
+
+    setAllTasksCount(count || 0);
+  } catch (error) {
+    console.error('Error loading all tasks count:', error);
+  }
+}
+  
   function handleAdjustEvents() {
     // Initialize bins with all events in Keep zone
     const allEvents = [
