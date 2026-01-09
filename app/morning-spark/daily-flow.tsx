@@ -93,6 +93,9 @@ export default function DailyFlowScreen() {
   const [commitThorn, setCommitThorn] = useState(false);
   const [commitEveningReview, setCommitEveningReview] = useState(false);
   const [showFinalCommitment, setShowFinalCommitment] = useState(false);
+  const [includeAllTasks, setIncludeAllTasks] = useState(false);
+  const [finalCommitmentTasks, setFinalCommitmentTasks] = useState<ScheduledAction[]>([]);
+  const [loadingFinalTasks, setLoadingFinalTasks] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -475,6 +478,106 @@ export default function DailyFlowScreen() {
       setDelegationsCount(delegationsCount || 0);
     } catch (error) {
       console.error('Error loading dropdown counts:', error);
+    }
+  }
+
+  async function loadAllTasksForCommitment() {
+    if (loadingFinalTasks) return;
+    
+    try {
+      setLoadingFinalTasks(true);
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      // Load ALL tasks due today or overdue (not just urgent)
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('type', 'task')
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`)
+        .order('is_urgent', { ascending: false }) // Urgent first
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+
+      let tasks = (data || []) as ScheduledAction[];
+
+      if (tasks.length > 0) {
+        const taskIds = tasks.map((t) => t.id);
+
+        // Fetch roles, domains, and goals for point calculation
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        // Calculate points for each task
+        tasks = tasks.map((task) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          const points = calculateTaskPoints(task as any, roles, domains, goals);
+
+          return { ...task, points };
+        });
+      }
+
+      setFinalCommitmentTasks(tasks);
+    } catch (error) {
+      console.error('Error loading all tasks for commitment:', error);
+    } finally {
+      setLoadingFinalTasks(false);
+    }
+  }
+
+  function handleIncludeAllTasksToggle() {
+    const newValue = !includeAllTasks;
+    setIncludeAllTasks(newValue);
+    
+    if (newValue) {
+      // Load all tasks
+      loadAllTasksForCommitment();
+    } else {
+      // Clear and go back to just urgent tasks
+      setFinalCommitmentTasks([]);
+    }
+    
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync();
     }
   }
 
@@ -1744,22 +1847,46 @@ export default function DailyFlowScreen() {
             )}
 
             {/* Tasks Section - EL1 only */}
-            {fuelLevel === 1 && (urgentTasks.length > 0 || (showAllTasks && allTasks.length > 0)) && (
+            {fuelLevel === 1 && (urgentTasks.length > 0 || includeAllTasks) && (
               <>
                 <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
-                  TASKS ({showAllTasks && allTasks.length > 0 ? allTasks.length : urgentTasks.length})
+                  TASKS ({includeAllTasks ? finalCommitmentTasks.length : urgentTasks.length})
                 </Text>
-                {(showAllTasks && allTasks.length > 0 ? allTasks : urgentTasks).map((task) => (
-                  <View key={task.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
-                    <CheckSquare size={16} color={getPriorityColor(task)} />
-                    <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
-                      {task.title}
-                    </Text>
-                    <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
-                      +{Math.round(task.points || 3)}
-                    </Text>
+                
+                {/* Toggle to include all tasks */}
+                <TouchableOpacity
+                  style={styles.includeAllTasksRow}
+                  onPress={handleIncludeAllTasksToggle}
+                >
+                  <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: includeAllTasks ? colors.primary : 'transparent' }]}>
+                    {includeAllTasks && <Check size={16} color="#FFFFFF" />}
                   </View>
-                ))}
+                  <Text style={[styles.includeAllTasksLabel, { color: colors.textSecondary }]}>
+                    Include all tasks for today (not just urgent)
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Show loading state */}
+                {loadingFinalTasks ? (
+                  <View style={[styles.commitmentItem, { borderBottomColor: colors.border, justifyContent: 'center' }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : (
+                  <>
+                    {/* Show tasks based on toggle */}
+                    {(includeAllTasks ? finalCommitmentTasks : urgentTasks).map((task) => (
+                      <View key={task.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
+                        <CheckSquare size={16} color={getPriorityColor(task)} />
+                        <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
+                          {task.title}
+                        </Text>
+                        <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
+                          +{Math.round(task.points || 3)}
+                        </Text>
+                      </View>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </View>
@@ -1832,17 +1959,24 @@ export default function DailyFlowScreen() {
               🎯 Your Target Score Today
             </Text>
             <Text style={[styles.finalTargetPoints, { color: getFuelColor(fuelLevel || 2) }]}>
-              {((actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0) +
-                (actionsData?.overdue || []).reduce((sum, e) => sum + (e.points || 3), 0) +
-                mindsetPoints +
-                Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10) +
-                (commitEveningReview ? 10 : 0) +
-                10)}{' '}
+              {(() => {
+                const eventPoints = (actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0);
+                const overduePoints = (actionsData?.overdue || []).reduce((sum, e) => sum + (e.points || 3), 0);
+                const taskPoints = fuelLevel === 1 
+                  ? (includeAllTasks ? finalCommitmentTasks : urgentTasks).reduce((sum, t) => sum + (t.points || 3), 0)
+                  : 0;
+                const reflectionPoints = Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10);
+                const eveningReviewPoints = commitEveningReview ? 10 : 0;
+                const completionBonus = 10;
+                
+                return eventPoints + overduePoints + taskPoints + mindsetPoints + reflectionPoints + eveningReviewPoints + completionBonus;
+              })()}{' '}
               points
             </Text>
             <Text style={[styles.finalTargetBreakdown, { color: colors.textSecondary }]}>
               {(actionsData?.today.length || 0) + (actionsData?.overdue.length || 0)} events
-              {fuelLevel === 1 && urgentTasks.length > 0 && ` + ${urgentTasks.length} tasks`}
+              {fuelLevel === 1 && (includeAllTasks ? finalCommitmentTasks.length : urgentTasks.length) > 0 && 
+                ` + ${includeAllTasks ? finalCommitmentTasks.length : urgentTasks.length} tasks`}
               {mindsetPoints > 0 && ` + ${mindsetPoints} mindset`}
               {(commitReflection || commitRose || commitThorn) && ` + ${Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10)} reflections`}
               {commitEveningReview && ' + 10 evening review'}
@@ -2842,5 +2976,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  includeAllTasksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    gap: 12,
+    marginBottom: 8,
+  },
+  includeAllTasksLabel: {
+    fontSize: 13,
+    fontStyle: 'italic',
   },
 });
