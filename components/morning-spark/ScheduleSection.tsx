@@ -29,7 +29,7 @@ export function ScheduleSection({
   handleCommitItem,
   openRescheduleModal,
 }: ScheduleSectionProps) {
-  const [showSchedule, setShowSchedule] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(true); // ✅ Changed to true - default open
 
   const renderEventRow = (event: Event) => {
     const isCommitted = itemCommitmentStates[event.id] === 'committed';
@@ -144,7 +144,7 @@ export function ScheduleSection({
       >
         <View style={styles.collapsibleTitleRow}>
           <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-            📅 Your Schedule Today
+            📅 Today's Scheduled Events
           </Text>
           <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
             ({events.length})
