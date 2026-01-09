@@ -190,7 +190,7 @@ export function RemainingTasksSection({
             📋 Remaining Tasks
           </Text>
           <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
-            {showRemainingTasks ? `(${allTasks.length})` : ''}
+            ({allTasks.length})
           </Text>
         </View>
         <Text style={[styles.collapsibleIcon, { color: colors.textSecondary }]}>
