@@ -1563,19 +1563,20 @@ async function loadAllTasksCount() {
 
         {/* Remaining Tasks Section - EL1 Only */}
         <RemainingTasksSection
-          fuelLevel={fuelLevel}
-          allTasks={allTasks || []}
-          colors={colors}
-          loadingAllTasks={loadingAllTasks}
-          itemCommitmentStates={itemCommitmentStates}
-          handleCommitItem={handleCommitItem}
-          openRescheduleModal={openRescheduleModal}
-          getVisibleItems={getVisibleItems}
-          getCommittedItems={getCommittedItems}
-          getPriorityColor={getPriorityColor}
-          loadAllTasks={loadAllTasks}
-          toLocalISOString={toLocalISOString}
-        />
+  fuelLevel={fuelLevel}
+  allTasks={allTasks || []}
+  allTasksCount={allTasksCount} // ✅ NEW PROP
+  colors={colors}
+  loadingAllTasks={loadingAllTasks}
+  itemCommitmentStates={itemCommitmentStates}
+  handleCommitItem={handleCommitItem}
+  openRescheduleModal={openRescheduleModal}
+  getVisibleItems={getVisibleItems}
+  getCommittedItems={getCommittedItems}
+  getPriorityColor={getPriorityColor}
+  loadAllTasks={loadAllTasks}
+  toLocalISOString={toLocalISOString}
+/>
 
         {/* EL1 Only: Collapsible Review Sections */}
         {fuelLevel === 1 && (
