@@ -1074,6 +1074,12 @@ export default function DailyFlowScreen() {
   }
 
   const hasEvents = actionsData && (actionsData.overdue.length > 0 || actionsData.today.length > 0);
+  
+  // Debug logging
+  console.log('DEBUG - actionsData:', actionsData);
+  console.log('DEBUG - hasEvents:', hasEvents);
+  console.log('DEBUG - actionsData.today.length:', actionsData?.today?.length);
+  console.log('DEBUG - actionsData.overdue.length:', actionsData?.overdue?.length);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
