@@ -1626,37 +1626,29 @@ export default function DailyFlowScreen() {
         )}
 
         {/* Urgent Tasks Section - EL1 Only */}
-        {fuelLevel === 1 && (
-          <>
-            {getVisibleItems(urgentTasks).length > 0 ? (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Urgent Tasks</Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  {Platform.OS === 'web' 
-                    ? "Click tasks to commit, or use the action buttons to reschedule."
-                    : "Swipe → to commit, ← to reschedule."}
-                </Text>
+        {fuelLevel === 1 && urgentTasks.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Urgent Tasks</Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              {Platform.OS === 'web' 
+                ? "Click tasks to commit, or use the action buttons to reschedule."
+                : "Tap to commit • Hold to reschedule"}
+            </Text>
 
-                <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-                  {getVisibleItems(urgentTasks).map((task) => {
-                    const isCommitted = itemCommitmentStates[task.id] === 'committed';
-                    console.log(`Task ${task.id} committed state:`, isCommitted);
-                    
-                    return Platform.OS === 'web' ? (
-                      // Web version with click and buttons
-                    </Text>
-                  )}
-                </TouchableOpacity>
+            {getVisibleItems(urgentTasks).length === 0 ? (
+              <View style={[styles.emptyTasksState, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
+                  All urgent tasks handled
+                </Text>
               </View>
             ) : (
               <>
                 <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
                   {getVisibleItems(urgentTasks).map((task) => {
                     const isCommitted = itemCommitmentStates[task.id] === 'committed';
-                    console.log(`Task ${task.id} committed state:`, isCommitted);
                     
                     return Platform.OS === 'web' ? (
-                      // Web version with click and buttons
+                      // Web version
                       <View
                         key={task.id}
                         style={[
@@ -1671,10 +1663,7 @@ export default function DailyFlowScreen() {
                       >
                         <TouchableOpacity
                           style={styles.webTaskClickArea}
-                          onPress={() => {
-                            console.log('Clicking task:', task.id);
-                            handleCommitItem(task.id);
-                          }}
+                          onPress={() => handleCommitItem(task.id)}
                         >
                           <View style={styles.iconContainer}>
                             {isCommitted ? (
@@ -1707,7 +1696,6 @@ export default function DailyFlowScreen() {
                           </Text>
                         </TouchableOpacity>
 
-                        {/* Reschedule button for web */}
                         <TouchableOpacity
                           style={[styles.webRescheduleButton, { backgroundColor: colors.background }]}
                           onPress={() => openRescheduleModal(task)}
@@ -1716,28 +1704,36 @@ export default function DailyFlowScreen() {
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      // Mobile version with swipe (simplified for now - we'll enhance with gestures later)
+                      // Mobile version
                       <TouchableOpacity
                         key={task.id}
                         style={[
                           styles.eventRow,
                           { borderBottomColor: colors.border },
-                          isCommitted && { backgroundColor: '#10B98110' }
+                          isCommitted && { 
+                            backgroundColor: '#10B98120',
+                            borderLeftWidth: 4,
+                            borderLeftColor: '#10B981'
+                          }
                         ]}
                         onPress={() => handleCommitItem(task.id)}
                         onLongPress={() => openRescheduleModal(task)}
                       >
                         <View style={styles.iconContainer}>
                           {isCommitted ? (
-                            <Check size={16} color="#10B981" strokeWidth={3} />
+                            <Check size={20} color="#10B981" strokeWidth={3} />
                           ) : (
                             <CheckSquare size={16} color={colors.primary} />
                           )}
                         </View>
 
                         <View style={styles.eventContent}>
-                          <Text style={[styles.eventTitle, { color: getPriorityColor(task) }]} numberOfLines={1}>
-                            {task.title}
+                          <Text style={[
+                            styles.eventTitle, 
+                            { color: getPriorityColor(task) },
+                            isCommitted && { fontWeight: '600' }
+                          ]} numberOfLines={1}>
+                            {isCommitted && '✓ '}{task.title}
                           </Text>
                           {task.due_date && (
                             <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
@@ -1752,15 +1748,6 @@ export default function DailyFlowScreen() {
                         <Text style={[styles.points, { color: '#10B981' }]}>
                           +{Math.round(task.points || 3)}
                         </Text>
-
-                        {/* Visual indicators for mobile */}
-                        <View style={styles.mobileSwipeHints}>
-                          {!isCommitted && (
-                            <Text style={[styles.swipeHint, { color: colors.textSecondary }]}>
-                              Tap to commit • Hold to reschedule
-                            </Text>
-                          )}
-                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -1774,6 +1761,25 @@ export default function DailyFlowScreen() {
                 )}
               </>
             )}
+          </View>
+        )}
+
+        {/* View All Tasks Link for EL1 when no urgent tasks */}
+        {fuelLevel === 1 && urgentTasks.length === 0 && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={[styles.viewAllTasksButton, { borderColor: colors.border }]}
+              onPress={loadAllTasks}
+              disabled={loadingAllTasks}
+            >
+              {loadingAllTasks ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={[styles.viewAllTasksText, { color: colors.primary }]}>
+                  View All Tasks?
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
