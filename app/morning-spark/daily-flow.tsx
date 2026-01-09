@@ -129,7 +129,7 @@ export default function DailyFlowScreen() {
   const [showUrgentTasks, setShowUrgentTasks] = useState(false);
   const [showBrainDump, setShowBrainDump] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
-  const [showSchedule, setShowSchedule] = useState(true);
+  const [showSchedule, setShowSchedule] = useState(false);
   const [showRemainingTasks, setShowRemainingTasks] = useState(false);
 
   useEffect(() => {
@@ -1237,12 +1237,8 @@ export default function DailyFlowScreen() {
 
       const supabase = getSupabaseClient();
 
-      // Calculate total committed points
+      // ✅ Calculate total committed points WITHOUT overdue events
       const eventPoints = (actionsData?.today || []).reduce(
-        (sum, event) => sum + (event.points || 3),
-        0
-      );
-      const overduePoints = (actionsData?.overdue || []).reduce(
         (sum, event) => sum + (event.points || 3),
         0
       );
@@ -1258,7 +1254,7 @@ export default function DailyFlowScreen() {
       const commitmentPoints = reflectionPoints + eveningReviewPoints;
       
       const sparkCompletionBonus = 10;
-      const totalTarget = eventPoints + overduePoints + mindsetPoints + commitmentPoints + sparkCompletionBonus;
+      const totalTarget = eventPoints + mindsetPoints + commitmentPoints + sparkCompletionBonus;
 
       // Update the spark with completion data and commitment flags
       await supabase
@@ -1759,7 +1755,6 @@ export default function DailyFlowScreen() {
             <Text style={[styles.finalTargetPoints, { color: getFuelColor(fuelLevel || 2) }]}>
               {(() => {
                 const eventPoints = (actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0);
-                const overduePoints = (actionsData?.overdue || []).reduce((sum, e) => sum + (e.points || 3), 0);
                 
                 // Only count COMMITTED tasks
                 const committedUrgent = fuelLevel === 1 ? getCommittedItems(urgentTasks) : [];
@@ -1776,12 +1771,12 @@ export default function DailyFlowScreen() {
                 const eveningReviewPoints = commitEveningReview ? 10 : 0;
                 const completionBonus = 10;
                 
-                return eventPoints + overduePoints + taskPoints + mindsetPoints + reflectionPoints + eveningReviewPoints + completionBonus;
+                return eventPoints + taskPoints + mindsetPoints + reflectionPoints + eveningReviewPoints + completionBonus;
               })()}{' '}
               points
             </Text>
             <Text style={[styles.finalTargetBreakdown, { color: colors.textSecondary }]}>
-              {(actionsData?.today.length || 0) + (actionsData?.overdue.length || 0)} events
+              {actionsData?.today.length || 0} events
               {(() => {
                 const committedUrgent = fuelLevel === 1 ? getCommittedItems(urgentTasks) : [];
                 const committedFromAll = fuelLevel === 1 ? getCommittedItems(allTasks) : [];
@@ -2170,86 +2165,104 @@ export default function DailyFlowScreen() {
               <TouchableOpacity
                 style={[
                   styles.quickButton,
-                  { borderColor: colors.border, backgroundColor: colors.surface },
-                  rescheduleTime === '18:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
+{ borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === '19:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
                 ]}
-                onPress={() => setRescheduleTime('18:00')}
+                onPress={() => setRescheduleTime('19:00')}
               >
                 <Text style={[
                   styles.quickButtonText,
-                  { color: rescheduleTime === '18:00' ? '#FFFFFF' : colors.text }
+                  { color: rescheduleTime === '19:00' ? '#FFFFFF' : colors.text }
                 ]}>
                   Evening
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {rescheduleItem?.start_time && (
-              <TouchableOpacity
-                style={[
-                  styles.sameTimeButton,
-                  { borderColor: colors.border, backgroundColor: colors.surface },
-                  rescheduleTime === rescheduleItem.start_time && { backgroundColor: colors.primary, borderColor: colors.primary }
-                ]}
-                onPress={() => setRescheduleTime(rescheduleItem.start_time || 'anytime')}
-              >
-                <Text style={[
-                  styles.quickButtonText,
-                  { color: rescheduleTime === rescheduleItem.start_time ? '#FFFFFF' : colors.text }
-                ]}>
-                  Same Time ({formatTimeDisplay(rescheduleItem.start_time)})
-                </Text>
-              </TouchableOpacity>
+            {rescheduleTime !== 'anytime' && (
+              <Text style={[styles.selectedValue, { color: colors.primary }]}>
+                {new Date(`2000-01-01T${rescheduleTime}`).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                })}
+              </Text>
             )}
 
-            <Text style={[styles.selectedValue, { color: colors.primary }]}>
-              {rescheduleTime === 'anytime' ? 'Anytime' : formatTimeDisplay(rescheduleTime)}
-            </Text>
+            {/* Custom Date/Time Picker */}
+            <TouchableOpacity
+              style={[styles.customPickerButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => {
+                // Show date/time picker (implement if needed)
+                Alert.alert('Coming Soon', 'Custom date/time picker will be available soon.');
+              }}
+            >
+              <Text style={[styles.customPickerButtonText, { color: colors.text }]}>
+                📆 Pick Custom Date/Time
+              </Text>
+            </TouchableOpacity>
           </ScrollView>
 
-          <View style={[styles.rescheduleActions, { borderTopColor: colors.border }]}>
+          <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
             <TouchableOpacity
-              style={[styles.rescheduleCancelButton, { borderColor: colors.border }]}
+              style={[styles.modalCancelButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
               onPress={() => setShowRescheduleModal(false)}
             >
-              <Text style={[styles.rescheduleCancelText, { color: colors.text }]}>
+              <Text style={[styles.modalCancelButtonText, { color: colors.text }]}>
                 Cancel
               </Text>
             </TouchableOpacity>
-
             <TouchableOpacity
-              style={[styles.rescheduleConfirmButton, { backgroundColor: colors.primary }]}
+              style={[
+                styles.modalConfirmButton,
+                { backgroundColor: colors.primary },
+                isRescheduling && styles.modalConfirmButtonDisabled
+              ]}
               onPress={handleRescheduleConfirm}
               disabled={isRescheduling}
             >
               {isRescheduling ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.rescheduleConfirmText}>
-                  Schedule
-                </Text>
+                <Text style={styles.modalConfirmButtonText}>Confirm</Text>
               )}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </Modal>
 
-      {/* Draggable FAB for quick task/event creation */}
-      <DraggableFab onPress={() => setIsFabModalVisible(true)} size={56}>
-        <Plus size={28} color="#ffffff" />
-      </DraggableFab>
+      {/* FAB for Quick Add */}
+      <DraggableFab
+        onPress={() => setIsFabModalVisible(true)}
+        colors={colors}
+      />
 
-      {/* TaskEventForm Modal */}
-      <Modal visible={isFabModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={async () => {
-            setIsFabModalVisible(false);
-            // Reload data after creating task/event
-            await loadData();
-          }}
-          onClose={() => setIsFabModalVisible(false)}
-        />
+      {/* FAB Modal for Task/Event Creation */}
+      <Modal
+        visible={isFabModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setIsFabModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setIsFabModalVisible(false)} style={styles.modalBackButton}>
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Add Task or Event
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <TaskEventForm
+            onSuccess={() => {
+              setIsFabModalVisible(false);
+              loadData(); // Reload data after creating task/event
+            }}
+            onCancel={() => setIsFabModalVisible(false)}
+          />
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -2273,30 +2286,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   headerCenter: {
-    flexDirection: 'row',
+    flex: 1,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: 8,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
   },
   fuelEmoji: {
-    fontSize: 20,
+    fontSize: 24,
   },
   scrollContent: {
     flex: 1,
   },
   scrollContentContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
+    padding: 16,
   },
   coachSection: {
     padding: 16,
@@ -2306,346 +2316,198 @@ const styles = StyleSheet.create({
   },
   coachLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
   coachText: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
+    fontSize: 16,
+    lineHeight: 24,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  sectionSubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  emptyState: {
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
+    padding: 16,
     borderRadius: 12,
     borderWidth: 1,
   },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
+  collapsibleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
   },
-  emptyText: {
+  collapsibleArrow: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  collapsibleContent: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  reviewItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  reviewItemTitle: {
     fontSize: 15,
     fontWeight: '500',
+    marginBottom: 4,
   },
-  overdueSection: {
-    marginBottom: 16,
+  reviewItemDate: {
+    fontSize: 13,
   },
-  overdueBanner: {
+  goalHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: 4,
   },
-  redLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#EF4444',
-  },
-  overdueLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#EF4444',
+  goalType: {
+    fontSize: 12,
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  goalProgress: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  delegationInfo: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
   eventsTable: {
+    marginTop: 12,
     borderRadius: 12,
     overflow: 'hidden',
   },
   eventRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     borderBottomWidth: 1,
     gap: 12,
   },
-  quickActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  quickActionButton: {
-    padding: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
+    width: 24,
     alignItems: 'center',
   },
   eventContent: {
     flex: 1,
+    gap: 4,
   },
   eventTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontSize: 15,
+    fontWeight: '500',
   },
   eventTime: {
     fontSize: 13,
-    fontWeight: '500',
   },
   overdueText: {
     fontSize: 13,
     color: '#EF4444',
-    fontWeight: '500',
   },
   points: {
     fontSize: 14,
-    fontWeight: '700',
-    minWidth: 40,
-    textAlign: 'right',
+    fontWeight: '600',
   },
-  summaryCard: {
+  webTaskClickArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  webRescheduleButton: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  finalTargetCard: {
+    marginTop: 16,
     padding: 20,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     alignItems: 'center',
+    gap: 8,
   },
-  summaryLabel: {
-    fontSize: 13,
+  finalTargetLabel: {
+    fontSize: 14,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
   },
-  summaryPoints: {
-    fontSize: 36,
+  finalTargetPoints: {
+    fontSize: 32,
     fontWeight: '700',
-    marginBottom: 4,
   },
-  summaryBreakdown: {
-    fontSize: 13,
-    fontWeight: '500',
+  finalTargetBreakdown: {
+    fontSize: 14,
     textAlign: 'center',
   },
   footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: 16,
     borderTopWidth: 1,
   },
   completeButton: {
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   completeButtonDisabled: {
     opacity: 0.6,
   },
   completeButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  acceptButton: {
-    flex: 2,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  acceptButtonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
-  adjustButton: {
+  modalContainer: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-  },
-  adjustButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  acceptedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 8,
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  acceptedText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  viewAllTasksButton: {
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  viewAllTasksText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  allTasksHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  hideButton: {
-    padding: 4,
-  },
-  hideButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  taskTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
-  },
-  urgentBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  urgentBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#EF4444',
-    letterSpacing: 0.5,
-  },
-  reviewButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  reviewButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  continueButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  continueButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
   },
+  modalBackButton: {
+    padding: 8,
+  },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
   },
   closeButton: {
-    padding: 4,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+    padding: 8,
   },
   modalContent: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
   modalInstructions: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  binContainer: {
-    marginBottom: 20,
-  },
-  binHeader: {
-    padding: 12,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-  },
-  binTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  binSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  binContent: {
-    minHeight: 80,
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    padding: 12,
-  },
-  emptyBinText: {
-    fontSize: 14,
-    fontStyle: 'italic',
+    lineHeight: 20,
+    marginBottom: 16,
     textAlign: 'center',
-    paddingVertical: 20,
-  },
-  binItem: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  binItemText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  binItemHint: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginTop: 4,
   },
   moveButtonsContainer: {
     padding: 16,
-    marginBottom: 16,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
+    marginBottom: 24,
   },
   moveButtonsLabel: {
     fontSize: 14,
@@ -2665,91 +2527,105 @@ const styles = StyleSheet.create({
   },
   moveButtonText: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  binContainer: {
+    marginBottom: 24,
+  },
+  binHeader: {
+    padding: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  binTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  binSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  binContent: {
+    borderWidth: 2,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    padding: 12,
+    minHeight: 80,
+  },
+  emptyBinText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  binItem: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  binItemText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   rescheduleItemContainer: {
     marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
   pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    marginBottom: 8,
   },
   pickerLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     width: 60,
   },
   pickerWrapper: {
     flex: 1,
-    borderWidth: 2,
+    borderWidth: 1,
     borderRadius: 8,
-    backgroundColor: '#3B82F608',
     overflow: 'hidden',
   },
   picker: {
-    height: 50,
-  },
-  movementButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  movementButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  movementButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  adjustItemCard: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  adjustItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  adjustItemTime: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 12,
-  },
-  adjustItemActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  adjustActionButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  adjustActionText: {
-    fontSize: 14,
-    fontWeight: '600',
+    height: 44,
   },
   modalFooter: {
-    padding: 20,
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
     borderTopWidth: 1,
   },
-  modalDoneButton: {
+  modalCancelButton: {
+    flex: 1,
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalConfirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalConfirmButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalConfirmButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalDoneButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
     alignItems: 'center',
   },
   modalDoneButtonText: {
@@ -2757,320 +2633,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  brainDumpContainer: {
-    borderRadius: 12,
-    padding: 12,
-    gap: 12,
-  },
-  brainDumpNote: {
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-  },
-  brainDumpContent: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  brainDumpActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  brainDumpButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  brainDumpButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  followUpContainer: {
-    borderRadius: 12,
-    padding: 12,
-    gap: 12,
-  },
-  followUpItem: {
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-  },
-  followUpHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  followUpFlag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  followUpFlagEmoji: {
-    fontSize: 16,
-  },
-  followUpType: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  followUpTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    lineHeight: 22,
-  },
-  followUpActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  followUpButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  followUpButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  collapsibleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  collapsibleHeaderInline: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 12,
-    marginBottom: 12,
-  },
-  collapsibleTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  collapsibleTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  collapsibleCount: {
-    fontSize: 14,
-    fontWeight: '400',
-  },
-  collapsibleIcon: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  collapsibleArrow: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  collapsibleContent: {
-    marginTop: 8,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 12,
-  },
-  reviewItem: {
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    gap: 4,
-  },
-  reviewItemTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  reviewItemDate: {
-    fontSize: 13,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  goalType: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  goalProgress: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  delegationInfo: {
-    fontSize: 13,
-  },
-  commitmentHeader: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  commitmentSubtitle: {
-    fontSize: 15,
-    marginBottom: 16,
-    lineHeight: 22,
-  },
-  commitmentTable: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 16,
-  },
-  commitmentTableTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  commitmentSectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  commitmentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    gap: 12,
-  },
-  commitmentItemTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  commitmentItemPoints: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  eventTime: {
-    fontSize: 13,
-    fontWeight: '400',
-    fontStyle: 'italic',
-  },
-  optionalCommitments: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 16,
-  },
-  optionalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  optionalSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    gap: 12,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  optionalNote: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginTop: 8,
-  },
-  finalTargetCard: {
-    borderRadius: 12,
-    borderWidth: 2,
-    padding: 20,
-    alignItems: 'center',
-  },
-  finalTargetLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  finalTargetPoints: {
-    fontSize: 42,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  finalTargetBreakdown: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  includeAllTasksRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    gap: 12,
-    marginBottom: 8,
-  },
-  includeAllTasksLabel: {
-    fontSize: 13,
-    fontStyle: 'italic',
-  },
-  emptyTasksState: {
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  emptyTasksText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  webTaskClickArea: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  webRescheduleButton: {
-    padding: 8,
-    borderRadius: 4,
-  },
-  mobileSwipeHints: {
-    position: 'absolute',
-    bottom: 4,
-    right: 12,
-  },
-  swipeHint: {
-    fontSize: 10,
-    fontStyle: 'italic',
-  },
-  commitmentSummary: {
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 12,
-  },
   rescheduleContent: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
   rescheduleQuestion: {
     fontSize: 18,
@@ -3089,54 +2654,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   quickButton: {
-    paddingHorizontal: 16,
     paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
   },
   quickButtonText: {
     fontSize: 14,
-    fontWeight: '500',
-  },
-  sameTimeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 8,
-    alignSelf: 'flex-start',
+    fontWeight: '600',
   },
   selectedValue: {
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
     marginTop: 8,
   },
-  rescheduleActions: {
-    flexDirection: 'row',
+  customPickerButton: {
+    marginTop: 24,
     padding: 16,
-    gap: 12,
-    borderTopWidth: 1,
-  },
-  rescheduleCancelButton: {
-    flex: 1,
-    paddingVertical: 14,
     borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
   },
-  rescheduleCancelText: {
-    fontSize: 16,
+  customPickerButtonText: {
+    fontSize: 14,
     fontWeight: '600',
-  },
-  rescheduleConfirmButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  rescheduleConfirmText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });
