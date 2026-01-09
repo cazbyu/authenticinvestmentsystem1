@@ -9,12 +9,14 @@ import {
   Alert,
   Platform,
   Modal,
+  Animated,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckSquare, Calendar, Check, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, CheckSquare, Calendar, Check, Trash2, X, ChevronRight, ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
@@ -96,6 +98,17 @@ export default function DailyFlowScreen() {
   const [includeAllTasks, setIncludeAllTasks] = useState(false);
   const [finalCommitmentTasks, setFinalCommitmentTasks] = useState<ScheduledAction[]>([]);
   const [loadingFinalTasks, setLoadingFinalTasks] = useState(false);
+  
+  // Task/Event commitment states
+  type CommitmentState = 'uncommitted' | 'committed' | 'rescheduled';
+  const [itemCommitmentStates, setItemCommitmentStates] = useState<Record<string, CommitmentState>>({});
+  
+  // Reschedule modal state
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleItem, setRescheduleItem] = useState<ScheduledAction | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('anytime');
+  const [isRescheduling, setIsRescheduling] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -579,6 +592,138 @@ export default function DailyFlowScreen() {
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync();
     }
+  }
+
+  function handleCommitItem(itemId: string) {
+    setItemCommitmentStates(prev => ({
+      ...prev,
+      [itemId]: 'committed'
+    }));
+    
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  function openRescheduleModal(item: ScheduledAction) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+    
+    setRescheduleItem(item);
+    setRescheduleDate(tomorrowStr);
+    setRescheduleTime(item.start_time || 'anytime');
+    setShowRescheduleModal(true);
+    
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  }
+
+  async function handleRescheduleConfirm() {
+    if (!rescheduleItem || isRescheduling) return;
+    
+    try {
+      setIsRescheduling(true);
+      const supabase = getSupabaseClient();
+      
+      const isEvent = !!rescheduleItem.start_date;
+      
+      if (isEvent) {
+        // Update event
+        await supabase
+          .from('0008-ap-tasks')
+          .update({
+            start_date: rescheduleDate,
+            start_time: rescheduleTime === 'anytime' ? null : rescheduleTime,
+          })
+          .eq('id', rescheduleItem.id);
+      } else {
+        // Update task
+        if (rescheduleTime === 'anytime') {
+          await supabase
+            .from('0008-ap-tasks')
+            .update({
+              due_date: rescheduleDate,
+              is_anytime: true,
+              start_time: null,
+              end_time: null,
+            })
+            .eq('id', rescheduleItem.id);
+        } else {
+          await supabase
+            .from('0008-ap-tasks')
+            .update({
+              due_date: rescheduleDate,
+              is_anytime: false,
+              start_time: rescheduleTime,
+              end_time: rescheduleTime,
+            })
+            .eq('id', rescheduleItem.id);
+        }
+      }
+      
+      // Mark as rescheduled
+      setItemCommitmentStates(prev => ({
+        ...prev,
+        [rescheduleItem.id]: 'rescheduled'
+      }));
+      
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      
+      setShowRescheduleModal(false);
+      
+      // Reload data
+      await loadData();
+    } catch (error) {
+      console.error('Error rescheduling item:', error);
+      Alert.alert('Error', 'Failed to reschedule. Please try again.');
+    } finally {
+      setIsRescheduling(false);
+    }
+  }
+
+  function getCommittedItems(items: ScheduledAction[]) {
+    return items.filter(item => {
+      const state = itemCommitmentStates[item.id];
+      // Default to uncommitted, only show if explicitly committed
+      return state === 'committed';
+    });
+  }
+
+  function getVisibleItems(items: ScheduledAction[]) {
+    return items.filter(item => {
+      const state = itemCommitmentStates[item.id];
+      // Hide rescheduled items
+      return state !== 'rescheduled';
+    });
+  }
+
+  function getTodayDate() {
+    return toLocalISOString(new Date()).split('T')[0];
+  }
+
+  function getTomorrowDate() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return toLocalISOString(tomorrow).split('T')[0];
+  }
+
+  function formatRescheduleDate(dateStr: string) {
+    const date = new Date(dateStr + 'T00:00:00');
+    const today = new Date(getTodayDate() + 'T00:00:00');
+    const tomorrow = new Date(getTomorrowDate() + 'T00:00:00');
+    
+    if (date.getTime() === today.getTime()) return 'Today';
+    if (date.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short',
+      month: 'short', 
+      day: 'numeric' 
+    });
   }
 
   async function loadUrgentTasks(uid: string) {
@@ -1431,15 +1576,17 @@ export default function DailyFlowScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Urgent Tasks</Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
               {urgentTasks.length > 0 
-                ? "These need attention today. Accept or adjust to protect your energy."
+                ? Platform.OS === 'web' 
+                  ? "Click tasks to commit, or use the action buttons to reschedule."
+                  : "Swipe → to commit, ← to reschedule."
                 : "You don't show any Urgent actions listed for today."}
             </Text>
 
-            {urgentTasks.length === 0 ? (
+            {getVisibleItems(urgentTasks).length === 0 ? (
               <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <Text style={styles.emptyEmoji}>✅</Text>
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No urgent tasks for today
+                  {urgentTasks.length === 0 ? 'No urgent tasks for today' : 'All urgent tasks handled'}
                 </Text>
                 <TouchableOpacity
                   style={[styles.viewAllTasksButton, { borderColor: colors.border }]}
@@ -1458,63 +1605,115 @@ export default function DailyFlowScreen() {
             ) : (
               <>
                 <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-                  {urgentTasks.map((task) => (
-                <View
-                  key={task.id}
-                  style={[styles.eventRow, { borderBottomColor: colors.border }]}
-                >
-                  <View style={styles.quickActions}>
-                    <TouchableOpacity
-                      onPress={() => handleCompleteEvent(task.id)}
-                      style={styles.quickActionButton}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Check size={18} color="#22c55e" strokeWidth={2.5} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteEvent(task.id, task.title)}
-                      style={styles.quickActionButton}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Trash2 size={18} color="#ef4444" strokeWidth={2} />
-                    </TouchableOpacity>
-                  </View>
+                  {getVisibleItems(urgentTasks).map((task) => {
+                    const isCommitted = itemCommitmentStates[task.id] === 'committed';
+                    
+                    return Platform.OS === 'web' ? (
+                      // Web version with click and buttons
+                      <View
+                        key={task.id}
+                        style={[
+                          styles.eventRow, 
+                          { borderBottomColor: colors.border },
+                          isCommitted && { backgroundColor: '#10B98110' }
+                        ]}
+                      >
+                        <TouchableOpacity
+                          style={styles.webTaskClickArea}
+                          onPress={() => handleCommitItem(task.id)}
+                        >
+                          <View style={styles.iconContainer}>
+                            {isCommitted ? (
+                              <Check size={16} color="#10B981" strokeWidth={3} />
+                            ) : (
+                              <CheckSquare size={16} color={colors.primary} />
+                            )}
+                          </View>
 
-                  <View style={styles.iconContainer}>
-                    <CheckSquare size={16} color={colors.primary} />
-                  </View>
+                          <View style={styles.eventContent}>
+                            <Text style={[styles.eventTitle, { color: getPriorityColor(task) }]} numberOfLines={1}>
+                              {task.title}
+                            </Text>
+                            {task.due_date && (
+                              <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+                                Due: {new Date(task.due_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </Text>
+                            )}
+                          </View>
 
-                  <View style={styles.eventContent}>
-                    <Text style={[styles.eventTitle, { color: getPriorityColor(task) }]} numberOfLines={1}>
-                      {task.title}
-                    </Text>
-                    {task.due_date && (
-                      <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
-                        Due: {new Date(task.due_date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </Text>
-                    )}
-                  </View>
+                          <Text style={[styles.points, { color: '#10B981' }]}>
+                            +{Math.round(task.points || 3)}
+                          </Text>
+                        </TouchableOpacity>
 
-                  <Text style={[styles.points, { color: '#10B981' }]}>
-                    +{Math.round(task.points || 3)}
-                  </Text>
+                        {/* Reschedule button for web */}
+                        <TouchableOpacity
+                          style={[styles.webRescheduleButton, { backgroundColor: colors.background }]}
+                          onPress={() => openRescheduleModal(task)}
+                        >
+                          <ChevronRight size={16} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      // Mobile version with swipe (simplified for now - we'll enhance with gestures later)
+                      <TouchableOpacity
+                        key={task.id}
+                        style={[
+                          styles.eventRow,
+                          { borderBottomColor: colors.border },
+                          isCommitted && { backgroundColor: '#10B98110' }
+                        ]}
+                        onPress={() => handleCommitItem(task.id)}
+                        onLongPress={() => openRescheduleModal(task)}
+                      >
+                        <View style={styles.iconContainer}>
+                          {isCommitted ? (
+                            <Check size={16} color="#10B981" strokeWidth={3} />
+                          ) : (
+                            <CheckSquare size={16} color={colors.primary} />
+                          )}
+                        </View>
+
+                        <View style={styles.eventContent}>
+                          <Text style={[styles.eventTitle, { color: getPriorityColor(task) }]} numberOfLines={1}>
+                            {task.title}
+                          </Text>
+                          {task.due_date && (
+                            <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+                              Due: {new Date(task.due_date).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </Text>
+                          )}
+                        </View>
+
+                        <Text style={[styles.points, { color: '#10B981' }]}>
+                          +{Math.round(task.points || 3)}
+                        </Text>
+
+                        {/* Visual indicators for mobile */}
+                        <View style={styles.mobileSwipeHints}>
+                          {!isCommitted && (
+                            <Text style={[styles.swipeHint, { color: colors.textSecondary }]}>
+                              Tap to commit • Hold to reschedule
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-              ))}
-            </View>
 
-            {/* Adjust Button for Tasks */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.adjustButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                onPress={handleAdjustTasks}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.adjustButtonText, { color: colors.text }]}>Adjust Tasks</Text>
-              </TouchableOpacity>
-            </View>
+                {/* Show commitment summary */}
+                {getCommittedItems(urgentTasks).length > 0 && (
+                  <Text style={[styles.commitmentSummary, { color: colors.primary }]}>
+                    ✓ {getCommittedItems(urgentTasks).length} of {getVisibleItems(urgentTasks).length} tasks committed
+                  </Text>
+                )}
               </>
             )}
           </View>
@@ -1839,53 +2038,45 @@ export default function DailyFlowScreen() {
               </>
             )}
 
-            {/* Tasks Section - EL1 only - ALWAYS show for EL1 */}
+            {/* Tasks Section - EL1 only - Show COMMITTED tasks */}
             {fuelLevel === 1 && (
               <>
-                <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
-                  TASKS ({includeAllTasks ? finalCommitmentTasks.length : urgentTasks.length})
-                </Text>
-                
-                {/* Toggle to include all tasks */}
-                <TouchableOpacity
-                  style={styles.includeAllTasksRow}
-                  onPress={handleIncludeAllTasksToggle}
-                >
-                  <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: includeAllTasks ? colors.primary : 'transparent' }]}>
-                    {includeAllTasks && <Check size={16} color="#FFFFFF" />}
-                  </View>
-                  <Text style={[styles.includeAllTasksLabel, { color: colors.textSecondary }]}>
-                    Include all tasks for today (not just urgent)
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Show loading state */}
-                {loadingFinalTasks ? (
-                  <View style={[styles.commitmentItem, { borderBottomColor: colors.border, justifyContent: 'center' }]}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  </View>
-                ) : (includeAllTasks ? finalCommitmentTasks : urgentTasks).length === 0 ? (
-                  <View style={[styles.emptyTasksState, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
-                      {includeAllTasks ? 'No tasks for today' : 'No urgent tasks'}
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    {/* Show tasks based on toggle */}
-                    {(includeAllTasks ? finalCommitmentTasks : urgentTasks).map((task) => (
-                      <View key={task.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
-                        <CheckSquare size={16} color={getPriorityColor(task)} />
-                        <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
-                          {task.title}
-                        </Text>
-                        <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
-                          +{Math.round(task.points || 3)}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
+                {(() => {
+                  const committedUrgent = getCommittedItems(urgentTasks);
+                  const committedAll = includeAllTasks ? getCommittedItems(finalCommitmentTasks) : committedUrgent;
+                  const taskCount = committedAll.length;
+                  
+                  return (
+                    <>
+                      <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
+                        TASKS ({taskCount})
+                      </Text>
+                      
+                      {taskCount === 0 ? (
+                        <View style={[styles.emptyTasksState, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                          <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
+                            No tasks committed yet. {urgentTasks.length > 0 ? 'Swipe/click tasks above to commit.' : ''}
+                          </Text>
+                        </View>
+                      ) : (
+                        <>
+                          {/* Show committed tasks */}
+                          {committedAll.map((task) => (
+                            <View key={task.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
+                              <CheckSquare size={16} color={getPriorityColor(task)} />
+                              <Text style={[styles.commitmentItemTitle, { color: colors.text }]} numberOfLines={1}>
+                                {task.title}
+                              </Text>
+                              <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
+                                +{Math.round(task.points || 3)}
+                              </Text>
+                            </View>
+                          ))}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </>
             )}
           </View>
@@ -1961,9 +2152,13 @@ export default function DailyFlowScreen() {
               {(() => {
                 const eventPoints = (actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0);
                 const overduePoints = (actionsData?.overdue || []).reduce((sum, e) => sum + (e.points || 3), 0);
-                const taskPoints = fuelLevel === 1 
-                  ? (includeAllTasks ? finalCommitmentTasks : urgentTasks).reduce((sum, t) => sum + (t.points || 3), 0)
-                  : 0;
+                
+                // Only count COMMITTED tasks
+                const committedTasks = fuelLevel === 1 
+                  ? (includeAllTasks ? getCommittedItems(finalCommitmentTasks) : getCommittedItems(urgentTasks))
+                  : [];
+                const taskPoints = committedTasks.reduce((sum, t) => sum + (t.points || 3), 0);
+                
                 const reflectionPoints = Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10);
                 const eveningReviewPoints = commitEveningReview ? 10 : 0;
                 const completionBonus = 10;
@@ -1974,8 +2169,12 @@ export default function DailyFlowScreen() {
             </Text>
             <Text style={[styles.finalTargetBreakdown, { color: colors.textSecondary }]}>
               {(actionsData?.today.length || 0) + (actionsData?.overdue.length || 0)} events
-              {fuelLevel === 1 && (includeAllTasks ? finalCommitmentTasks.length : urgentTasks.length) > 0 && 
-                ` + ${includeAllTasks ? finalCommitmentTasks.length : urgentTasks.length} tasks`}
+              {(() => {
+                const committedTasks = fuelLevel === 1 
+                  ? (includeAllTasks ? getCommittedItems(finalCommitmentTasks) : getCommittedItems(urgentTasks))
+                  : [];
+                return committedTasks.length > 0 ? ` + ${committedTasks.length} tasks` : '';
+              })()}
               {mindsetPoints > 0 && ` + ${mindsetPoints} mindset`}
               {(commitReflection || commitRose || commitThorn) && ` + ${Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10)} reflections`}
               {commitEveningReview && ' + 10 evening review'}
@@ -2228,6 +2427,191 @@ export default function DailyFlowScreen() {
               onPress={applyAdjustments}
             >
               <Text style={styles.modalDoneButtonText}>Apply Changes</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Reschedule Modal */}
+      <Modal
+        visible={showRescheduleModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowRescheduleModal(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setShowRescheduleModal(false)} style={styles.modalBackButton}>
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Reschedule{rescheduleItem ? ` "${rescheduleItem.title}"` : ''}
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <ScrollView style={styles.rescheduleContent}>
+            <Text style={[styles.rescheduleQuestion, { color: colors.text }]}>
+              When should we tackle this?
+            </Text>
+
+            {/* Quick Date Selection */}
+            <Text style={[styles.rescheduleLabel, { color: colors.textSecondary }]}>
+              📅 Date
+            </Text>
+            <View style={styles.quickButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleDate === getTodayDate() && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleDate(getTodayDate())}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleDate === getTodayDate() ? '#FFFFFF' : colors.text }
+                ]}>
+                  Today
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleDate === getTomorrowDate() && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleDate(getTomorrowDate())}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleDate === getTomorrowDate() ? '#FFFFFF' : colors.text }
+                ]}>
+                  Tomorrow
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.selectedValue, { color: colors.primary }]}>
+              {formatRescheduleDate(rescheduleDate)}
+            </Text>
+
+            {/* Quick Time Selection */}
+            <Text style={[styles.rescheduleLabel, { color: colors.textSecondary, marginTop: 24 }]}>
+              🕐 Time
+            </Text>
+            <View style={styles.quickButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === 'anytime' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('anytime')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === 'anytime' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Anytime
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === '09:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('09:00')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === '09:00' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Morning
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === '14:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('14:00')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === '14:00' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Afternoon
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === '18:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('18:00')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === '18:00' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Evening
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {rescheduleItem?.start_time && (
+              <TouchableOpacity
+                style={[
+                  styles.sameTimeButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === rescheduleItem.start_time && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime(rescheduleItem.start_time || 'anytime')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === rescheduleItem.start_time ? '#FFFFFF' : colors.text }
+                ]}>
+                  Same Time ({formatTimeDisplay(rescheduleItem.start_time)})
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={[styles.selectedValue, { color: colors.primary }]}>
+              {rescheduleTime === 'anytime' ? 'Anytime' : formatTimeDisplay(rescheduleTime)}
+            </Text>
+          </ScrollView>
+
+          <View style={[styles.rescheduleActions, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.rescheduleCancelButton, { borderColor: colors.border }]}
+              onPress={() => setShowRescheduleModal(false)}
+            >
+              <Text style={[styles.rescheduleCancelText, { color: colors.text }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.rescheduleConfirmButton, { backgroundColor: colors.primary }]}
+              onPress={handleRescheduleConfirm}
+              disabled={isRescheduling}
+            >
+              {isRescheduling ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.rescheduleConfirmText}>
+                  Schedule
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -3003,5 +3387,101 @@ const styles = StyleSheet.create({
   emptyTasksText: {
     fontSize: 14,
     fontStyle: 'italic',
+  },
+  webTaskClickArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  webRescheduleButton: {
+    padding: 8,
+    borderRadius: 4,
+  },
+  mobileSwipeHints: {
+    position: 'absolute',
+    bottom: 4,
+    right: 12,
+  },
+  swipeHint: {
+    fontSize: 10,
+    fontStyle: 'italic',
+  },
+  commitmentSummary: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  rescheduleContent: {
+    flex: 1,
+    padding: 20,
+  },
+  rescheduleQuestion: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 24,
+  },
+  rescheduleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  quickButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  quickButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  sameTimeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  selectedValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  rescheduleActions: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    borderTopWidth: 1,
+  },
+  rescheduleCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  rescheduleCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  rescheduleConfirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  rescheduleConfirmText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
