@@ -42,6 +42,7 @@ import { FollowUpSection } from '@/components/morning-spark/FollowUpSection';
 import { RemainingTasksSection } from '@/components/morning-spark/RemainingTasksSection';
 import { FinalCommitmentSection } from '@/components/morning-spark/FinalCommitmentSection';
 import { ReflectionsSection } from '@/components/morning-spark/ReflectionsSection';
+import { TodaysMenuModal } from '@/components/morning-spark/TodaysMenuModal';
 
 export default function DailyFlowScreen() {
   const router = useRouter();
@@ -123,6 +124,9 @@ export default function DailyFlowScreen() {
   
   // FAB modal state
   const [isFabModalVisible, setIsFabModalVisible] = useState(false);
+  
+  // Today's Menu modal state
+  const [showTodaysMenuModal, setShowTodaysMenuModal] = useState(false);
   
   // Collapsible section state
   const [showReflections, setShowReflections] = useState(false);
@@ -1301,16 +1305,14 @@ export default function DailyFlowScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert(
-        'Morning Spark Complete!',
-        `Your target for today is ${totalTarget} points. Let's make it happen!`,
-        [
-          {
-            text: 'View Dashboard',
-            onPress: () => router.replace('/(tabs)/dashboard'),
-          },
-        ]
-      );
+      // ✅ Show Today's Menu modal instead of Alert
+      setShowTodaysMenuModal(true);
+
+      // Auto-redirect to dashboard after 3 seconds
+      setTimeout(() => {
+        router.replace('/(tabs)/dashboard');
+      }, 3000);
+      
     } catch (error) {
       console.error('Error completing Morning Spark:', error);
       Alert.alert('Error', 'Failed to complete Morning Spark. Please try again.');
@@ -2242,6 +2244,25 @@ export default function DailyFlowScreen() {
           />
         </SafeAreaView>
       </Modal>
+
+      {/* Today's Menu Modal - Shows after completion */}
+      <TodaysMenuModal
+        visible={showTodaysMenuModal}
+        onClose={() => {
+          setShowTodaysMenuModal(false);
+          router.replace('/(tabs)/dashboard');
+        }}
+        fuelLevel={fuelLevel || 2}
+        events={actionsData?.today || []}
+        tasks={getCommittedItems([...urgentTasks, ...allTasks])}
+        reflections={{
+          commitReflection,
+          commitRose,
+          commitThorn,
+        }}
+        formatTimeDisplay={formatTimeDisplay}
+        colors={colors}
+      />
     </SafeAreaView>
   );
 }
