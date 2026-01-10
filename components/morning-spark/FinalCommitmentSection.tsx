@@ -48,9 +48,9 @@ export function FinalCommitmentSection({
   commitThorn,
   mindsetPoints,
 }: FinalCommitmentSectionProps) {
-  // Calculate committed tasks
-  const committedUrgent = fuelLevel === 1 ? getCommittedItems(urgentTasks) : [];
-  const committedFromAll = fuelLevel === 1 ? getCommittedItems(allTasks) : [];
+  // Calculate committed tasks - EL1 and EL2
+  const committedUrgent = (fuelLevel === 1 || fuelLevel === 2) ? getCommittedItems(urgentTasks) : [];
+  const committedFromAll = (fuelLevel === 1 || fuelLevel === 2) ? getCommittedItems(allTasks) : [];
   const allCommittedTasks = [...committedUrgent];
   committedFromAll.forEach(task => {
     if (!allCommittedTasks.find(t => t.id === task.id)) {
@@ -106,8 +106,8 @@ export function FinalCommitmentSection({
           </>
         )}
 
-        {/* Tasks Section - EL1 only - Show COMMITTED tasks */}
-        {fuelLevel === 1 && (
+        {/* Tasks Section - EL1 and EL2 - Show COMMITTED tasks */}
+        {(fuelLevel === 1 || fuelLevel === 2) && (
           <>
             <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>
               TASKS ({allCommittedTasks.length})
