@@ -46,9 +46,9 @@ export function RemainingTasksSection({
 }: RemainingTasksSectionProps) {
   const [showRemainingTasks, setShowRemainingTasks] = useState(false);
 
-  // For EL2, we want to show urgent tasks at the top
-  const isEL2 = fuelLevel === 2;
-  const allTasksToShow = isEL2 ? [...urgentTasks, ...allTasks.filter(t => !urgentTasks.find(ut => ut.id === t.id))] : allTasks;
+  // For EL2 and EL3, we want to show urgent tasks at the top
+  const isEL2orEL3 = fuelLevel === 2 || fuelLevel === 3;
+  const allTasksToShow = isEL2orEL3 ? [...urgentTasks, ...allTasks.filter(t => !urgentTasks.find(ut => ut.id === t.id))] : allTasks;
 
   const renderTaskRow = (task: Task) => {
     const isUrgent = task.is_urgent;
@@ -193,7 +193,7 @@ export function RemainingTasksSection({
       >
         <View style={styles.collapsibleTitleRow}>
           <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-            {isEL2 ? '📝 Tasks' : '📋 Remaining Tasks'}
+            {isEL2orEL3 ? '📝 Tasks' : '📋 Remaining Tasks'}
           </Text>
           <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
             ({allTasksCount})
