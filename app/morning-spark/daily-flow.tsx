@@ -1533,11 +1533,9 @@ export default function DailyFlowScreen() {
         {/* Follow Up Section - EL1 and EL2 */}
         {(fuelLevel === 1 || fuelLevel === 2) && (
           <FollowUpSection
-            followUpItems={followUpItems || []}
-            colors={colors}
-            loadingFollowUp={loadingFollowUp}
-            handleCompleteFollowUp={handleCompleteFollowUp}
-            handleSnoozeFollowUp={handleSnoozeFollowUp}
+            fuelLevel={fuelLevel}
+            userId={userId}
+            onItemActioned={() => loadData()}
           />
         )}
 
