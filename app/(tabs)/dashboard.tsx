@@ -683,8 +683,11 @@ export default function Dashboard() {
         if (error) throw error;
       }
 
-      // Remove from UI after successful database update
+      // Remove from UI immediately (optimistic update)
       setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
+
+      // Emit event to notify other components and refresh data
+      eventBus.emit(EVENTS.TASK_UPDATED, { taskId: task.id });
 
       console.log('[Dashboard] Waiting for database commits, then refreshing score');
       // Small delay to ensure all database writes (including RPC joins) complete
@@ -693,6 +696,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('[Dashboard] Error completing task:', error);
       Alert.alert('Error', (error as Error).message || 'Failed to complete action.');
+      // Revert optimistic update and refresh from database
       fetchData();
     }
   };
