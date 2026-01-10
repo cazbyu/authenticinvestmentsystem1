@@ -1106,16 +1106,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         } else if (formData.reflectionMode === 'depositIdea') {
           // Save to deposit ideas table
           const depositIdeaPayload = {
-            user_id: user.id,
-            title: formData.title.trim() || 'Untitled Idea',
-            is_active: true,
-            archived: false,
-            follow_up: formData.followUpEnabled,
-            // Parent relationship for follow-through items
-            parent_id: formData.parentId || null,
-            parent_type: formData.parentType || null,
-            ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
-          };
+  user_id: user.id,
+  title: formData.title.trim() || 'Untitled Idea',
+  is_active: true,
+  archived: false,
+  follow_up: formData.followUpEnabled ? formData.followUpDate : null,  // ✅ Send date or null
+  parent_id: formData.parentId || null,
+  parent_type: formData.parentType || null,
+  ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
+};
 
           if (mode === 'edit' && initialData?.id) {
             const { data, error } = await supabase
