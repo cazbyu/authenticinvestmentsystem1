@@ -14,7 +14,7 @@ interface Task {
 interface RemainingTasksSectionProps {
   fuelLevel: number | null;
   allTasks: Task[];
-  allTasksCount: number; // ✅ NEW: separate count prop
+  allTasksCount: number;
   colors: any;
   loadingAllTasks: boolean;
   itemCommitmentStates: Record<string, 'uncommitted' | 'committed' | 'rescheduled'>;
@@ -25,12 +25,13 @@ interface RemainingTasksSectionProps {
   getPriorityColor: (task: Task) => string;
   loadAllTasks: () => void;
   toLocalISOString: (date: Date) => string;
+  urgentTasks?: Task[];
 }
 
 export function RemainingTasksSection({
   fuelLevel,
   allTasks,
-  allTasksCount, // ✅ NEW
+  allTasksCount,
   colors,
   loadingAllTasks,
   itemCommitmentStates,
@@ -41,10 +42,13 @@ export function RemainingTasksSection({
   getPriorityColor,
   loadAllTasks,
   toLocalISOString,
+  urgentTasks = [],
 }: RemainingTasksSectionProps) {
   const [showRemainingTasks, setShowRemainingTasks] = useState(false);
 
-  if (fuelLevel !== 1) return null;
+  // For EL2, we want to show urgent tasks at the top
+  const isEL2 = fuelLevel === 2;
+  const allTasksToShow = isEL2 ? [...urgentTasks, ...allTasks.filter(t => !urgentTasks.find(ut => ut.id === t.id))] : allTasks;
 
   const renderTaskRow = (task: Task) => {
     const isUrgent = task.is_urgent;
@@ -189,7 +193,7 @@ export function RemainingTasksSection({
       >
         <View style={styles.collapsibleTitleRow}>
           <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-            📋 Remaining Tasks
+            {isEL2 ? '📝 Tasks' : '📋 Remaining Tasks'}
           </Text>
           <Text style={[styles.collapsibleCount, { color: colors.textSecondary }]}>
             ({allTasksCount})
@@ -212,7 +216,7 @@ export function RemainingTasksSection({
             <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
-          ) : allTasks.length === 0 ? (
+          ) : allTasksToShow.length === 0 ? (
             <View style={[styles.emptyTasksState, { backgroundColor: colors.surface }]}>
               <Text style={[styles.emptyTasksText, { color: colors.textSecondary }]}>
                 No remaining tasks for today
@@ -221,12 +225,12 @@ export function RemainingTasksSection({
           ) : (
             <>
               <View style={[styles.eventsTable, { backgroundColor: colors.surface }]}>
-                {getVisibleItems(allTasks).map((task) => renderTaskRow(task))}
+                {getVisibleItems(allTasksToShow).map((task) => renderTaskRow(task))}
               </View>
 
-              {getCommittedItems(allTasks).length > 0 && (
+              {getCommittedItems(allTasksToShow).length > 0 && (
                 <Text style={[styles.commitmentSummary, { color: colors.primary }]}>
-                  ✓ {getCommittedItems(allTasks).length} of {getVisibleItems(allTasks).length} tasks committed
+                  ✓ {getCommittedItems(allTasksToShow).length} of {getVisibleItems(allTasksToShow).length} tasks committed
                 </Text>
               )}
             </>
