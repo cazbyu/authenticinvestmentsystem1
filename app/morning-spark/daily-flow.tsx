@@ -174,11 +174,11 @@ export default function DailyFlowScreen() {
         await loadDropdownCounts(user.id);
       }
 
-      // Load urgent tasks for EL1 (AND the count)
+      // Load urgent tasks and task count for EL1
       if (spark.fuel_level === 1) {
         await Promise.all([
           loadUrgentTasks(user.id),
-          loadAllTasksCount() // ✅ NEW: Load count on initial load
+          loadAllTasksCount(user.id) // ✅ Pass user.id directly
         ]);
       }
       
@@ -922,7 +922,7 @@ export default function DailyFlowScreen() {
     }
   }
 
-  async function loadAllTasksCount() {
+  async function loadAllTasksCount(uid: string) {
     try {
       const supabase = getSupabaseClient();
       const today = toLocalISOString(new Date()).split('T')[0];
@@ -930,7 +930,7 @@ export default function DailyFlowScreen() {
       const { count, error } = await supabase
         .from('0008-ap-tasks')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('user_id', uid)
         .eq('type', 'task')
         .is('completed_at', null)
         .is('deleted_at', null)
