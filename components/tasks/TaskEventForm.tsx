@@ -1004,21 +1004,19 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') {
           // Save to reflections table
           const reflectionPayload = {
-            user_id: user.id,
-            content: formData.content.trim(),
-            reflection_title: formData.title.trim() || null,
-            reflection_type: 'daily',
-            date: formatLocalDate(new Date()),
-            archived: false,
-            follow_up: formData.followUpEnabled ? formData.followUpDate : null,
-            follow_up_date: formData.followUpEnabled ? formData.followUpDate : null,
-            daily_rose: formData.reflectionMode === 'rose',
-            daily_thorn: formData.reflectionMode === 'thorn',
-            // Parent relationship for follow-through items
-            parent_id: formData.parentId || null,
-            parent_type: formData.parentType || null,
-            ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
-          };
+  user_id: user.id,
+  content: formData.content.trim(),
+  reflection_title: formData.title.trim() || null,
+  reflection_type: 'daily',
+  date: formatLocalDate(new Date()),
+  archived: false,
+  follow_up: formData.followUpEnabled ? formData.followUpDate : null,  // ✅ Date field
+  daily_rose: formData.reflectionMode === 'rose',
+  daily_thorn: formData.reflectionMode === 'thorn',
+  parent_id: formData.parentId || null,
+  parent_type: formData.parentType || null,
+  ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
+};
 
           if (mode === 'edit' && initialData?.id) {
             const { data, error } = await supabase
