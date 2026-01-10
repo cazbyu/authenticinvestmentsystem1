@@ -105,7 +105,6 @@ export default function DailyFlowScreen() {
   const [commitReflection, setCommitReflection] = useState(false);
   const [commitRose, setCommitRose] = useState(false);
   const [commitThorn, setCommitThorn] = useState(false);
-  const [commitEveningReview, setCommitEveningReview] = useState(false);
   const [showFinalCommitment, setShowFinalCommitment] = useState(false);
   const [includeAllTasks, setIncludeAllTasks] = useState(false);
   const [finalCommitmentTasks, setFinalCommitmentTasks] = useState<ScheduledAction[]>([]);
@@ -1272,14 +1271,14 @@ export default function DailyFlowScreen() {
         0
       );
       
-      // Calculate commitment points (max 10 from reflections, separate 10 from evening review)
+      // Calculate commitment points (max 10 from reflections + always 10 for evening review)
       const reflectionPoints = Math.min(
         (commitReflection ? 1 : 0) + 
         (commitRose ? 2 : 0) + 
         (commitThorn ? 1 : 0),
         10
       );
-      const eveningReviewPoints = commitEveningReview ? 10 : 0;
+      const eveningReviewPoints = 10; // ✅ Always 10 points
       const commitmentPoints = reflectionPoints + eveningReviewPoints;
       
       const sparkCompletionBonus = 10;
@@ -1294,7 +1293,7 @@ export default function DailyFlowScreen() {
           commit_reflection: commitReflection,
           commit_rose: commitRose,
           commit_thorn: commitThorn,
-          commit_evening_review: commitEveningReview,
+          commit_evening_review: true, // ✅ Always true
         })
         .eq('id', sparkId);
 
@@ -1760,7 +1759,6 @@ export default function DailyFlowScreen() {
           commitReflection={commitReflection}
           commitRose={commitRose}
           commitThorn={commitThorn}
-          commitEveningReview={commitEveningReview}
           mindsetPoints={mindsetPoints}
         />
 
@@ -1773,57 +1771,7 @@ export default function DailyFlowScreen() {
           setCommitRose={setCommitRose}
           commitThorn={commitThorn}
           setCommitThorn={setCommitThorn}
-          commitEveningReview={commitEveningReview}
-          setCommitEveningReview={setCommitEveningReview}
         />
-
-          {/* Final Target Display */}
-          <View style={[styles.finalTargetCard, { backgroundColor: colors.surface, borderColor: getFuelColor(fuelLevel || 2) }]}>
-            <Text style={[styles.finalTargetLabel, { color: colors.textSecondary }]}>
-              🎯 Your Target Score Today
-            </Text>
-            <Text style={[styles.finalTargetPoints, { color: getFuelColor(fuelLevel || 2) }]}>
-              {(() => {
-                const eventPoints = (actionsData?.today || []).reduce((sum, e) => sum + (e.points || 3), 0);
-                
-                // Only count COMMITTED tasks
-                const committedUrgent = fuelLevel === 1 ? getCommittedItems(urgentTasks) : [];
-                const committedFromAll = fuelLevel === 1 ? getCommittedItems(allTasks) : [];
-                const allCommittedTasks = [...committedUrgent];
-                committedFromAll.forEach(task => {
-                  if (!allCommittedTasks.find(t => t.id === task.id)) {
-                    allCommittedTasks.push(task);
-                  }
-                });
-                const taskPoints = allCommittedTasks.reduce((sum, t) => sum + (t.points || 3), 0);
-                
-                const reflectionPoints = Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10);
-                const eveningReviewPoints = commitEveningReview ? 10 : 0;
-                const completionBonus = 10;
-                
-                return eventPoints + taskPoints + mindsetPoints + reflectionPoints + eveningReviewPoints + completionBonus;
-              })()}{' '}
-              points
-            </Text>
-            <Text style={[styles.finalTargetBreakdown, { color: colors.textSecondary }]}>
-              {actionsData?.today.length || 0} events
-              {(() => {
-                const committedUrgent = fuelLevel === 1 ? getCommittedItems(urgentTasks) : [];
-                const committedFromAll = fuelLevel === 1 ? getCommittedItems(allTasks) : [];
-                const allCommittedTasks = [...committedUrgent];
-                committedFromAll.forEach(task => {
-                  if (!allCommittedTasks.find(t => t.id === task.id)) {
-                    allCommittedTasks.push(task);
-                  }
-                });
-                return allCommittedTasks.length > 0 ? ` + ${allCommittedTasks.length} tasks` : '';
-              })()}
-              {mindsetPoints > 0 && ` + ${mindsetPoints} mindset`}
-              {(commitReflection || commitRose || commitThorn) && ` + ${Math.min((commitReflection ? 1 : 0) + (commitRose ? 2 : 0) + (commitThorn ? 1 : 0), 10)} reflections`}
-              {commitEveningReview && ' + 10 evening review'}
-              {' + 10 completion bonus'}
-            </Text>
-          </View>
 
         <View style={{ height: 20 }} />
       </ScrollView>
