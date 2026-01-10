@@ -78,31 +78,15 @@ export function FinalCommitmentSection({
       {/* Combined Tasks + Events Table */}
       <View style={[styles.commitmentTable, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.commitmentTableTitle, { color: colors.text }]}>
-          Your Daily Creation Menu
+          Today's Menu
         </Text>
 
-        {/* Events Section */}
-        {actionsData && (actionsData.today.length > 0 || actionsData.overdue.length > 0) && (
+        {/* ✅ Events Section - ONLY TODAY'S EVENTS */}
+        {actionsData && actionsData.today.length > 0 && (
           <>
             <Text style={[styles.commitmentSectionLabel, { color: colors.textSecondary }]}>
-              EVENTS ({actionsData.today.length + actionsData.overdue.length})
+              EVENTS ({actionsData.today.length})
             </Text>
-            {actionsData.overdue.map((event) => (
-              <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
-                <Calendar size={16} color="#EF4444" />
-                <Text style={[styles.commitmentItemTitle, { color: '#EF4444' }]} numberOfLines={1}>
-                  {event.title}
-                  {event.start_time && (
-                    <Text style={[styles.eventTime, { color: '#EF4444' }]}>
-                      {' '}({formatTimeDisplay(event.start_time)})
-                    </Text>
-                  )}
-                </Text>
-                <Text style={[styles.commitmentItemPoints, { color: '#10B981' }]}>
-                  +{event.points || 3}
-                </Text>
-              </View>
-            ))}
             {actionsData.today.map((event) => (
               <View key={event.id} style={[styles.commitmentItem, { borderBottomColor: colors.border }]}>
                 <Calendar size={16} color={colors.primary} />
