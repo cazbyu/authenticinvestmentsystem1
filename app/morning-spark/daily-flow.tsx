@@ -173,13 +173,13 @@ export default function DailyFlowScreen() {
       // Load follow-ups
       await loadFollowUps(user.id);
       
-      // Load counts for EL1 and EL2 dropdowns (don't load full data yet)
-      if (spark.fuel_level === 1 || spark.fuel_level === 2) {
+      // Load counts for EL1, EL2, and EL3 dropdowns (don't load full data yet)
+      if (spark.fuel_level === 1 || spark.fuel_level === 2 || spark.fuel_level === 3) {
         await loadDropdownCounts(user.id);
       }
 
-      // Load urgent tasks and task count for EL1 and EL2
-      if (spark.fuel_level === 1 || spark.fuel_level === 2) {
+      // Load urgent tasks and task count for EL1, EL2, and EL3
+      if (spark.fuel_level === 1 || spark.fuel_level === 2 || spark.fuel_level === 3) {
         await Promise.all([
           loadUrgentTasks(user.id),
           loadAllTasksCount(user.id) // ✅ Pass user.id directly
@@ -1454,7 +1454,7 @@ export default function DailyFlowScreen() {
     } else if (fuelLevel === 2) {
       return "Today's goal is consistency and execution.";
     } else {
-      return "Our goal is to harness your energy and make today count.";
+      return "You're energized and ready! Let's channel this energy into meaningful progress and make today count!";
     }
   }
 
@@ -1469,10 +1469,7 @@ export default function DailyFlowScreen() {
     } else if (fuelLevel === 2) {
       return "These are the events you have on today's calendar. Are there any Big Rocks you would like to add?";
     } else {
-      if (!hasEvents) {
-        return "No scheduled events. Let's create some momentum!";
-      }
-      return "You're energized! Let's make the most of these opportunities.";
+      return "These are the events you have on today's calendar. You're energized - what Big Rocks can you add to maximize this momentum?";
     }
   }
 
@@ -1505,7 +1502,43 @@ export default function DailyFlowScreen() {
             <Text style={styles.fuelEmoji}>{getFuelEmoji(fuelLevel)}</Text>
           )}
         </View>
-        <View style={{ width: 40 }} />
+        {/* TEMPORARY DEV RESET BUTTON */}
+        <TouchableOpacity
+          onPress={async () => {
+            Alert.alert(
+              'Reset Morning Spark?',
+              'This will delete today\'s spark and let you start fresh. (Dev only)',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Reset',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const supabase = getSupabaseClient();
+                      const today = toLocalISOString(new Date()).split('T')[0];
+                      
+                      await supabase
+                        .from('0008-ap-daily-sparks')
+                        .delete()
+                        .eq('user_id', userId)
+                        .gte('created_at', today);
+                      
+                      Alert.alert('Success', 'Morning Spark reset! Redirecting...');
+                      router.replace('/morning-spark');
+                    } catch (error) {
+                      console.error('Reset error:', error);
+                      Alert.alert('Error', 'Failed to reset. Try again.');
+                    }
+                  },
+                },
+              ]
+            );
+          }}
+          style={styles.backButton}
+        >
+          <Trash2 size={20} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
@@ -1519,8 +1552,8 @@ export default function DailyFlowScreen() {
           </Text>
         </View>
 
-        {/* Brain Dump Section - EL1 and EL2 */}
-        {(fuelLevel === 1 || fuelLevel === 2) && (
+        {/* Brain Dump Section - EL1, EL2, and EL3 */}
+        {(fuelLevel === 1 || fuelLevel === 2 || fuelLevel === 3) && (
           <BrainDumpSection
             brainDumpNotes={brainDumpNotes || []}
             colors={colors}
@@ -1530,8 +1563,8 @@ export default function DailyFlowScreen() {
           />
         )}
 
-        {/* Follow Up Section - EL1 and EL2 */}
-        {(fuelLevel === 1 || fuelLevel === 2) && (
+        {/* Follow Up Section - EL1, EL2, and EL3 */}
+        {(fuelLevel === 1 || fuelLevel === 2 || fuelLevel === 3) && (
           <FollowUpSection
             fuelLevel={fuelLevel}
             userId={userId}
@@ -1584,8 +1617,8 @@ export default function DailyFlowScreen() {
           />
         )}
 
-        {/* Collapsible Review Sections - EL1 and EL2 */}
-        {(fuelLevel === 1 || fuelLevel === 2) && (
+        {/* Collapsible Review Sections - EL1, EL2, and EL3 */}
+        {(fuelLevel === 1 || fuelLevel === 2 || fuelLevel === 3) && (
           <>
             {/* Deposit Ideas Section */}
             <View style={styles.section}>
@@ -1647,6 +1680,13 @@ export default function DailyFlowScreen() {
                 </Text>
               )}
               
+              {/* EL3: Add energetic description above Goals */}
+              {fuelLevel === 3 && (
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  You're fired up! Here are your Goal-aligned actions - let's commit to making serious progress today!
+                </Text>
+              )}
+              
               <TouchableOpacity
                 style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 onPress={() => {
@@ -1705,6 +1745,32 @@ export default function DailyFlowScreen() {
               <View style={styles.section}>
                 <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
                   You have {urgentTasks.length} Urgent task{urgentTasks.length !== 1 ? 's' : ''} - knock those out to give yourself some peace of mind, then try to use your creative time to accomplish tasks which are most Important.
+                </Text>
+                
+                <RemainingTasksSection
+                  fuelLevel={fuelLevel}
+                  allTasks={allTasks || []}
+                  allTasksCount={allTasksCount}
+                  colors={colors}
+                  loadingAllTasks={loadingAllTasks}
+                  itemCommitmentStates={itemCommitmentStates}
+                  handleCommitItem={handleCommitItem}
+                  openRescheduleModal={openRescheduleModal}
+                  getVisibleItems={getVisibleItems}
+                  getCommittedItems={getCommittedItems}
+                  getPriorityColor={getPriorityColor}
+                  loadAllTasks={loadAllTasks}
+                  toLocalISOString={toLocalISOString}
+                  urgentTasks={urgentTasks}
+                />
+              </View>
+            )}
+
+            {/* EL3: Tasks Section with Energetic Messaging */}
+            {fuelLevel === 3 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  You have {urgentTasks.length} Urgent task{urgentTasks.length !== 1 ? 's' : ''} - blast through those, then tackle your most Important work while you're in the zone!
                 </Text>
                 
                 <RemainingTasksSection
