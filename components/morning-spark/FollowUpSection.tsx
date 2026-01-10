@@ -333,11 +333,18 @@ export function FollowUpSection({
 
   if (followUps.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={[styles.emptyIcon, { fontSize: 48 }]}>✅</Text>
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          All clear! No follow-ups for today.
-        </Text>
+      <View style={styles.section}>
+        <TouchableOpacity
+          style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          disabled={true}
+        >
+          <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
+            🔔 Follow Up (0)
+          </Text>
+          <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
+            ▶
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -540,6 +547,25 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  collapsibleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  collapsibleArrow: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   collapsedContainer: {
     padding: 20,
