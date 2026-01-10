@@ -1010,7 +1010,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             reflection_type: 'daily',
             date: formatLocalDate(new Date()),
             archived: false,
-            follow_up: formData.followUpEnabled,
+            follow_up: formData.followUpEnabled ? formData.followUpDate : null,
             follow_up_date: formData.followUpEnabled ? formData.followUpDate : null,
             daily_rose: formData.reflectionMode === 'rose',
             daily_thorn: formData.reflectionMode === 'thorn',
