@@ -173,13 +173,13 @@ export default function DailyFlowScreen() {
       // Load follow-ups
       await loadFollowUps(user.id);
       
-      // Load counts for EL1 dropdowns (don't load full data yet)
-      if (spark.fuel_level === 1) {
+      // Load counts for EL1 and EL2 dropdowns (don't load full data yet)
+      if (spark.fuel_level === 1 || spark.fuel_level === 2) {
         await loadDropdownCounts(user.id);
       }
 
-      // Load urgent tasks and task count for EL1
-      if (spark.fuel_level === 1) {
+      // Load urgent tasks and task count for EL1 and EL2
+      if (spark.fuel_level === 1 || spark.fuel_level === 2) {
         await Promise.all([
           loadUrgentTasks(user.id),
           loadAllTasksCount(user.id) // ✅ Pass user.id directly
@@ -1452,7 +1452,7 @@ export default function DailyFlowScreen() {
     if (fuelLevel === 1) {
       return 'Our goal is to reduce overwhelm and prevent spirals.';
     } else if (fuelLevel === 2) {
-      return 'Our goal is to maintain steady momentum without burning out.';
+      return "Today's goal is consistency and execution.";
     } else {
       return "Our goal is to harness your energy and make today count.";
     }
@@ -1467,10 +1467,7 @@ export default function DailyFlowScreen() {
       }
       return 'Should we reschedule any of these to protect your energy?';
     } else if (fuelLevel === 2) {
-      if (!hasEvents) {
-        return "Your calendar is clear. You can add intentions below.";
-      }
-      return "Here's your schedule. Focus on steady progress.";
+      return "These are the events you have on today's calendar. Are there any Big Rocks you would like to add?";
     } else {
       if (!hasEvents) {
         return "No scheduled events. Let's create some momentum!";
@@ -1522,6 +1519,28 @@ export default function DailyFlowScreen() {
           </Text>
         </View>
 
+        {/* Brain Dump Section - EL1 and EL2 */}
+        {(fuelLevel === 1 || fuelLevel === 2) && (
+          <BrainDumpSection
+            brainDumpNotes={brainDumpNotes || []}
+            colors={colors}
+            loadingBrainDump={loadingBrainDump}
+            handleDeferNote={handleDeferNote}
+            handleFollowUpNote={handleFollowUpNote}
+          />
+        )}
+
+        {/* Follow Up Section - EL1 and EL2 */}
+        {(fuelLevel === 1 || fuelLevel === 2) && (
+          <FollowUpSection
+            followUpItems={followUpItems || []}
+            colors={colors}
+            loadingFollowUp={loadingFollowUp}
+            handleCompleteFollowUp={handleCompleteFollowUp}
+            handleSnoozeFollowUp={handleSnoozeFollowUp}
+          />
+        )}
+
         {/* Scheduled Events Section */}
         <ScheduleSection
           events={actionsData?.today || []}
@@ -1534,55 +1553,41 @@ export default function DailyFlowScreen() {
         />
 
         {/* Urgent Tasks Section - EL1 Only */}
-        <UrgentTasksSection
-          fuelLevel={fuelLevel}
-          urgentTasks={urgentTasks || []}
-          colors={colors}
-          itemCommitmentStates={itemCommitmentStates}
-          handleCommitItem={handleCommitItem}
-          openRescheduleModal={openRescheduleModal}
-          getVisibleItems={getVisibleItems}
-          getCommittedItems={getCommittedItems}
-          getPriorityColor={getPriorityColor}
-        />
-
-        {/* Brain Dump Section */}
-        <BrainDumpSection
-          brainDumpNotes={brainDumpNotes || []}
-          colors={colors}
-          loadingBrainDump={loadingBrainDump}
-          handleDeferNote={handleDeferNote}
-          handleFollowUpNote={handleFollowUpNote}
-        />
-
-        {/* Follow Up Section */}
-        <FollowUpSection
-          followUpItems={followUpItems || []}
-          colors={colors}
-          loadingFollowUp={loadingFollowUp}
-          handleCompleteFollowUp={handleCompleteFollowUp}
-          handleSnoozeFollowUp={handleSnoozeFollowUp}
-        />
+        {fuelLevel === 1 && (
+          <UrgentTasksSection
+            fuelLevel={fuelLevel}
+            urgentTasks={urgentTasks || []}
+            colors={colors}
+            itemCommitmentStates={itemCommitmentStates}
+            handleCommitItem={handleCommitItem}
+            openRescheduleModal={openRescheduleModal}
+            getVisibleItems={getVisibleItems}
+            getCommittedItems={getCommittedItems}
+            getPriorityColor={getPriorityColor}
+          />
+        )}
 
         {/* Remaining Tasks Section - EL1 Only */}
-        <RemainingTasksSection
-  fuelLevel={fuelLevel}
-  allTasks={allTasks || []}
-  allTasksCount={allTasksCount} // ✅ NEW PROP
-  colors={colors}
-  loadingAllTasks={loadingAllTasks}
-  itemCommitmentStates={itemCommitmentStates}
-  handleCommitItem={handleCommitItem}
-  openRescheduleModal={openRescheduleModal}
-  getVisibleItems={getVisibleItems}
-  getCommittedItems={getCommittedItems}
-  getPriorityColor={getPriorityColor}
-  loadAllTasks={loadAllTasks}
-  toLocalISOString={toLocalISOString}
-/>
-
-        {/* EL1 Only: Collapsible Review Sections */}
         {fuelLevel === 1 && (
+          <RemainingTasksSection
+            fuelLevel={fuelLevel}
+            allTasks={allTasks || []}
+            allTasksCount={allTasksCount}
+            colors={colors}
+            loadingAllTasks={loadingAllTasks}
+            itemCommitmentStates={itemCommitmentStates}
+            handleCommitItem={handleCommitItem}
+            openRescheduleModal={openRescheduleModal}
+            getVisibleItems={getVisibleItems}
+            getCommittedItems={getCommittedItems}
+            getPriorityColor={getPriorityColor}
+            loadAllTasks={loadAllTasks}
+            toLocalISOString={toLocalISOString}
+          />
+        )}
+
+        {/* Collapsible Review Sections - EL1 and EL2 */}
+        {(fuelLevel === 1 || fuelLevel === 2) && (
           <>
             {/* Deposit Ideas Section */}
             <View style={styles.section}>
@@ -1637,6 +1642,13 @@ export default function DailyFlowScreen() {
 
             {/* Goals Section */}
             <View style={styles.section}>
+              {/* EL2: Add description above Goals */}
+              {fuelLevel === 2 && (
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  Here are the actions you list as supporting your Goals - click to commit to today's contract.
+                </Text>
+              )}
+              
               <TouchableOpacity
                 style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 onPress={() => {
@@ -1689,6 +1701,32 @@ export default function DailyFlowScreen() {
                 )
               )}
             </View>
+
+            {/* EL2: Tasks Section with Urgent at Top */}
+            {fuelLevel === 2 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  You have {urgentTasks.length} Urgent task{urgentTasks.length !== 1 ? 's' : ''} - knock those out to give yourself some peace of mind, then try to use your creative time to accomplish tasks which are most Important.
+                </Text>
+                
+                <RemainingTasksSection
+                  fuelLevel={fuelLevel}
+                  allTasks={allTasks || []}
+                  allTasksCount={allTasksCount}
+                  colors={colors}
+                  loadingAllTasks={loadingAllTasks}
+                  itemCommitmentStates={itemCommitmentStates}
+                  handleCommitItem={handleCommitItem}
+                  openRescheduleModal={openRescheduleModal}
+                  getVisibleItems={getVisibleItems}
+                  getCommittedItems={getCommittedItems}
+                  getPriorityColor={getPriorityColor}
+                  loadAllTasks={loadAllTasks}
+                  toLocalISOString={toLocalISOString}
+                  urgentTasks={urgentTasks}
+                />
+              </View>
+            )}
 
             {/* Delegations Section */}
             <View style={styles.section}>
