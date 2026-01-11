@@ -22,10 +22,11 @@ import { Camera, Upload, User, HardDrive, RefreshCw, Clock } from 'lucide-react-
 import { TimePickerDropdown } from '@/components/tasks/TimePickerDropdown';
 import { getRitualSettings, updateRitualSettings, getDefaultRitualSettings, RitualSettings, RitualType } from '@/lib/ritualUtils';
 import { getUserPreferences, updateUserPreferences, UserPreferences } from '@/lib/userPreferences';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID';
 const redirectUri = AuthSession.makeRedirectUri({
   scheme: 'myapp',
 });
@@ -82,70 +83,66 @@ export default function SettingsScreen() {
     }
   );
 
-  *useEffect(() => {
-  const handleOAuthResponse = async () => {
-    if (response?.type === 'success') {
-      try {
-        setIsConnectingGoogle(true);
-        const { access_token, refresh_token, expires_in } = response.params;
-        
-        const supabase = getSupabaseClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('No user found');
+  useEffect(() => {
+    const handleOAuthResponse = async () => {
+      if (response?.type === 'success') {
+        try {
+          setIsConnectingGoogle(true);
+          const { access_token, refresh_token, expires_in } = response.params;
+          
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) throw new Error('No user found');
 
-        // Get user's email from Google
-        const { getGoogleUserEmail, saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
-          await import('@/lib/googleCalendarSync');
-        
-        const userEmail = await getGoogleUserEmail(access_token);
-        if (!userEmail) throw new Error('Could not retrieve Google account email');
+          // Get user's email from Google
+          const { getGoogleUserEmail, saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
+            await import('@/lib/googleCalendarSync');
+          
+          const userEmail = await getGoogleUserEmail(access_token);
+          if (!userEmail) throw new Error('Could not retrieve Google account email');
 
-        // Save connection to database
-        const saveResult = await saveGoogleCalendarConnection(
-          user.id,
-          access_token,
-          refresh_token,
-          expires_in || 3600,
-          userEmail
-        );
-
-        if (!saveResult.success) {
-          throw new Error(saveResult.error);
-        }
-
-        // Immediately sync events
-        Alert.alert(
-          'Connected!',
-          'Syncing your Google Calendar events...',
-          [{ text: 'OK' }]
-        );
-
-        const syncResult = await syncGoogleCalendarEvents(user.id);
-        
-        if (syncResult.success) {
-          setGoogleAccessToken(access_token);
-          setSyncEnabled(true);
-          Alert.alert(
-            'Sync Complete!',
-            `Imported ${syncResult.eventsCreated} new events from Google Calendar.`
+          // Save connection to database
+          const saveResult = await saveGoogleCalendarConnection(
+            user.id,
+            access_token,
+            refresh_token,
+            expires_in || 3600,
+            userEmail
           );
-        } else {
-          Alert.alert('Sync Warning', syncResult.error || 'Could not sync events');
-        }
-      } catch (error) {
-        console.error('[Settings] OAuth error:', error);
-        Alert.alert('Error', (error as Error).message);
-      } finally {
-        setIsConnectingGoogle(false);
-      }
-    } else if (response?.type === 'error') {
-      setIsConnectingGoogle(false);
-      Alert.alert('Error', 'Failed to connect to Google Calendar');
-    }
-  };
 
-    handleOAuthResponse();  // ← ADD THIS LINE
-}, [response]);           // ← ADD THIS LINE
+          if (!saveResult.success) {
+            throw new Error(saveResult.error);
+          }
+
+          // Immediately sync events
+          const syncResult = await syncGoogleCalendarEvents(user.id);
+          
+          if (syncResult.success) {
+            setGoogleAccessToken(access_token);
+            setSyncEnabled(true);
+            Alert.alert(
+              'Sync Complete!',
+              `Connected to ${userEmail}\n\nImported ${syncResult.eventsCreated} new events from Google Calendar.`
+            );
+            // Refresh calendar view
+            eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+          } else {
+            Alert.alert('Sync Warning', syncResult.error || 'Could not sync events');
+          }
+        } catch (error) {
+          console.error('[Settings] OAuth error:', error);
+          Alert.alert('Error', (error as Error).message);
+        } finally {
+          setIsConnectingGoogle(false);
+        }
+      } else if (response?.type === 'error') {
+        setIsConnectingGoogle(false);
+        Alert.alert('Error', 'Failed to connect to Google Calendar');
+      }
+    };
+
+    handleOAuthResponse();
+  }, [response]);
 
   const themeColorOptions = [
     { name: 'Blue', value: '#0078d4' },
@@ -209,7 +206,6 @@ export default function SettingsScreen() {
       console.error('Error fetching profile:', error);
     }
   };
-
 
   useEffect(() => {
     fetchProfile();
@@ -297,8 +293,7 @@ export default function SettingsScreen() {
       const response = await fetch(uri);
       const blob = await response.blob();
 
-      // Validate file size (5MB limit for profile images)
-      const MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+      const MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024;
       if (blob.size > MAX_PROFILE_IMAGE_SIZE) {
         Alert.alert(
           'File Size Limit Exceeded',
@@ -451,14 +446,12 @@ export default function SettingsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
 
-      // Build a clean payload with only the fields we want to update
       const payload: any = {
         id: user.id,
         email: user.email || '',
         updated_at: toLocalISOString(new Date()),
       };
 
-      // Add fields from current profile state
       if (profile.first_name !== undefined) payload.first_name = profile.first_name;
       if (profile.last_name !== undefined) payload.last_name = profile.last_name;
       if (profile.profile_image !== undefined) payload.profile_image = profile.profile_image;
@@ -473,26 +466,17 @@ export default function SettingsScreen() {
         };
       }
 
-      // Override with any updates
       Object.keys(updates).forEach(key => {
         payload[key] = updates[key as keyof typeof profile];
       });
-
-      console.log('[Settings] Updating profile with payload:', JSON.stringify(payload, null, 2));
 
       const { error, data } = await supabase
         .from('0008-ap-users')
         .upsert(payload, { onConflict: 'id' })
         .select();
 
-      if (error) {
-        console.error('[Settings] Error updating profile:', error);
-        console.error('[Settings] Error details:', JSON.stringify(error, null, 2));
-        console.error('[Settings] Failed payload was:', JSON.stringify(payload, null, 2));
-        throw error;
-      }
+      if (error) throw error;
 
-      console.log('[Settings] Profile updated successfully. Database response:', JSON.stringify(data, null, 2));
       setProfile(prev => ({ ...prev, ...updates }));
 
       if (updates.profile_image) {
@@ -504,7 +488,6 @@ export default function SettingsScreen() {
           if (publicUrlData?.publicUrl) {
             setProfileImageUrl(`${publicUrlData.publicUrl}?cb=${Date.now()}`);
           } else {
-            console.error('No public URL returned in updateProfile');
             setProfileImageUrl(null);
           }
         } catch (imageError) {
@@ -543,25 +526,50 @@ export default function SettingsScreen() {
   };
 
   const disconnectGoogle = async () => {
-  try {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    Alert.alert(
+      'Disconnect Google Calendar?',
+      'This will remove all synced events from your calendar.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const supabase = getSupabaseClient();
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) return;
 
-    const { disconnectGoogleCalendar } = await import('@/lib/googleCalendarSync');
-    const result = await disconnectGoogleCalendar(user.id);
-    
-    if (result.success) {
-      setGoogleAccessToken(null);
-      setSyncEnabled(false);
-      Alert.alert('Success', 'Disconnected from Google Calendar');
-    } else {
-      Alert.alert('Error', result.error || 'Failed to disconnect');
-    }
-  } catch (error) {
-    Alert.alert('Error', (error as Error).message);
-  }
-};
+              // Delete all Google Calendar events
+              await supabase
+                .from('0008-ap-tasks')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('external_source', 'google');
+
+              // Disconnect the calendar connection
+              const { disconnectGoogleCalendar } = await import('@/lib/googleCalendarSync');
+              const result = await disconnectGoogleCalendar(user.id);
+              
+              if (result.success) {
+                setGoogleAccessToken(null);
+                setSyncEnabled(false);
+                Alert.alert('Success', 'Disconnected from Google Calendar');
+                eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+              } else {
+                Alert.alert('Error', result.error || 'Failed to disconnect');
+              }
+            } catch (error) {
+              Alert.alert('Error', (error as Error).message);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const convertTo12Hour = (time24: string): string => {
     const [hours, minutes] = time24.split(':').map(Number);
@@ -590,7 +598,6 @@ export default function SettingsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Profile</Text>
 
-          {/* Profile Photo */}
           <View style={styles.profilePhotoSection}>
             <Text style={[styles.fieldLabel, { color: colors.text }]}>Profile Photo</Text>
 
@@ -636,7 +643,6 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Profile Information */}
           <View style={styles.profileField}>
             <Text style={[styles.fieldLabel, { color: colors.text }]}>First Name</Text>
             <TextInput
@@ -659,7 +665,6 @@ export default function SettingsScreen() {
             />
           </View>
 
-          {/* Personalization */}
           <View style={[styles.colorField, { marginTop: 24 }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Personalization</Text>
             <Text style={[styles.fieldLabel, { color: colors.text }]}>Theme Color</Text>
@@ -1185,87 +1190,85 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Google Calendar Section */}
-<View style={[styles.section, { backgroundColor: colors.surface }]}>
-  <Text style={[styles.sectionTitle, { color: colors.text }]}>Google Calendar Integration</Text>
+        {/* Google Calendar Integration Section */}
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Google Calendar Integration</Text>
 
-  <View style={styles.settingRow}>
-    <View style={styles.settingInfo}>
-      <Text style={[styles.settingLabel, { color: colors.text }]}>Google Calendar</Text>
-      <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-        {googleAccessToken ? 'Connected' : 'Not connected'}
-      </Text>
-    </View>
-    {googleAccessToken ? (
-      <TouchableOpacity
-        style={[styles.connectButton, styles.disconnectButton]}
-        onPress={disconnectGoogle}
-      >
-        <Text style={styles.disconnectButtonText}>Disconnect</Text>
-      </TouchableOpacity>
-    ) : (
-      <TouchableOpacity
-        style={[styles.connectButton, { backgroundColor: colors.primary }]}
-        onPress={connectToGoogle}
-        disabled={isConnectingGoogle}
-      >
-        <Text style={styles.connectButtonText}>
-          {isConnectingGoogle ? 'Connecting...' : 'Connect'}
-        </Text>
-      </TouchableOpacity>
-    )}
-  </View>
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Google Calendar</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                {googleAccessToken ? 'Connected' : 'Not connected'}
+              </Text>
+            </View>
+            {googleAccessToken ? (
+              <TouchableOpacity
+                style={[styles.connectButton, styles.disconnectButton]}
+                onPress={disconnectGoogle}
+              >
+                <Text style={styles.disconnectButtonText}>Disconnect</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.connectButton, { backgroundColor: colors.primary }]}
+                onPress={connectToGoogle}
+                disabled={isConnectingGoogle}
+              >
+                <Text style={styles.connectButtonText}>
+                  {isConnectingGoogle ? 'Connecting...' : 'Connect'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-  {googleAccessToken && (
-    <>
-      <View style={styles.settingRow}>
-        <Text style={[styles.settingLabel, { color: colors.text }]}>Sync Events</Text>
-        <Switch
-          value={syncEnabled}
-          onValueChange={setSyncEnabled}
-          trackColor={{ false: colors.border, true: colors.primary }}
-          thumbColor={syncEnabled ? colors.surface : colors.surface}
-        />
-      </View>
+          {googleAccessToken && (
+            <>
+              <View style={styles.settingRow}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Sync Events</Text>
+                <Switch
+                  value={syncEnabled}
+                  onValueChange={setSyncEnabled}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={syncEnabled ? colors.surface : colors.surface}
+                />
+              </View>
 
-      {/* ADD THIS: Manual Sync Button */}
-      {syncEnabled && (
-        <TouchableOpacity
-          style={[styles.settingButton, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }]}
-          onPress={async () => {
-            try {
-              const supabase = getSupabaseClient();
-              const { data: { user } } = await supabase.auth.getUser();
-              if (!user) return;
+              {syncEnabled && (
+                <TouchableOpacity
+                  style={[styles.settingButton, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }]}
+                  onPress={async () => {
+                    try {
+                      const supabase = getSupabaseClient();
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) return;
 
-              Alert.alert('Syncing...', 'Fetching events from Google Calendar');
-              
-              const { syncGoogleCalendarEvents } = await import('@/lib/googleCalendarSync');
-              const result = await syncGoogleCalendarEvents(user.id);
-              
-              if (result.success) {
-                Alert.alert(
-                  'Sync Complete',
-                  `Fetched: ${result.eventsFetched} events\nCreated: ${result.eventsCreated}\nUpdated: ${result.eventsUpdated}\nSkipped: ${result.eventsSkipped}`
-                );
-                // Refresh the calendar view
-                eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
-              } else {
-                Alert.alert('Sync Failed', result.error || 'Unknown error');
-              }
-            } catch (error) {
-              Alert.alert('Error', (error as Error).message);
-            }
-          }}
-        >
-          <Text style={[styles.settingButtonText, { color: colors.primary }]}>
-            🔄 Sync Now
-          </Text>
-        </TouchableOpacity>
-      )}
-    </>
-  )}
-</View>
+                      Alert.alert('Syncing...', 'Fetching events from Google Calendar');
+                      
+                      const { syncGoogleCalendarEvents } = await import('@/lib/googleCalendarSync');
+                      const result = await syncGoogleCalendarEvents(user.id);
+                      
+                      if (result.success) {
+                        Alert.alert(
+                          'Sync Complete',
+                          `Fetched: ${result.eventsFetched} events\nCreated: ${result.eventsCreated}\nUpdated: ${result.eventsUpdated}\nSkipped: ${result.eventsSkipped}`
+                        );
+                        eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+                      } else {
+                        Alert.alert('Sync Failed', result.error || 'Unknown error');
+                      }
+                    } catch (error) {
+                      Alert.alert('Error', (error as Error).message);
+                    }
+                  }}
+                >
+                  <Text style={[styles.settingButtonText, { color: colors.primary }]}>
+                    🔄 Sync Now
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
 
         {/* Notifications Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
