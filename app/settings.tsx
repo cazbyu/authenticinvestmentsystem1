@@ -28,7 +28,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID';
 const redirectUri = AuthSession.makeRedirectUri({
-  scheme: 'myapp',
+  scheme: 'authenticinvestment',
 });
 
 export default function SettingsScreen() {
