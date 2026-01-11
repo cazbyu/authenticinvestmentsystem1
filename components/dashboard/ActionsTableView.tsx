@@ -14,6 +14,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import { ActFilter } from './ActFilterButtons';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 interface ActionItem {
   id: string;
@@ -94,6 +95,26 @@ export function ActionsTableView({
   useEffect(() => {
     loadActions();
   }, [filter, period, userId]);
+
+  // Event bus listeners for real-time updates
+  useEffect(() => {
+    const handleRefresh = () => {
+      console.log('[ActionsTableView] Event received, refreshing...');
+      loadActions();
+    };
+
+    eventBus.on(EVENTS.TASK_UPDATED, handleRefresh);
+    eventBus.on(EVENTS.TASK_DELETED, handleRefresh);
+    eventBus.on(EVENTS.TASK_CREATED, handleRefresh);
+    eventBus.on(EVENTS.REFRESH_ALL_TASKS, handleRefresh);
+
+    return () => {
+      eventBus.off(EVENTS.TASK_UPDATED, handleRefresh);
+      eventBus.off(EVENTS.TASK_DELETED, handleRefresh);
+      eventBus.off(EVENTS.TASK_CREATED, handleRefresh);
+      eventBus.off(EVENTS.REFRESH_ALL_TASKS, handleRefresh);
+    };
+  }, []);
 
   const loadActions = async () => {
     try {
@@ -335,8 +356,7 @@ export function ActionsTableView({
   const handleComplete = (action: ActionItem) => {
     if (onComplete) {
       onComplete(action.id);
-      loadActions();
-      if (onRefresh) onRefresh();
+      // Event bus will trigger refresh - no need to call loadActions() here
     }
   };
 
@@ -361,8 +381,7 @@ export function ActionsTableView({
           onPress: () => {
             if (onDelete) {
               onDelete(action.id);
-              loadActions();
-              if (onRefresh) onRefresh();
+              // Event bus will trigger refresh - no need to call loadActions() here
             }
           },
         },
