@@ -542,11 +542,26 @@ export default function SettingsScreen() {
     await promptAsync();
   };
 
-  const disconnectGoogle = () => {
-    setGoogleAccessToken(null);
-    setSyncEnabled(false);
-    Alert.alert('Success', 'Disconnected from Google Calendar');
-  };
+  const disconnectGoogle = async () => {
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { disconnectGoogleCalendar } = await import('@/lib/googleCalendarSync');
+    const result = await disconnectGoogleCalendar(user.id);
+    
+    if (result.success) {
+      setGoogleAccessToken(null);
+      setSyncEnabled(false);
+      Alert.alert('Success', 'Disconnected from Google Calendar');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to disconnect');
+    }
+  } catch (error) {
+    Alert.alert('Error', (error as Error).message);
+  }
+};
 
   const convertTo12Hour = (time24: string): string => {
     const [hours, minutes] = time24.split(':').map(Number);
