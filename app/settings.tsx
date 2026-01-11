@@ -82,7 +82,7 @@ export default function SettingsScreen() {
     }
   );
 
-  useEffect(() => {
+  *useEffect(() => {
   const handleOAuthResponse = async () => {
     if (response?.type === 'success') {
       try {
@@ -144,8 +144,8 @@ export default function SettingsScreen() {
     }
   };
 
-  handleOAuthResponse();
-}, [response]);
+    handleOAuthResponse();  // ← ADD THIS LINE
+}, [response]);           // ← ADD THIS LINE
 
   const themeColorOptions = [
     { name: 'Blue', value: '#0078d4' },
