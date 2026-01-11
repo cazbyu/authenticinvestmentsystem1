@@ -1186,48 +1186,86 @@ export default function SettingsScreen() {
         </View>
 
         {/* Google Calendar Section */}
-        <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Google Calendar Integration</Text>
+<View style={[styles.section, { backgroundColor: colors.surface }]}>
+  <Text style={[styles.sectionTitle, { color: colors.text }]}>Google Calendar Integration</Text>
 
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>Google Calendar</Text>
-              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                {googleAccessToken ? 'Connected' : 'Not connected'}
-              </Text>
-            </View>
-            {googleAccessToken ? (
-              <TouchableOpacity
-                style={[styles.connectButton, styles.disconnectButton]}
-                onPress={disconnectGoogle}
-              >
-                <Text style={styles.disconnectButtonText}>Disconnect</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.connectButton, { backgroundColor: colors.primary }]}
-                onPress={connectToGoogle}
-                disabled={isConnectingGoogle}
-              >
-                <Text style={styles.connectButtonText}>
-                  {isConnectingGoogle ? 'Connecting...' : 'Connect'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+  <View style={styles.settingRow}>
+    <View style={styles.settingInfo}>
+      <Text style={[styles.settingLabel, { color: colors.text }]}>Google Calendar</Text>
+      <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+        {googleAccessToken ? 'Connected' : 'Not connected'}
+      </Text>
+    </View>
+    {googleAccessToken ? (
+      <TouchableOpacity
+        style={[styles.connectButton, styles.disconnectButton]}
+        onPress={disconnectGoogle}
+      >
+        <Text style={styles.disconnectButtonText}>Disconnect</Text>
+      </TouchableOpacity>
+    ) : (
+      <TouchableOpacity
+        style={[styles.connectButton, { backgroundColor: colors.primary }]}
+        onPress={connectToGoogle}
+        disabled={isConnectingGoogle}
+      >
+        <Text style={styles.connectButtonText}>
+          {isConnectingGoogle ? 'Connecting...' : 'Connect'}
+        </Text>
+      </TouchableOpacity>
+    )}
+  </View>
 
-          {googleAccessToken && (
-            <View style={styles.settingRow}>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>Sync Events</Text>
-              <Switch
-                value={syncEnabled}
-                onValueChange={setSyncEnabled}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={syncEnabled ? colors.surface : colors.surface}
-              />
-            </View>
-          )}
-        </View>
+  {googleAccessToken && (
+    <>
+      <View style={styles.settingRow}>
+        <Text style={[styles.settingLabel, { color: colors.text }]}>Sync Events</Text>
+        <Switch
+          value={syncEnabled}
+          onValueChange={setSyncEnabled}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={syncEnabled ? colors.surface : colors.surface}
+        />
+      </View>
+
+      {/* ADD THIS: Manual Sync Button */}
+      {syncEnabled && (
+        <TouchableOpacity
+          style={[styles.settingButton, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }]}
+          onPress={async () => {
+            try {
+              const supabase = getSupabaseClient();
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) return;
+
+              Alert.alert('Syncing...', 'Fetching events from Google Calendar');
+              
+              const { syncGoogleCalendarEvents } = await import('@/lib/googleCalendarSync');
+              const result = await syncGoogleCalendarEvents(user.id);
+              
+              if (result.success) {
+                Alert.alert(
+                  'Sync Complete',
+                  `Fetched: ${result.eventsFetched} events\nCreated: ${result.eventsCreated}\nUpdated: ${result.eventsUpdated}\nSkipped: ${result.eventsSkipped}`
+                );
+                // Refresh the calendar view
+                eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+              } else {
+                Alert.alert('Sync Failed', result.error || 'Unknown error');
+              }
+            } catch (error) {
+              Alert.alert('Error', (error as Error).message);
+            }
+          }}
+        >
+          <Text style={[styles.settingButtonText, { color: colors.primary }]}>
+            🔄 Sync Now
+          </Text>
+        </TouchableOpacity>
+      )}
+    </>
+  )}
+</View>
 
         {/* Notifications Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
