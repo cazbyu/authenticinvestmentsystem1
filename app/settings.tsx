@@ -83,16 +83,69 @@ export default function SettingsScreen() {
   );
 
   useEffect(() => {
+  const handleOAuthResponse = async () => {
     if (response?.type === 'success') {
-      const { access_token } = response.params;
-      setGoogleAccessToken(access_token);
-      setIsConnectingGoogle(false);
-      Alert.alert('Success', 'Connected to Google Calendar!');
+      try {
+        setIsConnectingGoogle(true);
+        const { access_token, refresh_token, expires_in } = response.params;
+        
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('No user found');
+
+        // Get user's email from Google
+        const { getGoogleUserEmail, saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
+          await import('@/lib/googleCalendarSync');
+        
+        const userEmail = await getGoogleUserEmail(access_token);
+        if (!userEmail) throw new Error('Could not retrieve Google account email');
+
+        // Save connection to database
+        const saveResult = await saveGoogleCalendarConnection(
+          user.id,
+          access_token,
+          refresh_token,
+          expires_in || 3600,
+          userEmail
+        );
+
+        if (!saveResult.success) {
+          throw new Error(saveResult.error);
+        }
+
+        // Immediately sync events
+        Alert.alert(
+          'Connected!',
+          'Syncing your Google Calendar events...',
+          [{ text: 'OK' }]
+        );
+
+        const syncResult = await syncGoogleCalendarEvents(user.id);
+        
+        if (syncResult.success) {
+          setGoogleAccessToken(access_token);
+          setSyncEnabled(true);
+          Alert.alert(
+            'Sync Complete!',
+            `Imported ${syncResult.eventsCreated} new events from Google Calendar.`
+          );
+        } else {
+          Alert.alert('Sync Warning', syncResult.error || 'Could not sync events');
+        }
+      } catch (error) {
+        console.error('[Settings] OAuth error:', error);
+        Alert.alert('Error', (error as Error).message);
+      } finally {
+        setIsConnectingGoogle(false);
+      }
     } else if (response?.type === 'error') {
       setIsConnectingGoogle(false);
       Alert.alert('Error', 'Failed to connect to Google Calendar');
     }
-  }, [response]);
+  };
+
+  handleOAuthResponse();
+}, [response]);
 
   const themeColorOptions = [
     { name: 'Blue', value: '#0078d4' },
