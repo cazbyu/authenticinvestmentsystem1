@@ -7,6 +7,7 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 
 const BalanceWheelChart = lazy(() => import('./BalanceWheelChart').then(module => ({ default: module.BalanceWheelChart })));
 const BalanceBarChart = lazy(() => import('./BalanceBarChart').then(module => ({ default: module.BalanceBarChart })));
+const BalancePieChart = lazy(() => import('./BalancePieChart').then(module => ({ default: module.BalancePieChart })));
 
 interface Domain {
   id: string;
@@ -25,7 +26,7 @@ interface BalanceScoresViewProps {
 }
 
 export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
-  const [activeChartView, setActiveChartView] = useState<'wheel' | 'bar'>('wheel');
+  const [activeChartView, setActiveChartView] = useState<'wheel' | 'bar' | 'pie'>('wheel');
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'all'>('week');
   const [calculationMode, setCalculationMode] = useState<'count' | 'score'>('count');
   const [domainScores, setDomainScores] = useState<DomainScore[]>([]);
@@ -83,9 +84,10 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
 
       let tasksQuery = supabase
         .from('0008-ap-tasks')
-        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_authentic_deposit, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
         .eq('user_id', user.id)
         .eq('status', 'completed')
+        .is('deleted_at', null)
         .not('completed_at', 'is', null);
 
       if (dateFilter) {
@@ -293,6 +295,14 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
               Bar Graph
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chartToggleButton, activeChartView === 'pie' && styles.activeChartToggle]}
+            onPress={() => setActiveChartView('pie')}
+          >
+            <Text style={[styles.chartToggleText, activeChartView === 'pie' && styles.activeChartToggleText]}>
+              Pie Chart
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.timeRangeGroup}>
@@ -356,7 +366,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
               <BalanceWheelChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
             </ChartErrorBoundary>
           </Suspense>
-        ) : (
+        ) : activeChartView === 'bar' ? (
           <Suspense fallback={
             <View style={styles.chartLoadingContainer}>
               <ActivityIndicator size="large" color="#0078d4" />
@@ -365,6 +375,17 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
           }>
             <ChartErrorBoundary>
               <BalanceBarChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
+            </ChartErrorBoundary>
+          </Suspense>
+        ) : (
+          <Suspense fallback={
+            <View style={styles.chartLoadingContainer}>
+              <ActivityIndicator size="large" color="#0078d4" />
+              <Text style={styles.chartLoadingText}>Loading chart...</Text>
+            </View>
+          }>
+            <ChartErrorBoundary>
+              <BalancePieChart data={domainScores} maxScore={maxScore} unit={calculationMode === 'count' ? 'tasks' : 'points'} />
             </ChartErrorBoundary>
           </Suspense>
         )}

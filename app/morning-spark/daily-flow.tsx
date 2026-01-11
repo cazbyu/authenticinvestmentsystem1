@@ -1,0 +1,2784 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+  Alert,
+  Platform,
+  Modal,
+  Animated,
+} from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { ArrowLeft, CheckSquare, Calendar, Check, Trash2, X, ChevronRight, ChevronLeft, Plus } from 'lucide-react-native';
+import { useTheme } from '@/contexts/ThemeContext';
+import { getSupabaseClient } from '@/lib/supabase';
+import { toLocalISOString } from '@/lib/dateUtils';
+import {
+  checkTodaysSpark,
+  getScheduledActions,
+  formatTimeDisplay,
+  ScheduledAction,
+  ScheduledActionsData,
+  getFuelEmoji,
+  getFuelColor,
+} from '@/lib/sparkUtils';
+import { calculateTaskPoints } from '@/lib/taskUtils';
+import { MindsetCapture } from '@/components/morning-spark/MindsetCapture';
+import { DraggableFab } from '@/components/DraggableFab';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
+
+// Import Morning Spark Components
+import { ScheduleSection } from '@/components/morning-spark/ScheduleSection';
+import { UrgentTasksSection } from '@/components/morning-spark/UrgentTasksSection';
+import { BrainDumpSection } from '@/components/morning-spark/BrainDumpSection';
+import { FollowUpSection } from '@/components/morning-spark/FollowUpSection';
+import { RemainingTasksSection } from '@/components/morning-spark/RemainingTasksSection';
+import { FinalCommitmentSection } from '@/components/morning-spark/FinalCommitmentSection';
+import { ReflectionsSection } from '@/components/morning-spark/ReflectionsSection';
+import { TodaysMenuModal } from '@/components/morning-spark/TodaysMenuModal';
+
+export default function DailyFlowScreen() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const [loading, setLoading] = useState(true);
+  const [completing, setCompleting] = useState(false);
+  const [fuelLevel, setFuelLevel] = useState<1 | 2 | 3 | null>(null);
+  const [sparkId, setSparkId] = useState<string | null>(null);
+  const [actionsData, setActionsData] = useState<ScheduledActionsData | null>(null);
+  const [userId, setUserId] = useState<string>('');
+  const [mindsetPoints, setMindsetPoints] = useState(0);
+  const [urgentTasks, setUrgentTasks] = useState<ScheduledAction[]>([]);
+  const [allTasks, setAllTasks] = useState<ScheduledAction[]>([]);
+   const [allTasksCount, setAllTasksCount] = useState(0);
+  const [showAllTasks, setShowAllTasks] = useState(false);
+  const [loadingAllTasks, setLoadingAllTasks] = useState(false);
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustType, setAdjustType] = useState<'events' | 'tasks'>('events');
+  
+  // Adjustment bins
+  const [itemsInKeepZone, setItemsInKeepZone] = useState<ScheduledAction[]>([]);
+  const [itemsInRescheduleZone, setItemsInRescheduleZone] = useState<ScheduledAction[]>([]);
+  const [itemsInCancelZone, setItemsInCancelZone] = useState<ScheduledAction[]>([]);
+  const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
+  const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  
+  // Brain Dump state
+  const [brainDumpNotes, setBrainDumpNotes] = useState<Array<{id: string; content: string}>>([]);
+  const [loadingBrainDump, setLoadingBrainDump] = useState(false);
+  
+  // Follow Up state
+  interface FollowUpItem {
+    id: string;
+    user_id: string;
+    parent_type: string;
+    parent_id: string;
+    follow_up_date: string;
+    title: string;
+    completed_at?: string;
+    archived: boolean;
+  }
+  const [followUpItems, setFollowUpItems] = useState<FollowUpItem[]>([]);
+  const [loadingFollowUp, setLoadingFollowUp] = useState(false);
+  
+  // EL1 Collapsible Sections state
+  const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
+  const [activeGoals, setActiveGoals] = useState<any[]>([]);
+  const [delegations, setDelegations] = useState<any[]>([]);
+  const [depositIdeasCount, setDepositIdeasCount] = useState(0);
+  const [activeGoalsCount, setActiveGoalsCount] = useState(0);
+  const [delegationsCount, setDelegationsCount] = useState(0);
+  const [showDepositIdeas, setShowDepositIdeas] = useState(false);
+  const [showGoals, setShowGoals] = useState(false);
+  const [showDelegations, setShowDelegations] = useState(false);
+  const [loadingDepositIdeas, setLoadingDepositIdeas] = useState(false);
+  const [loadingGoals, setLoadingGoals] = useState(false);
+  const [loadingDelegations, setLoadingDelegations] = useState(false);
+  
+  // Final Commitment state
+  const [commitReflection, setCommitReflection] = useState(false);
+  const [commitRose, setCommitRose] = useState(false);
+  const [commitThorn, setCommitThorn] = useState(false);
+  const [showFinalCommitment, setShowFinalCommitment] = useState(false);
+  const [includeAllTasks, setIncludeAllTasks] = useState(false);
+  const [finalCommitmentTasks, setFinalCommitmentTasks] = useState<ScheduledAction[]>([]);
+  const [loadingFinalTasks, setLoadingFinalTasks] = useState(false);
+  
+  // Task/Event commitment states
+  type CommitmentState = 'uncommitted' | 'committed' | 'rescheduled';
+  const [itemCommitmentStates, setItemCommitmentStates] = useState<Record<string, CommitmentState>>({});
+  
+  // Reschedule modal state
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleItem, setRescheduleItem] = useState<ScheduledAction | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('anytime');
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  
+  // FAB modal state
+  const [isFabModalVisible, setIsFabModalVisible] = useState(false);
+  
+  // Today's Menu modal state
+  const [showTodaysMenuModal, setShowTodaysMenuModal] = useState(false);
+  
+  // Collapsible section state
+  const [showReflections, setShowReflections] = useState(false);
+  const [showUrgentTasks, setShowUrgentTasks] = useState(false);
+  const [showBrainDump, setShowBrainDump] = useState(false);
+  const [showFollowUp, setShowFollowUp] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [showRemainingTasks, setShowRemainingTasks] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in.');
+        router.back();
+        return;
+      }
+
+      setUserId(user.id);
+
+      const [spark, actions] = await Promise.all([
+        checkTodaysSpark(user.id),
+        getScheduledActions(user.id),
+      ]);
+
+      if (!spark) {
+        router.replace('/morning-spark');
+        return;
+      }
+
+      setSparkId(spark.id);
+      setFuelLevel(spark.fuel_level);
+      setActionsData(actions);
+
+      // Load brain dump after we have userId
+      await loadBrainDump(user.id);
+      
+      // Load follow-ups
+      await loadFollowUps(user.id);
+      
+      // Load counts for EL1, EL2, and EL3 dropdowns (don't load full data yet)
+      if (spark.fuel_level === 1 || spark.fuel_level === 2 || spark.fuel_level === 3) {
+        await loadDropdownCounts(user.id);
+      }
+
+      // Load urgent tasks and task count for EL1, EL2, and EL3
+      if (spark.fuel_level === 1 || spark.fuel_level === 2 || spark.fuel_level === 3) {
+        await Promise.all([
+          loadUrgentTasks(user.id),
+          loadAllTasksCount(user.id) // ✅ Pass user.id directly
+        ]);
+      }
+      
+    } catch (error) {
+      console.error('Error loading data:', error);
+      Alert.alert('Error', 'Failed to load Morning Spark. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadBrainDump(uid: string) {
+    try {
+      setLoadingBrainDump(true);
+      const supabase = getSupabaseClient();
+      
+      // Query yesterday's brain dump reflections
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = toLocalISOString(yesterday).split('T')[0];
+
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .select('id, content')
+        .eq('user_id', uid)
+        .eq('reflection_type', 'brain_dump')
+        .gte('created_at', `${yesterdayStr}T00:00:00`)
+        .lt('created_at', `${yesterdayStr}T23:59:59`)
+        .eq('archived', false)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setBrainDumpNotes(data || []);
+    } catch (error) {
+      console.error('Error loading brain dump:', error);
+    } finally {
+      setLoadingBrainDump(false);
+    }
+  }
+
+  async function handleDeferNote(noteId: string) {
+    // Just remove from display - note stays in database for Journal view
+    setBrainDumpNotes(prev => prev.filter(note => note.id !== noteId));
+    
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  async function handleFollowUpNote(noteId: string) {
+    try {
+      const supabase = getSupabaseClient();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+
+      // Set follow_up date to tomorrow
+      await supabase
+        .from('0008-ap-reflections')
+        .update({ follow_up: tomorrowStr })
+        .eq('id', noteId);
+
+      // Remove from display
+      setBrainDumpNotes(prev => prev.filter(note => note.id !== noteId));
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      Alert.alert('Success', 'Note will appear in tomorrow\'s Follow Up section.');
+    } catch (error) {
+      console.error('Error setting follow-up:', error);
+      Alert.alert('Error', 'Failed to set follow-up. Please try again.');
+    }
+  }
+
+  async function loadFollowUps(uid: string) {
+    try {
+      setLoadingFollowUp(true);
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      // Use the view we created
+      const { data, error } = await supabase
+        .from('v_morning_spark_follow_ups')
+        .select('*')
+        .eq('user_id', uid);
+
+      if (error) throw error;
+
+      setFollowUpItems(data || []);
+    } catch (error) {
+      console.error('Error loading follow-ups:', error);
+    } finally {
+      setLoadingFollowUp(false);
+    }
+  }
+
+  async function handleCompleteFollowUp(item: FollowUpItem) {
+    try {
+      const supabase = getSupabaseClient();
+      const now = toLocalISOString(new Date());
+
+      // Determine which table to update based on parent_type
+      let tableName = '';
+      if (item.parent_type === 'task' || item.parent_type === 'event') {
+        tableName = '0008-ap-tasks';
+      } else if (item.parent_type === 'depositIdea') {
+        tableName = '0008-ap-deposit-ideas';
+      } else if (item.parent_type === 'reflection') {
+        tableName = '0008-ap-reflections';
+      } else if (item.parent_type === 'goal_12wk') {
+        tableName = '0008-ap-goals-12wk';
+      } else if (item.parent_type === 'goal_1y') {
+        tableName = '0008-ap-goals-1y';
+      } else if (item.parent_type === 'goal_custom') {
+        tableName = '0008-ap-goals-custom';
+      }
+
+      if (tableName) {
+        // Clear follow_up and set followed_up_at
+        await supabase
+          .from(tableName)
+          .update({
+            follow_up: null,
+            followed_up_at: now,
+          })
+          .eq('id', item.id);
+
+        // Remove from display
+        setFollowUpItems(prev => prev.filter(i => i.id !== item.id));
+
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    } catch (error) {
+      console.error('Error completing follow-up:', error);
+      Alert.alert('Error', 'Failed to mark as followed up. Please try again.');
+    }
+  }
+
+  async function handleSnoozeFollowUp(item: FollowUpItem) {
+    try {
+      const supabase = getSupabaseClient();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+
+      // Determine which table to update
+      let tableName = '';
+      if (item.parent_type === 'task' || item.parent_type === 'event') {
+        tableName = '0008-ap-tasks';
+      } else if (item.parent_type === 'depositIdea') {
+        tableName = '0008-ap-deposit-ideas';
+      } else if (item.parent_type === 'reflection') {
+        tableName = '0008-ap-reflections';
+      } else if (item.parent_type === 'goal_12wk') {
+        tableName = '0008-ap-goals-12wk';
+      } else if (item.parent_type === 'goal_1y') {
+        tableName = '0008-ap-goals-1y';
+      } else if (item.parent_type === 'goal_custom') {
+        tableName = '0008-ap-goals-custom';
+      }
+
+      if (tableName) {
+        // Update follow_up to tomorrow
+        await supabase
+          .from(tableName)
+          .update({ follow_up: tomorrowStr })
+          .eq('id', item.id);
+
+        // Remove from display
+        setFollowUpItems(prev => prev.filter(i => i.id !== item.id));
+
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+
+        Alert.alert('Success', 'Follow-up snoozed until tomorrow.');
+      }
+    } catch (error) {
+      console.error('Error snoozing follow-up:', error);
+      Alert.alert('Error', 'Failed to snooze follow-up. Please try again.');
+    }
+  }
+
+  async function loadDepositIdeas() {
+    if (loadingDepositIdeas) return;
+    
+    try {
+      setLoadingDepositIdeas(true);
+      const supabase = getSupabaseClient();
+
+      const { data, error } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .select('id, title, created_at, activated_at')
+        .eq('user_id', userId)
+        .eq('archived', false)
+        .eq('is_active', true)
+        .is('activated_at', null)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      setDepositIdeas(data || []);
+      setShowDepositIdeas(true);
+    } catch (error) {
+      console.error('Error loading deposit ideas:', error);
+      Alert.alert('Error', 'Failed to load deposit ideas. Please try again.');
+    } finally {
+      setLoadingDepositIdeas(false);
+    }
+  }
+
+  async function loadActiveGoals() {
+    if (loadingGoals) return;
+    
+    try {
+      setLoadingGoals(true);
+      const supabase = getSupabaseClient();
+
+      // Load from all 3 goal tables
+      const [goals12wk, goals1y, goalsCustom] = await Promise.all([
+        supabase
+          .from('0008-ap-goals-12wk')
+          .select('id, title, status, progress, start_date, end_date')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .eq('archived', false)
+          .order('start_date', { ascending: false }),
+        supabase
+          .from('0008-ap-goals-1y')
+          .select('id, title, status, year_target_date')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .is('archived_at', null)
+          .order('year_target_date', { ascending: true }),
+        supabase
+          .from('0008-ap-goals-custom')
+          .select('id, title, status, progress, start_date, end_date')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .eq('archived', false)
+          .order('start_date', { ascending: false }),
+      ]);
+
+      const combined = [
+        ...(goals12wk.data || []).map(g => ({ ...g, type: '12-Week' })),
+        ...(goals1y.data || []).map(g => ({ ...g, type: '1-Year' })),
+        ...(goalsCustom.data || []).map(g => ({ ...g, type: 'Custom' })),
+      ];
+
+      setActiveGoals(combined);
+      setShowGoals(true);
+    } catch (error) {
+      console.error('Error loading goals:', error);
+      Alert.alert('Error', 'Failed to load goals. Please try again.');
+    } finally {
+      setLoadingGoals(false);
+    }
+  }
+
+  async function loadDelegations() {
+    if (loadingDelegations) return;
+    
+    try {
+      setLoadingDelegations(true);
+      const supabase = getSupabaseClient();
+
+      // Use the view we have
+      const { data, error } = await supabase
+        .from('v_morning_spark_delegations')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      setDelegations(data || []);
+      setShowDelegations(true);
+    } catch (error) {
+      console.error('Error loading delegations:', error);
+      Alert.alert('Error', 'Failed to load delegations. Please try again.');
+    } finally {
+      setLoadingDelegations(false);
+    }
+  }
+
+  async function loadDropdownCounts(uid: string) {
+    try {
+      const supabase = getSupabaseClient();
+
+      // Count deposit ideas
+      const { count: ideasCount } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid)
+        .eq('archived', false)
+        .eq('is_active', true)
+        .is('activated_at', null);
+
+      // Count goals from all 3 tables
+      const [goals12wkCount, goals1yCount, goalsCustomCount] = await Promise.all([
+        supabase
+          .from('0008-ap-goals-12wk')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .eq('archived', false),
+        supabase
+          .from('0008-ap-goals-1y')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .is('archived_at', null),
+        supabase
+          .from('0008-ap-goals-custom')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .eq('archived', false),
+      ]);
+
+      const totalGoals = (goals12wkCount.count || 0) + (goals1yCount.count || 0) + (goalsCustomCount.count || 0);
+
+      // Count delegations
+      const { count: delegationsCount } = await supabase
+        .from('v_morning_spark_delegations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid);
+
+      setDepositIdeasCount(ideasCount || 0);
+      setActiveGoalsCount(totalGoals);
+      setDelegationsCount(delegationsCount || 0);
+    } catch (error) {
+      console.error('Error loading dropdown counts:', error);
+    }
+  }
+
+  async function loadAllTasksForCommitment() {
+    if (loadingFinalTasks) return;
+    
+    try {
+      setLoadingFinalTasks(true);
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      // Load ALL tasks due today or overdue (not just urgent)
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('type', 'task')
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`)
+        .order('is_urgent', { ascending: false }) // Urgent first
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+
+      let tasks = (data || []) as ScheduledAction[];
+
+      if (tasks.length > 0) {
+        const taskIds = tasks.map((t) => t.id);
+
+        // Fetch roles, domains, and goals for point calculation
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        // Calculate points for each task
+        tasks = tasks.map((task) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          const points = calculateTaskPoints(task as any, roles, domains, goals);
+
+          return { ...task, points };
+        });
+      }
+
+      setFinalCommitmentTasks(tasks);
+    } catch (error) {
+      console.error('Error loading all tasks for commitment:', error);
+    } finally {
+      setLoadingFinalTasks(false);
+    }
+  }
+
+  function handleIncludeAllTasksToggle() {
+    const newValue = !includeAllTasks;
+    setIncludeAllTasks(newValue);
+    
+    if (newValue) {
+      // Load all tasks
+      loadAllTasksForCommitment();
+    } else {
+      // Clear and go back to just urgent tasks
+      setFinalCommitmentTasks([]);
+    }
+    
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync();
+    }
+  }
+
+  function handleCommitItem(itemId: string) {
+    console.log('Toggling commit for item:', itemId);
+    setItemCommitmentStates(prev => {
+      const currentState = prev[itemId];
+      const newState = currentState === 'committed' ? 'uncommitted' : 'committed';
+      const updatedStates = {
+        ...prev,
+        [itemId]: newState as CommitmentState
+      };
+      console.log('New commitment states:', updatedStates);
+      return updatedStates;
+    });
+    
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  function openRescheduleModal(item: ScheduledAction) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+    
+    setRescheduleItem(item);
+    setRescheduleDate(tomorrowStr);
+    setRescheduleTime(item.start_time || 'anytime');
+    setShowRescheduleModal(true);
+    
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  }
+
+  async function handleRescheduleConfirm() {
+    if (!rescheduleItem || isRescheduling) return;
+    
+    try {
+      setIsRescheduling(true);
+      const supabase = getSupabaseClient();
+      
+      const isEvent = !!rescheduleItem.start_date;
+      
+      if (isEvent) {
+        // Update event
+        await supabase
+          .from('0008-ap-tasks')
+          .update({
+            start_date: rescheduleDate,
+            start_time: rescheduleTime === 'anytime' ? null : rescheduleTime,
+          })
+          .eq('id', rescheduleItem.id);
+      } else {
+        // Update task
+        if (rescheduleTime === 'anytime') {
+          await supabase
+            .from('0008-ap-tasks')
+            .update({
+              due_date: rescheduleDate,
+              is_anytime: true,
+              start_time: null,
+              end_time: null,
+            })
+            .eq('id', rescheduleItem.id);
+        } else {
+          await supabase
+            .from('0008-ap-tasks')
+            .update({
+              due_date: rescheduleDate,
+              is_anytime: false,
+              start_time: rescheduleTime,
+              end_time: rescheduleTime,
+            })
+            .eq('id', rescheduleItem.id);
+        }
+      }
+      
+      // Mark as rescheduled
+      setItemCommitmentStates(prev => ({
+        ...prev,
+        [rescheduleItem.id]: 'rescheduled'
+      }));
+      
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      
+      setShowRescheduleModal(false);
+      
+      // Reload data
+      await loadData();
+    } catch (error) {
+      console.error('Error rescheduling item:', error);
+      Alert.alert('Error', 'Failed to reschedule. Please try again.');
+    } finally {
+      setIsRescheduling(false);
+    }
+  }
+
+  function getCommittedItems(items: ScheduledAction[]) {
+    return items.filter(item => {
+      const state = itemCommitmentStates[item.id];
+      // Default to uncommitted, only show if explicitly committed
+      return state === 'committed';
+    });
+  }
+
+  function getVisibleItems(items: ScheduledAction[]) {
+    return items.filter(item => {
+      const state = itemCommitmentStates[item.id];
+      // Hide rescheduled items
+      return state !== 'rescheduled';
+    });
+  }
+
+  function getTodayDate() {
+    return toLocalISOString(new Date()).split('T')[0];
+  }
+
+  function getTomorrowDate() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return toLocalISOString(tomorrow).split('T')[0];
+  }
+
+  function formatRescheduleDate(dateStr: string) {
+    const date = new Date(dateStr + 'T00:00:00');
+    const today = new Date(getTodayDate() + 'T00:00:00');
+    const tomorrow = new Date(getTomorrowDate() + 'T00:00:00');
+    
+    if (date.getTime() === today.getTime()) return 'Today';
+    if (date.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short',
+      month: 'short', 
+      day: 'numeric' 
+    });
+  }
+
+  async function loadUrgentTasks(uid: string) {
+    try {
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('type', 'task')
+        .eq('is_urgent', true)
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`)
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+
+      let tasks = (data || []) as ScheduledAction[];
+
+      if (tasks.length > 0) {
+        const taskIds = tasks.map((t) => t.id);
+
+        // Fetch roles, domains, and goals for point calculation
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        // Calculate points for each task
+        tasks = tasks.map((task) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          const points = calculateTaskPoints(task as any, roles, domains, goals);
+
+          return { ...task, points };
+        });
+      }
+
+      setUrgentTasks(tasks);
+    } catch (error) {
+      console.error('Error loading urgent tasks:', error);
+    }
+  }
+
+  async function loadAllTasks() {
+    if (loadingAllTasks) return;
+    
+    try {
+      setLoadingAllTasks(true);
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('type', 'task')
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`)
+        .order('is_urgent', { ascending: false })
+        .order('due_date', { ascending: true });
+
+      if (error) throw error;
+
+      let tasks = (data || []) as ScheduledAction[];
+
+      if (tasks.length > 0) {
+        const taskIds = tasks.map((t) => t.id);
+
+        // Fetch roles, domains, and goals for point calculation
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        // Calculate points for each task
+        tasks = tasks.map((task) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          const points = calculateTaskPoints(task as any, roles, domains, goals);
+
+          return { ...task, points };
+        });
+      }
+
+      setAllTasks(tasks);
+      setAllTasksCount(tasks.length);
+      setShowAllTasks(true);
+      
+    } catch (error) {
+      console.error('Error loading all tasks:', error);
+      Alert.alert('Error', 'Failed to load tasks. Please try again.');
+    } finally {
+      setLoadingAllTasks(false);
+    }
+  }
+
+  async function loadAllTasksCount(uid: string) {
+    try {
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      const { count, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', uid)
+        .eq('type', 'task')
+        .is('completed_at', null)
+        .is('deleted_at', null)
+        .or(`due_date.eq.${today},due_date.lt.${today}`);
+
+      if (error) throw error;
+
+      setAllTasksCount(count || 0);
+    } catch (error) {
+      console.error('Error loading all tasks count:', error);
+    }
+  }
+  
+  function handleAdjustEvents() {
+    // Initialize bins with all events in Keep zone
+    const allEvents = [
+      ...(actionsData?.overdue || []),
+      ...(actionsData?.today || []),
+    ];
+    
+    // Set up tomorrow as default reschedule date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+    
+    const initialDates: Record<string, string> = {};
+    const initialTimes: Record<string, string> = {};
+    
+    allEvents.forEach(event => {
+      initialDates[event.id] = tomorrowStr;
+      // Default to same time or "anytime"
+      initialTimes[event.id] = event.start_time || 'anytime';
+    });
+    
+    setItemsInKeepZone(allEvents);
+    setItemsInRescheduleZone([]);
+    setItemsInCancelZone([]);
+    setRescheduleDates(initialDates);
+    setRescheduleTimes(initialTimes);
+    setAdjustType('events');
+    setShowAdjustModal(true);
+  }
+
+  function handleAdjustTasks() {
+    // Initialize bins with all tasks in Keep zone
+    const allTasksList = showAllTasks ? allTasks : urgentTasks;
+    
+    // Set up tomorrow as default reschedule date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = toLocalISOString(tomorrow).split('T')[0];
+    
+    const initialDates: Record<string, string> = {};
+    const initialTimes: Record<string, string> = {};
+    
+    allTasksList.forEach(task => {
+      initialDates[task.id] = tomorrowStr;
+      initialTimes[task.id] = task.due_time || 'anytime';
+    });
+    
+    setItemsInKeepZone(allTasksList);
+    setItemsInRescheduleZone([]);
+    setItemsInCancelZone([]);
+    setRescheduleDates(initialDates);
+    setRescheduleTimes(initialTimes);
+    setAdjustType('tasks');
+    setShowAdjustModal(true);
+  }
+
+  function getPriorityColor(task: ScheduledAction): string {
+    if (task.is_urgent && task.is_important) {
+      return '#ef4444'; // Red - Urgent & Important
+    } else if (!task.is_urgent && task.is_important) {
+      return '#22c55e'; // Green - Not Urgent but Important
+    } else if (task.is_urgent && !task.is_important) {
+      return '#eab308'; // Yellow - Urgent but Not Important
+    } else {
+      return '#9ca3af'; // Gray - Neither Urgent nor Important
+    }
+  }
+
+  function getTimeOptions(item: ScheduledAction): Array<{label: string, value: string}> {
+    const times: Array<{label: string, value: string}> = [
+      { label: 'Anytime', value: 'anytime' }
+    ];
+    
+    // Generate all times in 15-minute increments (96 slots in 24 hours)
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+        const displayTime = new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        times.push({ label: displayTime, value: timeStr });
+      }
+    }
+    
+    return times;
+  }
+
+  function selectItem(itemId: string) {
+    setSelectedItemId(itemId);
+  }
+
+  function moveSelectedItemTo(targetBin: 'keep' | 'reschedule' | 'cancel') {
+    if (!selectedItemId) return;
+
+    const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
+    const item = allItems.find(i => i.id === selectedItemId);
+    if (!item) return;
+
+    // Remove from all bins
+    setItemsInKeepZone(prev => prev.filter(i => i.id !== selectedItemId));
+    setItemsInRescheduleZone(prev => prev.filter(i => i.id !== selectedItemId));
+    setItemsInCancelZone(prev => prev.filter(i => i.id !== selectedItemId));
+
+    // Add to target bin
+    if (targetBin === 'keep') {
+      setItemsInKeepZone(prev => [...prev, item]);
+    } else if (targetBin === 'reschedule') {
+      setItemsInRescheduleZone(prev => [...prev, item]);
+      // Set default reschedule values if not already set
+      if (!rescheduleDates[selectedItemId]) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setRescheduleDates(prev => ({...prev, [selectedItemId]: toLocalISOString(tomorrow).split('T')[0]}));
+      }
+      if (!rescheduleTimes[selectedItemId]) {
+        setRescheduleTimes(prev => ({...prev, [selectedItemId]: 'anytime'}));
+      }
+    } else {
+      setItemsInCancelZone(prev => [...prev, item]);
+    }
+
+    setSelectedItemId(null);
+  }
+
+  // Mobile tap fallback (cycle through bins)
+  function moveItemToNextBin(itemId: string, currentBin: 'keep' | 'reschedule' | 'cancel') {
+    // Single tap cycles: keep → reschedule → cancel → keep
+    const nextBin = currentBin === 'keep' ? 'reschedule' : currentBin === 'reschedule' ? 'cancel' : 'keep';
+
+    const allItems = [...itemsInKeepZone, ...itemsInRescheduleZone, ...itemsInCancelZone];
+    const item = allItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    // Remove from all bins
+    setItemsInKeepZone(prev => prev.filter(i => i.id !== itemId));
+    setItemsInRescheduleZone(prev => prev.filter(i => i.id !== itemId));
+    setItemsInCancelZone(prev => prev.filter(i => i.id !== itemId));
+
+    // Add to next bin
+    if (nextBin === 'keep') {
+      setItemsInKeepZone(prev => [...prev, item]);
+    } else if (nextBin === 'reschedule') {
+      setItemsInRescheduleZone(prev => [...prev, item]);
+      // Set default reschedule values if not already set
+      if (!rescheduleDates[itemId]) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setRescheduleDates(prev => ({...prev, [itemId]: toLocalISOString(tomorrow).split('T')[0]}));
+      }
+      if (!rescheduleTimes[itemId]) {
+        setRescheduleTimes(prev => ({...prev, [itemId]: 'anytime'}));
+      }
+    } else {
+      setItemsInCancelZone(prev => [...prev, item]);
+    }
+  }
+
+  async function applyAdjustments() {
+    try {
+      const supabase = getSupabaseClient();
+
+      // Handle cancellations
+      if (itemsInCancelZone.length > 0) {
+        const cancelIds = itemsInCancelZone.map(i => i.id);
+        await supabase
+          .from('0008-ap-tasks')
+          .update({ 
+            deleted_at: toLocalISOString(new Date()),
+            status: 'cancelled'
+          })
+          .in('id', cancelIds);
+      }
+
+      // Handle rescheduling
+      if (itemsInRescheduleZone.length > 0) {
+        for (const item of itemsInRescheduleZone) {
+          const newDate = rescheduleDates[item.id];
+          const newTime = rescheduleTimes[item.id];
+
+          console.log('Rescheduling:', item.title, 'to', newDate, newTime);
+
+          // Determine if it's an event or task based on which date field is populated
+          const isEvent = !!item.start_date;
+          
+          if (isEvent) {
+            // Events: update start_date and start_time
+            await supabase
+              .from('0008-ap-tasks')
+              .update({
+                start_date: newDate,
+                start_time: newTime === 'anytime' ? null : newTime,
+              })
+              .eq('id', item.id);
+          } else {
+            // Tasks: update due_date, is_anytime, start_time, and end_time
+            if (newTime === 'anytime') {
+              await supabase
+                .from('0008-ap-tasks')
+                .update({
+                  due_date: newDate,
+                  is_anytime: true,
+                  start_time: null,
+                  end_time: null,
+                })
+                .eq('id', item.id);
+            } else {
+              await supabase
+                .from('0008-ap-tasks')
+                .update({
+                  due_date: newDate,
+                  is_anytime: false,
+                  start_time: newTime,
+                  end_time: newTime,
+                })
+                .eq('id', item.id);
+            }
+          }
+        }
+      }
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      // Build success message
+      let message = 'Changes applied successfully!';
+      if (itemsInRescheduleZone.length > 0) {
+        const rescheduledCount = itemsInRescheduleZone.length;
+        message += `\n\n${rescheduledCount} item${rescheduledCount > 1 ? 's' : ''} rescheduled and will appear on the new date.`;
+      }
+      if (itemsInCancelZone.length > 0) {
+        const cancelledCount = itemsInCancelZone.length;
+        message += `\n\n${cancelledCount} item${cancelledCount > 1 ? 's' : ''} cancelled.`;
+      }
+
+      Alert.alert('Success', message);
+      setShowAdjustModal(false);
+      await loadData(); // Reload everything
+      
+      // If "All Tasks" was expanded, reload it too
+      if (showAllTasks) {
+        await loadAllTasks();
+      }
+    } catch (error) {
+      console.error('Error applying adjustments:', error);
+      Alert.alert('Error', 'Failed to apply changes. Please try again.');
+    }
+  }
+
+  async function handleCompleteEvent(eventId: string) {
+    try {
+      const supabase = getSupabaseClient();
+
+      await supabase
+        .from('0008-ap-tasks')
+        .update({
+          status: 'completed',
+          completed_at: toLocalISOString(new Date()),
+        })
+        .eq('id', eventId);
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      await loadData();
+    } catch (error) {
+      console.error('Error completing event:', error);
+      Alert.alert('Error', 'Failed to complete event');
+    }
+  }
+
+  async function handleDeleteEvent(eventId: string, eventTitle: string) {
+    Alert.alert(
+      'Delete Event',
+      `Are you sure you want to delete "${eventTitle}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const supabase = getSupabaseClient();
+              await supabase
+                .from('0008-ap-tasks')
+                .update({
+                  deleted_at: toLocalISOString(new Date()),
+                  status: 'cancelled',
+                })
+                .eq('id', eventId);
+
+              if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+
+              await loadData();
+            } catch (error) {
+              console.error('Error deleting event:', error);
+              Alert.alert('Error', 'Failed to delete event');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  function handleMindsetPointsAdded(points: number) {
+    setMindsetPoints((prev) => prev + points);
+  }
+
+  async function handleComplete() {
+    if (completing) return;
+
+    try {
+      setCompleting(true);
+
+      const supabase = getSupabaseClient();
+
+      // ✅ Calculate total committed points WITHOUT overdue events
+      const eventPoints = (actionsData?.today || []).reduce(
+        (sum, event) => sum + (event.points || 3),
+        0
+      );
+      
+      // Calculate commitment points (max 10 from reflections + always 10 for evening review)
+      const reflectionPoints = Math.min(
+        (commitReflection ? 1 : 0) + 
+        (commitRose ? 2 : 0) + 
+        (commitThorn ? 1 : 0),
+        10
+      );
+      const eveningReviewPoints = 10; // ✅ Always 10 points
+      const commitmentPoints = reflectionPoints + eveningReviewPoints;
+      
+      const sparkCompletionBonus = 10;
+      const totalTarget = eventPoints + mindsetPoints + commitmentPoints + sparkCompletionBonus;
+
+      // Update the spark with completion data and commitment flags
+      await supabase
+        .from('0008-ap-daily-sparks')
+        .update({
+          initial_target_score: totalTarget,
+          committed_at: toLocalISOString(new Date()),
+          commit_reflection: commitReflection,
+          commit_rose: commitRose,
+          commit_thorn: commitThorn,
+          commit_evening_review: true, // ✅ Always true
+        })
+        .eq('id', sparkId);
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      // ✅ Show Today's Menu modal instead of Alert
+      setShowTodaysMenuModal(true);
+
+      // Auto-redirect to dashboard after 3 seconds
+      setTimeout(() => {
+        router.replace('/(tabs)/dashboard');
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error completing Morning Spark:', error);
+      Alert.alert('Error', 'Failed to complete Morning Spark. Please try again.');
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+  function renderEventRow(event: ScheduledAction, isOverdue: boolean) {
+    const iconColor = colors.primary;
+    const titleColor = isOverdue ? '#EF4444' : colors.text;
+    const isCommitted = itemCommitmentStates[event.id] === 'committed';
+    const isRescheduled = itemCommitmentStates[event.id] === 'rescheduled';
+    
+    // Don't render rescheduled events
+    if (isRescheduled) return null;
+
+    return Platform.OS === 'web' ? (
+      // Web version
+      <View
+        key={event.id}
+        style={[
+          styles.eventRow,
+          { borderBottomColor: colors.border },
+          isCommitted && { 
+            backgroundColor: '#10B98120',
+            borderLeftWidth: 4,
+            borderLeftColor: '#10B981'
+          }
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.webTaskClickArea}
+          onPress={() => handleCommitItem(event.id)}
+        >
+          <View style={styles.iconContainer}>
+            {isCommitted ? (
+              <Check size={20} color="#10B981" strokeWidth={3} />
+            ) : (
+              <Calendar size={16} color={iconColor} />
+            )}
+          </View>
+
+          <View style={styles.eventContent}>
+            <Text style={[
+              styles.eventTitle, 
+              { color: titleColor },
+              isCommitted && { fontWeight: '600' }
+            ]} numberOfLines={1}>
+              {isCommitted && '✓ '}{event.title}
+              {isOverdue && event.start_date && (
+                <Text style={styles.overdueText}>
+                  {' '}(Overdue - {new Date(event.start_date).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  })})
+                </Text>
+              )}
+            </Text>
+            {event.start_time && (
+              <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+                {formatTimeDisplay(event.start_time)}
+                {event.end_time && ` - ${formatTimeDisplay(event.end_time)}`}
+              </Text>
+            )}
+          </View>
+
+          <Text style={[styles.points, { color: '#10B981' }]}>
+            +{Math.round(event.points || 3)}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Reschedule button for web */}
+        <TouchableOpacity
+          style={[styles.webRescheduleButton, { backgroundColor: colors.background }]}
+          onPress={() => openRescheduleModal(event)}
+        >
+          <ChevronRight size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+    ) : (
+      // Mobile version
+      <TouchableOpacity
+        key={event.id}
+        style={[
+          styles.eventRow,
+          { borderBottomColor: colors.border },
+          isCommitted && { 
+            backgroundColor: '#10B98120',
+            borderLeftWidth: 4,
+            borderLeftColor: '#10B981'
+          }
+        ]}
+        onPress={() => handleCommitItem(event.id)}
+        onLongPress={() => openRescheduleModal(event)}
+      >
+        <View style={styles.iconContainer}>
+          {isCommitted ? (
+            <Check size={20} color="#10B981" strokeWidth={3} />
+          ) : (
+            <Calendar size={16} color={iconColor} />
+          )}
+        </View>
+
+        <View style={styles.eventContent}>
+          <Text style={[
+            styles.eventTitle, 
+            { color: titleColor },
+            isCommitted && { fontWeight: '600' }
+          ]} numberOfLines={1}>
+            {isCommitted && '✓ '}{event.title}
+            {isOverdue && event.start_date && (
+              <Text style={styles.overdueText}>
+                {' '}(Overdue - {new Date(event.start_date).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                })})
+              </Text>
+            )}
+          </Text>
+          {event.start_time && (
+            <Text style={[styles.eventTime, { color: colors.textSecondary }]}>
+              {formatTimeDisplay(event.start_time)}
+              {event.end_time && ` - ${formatTimeDisplay(event.end_time)}`}
+            </Text>
+          )}
+        </View>
+
+        <Text style={[styles.points, { color: '#10B981' }]}>
+          +{Math.round(event.points || 3)}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  function getCoachMessage(): string {
+    if (fuelLevel === 1) {
+      return 'Our goal is to reduce overwhelm and prevent spirals.';
+    } else if (fuelLevel === 2) {
+      return "Today's goal is consistency and execution.";
+    } else {
+      return "You're energized and ready! Let's channel this energy into meaningful progress and make today count!";
+    }
+  }
+
+  function getScheduleMessage(): string {
+    const hasEvents = actionsData && (actionsData.overdue.length > 0 || actionsData.today.length > 0);
+    
+    if (fuelLevel === 1) {
+      if (!hasEvents) {
+        return "Nothing is currently on your calendar. Let's focus on doing something though.";
+      }
+      return 'Should we reschedule any of these to protect your energy?';
+    } else if (fuelLevel === 2) {
+      return "These are the events you have on today's calendar. Are there any Big Rocks you would like to add?";
+    } else {
+      return "These are the events you have on today's calendar. You're energized - what Big Rocks can you add to maximize this momentum?";
+    }
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const hasEvents = actionsData && (actionsData.overdue.length > 0 || actionsData.today.length > 0);
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessible={true}
+          accessibilityLabel="Go back"
+        >
+          <ArrowLeft size={24} color={colors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Morning Spark</Text>
+          {fuelLevel && (
+            <Text style={styles.fuelEmoji}>{getFuelEmoji(fuelLevel)}</Text>
+          )}
+        </View>
+        {/* TEMPORARY DEV RESET BUTTON */}
+        <TouchableOpacity
+          onPress={async () => {
+            Alert.alert(
+              'Reset Morning Spark?',
+              'This will delete today\'s spark and let you start fresh. (Dev only)',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Reset',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const supabase = getSupabaseClient();
+                      const today = toLocalISOString(new Date()).split('T')[0];
+                      
+                      await supabase
+                        .from('0008-ap-daily-sparks')
+                        .delete()
+                        .eq('user_id', userId)
+                        .gte('created_at', today);
+                      
+                      Alert.alert('Success', 'Morning Spark reset! Redirecting...');
+                      router.replace('/morning-spark');
+                    } catch (error) {
+                      console.error('Reset error:', error);
+                      Alert.alert('Error', 'Failed to reset. Try again.');
+                    }
+                  },
+                },
+              ]
+            );
+          }}
+          style={styles.backButton}
+        >
+          <Trash2 size={20} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+        {/* Coach Comments Section */}
+        <View style={[styles.coachSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.coachLabel, { color: colors.textSecondary }]}>
+            Coach Comments
+          </Text>
+          <Text style={[styles.coachText, { color: colors.text }]}>
+            {getCoachMessage()}
+          </Text>
+        </View>
+
+        {/* Brain Dump Section - EL1, EL2, and EL3 */}
+        {(fuelLevel === 1 || fuelLevel === 2 || fuelLevel === 3) && (
+          <BrainDumpSection
+            brainDumpNotes={brainDumpNotes || []}
+            colors={colors}
+            loadingBrainDump={loadingBrainDump}
+            handleDeferNote={handleDeferNote}
+            handleFollowUpNote={handleFollowUpNote}
+          />
+        )}
+
+        {/* Follow Up Section - EL1, EL2, and EL3 */}
+        {(fuelLevel === 1 || fuelLevel === 2 || fuelLevel === 3) && (
+          <FollowUpSection
+            fuelLevel={fuelLevel}
+            userId={userId}
+            onItemActioned={() => loadData()}
+          />
+        )}
+
+        {/* Scheduled Events Section */}
+        <ScheduleSection
+          events={actionsData?.today || []}
+          colors={colors}
+          formatTimeDisplay={formatTimeDisplay}
+          getScheduleMessage={getScheduleMessage}
+          itemCommitmentStates={itemCommitmentStates}
+          handleCommitItem={handleCommitItem}
+          openRescheduleModal={openRescheduleModal}
+        />
+
+        {/* Urgent Tasks Section - EL1 Only */}
+        {fuelLevel === 1 && (
+          <UrgentTasksSection
+            fuelLevel={fuelLevel}
+            urgentTasks={urgentTasks || []}
+            colors={colors}
+            itemCommitmentStates={itemCommitmentStates}
+            handleCommitItem={handleCommitItem}
+            openRescheduleModal={openRescheduleModal}
+            getVisibleItems={getVisibleItems}
+            getCommittedItems={getCommittedItems}
+            getPriorityColor={getPriorityColor}
+          />
+        )}
+
+        {/* Remaining Tasks Section - EL1 Only */}
+        {fuelLevel === 1 && (
+          <RemainingTasksSection
+            fuelLevel={fuelLevel}
+            allTasks={allTasks || []}
+            allTasksCount={allTasksCount}
+            colors={colors}
+            loadingAllTasks={loadingAllTasks}
+            itemCommitmentStates={itemCommitmentStates}
+            handleCommitItem={handleCommitItem}
+            openRescheduleModal={openRescheduleModal}
+            getVisibleItems={getVisibleItems}
+            getCommittedItems={getCommittedItems}
+            getPriorityColor={getPriorityColor}
+            loadAllTasks={loadAllTasks}
+            toLocalISOString={toLocalISOString}
+          />
+        )}
+
+        {/* Collapsible Review Sections - EL1, EL2, and EL3 */}
+        {(fuelLevel === 1 || fuelLevel === 2 || fuelLevel === 3) && (
+          <>
+            {/* Deposit Ideas Section */}
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => {
+                  if (!showDepositIdeas) {
+                    loadDepositIdeas();
+                  } else {
+                    setShowDepositIdeas(false);
+                  }
+                }}
+              >
+                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
+                  💡 Review Deposit Ideas ({depositIdeasCount})
+                </Text>
+                <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
+                  {showDepositIdeas ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showDepositIdeas && (
+                loadingDepositIdeas ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : depositIdeas.length === 0 ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No active deposit ideas
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {depositIdeas.map((idea) => (
+                      <View key={idea.id} style={[styles.reviewItem, { borderColor: colors.border }]}>
+                        <Text style={[styles.reviewItemTitle, { color: colors.text }]}>
+                          {idea.title}
+                        </Text>
+                        <Text style={[styles.reviewItemDate, { color: colors.textSecondary }]}>
+                          Added {new Date(idea.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )
+              )}
+            </View>
+
+            {/* Goals Section */}
+            <View style={styles.section}>
+              {/* EL2: Add description above Goals */}
+              {fuelLevel === 2 && (
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  Here are the actions you list as supporting your Goals - click to commit to today's contract.
+                </Text>
+              )}
+              
+              {/* EL3: Add energetic description above Goals */}
+              {fuelLevel === 3 && (
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  You're fired up! Here are your Goal-aligned actions - let's commit to making serious progress today!
+                </Text>
+              )}
+              
+              <TouchableOpacity
+                style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => {
+                  if (!showGoals) {
+                    loadActiveGoals();
+                  } else {
+                    setShowGoals(false);
+                  }
+                }}
+              >
+                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
+                  🎯 Review Active Goals ({activeGoalsCount})
+                </Text>
+                <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
+                  {showGoals ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showGoals && (
+                loadingGoals ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : activeGoals.length === 0 ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No active goals
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {activeGoals.map((goal) => (
+                      <View key={goal.id} style={[styles.reviewItem, { borderColor: colors.border }]}>
+                        <View style={styles.goalHeader}>
+                          <Text style={[styles.reviewItemTitle, { color: colors.text }]}>
+                            {goal.title}
+                          </Text>
+                          <Text style={[styles.goalType, { color: colors.textSecondary }]}>
+                            {goal.type}
+                          </Text>
+                        </View>
+                        {goal.progress !== undefined && (
+                          <Text style={[styles.goalProgress, { color: colors.primary }]}>
+                            {goal.progress}% complete
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )
+              )}
+            </View>
+
+            {/* EL2: Tasks Section with Urgent at Top */}
+            {fuelLevel === 2 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  You have {urgentTasks.length} Urgent task{urgentTasks.length !== 1 ? 's' : ''} - knock those out to give yourself some peace of mind, then try to use your creative time to accomplish tasks which are most Important.
+                </Text>
+                
+                <RemainingTasksSection
+                  fuelLevel={fuelLevel}
+                  allTasks={allTasks || []}
+                  allTasksCount={allTasksCount}
+                  colors={colors}
+                  loadingAllTasks={loadingAllTasks}
+                  itemCommitmentStates={itemCommitmentStates}
+                  handleCommitItem={handleCommitItem}
+                  openRescheduleModal={openRescheduleModal}
+                  getVisibleItems={getVisibleItems}
+                  getCommittedItems={getCommittedItems}
+                  getPriorityColor={getPriorityColor}
+                  loadAllTasks={loadAllTasks}
+                  toLocalISOString={toLocalISOString}
+                  urgentTasks={urgentTasks}
+                />
+              </View>
+            )}
+
+            {/* EL3: Tasks Section with Energetic Messaging */}
+            {fuelLevel === 3 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
+                  You have {urgentTasks.length} Urgent task{urgentTasks.length !== 1 ? 's' : ''} - blast through those, then tackle your most Important work while you're in the zone!
+                </Text>
+                
+                <RemainingTasksSection
+                  fuelLevel={fuelLevel}
+                  allTasks={allTasks || []}
+                  allTasksCount={allTasksCount}
+                  colors={colors}
+                  loadingAllTasks={loadingAllTasks}
+                  itemCommitmentStates={itemCommitmentStates}
+                  handleCommitItem={handleCommitItem}
+                  openRescheduleModal={openRescheduleModal}
+                  getVisibleItems={getVisibleItems}
+                  getCommittedItems={getCommittedItems}
+                  getPriorityColor={getPriorityColor}
+                  loadAllTasks={loadAllTasks}
+                  toLocalISOString={toLocalISOString}
+                  urgentTasks={urgentTasks}
+                />
+              </View>
+            )}
+
+            {/* Delegations Section */}
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={[styles.collapsibleHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => {
+                  if (!showDelegations) {
+                    loadDelegations();
+                  } else {
+                    setShowDelegations(false);
+                  }
+                }}
+              >
+                <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
+                  👥 Review Delegations ({delegationsCount})
+                </Text>
+                <Text style={[styles.collapsibleArrow, { color: colors.textSecondary }]}>
+                  {showDelegations ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showDelegations && (
+                loadingDelegations ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : delegations.length === 0 ? (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No pending delegations
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {delegations.map((delegation) => (
+                      <View key={delegation.delegation_id} style={[styles.reviewItem, { borderColor: colors.border }]}>
+                        <Text style={[styles.reviewItemTitle, { color: colors.text }]}>
+                          {delegation.task_title}
+                        </Text>
+                        <Text style={[styles.delegationInfo, { color: colors.textSecondary }]}>
+                          Delegated to: {delegation.delegate_name}
+                        </Text>
+                        {delegation.due_date && (
+                          <Text style={[styles.reviewItemDate, { color: colors.textSecondary }]}>
+                            Due: {new Date(delegation.due_date).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )
+              )}
+            </View>
+          </>
+        )}
+
+        {/* Final Commitment View */}
+        <FinalCommitmentSection
+          actionsData={actionsData}
+          fuelLevel={fuelLevel}
+          urgentTasks={urgentTasks}
+          allTasks={allTasks}
+          colors={colors}
+          formatTimeDisplay={formatTimeDisplay}
+          getPriorityColor={getPriorityColor}
+          getCommittedItems={getCommittedItems}
+          commitReflection={commitReflection}
+          commitRose={commitRose}
+          commitThorn={commitThorn}
+          mindsetPoints={mindsetPoints}
+        />
+
+          {/* Reflections Section */}
+        <ReflectionsSection
+          colors={colors}
+          commitReflection={commitReflection}
+          setCommitReflection={setCommitReflection}
+          commitRose={commitRose}
+          setCommitRose={setCommitRose}
+          commitThorn={commitThorn}
+          setCommitThorn={setCommitThorn}
+        />
+
+        <View style={{ height: 20 }} />
+      </ScrollView>
+
+      {/* Complete Button - Fixed at bottom */}
+      <View style={[styles.footer, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+        <TouchableOpacity
+          style={[
+            styles.completeButton,
+            { backgroundColor: fuelLevel ? getFuelColor(fuelLevel) : colors.primary },
+            completing && styles.completeButtonDisabled,
+          ]}
+          onPress={handleComplete}
+          disabled={completing}
+          activeOpacity={0.8}
+        >
+          {completing ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.completeButtonText}>Complete Morning Spark</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Adjust Modal - Bin-based with Dropdowns */}
+      <Modal
+        visible={showAdjustModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAdjustModal(false)}
+      >
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Adjust {adjustType === 'events' ? 'Schedule' : 'Tasks'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowAdjustModal(false)}
+              style={styles.closeButton}
+            >
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <Text style={[styles.modalInstructions, { color: colors.textSecondary }]}>
+              Click an item to select it, then click a bin below to move it there
+            </Text>
+
+            {/* Move Buttons - Show when item is selected */}
+            {selectedItemId && (
+              <View style={[styles.moveButtonsContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.moveButtonsLabel, { color: colors.text }]}>
+                  Move selected item to:
+                </Text>
+                <View style={styles.moveButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.moveButton, { backgroundColor: '#10B981' }]}
+                    onPress={() => moveSelectedItemTo('keep')}
+                  >
+                    <Text style={styles.moveButtonText}>✓ KEEP</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.moveButton, { backgroundColor: '#3B82F6' }]}
+                    onPress={() => moveSelectedItemTo('reschedule')}
+                  >
+                    <Text style={styles.moveButtonText}>📅 RESCHEDULE</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.moveButton, { backgroundColor: '#EF4444' }]}
+                    onPress={() => moveSelectedItemTo('cancel')}
+                  >
+                    <Text style={styles.moveButtonText}>🗑️ CANCEL</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* KEEP ZONE */}
+            <View style={styles.binContainer}>
+              <View style={[
+                styles.binHeader, 
+                { backgroundColor: '#10B98120' }
+              ]}>
+                <Text style={[styles.binTitle, { color: '#10B981' }]}>KEEP AS IS</Text>
+                <Text style={[styles.binSubtitle, { color: '#10B981' }]}>
+                  ✓ These will stay scheduled for today
+                </Text>
+              </View>
+              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#10B981' }]}>
+                {itemsInKeepZone.length === 0 ? (
+                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
+                    No items here
+                  </Text>
+                ) : (
+                  itemsInKeepZone.map(item => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.binItem,
+                        { 
+                          backgroundColor: selectedItemId === item.id ? '#10B98130' : colors.background,
+                          borderColor: selectedItemId === item.id ? '#10B981' : colors.border,
+                          borderWidth: selectedItemId === item.id ? 2 : 1
+                        }
+                      ]}
+                      onPress={() => selectItem(item.id)}
+                    >
+                      <Text style={[
+                        styles.binItemText,
+                        { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                      ]}>
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            </View>
+
+            {/* RESCHEDULE ZONE */}
+            <View style={styles.binContainer}>
+              <View style={[styles.binHeader, { backgroundColor: '#3B82F620' }]}>
+                <Text style={[styles.binTitle, { color: '#3B82F6' }]}>RESCHEDULE</Text>
+                <Text style={[styles.binSubtitle, { color: '#3B82F6' }]}>
+                  📅 Adjust date and time
+                </Text>
+              </View>
+              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#3B82F6' }]}>
+                {itemsInRescheduleZone.length === 0 ? (
+                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
+                    No items here
+                  </Text>
+                ) : (
+                  itemsInRescheduleZone.map(item => (
+                    <View key={item.id} style={styles.rescheduleItemContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.binItem,
+                          { 
+                            backgroundColor: selectedItemId === item.id ? '#3B82F630' : colors.background,
+                            borderColor: selectedItemId === item.id ? '#3B82F6' : colors.border,
+                            borderWidth: selectedItemId === item.id ? 2 : 1,
+                            marginBottom: 8
+                          }
+                        ]}
+                        onPress={() => selectItem(item.id)}
+                      >
+                        <Text style={[
+                          styles.binItemText,
+                          { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                        ]}>
+                          {item.title}
+                        </Text>
+                      </TouchableOpacity>
+
+                        {/* Date Picker - Inline like TaskEventForm */}
+                        <View style={styles.pickerRow}>
+                          <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Date:</Text>
+                          <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                            <Picker
+                              selectedValue={rescheduleDates[item.id]}
+                              onValueChange={(value) => setRescheduleDates(prev => ({...prev, [item.id]: value}))}
+                              style={[styles.picker, { color: colors.text }]}
+                            >
+                              {Array.from({length: 14}, (_, i) => {
+                                const date = new Date();
+                                date.setDate(date.getDate() + i + 1);
+                                const dateStr = toLocalISOString(date).split('T')[0];
+                                const label = i === 0 ? 'Tomorrow' : 
+                                             i === 1 ? 'Day After Tomorrow' :
+                                             date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                return <Picker.Item key={dateStr} label={label} value={dateStr} />;
+                              })}
+                            </Picker>
+                          </View>
+                        </View>
+
+                        {/* Time Picker - Inline like TaskEventForm */}
+                        <View style={styles.pickerRow}>
+                          <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>Time:</Text>
+                          <View style={[styles.pickerWrapper, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                            <Picker
+                              selectedValue={rescheduleTimes[item.id]}
+                              onValueChange={(value) => setRescheduleTimes(prev => ({...prev, [item.id]: value}))}
+                              style={[styles.picker, { color: colors.text }]}
+                            >
+                              {getTimeOptions(item).map(opt => (
+                                <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+                      </View>
+                    ))
+                )}
+              </View>
+            </View>
+
+            {/* CANCEL ZONE */}
+            <View style={styles.binContainer}>
+              <View style={[styles.binHeader, { backgroundColor: '#EF444420' }]}>
+                <Text style={[styles.binTitle, { color: '#EF4444' }]}>CANCEL</Text>
+                <Text style={[styles.binSubtitle, { color: '#EF4444' }]}>
+                  🗑️ These will be deleted
+                </Text>
+              </View>
+              <View style={[styles.binContent, { backgroundColor: colors.surface, borderColor: '#EF4444' }]}>
+                {itemsInCancelZone.length === 0 ? (
+                  <Text style={[styles.emptyBinText, { color: colors.textSecondary }]}>
+                    No items here
+                  </Text>
+                ) : (
+                  itemsInCancelZone.map(item => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.binItem,
+                        { 
+                          backgroundColor: selectedItemId === item.id ? '#EF444430' : colors.background,
+                          borderColor: selectedItemId === item.id ? '#EF4444' : colors.border,
+                          borderWidth: selectedItemId === item.id ? 2 : 1
+                        }
+                      ]}
+                      onPress={() => selectItem(item.id)}
+                    >
+                      <Text style={[
+                        styles.binItemText,
+                        { color: adjustType === 'tasks' ? getPriorityColor(item) : colors.text }
+                      ]}>
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.modalDoneButton, { backgroundColor: colors.primary }]}
+              onPress={applyAdjustments}
+            >
+              <Text style={styles.modalDoneButtonText}>Apply Changes</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Reschedule Modal */}
+      <Modal
+        visible={showRescheduleModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowRescheduleModal(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setShowRescheduleModal(false)} style={styles.modalBackButton}>
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Reschedule{rescheduleItem ? ` "${rescheduleItem.title}"` : ''}
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <ScrollView style={styles.rescheduleContent}>
+            <Text style={[styles.rescheduleQuestion, { color: colors.text }]}>
+              When should we tackle this?
+            </Text>
+
+            {/* Quick Date Selection */}
+            <Text style={[styles.rescheduleLabel, { color: colors.textSecondary }]}>
+              📅 Date
+            </Text>
+            <View style={styles.quickButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleDate === getTodayDate() && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleDate(getTodayDate())}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleDate === getTodayDate() ? '#FFFFFF' : colors.text }
+                ]}>
+                  Today
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleDate === getTomorrowDate() && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleDate(getTomorrowDate())}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleDate === getTomorrowDate() ? '#FFFFFF' : colors.text }
+                ]}>
+                  Tomorrow
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.selectedValue, { color: colors.primary }]}>
+              {formatRescheduleDate(rescheduleDate)}
+            </Text>
+
+            {/* Quick Time Selection */}
+            <Text style={[styles.rescheduleLabel, { color: colors.textSecondary, marginTop: 24 }]}>
+              🕐 Time
+            </Text>
+            <View style={styles.quickButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === 'anytime' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('anytime')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === 'anytime' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Anytime
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === '09:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('09:00')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === '09:00' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Morning
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === '14:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('14:00')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === '14:00' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Afternoon
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.quickButton,
+{ borderColor: colors.border, backgroundColor: colors.surface },
+                  rescheduleTime === '19:00' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => setRescheduleTime('19:00')}
+              >
+                <Text style={[
+                  styles.quickButtonText,
+                  { color: rescheduleTime === '19:00' ? '#FFFFFF' : colors.text }
+                ]}>
+                  Evening
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {rescheduleTime !== 'anytime' && (
+              <Text style={[styles.selectedValue, { color: colors.primary }]}>
+                {new Date(`2000-01-01T${rescheduleTime}`).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                })}
+              </Text>
+            )}
+
+            {/* Custom Date/Time Picker */}
+            <TouchableOpacity
+              style={[styles.customPickerButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => {
+                // Show date/time picker (implement if needed)
+                Alert.alert('Coming Soon', 'Custom date/time picker will be available soon.');
+              }}
+            >
+              <Text style={[styles.customPickerButtonText, { color: colors.text }]}>
+                📆 Pick Custom Date/Time
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.modalCancelButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => setShowRescheduleModal(false)}
+            >
+              <Text style={[styles.modalCancelButtonText, { color: colors.text }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.modalConfirmButton,
+                { backgroundColor: colors.primary },
+                isRescheduling && styles.modalConfirmButtonDisabled
+              ]}
+              onPress={handleRescheduleConfirm}
+              disabled={isRescheduling}
+            >
+              {isRescheduling ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.modalConfirmButtonText}>Confirm</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* FAB for Quick Add */}
+      <DraggableFab
+        onPress={() => setIsFabModalVisible(true)}
+        colors={colors}
+      />
+
+      {/* FAB Modal for Task/Event Creation */}
+      <Modal
+        visible={isFabModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setIsFabModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setIsFabModalVisible(false)} style={styles.modalBackButton}>
+              <X size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Add Task or Event
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <TaskEventForm
+            onSuccess={() => {
+              setIsFabModalVisible(false);
+              loadData(); // Reload data after creating task/event
+            }}
+            onCancel={() => setIsFabModalVisible(false)}
+          />
+        </SafeAreaView>
+      </Modal>
+
+      {/* Today's Menu Modal - Shows after completion */}
+      <TodaysMenuModal
+        visible={showTodaysMenuModal}
+        onClose={() => {
+          setShowTodaysMenuModal(false);
+          router.replace('/(tabs)/dashboard');
+        }}
+        fuelLevel={fuelLevel || 2}
+        events={actionsData?.today || []}
+        tasks={getCommittedItems([...urgentTasks, ...allTasks])}
+        reflections={{
+          commitReflection,
+          commitRose,
+          commitThorn,
+        }}
+        formatTimeDisplay={formatTimeDisplay}
+        colors={colors}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  fuelEmoji: {
+    fontSize: 24,
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    padding: 16,
+  },
+  coachSection: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  coachLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  coachText: {
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  collapsibleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  collapsibleArrow: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  collapsibleContent: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  reviewItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  reviewItemTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  reviewItemDate: {
+    fontSize: 13,
+  },
+  goalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  goalType: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  goalProgress: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  delegationInfo: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  eventsTable: {
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  iconContainer: {
+    width: 24,
+    alignItems: 'center',
+  },
+  eventContent: {
+    flex: 1,
+    gap: 4,
+  },
+  eventTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  eventTime: {
+    fontSize: 13,
+  },
+  overdueText: {
+    fontSize: 13,
+    color: '#EF4444',
+  },
+  points: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  webTaskClickArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  webRescheduleButton: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  finalTargetCard: {
+    marginTop: 16,
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    gap: 8,
+  },
+  finalTargetLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  finalTargetPoints: {
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  finalTargetBreakdown: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+  },
+  completeButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  completeButtonDisabled: {
+    opacity: 0.6,
+  },
+  completeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  modalBackButton: {
+    padding: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  modalInstructions: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  moveButtonsContainer: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  moveButtonsLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  moveButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  moveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  moveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  binContainer: {
+    marginBottom: 24,
+  },
+  binHeader: {
+    padding: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  binTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  binSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  binContent: {
+    borderWidth: 2,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    padding: 12,
+    minHeight: 80,
+  },
+  emptyBinText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  binItem: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  binItemText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  rescheduleItemContainer: {
+    marginBottom: 16,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pickerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    width: 60,
+  },
+  pickerWrapper: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 44,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    borderTopWidth: 1,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalConfirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalConfirmButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalConfirmButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalDoneButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalDoneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  rescheduleContent: {
+    flex: 1,
+    padding: 16,
+  },
+  rescheduleQuestion: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 24,
+  },
+  rescheduleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  quickButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  quickButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  selectedValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  customPickerButton: {
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  customPickerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});

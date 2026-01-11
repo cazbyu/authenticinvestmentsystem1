@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { checkOccurrenceExists } from '@/lib/taskUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
@@ -36,6 +36,7 @@ export async function handleActionCompletion(
       .from('0008-ap-tasks')
       .select('id, title, user_global_timeline_id, custom_timeline_id')
       .eq('id', actionId)
+      .is('deleted_at', null)
       .single();
 
     if (parentError || !parent) {
@@ -48,7 +49,7 @@ export async function handleActionCompletion(
       type: 'task',
       status: 'completed',
       due_date: dueDate,
-      completed_at: new Date().toISOString(),
+      completed_at: toLocalISOString(new Date()),
       parent_task_id: actionId,
       is_twelve_week_goal: !!(parent.user_global_timeline_id || (timeline?.source === 'global')),
     };
@@ -182,6 +183,7 @@ export async function handleRecurringTaskCompletion(
       .from('0008-ap-tasks')
       .select('*')
       .eq('id', sourceTaskId)
+      .is('deleted_at', null)
       .single();
 
     if (sourceError || !sourceTask) {
@@ -198,12 +200,11 @@ export async function handleRecurringTaskCompletion(
       end_date: parentTask.end_date,
       start_time: sourceTask.start_time,
       end_time: sourceTask.end_time,
-      completed_at: new Date().toISOString(),
+      completed_at: toLocalISOString(new Date()),
       parent_task_id: sourceTaskId,
       is_urgent: sourceTask.is_urgent,
       is_important: sourceTask.is_important,
       is_all_day: sourceTask.is_all_day,
-      is_authentic_deposit: sourceTask.is_authentic_deposit,
       is_twelve_week_goal: sourceTask.is_twelve_week_goal,
       user_global_timeline_id: sourceTask.user_global_timeline_id,
       custom_timeline_id: sourceTask.custom_timeline_id,

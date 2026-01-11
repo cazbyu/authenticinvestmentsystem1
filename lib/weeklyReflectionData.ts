@@ -345,15 +345,18 @@ export const fetchDailyDomainBalance = async (
 export const fetchDailyAggregationData = async (
   userId: string,
   dayStart: string,
-  dayEnd: string
+  dayEnd: string,
+  targetDate?: string
 ): Promise<DailyAggregationData> => {
   const supabase = getSupabaseClient();
 
-  console.log('[fetchDailyAggregationData] Fetching data for date:', dayStart.split('T')[0]);
+  const normalizedTargetDate = targetDate ? targetDate.split('T')[0] : dayStart.split('T')[0];
 
-  const goalSummaries = await fetchDailyGoalActionsSummary(userId, dayStart);
-  const roleInvestments = await fetchDailyRoleInvestments(userId, dayStart);
-  const domainBalance = await fetchDailyDomainBalance(userId, dayStart);
+  console.log('[fetchDailyAggregationData] Fetching data for date:', normalizedTargetDate);
+
+  const goalSummaries = await fetchDailyGoalActionsSummary(userId, targetDate ?? dayStart);
+  const roleInvestments = await fetchDailyRoleInvestments(userId, targetDate ?? dayStart);
+  const domainBalance = await fetchDailyDomainBalance(userId, targetDate ?? dayStart);
 
   console.log('[fetchDailyAggregationData] Data fetched:', {
     goalSummaries: goalSummaries.length,
@@ -361,8 +364,6 @@ export const fetchDailyAggregationData = async (
     domainBalance: domainBalance.length,
   });
 
-  // Use date-only comparison for withdrawals
-  const withdrawalDate = dayStart.split('T')[0];
   const { data: withdrawals, error: withdrawalsError } = await supabase
     .from('0008-ap-withdrawals')
     .select('id, amount, withdrawn_at')
@@ -374,17 +375,27 @@ export const fetchDailyAggregationData = async (
     console.error('Error fetching withdrawals:', withdrawalsError);
   }
 
-  console.log('[fetchDailyAggregationData] Found', withdrawals?.length || 0, 'withdrawals');
+  const filteredWithdrawals = (withdrawals || []).filter((withdrawal) => {
+    if (!withdrawal.withdrawn_at) {
+      return false;
+    }
+
+    const withdrawalDate = new Date(withdrawal.withdrawn_at);
+    const withdrawalDateString = withdrawalDate.toISOString().split('T')[0];
+    return withdrawalDateString === normalizedTargetDate;
+  });
+
+  console.log('[fetchDailyAggregationData] Found', filteredWithdrawals.length, 'withdrawals for', normalizedTargetDate);
 
   let withdrawalRoles: { role_label: string; count: number }[] = [];
   let withdrawalDomains: { domain_name: string; count: number }[] = [];
-  const totalWithdrawals = withdrawals?.length || 0;
+  const totalWithdrawals = filteredWithdrawals.length;
 
-  if (withdrawals && withdrawals.length > 0) {
+  if (filteredWithdrawals.length > 0) {
     const roleMap = new Map<string, { label: string; count: number }>();
     const domainMap = new Map<string, { name: string; count: number }>();
 
-    for (const withdrawal of withdrawals) {
+    for (const withdrawal of filteredWithdrawals) {
       const [{ data: roleJoins }, { data: domainJoins }] = await Promise.all([
         supabase
           .from('0008-ap-universal-roles-join')

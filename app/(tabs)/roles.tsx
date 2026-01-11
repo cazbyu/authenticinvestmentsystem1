@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image } from 'react-native';
+import { toLocalISOString } from '@/lib/dateUtils';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { DraggableFab } from '@/components/DraggableFab';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { ManageRolesModal } from '@/components/settings/ManageRolesModal';
@@ -13,9 +14,12 @@ import { ManageRolesContent } from '@/components/settings/ManageRolesContent';
 import { EditRoleModal } from '@/components/settings/EditRoleModal';
 import { EditKRModal } from '@/components/settings/EditKRModal';
 import { JournalView } from '@/components/journal/JournalView';
+import JournalForm from '@/components/reflections/JournalForm';
+import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
+import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
 import { getSupabaseClient } from '@/lib/supabase';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
-import { Plus, Users, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
+import { Plus, Users, UserX, Ban, Menu, CreditCard as Edit2, Pencil } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
@@ -25,6 +29,9 @@ import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { WebNavigationMenu } from '@/components/WebNavigationMenu';
+import { RoleCard } from '@/components/roles/RoleCard';
+import { getRoleStatistics, RoleStatistics } from '@/lib/roleStatistics';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -49,6 +56,7 @@ export default function Roles() {
   const { authenticScore, refreshScoreForRole } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [keyRelationships, setKeyRelationships] = useState<KeyRelationship[]>([]);
@@ -72,6 +80,10 @@ export default function Roles() {
   const [taskFormVisible, setTaskFormVisible] = useState(false);
   const [taskDetailVisible, setTaskDetailVisible] = useState(false);
   const [depositIdeaDetailVisible, setDepositIdeaDetailVisible] = useState(false);
+  const [reflectionFormVisible, setReflectionFormVisible] = useState(false);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
+  const [reflectionDetailVisible, setReflectionDetailVisible] = useState(false);
+  const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<ReflectionWithRelations | null>(null);
 
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -85,10 +97,23 @@ export default function Roles() {
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
   const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
   const fetchAbortController = useRef<AbortController | null>(null);
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
   const previousRoleIdRef = useRef<string | null>(null);
   const fetchInProgressRef = useRef<boolean>(false);
+
+  // Follow-through TaskEventForm state
+  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
+  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
+  const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
+  // Role Bank statistics
+  const [roleStatsPeriod, setRoleStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
+  const [roleStatistics, setRoleStatistics] = useState<Record<string, RoleStatistics>>({});
+  const [loadingStatistics, setLoadingStatistics] = useState(false);
 
   // Memoize the scope object to prevent unnecessary re-renders
   const goalsScope = useMemo(() => {
@@ -153,7 +178,7 @@ export default function Roles() {
     }
   }, [selectedRole, selectedKR, calculatePeriodScore]);
 
-  const handleJournalEntryPress = (entry: any) => {
+  const handleJournalEntryPress = async (entry: any) => {
     if (entry.source_type === 'task') {
       setSelectedTask(entry.source_data);
       setTaskDetailVisible(true);
@@ -165,6 +190,22 @@ export default function Roles() {
       };
       setEditingTask(editData);
       setTaskFormVisible(true);
+    } else if (entry.source_type === 'depositIdea') {
+      // Open TaskEventForm in depositIdea reflection mode for editing
+      const editData = {
+        ...entry.source_data,
+        type: 'reflection',
+        reflectionMode: 'depositIdea'
+      };
+      setEditingTask(editData);
+      setTaskFormVisible(true);
+    } else if (entry.source_type === 'reflection') {
+      // Fetch full reflection data and open ReflectionDetailsModal
+      const reflection = await fetchReflectionById(entry.source_id);
+      if (reflection) {
+        setSelectedReflectionDetail(reflection);
+        setReflectionDetailVisible(true);
+      }
     }
   };
 
@@ -410,6 +451,7 @@ export default function Roles() {
           .eq('user_id', user.id)
           .in('id', roleDepositIdeaIds)
           .eq('archived', false)
+          .eq('is_active', true)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
@@ -608,6 +650,7 @@ export default function Roles() {
           .eq('user_id', user.id)
           .in('id', krDepositIdeaIds)
           .eq('archived', false)
+          .eq('is_active', true)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
@@ -878,6 +921,44 @@ export default function Roles() {
     }
   }, [activeMainTab, selectedRole, selectedKR]);
 
+  // Fetch role statistics when viewing main role bank and period changes
+  useEffect(() => {
+    const fetchRoleStatistics = async () => {
+      if (activeMainTab === 'roles' && !selectedRole && roles.length > 0) {
+        setLoadingStatistics(true);
+        try {
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const statsArray = await Promise.all(
+            roles.map(role =>
+              getRoleStatistics(
+                supabase,
+                user.id,
+                role.id,
+                roleStatsPeriod
+              ).then(stats => ({ roleId: role.id, stats }))
+            )
+          );
+
+          const stats: Record<string, RoleStatistics> = {};
+          statsArray.forEach(({ roleId, stats: roleStats }) => {
+            stats[roleId] = roleStats;
+          });
+
+          setRoleStatistics(stats);
+        } catch (error) {
+          console.error('Error fetching role statistics:', error);
+        } finally {
+          setLoadingStatistics(false);
+        }
+      }
+    };
+
+    fetchRoleStatistics();
+  }, [activeMainTab, roles.length, roleStatsPeriod, selectedRole]);
+
   const handleViewChange = (view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
     if (selectedRole && (view === 'deposits' || view === 'ideas')) {
@@ -906,7 +987,7 @@ export default function Roles() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
         .eq('id', taskId);
 
       if (error) throw error;
@@ -927,7 +1008,10 @@ export default function Roles() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ deleted_at: new Date().toISOString() })
+        .update({
+          deleted_at: toLocalISOString(new Date()),
+          status: 'cancelled'
+        })
         .eq('id', taskId);
 
       if (error) throw error;
@@ -940,6 +1024,27 @@ export default function Roles() {
       }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
+    }
+  };
+
+  const handleDeleteReflection = async (reflection: ReflectionWithRelations) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .delete()
+        .eq('id', reflection.id);
+
+      if (error) throw error;
+
+      if (selectedRole) {
+        fetchRoleTasks(selectedRole.id, activeView);
+      }
+      if (selectedKR) {
+        fetchKRTasks(selectedKR.id, krJournalView);
+      }
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
     }
   };
 
@@ -961,7 +1066,7 @@ export default function Roles() {
         .update({
           is_active: false,
           archived: true,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', depositIdea.id);
 
@@ -1054,6 +1159,25 @@ export default function Roles() {
   const handleFormClose = () => {
     setTaskFormVisible(false);
     setEditingTask(null);
+  };
+
+  const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
+    setFollowThroughPreSelectedType(type);
+    setFollowThroughParentId(parentId);
+    setFollowThroughParentType(parentType);
+    setFollowThroughFormVisible(true);
+  };
+
+  const handleFollowThroughFormClose = () => {
+    setFollowThroughFormVisible(false);
+    setRefreshAssociatedItemsKey(prev => prev + 1);
+    if (selectedRole) {
+      fetchDataForRole(selectedRole.id);
+    }
+    if (selectedKR) {
+      fetchDataForKR(selectedKR.id);
+    }
+    refreshGoals();
   };
 
   const handleRolePress = useCallback((role: Role) => {
@@ -1195,7 +1319,7 @@ export default function Roles() {
               style={styles.customBackButton}
               onPress={hideManageRolesView}
             >
-              <Text style={styles.customBackButtonText}>← Back to Role Bank</Text>
+              <Text style={styles.customBackButtonText}>← Role Bank</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>Manage Roles</Text>
@@ -1266,7 +1390,7 @@ export default function Roles() {
               style={styles.customBackButton}
               onPress={() => setSelectedRole(null)}
             >
-              <Text style={styles.customBackButtonText}>← Back to Role Bank</Text>
+              <Text style={styles.customBackButtonText}>← Role Bank</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedRole.label}</Text>
@@ -1310,7 +1434,13 @@ export default function Roles() {
         <View style={styles.customHeaderTop}>
           <TouchableOpacity
             style={styles.customMenuButton}
-            onPress={() => navigation.openDrawer()}
+            onPress={() => {
+              if (Platform.OS === 'web') {
+                setIsWebMenuVisible(true);
+              } else if (typeof navigation.openDrawer === 'function') {
+                navigation.openDrawer();
+              }
+            }}
           >
             <Menu size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -1360,7 +1490,7 @@ export default function Roles() {
     if (activeMainTab === 'manageRoles') {
       // Manage Roles view
       return (
-        <View style={styles.content}>
+        <View style={styles.content} pointerEvents="box-none">
           <ManageRolesContent
             onUpdate={handleManageRolesUpdate}
           />
@@ -1371,7 +1501,7 @@ export default function Roles() {
     if (selectedKR) {
       // Key Relationship view
       return (
-        <View style={styles.content}>
+        <View style={styles.content} pointerEvents="box-none">
 
           <ScrollView style={styles.taskList}>
             {krJournalView === 'journal' ? (
@@ -1379,7 +1509,8 @@ export default function Roles() {
                 <JournalView
                   scope={krJournalScope}
                   onEntryPress={handleJournalEntryPress}
-                  periodScore={periodScore}
+                  dateRange={journalDateRange}
+                  showTimePeriodSelector={true}
                   onDateRangeChange={handleJournalDateRangeChange}
                 />
               )
@@ -1438,7 +1569,7 @@ export default function Roles() {
     if (selectedRole) {
       // Role view
       return (
-        <View style={styles.content}>
+        <View style={styles.content} pointerEvents="box-none">
 
           {/* 12-Week Goals Strip - Only show when data is stable */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && fetchState === 'complete' && (
@@ -1485,7 +1616,8 @@ export default function Roles() {
                 <JournalView
                   scope={journalScope}
                   onEntryPress={handleJournalEntryPress}
-                  periodScore={periodScore}
+                  dateRange={journalDateRange}
+                  showTimePeriodSelector={true}
                   onDateRangeChange={handleJournalDateRangeChange}
                 />
               )
@@ -1594,9 +1726,64 @@ export default function Roles() {
 
     // Main Role Bank view with tabs
     return (
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'roles' && (
           <ScrollView style={styles.rolesList}>
+            {/* Time Period Selector */}
+            <View style={styles.timePeriodContainer}>
+              <View style={styles.timePeriodSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'today' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('today')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'today' && styles.timePeriodButtonTextActive
+                  ]}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'week' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('week')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'week' && styles.timePeriodButtonTextActive
+                  ]}>Week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'month' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('month')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'month' && styles.timePeriodButtonTextActive
+                  ]}>Month</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'all' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('all')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'all' && styles.timePeriodButtonTextActive
+                  ]}>All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Roles Grid */}
             {roles.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No active roles found</Text>
@@ -1609,56 +1796,18 @@ export default function Roles() {
               </View>
             ) : (
               <View style={styles.rolesGrid}>
-                {roles.map(role => (
-                  <TouchableOpacity
-                    key={role.id}
-                    style={[
-                      styles.roleCard,
-                      styles.roleCardHalf,
-                      { borderLeftColor: role.color || '#0078d4' }
-                    ]}
-                    onPress={() => handleRolePress(role)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.roleCardContent}>
-                      <View style={styles.roleCardMain}>
-                        {role.image_path && roleImageUrls[role.id] ? (
-                          <Image
-                            source={{ uri: roleImageUrls[role.id] || undefined }}
-                            style={styles.roleImage}
-                            onError={(error) => {
-                              console.error('[RoleBank] Failed to load role image:', role.label, role.image_path, error.nativeEvent.error);
-                            }}
-                          />
-                        ) : (
-                          <View style={[styles.roleImagePlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
-                            <Text style={styles.roleImageText}>
-                              {role.label.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
-
-                        <View style={styles.roleInfo}>
-                          <Text style={styles.roleName} numberOfLines={2}>{role.label}</Text>
-                          {role.category && (
-                            <Text style={styles.roleCategory} numberOfLines={1}>{role.category}</Text>
-                          )}
-                        </View>
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.editRoleButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleEditRole(role);
-                        }}
-                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                      >
-                        <Edit size={16} color="#6b7280" />
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {roles.map(role => {
+                  const stats = roleStatistics[role.id];
+                  return (
+                    <RoleCard
+                      key={role.id}
+                      role={role}
+                      statistics={stats || null}
+                      onPress={handleRolePress}
+                      imageUrl={roleImageUrls[role.id]}
+                    />
+                  );
+                })}
               </View>
             )}
           </ScrollView>
@@ -1731,7 +1880,7 @@ export default function Roles() {
                                   handleEditKR(kr);
                                 }}
                               >
-                                <Edit size={16} color="#6b7280" />
+                                <Pencil size={16} color="#6b7280" />
                               </TouchableOpacity>
                             </TouchableOpacity>
                           ))}
@@ -1769,8 +1918,8 @@ export default function Roles() {
           setEditingTask(null);
         }
         setTaskFormVisible(true);
-      }}>
-        <Plus size={24} color="#ffffff" />
+      }} size={44}>
+        <Plus size={28} color="#ffffff" />
       </DraggableFab>
 
       {/* Modals */}
@@ -1804,13 +1953,15 @@ export default function Roles() {
         />
       </Modal>
 
-      <TaskDetailModal
+      <ActionDetailsModal
         visible={taskDetailVisible}
         task={selectedTask}
         onClose={() => setTaskDetailVisible(false)}
-        onUpdate={handleUpdateTask}
+        onEdit={handleUpdateTask}
         onDelegate={handleDelegateTask}
         onCancel={handleCancelTask}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
 
       <DepositIdeaDetailModal
@@ -1819,6 +1970,61 @@ export default function Roles() {
         onClose={() => setDepositIdeaDetailVisible(false)}
         onUpdate={handleUpdateDepositIdea}
         onCancel={handleCancelDepositIdea}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+      />
+
+      {/* Follow-through TaskEventForm Modal */}
+      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleFollowThroughFormClose}
+          onClose={() => setFollowThroughFormVisible(false)}
+          parentId={followThroughParentId}
+          parentType={followThroughParentType as any}
+          preSelectedType={followThroughPreSelectedType}
+        />
+      </Modal>
+      <JournalForm
+        visible={reflectionFormVisible}
+        mode={selectedReflection ? 'edit' : 'create'}
+        initialData={selectedReflection || undefined}
+        openedFromJournal={true}
+        onClose={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+        }}
+        onSaveSuccess={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+          if (selectedRole) {
+            fetchRoleTasks(selectedRole.id, activeView);
+          }
+        }}
+      />
+
+      <ReflectionDetailsModal
+        visible={reflectionDetailVisible}
+        reflection={selectedReflectionDetail}
+        onClose={() => {
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onEdit={(reflection) => {
+          setReflectionDetailVisible(false);
+          setSelectedReflection(reflection);
+          setReflectionFormVisible(true);
+        }}
+        onDelete={(reflection) => {
+          handleDeleteReflection(reflection);
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+      />
+
+      <WebNavigationMenu
+        visible={isWebMenuVisible}
+        onClose={() => setIsWebMenuVisible(false)}
       />
     </SafeAreaView>
   );
@@ -1914,78 +2120,45 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  roleCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  timePeriodContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 12,
+    alignItems: 'flex-end',
   },
-  roleCardContent: {
+  timePeriodSelector: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  roleCardMain: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    flex: 1,
-    gap: 8,
+  timePeriodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+  },
+  timePeriodButtonActive: {
+    backgroundColor: '#0078d4',
+  },
+  timePeriodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  timePeriodButtonTextActive: {
+    color: '#ffffff',
   },
   rolesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 8,
     paddingHorizontal: 16,
-  },
-  roleCardHalf: {
-    width: '48%',
-    minHeight: 120,
-  },
-  roleImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  roleImagePlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  roleImageText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  roleInfo: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  roleName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  roleCategory: {
-    fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  editRoleButton: {
-    padding: 8,
-    position: 'absolute',
-    top: 4,
-    right: 4,
   },
   taskList: {
     flex: 1,

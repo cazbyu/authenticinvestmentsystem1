@@ -21,7 +21,6 @@ export interface CalendarEvent {
   is_important: boolean;
   is_all_day: boolean;
   is_anytime: boolean;
-  is_authentic_deposit: boolean;
   user_global_timeline_id: string | null;
   custom_timeline_id: string | null;
   input_kind: string | null;

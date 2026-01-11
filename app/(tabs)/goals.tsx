@@ -18,7 +18,7 @@ import { useGoals } from '@/hooks/useGoals';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { fetchGoalActionsForWeek } from '@/hooks/fetchGoalActionsForWeek';
 import { calculateAuthenticScore, calculateTotalGoalProgress } from '@/lib/taskUtils';
-import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { getWeeklyCompletionCountWithTarget, syncCompletionAcrossViews, completionEvents } from '@/lib/completionSync';
 import { Plus, ChevronLeft, ChevronRight, Target, Users, Minus, X } from 'lucide-react-native';
@@ -234,7 +234,7 @@ export default function Goals() {
                 day_of_week: new Date(date).getDay(),
                 value: 1,
                 completed: true,
-                created_at: new Date().toISOString(),
+                created_at: toLocalISOString(new Date()),
               });
             }
             updatedAction.weeklyActual = updatedAction.weeklyActual + 1;
@@ -680,11 +680,11 @@ export default function Goals() {
 
   const getCurrentWeekIndex = () => {
     if (timelineWeeks.length === 0) return 0;
-    
+
     const today = formatLocalDate(new Date());
-    
+
     // Find the week that contains today's date
-    const currentWeekIndex = timelineWeeks.findIndex(week => 
+    const currentWeekIndex = timelineWeeks.findIndex(week =>
       today >= week.start_date && today <= week.end_date
     );
     
@@ -1181,7 +1181,7 @@ export default function Goals() {
   };
 
   const renderTimelinesTab = () => (
-    <View style={styles.content}>
+    <View style={styles.content} pointerEvents="box-none">
       <View style={styles.sectionHeaderContainer}>
         <Text style={styles.sectionHeaderTitle}>Active Timelines</Text>
         <Text style={styles.sectionHeaderSubtitle}>
@@ -1259,7 +1259,7 @@ export default function Goals() {
   );
 
   const renderNorthStarTab = () => (
-    <View style={styles.content}>
+    <View style={styles.content} pointerEvents="box-none">
       <NorthStarQuickView
         data={northStarData}
         loading={loadingNorthStar}
@@ -1288,7 +1288,7 @@ export default function Goals() {
     const weekGoalActionsForWeek = weekGoalActions || {};
 
     return (
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
 
         {/* Week Navigation */}
         {timelineWeeks.length > 0 && (
@@ -1456,8 +1456,8 @@ export default function Goals() {
 
       {/* FAB for creating goals - show when on timelines tab or viewing a timeline */}
       {(activeTab === 'timelines' || selectedTimeline) && (
-        <DraggableFab onPress={() => setCreateGoalModalVisible(true)}>
-          <Plus size={24} color="#ffffff" />
+        <DraggableFab onPress={() => setCreateGoalModalVisible(true)} size={44}>
+          <Plus size={28} color="#ffffff" />
         </DraggableFab>
       )}
 

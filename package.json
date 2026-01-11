@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cross-env EXPO_NO_TELEMETRY=1 npx expo start",
     "start": "expo start",
-    "build:web": "npm run clean:web && cross-env EXPO_NO_TELEMETRY=1 npx expo export -p web --output-dir build",
+    "build:web": "npm run clean:web && cross-env EXPO_NO_TELEMETRY=1 npx expo export -p web --output-dir build && shx cp _redirects build/_redirects && shx echo \"_redirects file copied successfully\" && shx cat build/_redirects",
     "clean:web": "shx rm -rf build",
     "lint": "expo lint",
     "test": "node --test"
@@ -14,6 +14,8 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/slider": "^5.1.1",
+    "@react-native-picker/picker": "2.11.1",
     "@react-navigation/drawer": "^7.1.1",
     "@react-navigation/native": "^7.0.14",
     "@supabase/supabase-js": "^2.55.0",

@@ -5,16 +5,16 @@ import { SupabaseClient } from '@supabase/supabase-js';
  * CRITICAL: This is the CENTRALIZED point calculation function.
  * ALL components MUST use this function to calculate task points.
  *
- * Scoring Rules (as of the current implementation):
- * 1. Roles: +1 point if ANY role is assigned (binary, not per role)
- * 2. Domains: +1 point if ANY domain is assigned (binary, not per domain)
- * 3. Authentic Deposit: +2 points if flagged as authentic deposit
- * 4. Priority:
- *    - Urgent + Important: +1.5 points
- *    - Important only: +3 points
- *    - Urgent only: +1 point
- *    - Neither: +0.5 points
- * 5. Active Goals: +2 points if linked to ANY active goal (12-week or custom)
+ * Scoring Rules v1.0 (Authentic Investment System):
+ * 1. BASE SCORE (Mutually Exclusive):
+ *    - Complete Deposit (+5): Task activated from deposit idea
+ *    - Complete Task (+3): Regular task completion
+ * 2. ALIGNMENT BONUSES (Stackable, +1 each):
+ *    - Link Role: +1 if ANY role assigned
+ *    - Link Zone/Domain: +1 if ANY domain assigned
+ *    - Link Goal: +1 if linked to ANY active goal
+ * 3. Q2 DEFENSE:
+ *    - Important + NOT Urgent: +1 bonus
  *
  * IMPORTANT: Do NOT create duplicate calculation logic elsewhere.
  * If you need to calculate points, import and use this function.
@@ -23,7 +23,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
  * @param roles - Array of role objects assigned to the task
  * @param domains - Array of domain objects assigned to the task
  * @param goals - Array of goal objects linked to the task
- * @returns The calculated point value (rounded to 1 decimal place)
+ * @returns The calculated point value (integer)
  */
 export function calculateTaskPoints(
   task: any,
@@ -33,59 +33,82 @@ export function calculateTaskPoints(
 ): number {
   let points = 0;
 
-  // Role + Domain points (binary scoring: 1 point if any exist)
-  if (roles.length > 0) points += 1;
-  if (domains.length > 0) points += 1;
+  // BASE SCORE: Deposit Idea vs Regular Task (MUTUALLY EXCLUSIVE)
+  if (task.is_deposit_idea || task.deposit_idea) {
+    points = 5; // Complete Deposit
+  } else {
+    points = 3; // Complete Task
+  }
 
-  // Authentic deposit bonus
-  if (task.is_authentic_deposit) points += 2;
+  // ALIGNMENT BONUSES (Flat +1 each, stackable)
+  if (roles && roles.length > 0) {
+    points += 1; // Link Role
+  }
 
-  // Urgency / Importance weights
-  if (task.is_urgent && task.is_important) points += 1.5;
-  else if (!task.is_urgent && task.is_important) points += 3;
-  else if (task.is_urgent && !task.is_important) points += 1;
-  else points += 0.5;
+  if (domains && domains.length > 0) {
+    points += 1; // Link Zone (Domain)
+  }
 
   // Linked to active goal bonus (exclude archived/cancelled goals)
-  // Award +2 bonus for any active goal (12-week OR custom)
-  const activeGoals = (goals || []).filter(g => g.goal_type !== 'deleted' && g.status !== 'archived' && g.status !== 'cancelled');
-  if (activeGoals.length > 0) points += 2;
+  const activeGoals = (goals || []).filter(g =>
+    g.goal_type !== 'deleted' &&
+    g.status !== 'archived' &&
+    g.status !== 'cancelled'
+  );
+  if (activeGoals.length > 0) {
+    points += 1; // Link Goal
+  }
 
-  return Math.round(points * 10) / 10;
+  // Q2 DEFENSE: Important but NOT Urgent
+  if (task.is_important && !task.is_urgent) {
+    points += 1; // Q2 Defense
+  }
+
+  return points; // Return integer, no decimal rounding needed
 }
 
 //
-// Calculate Authentic Score directly from Supabase
+// Calculate Authentic Score directly from Supabase (v1.0)
+// Includes ALL scoring components:
+// 1. Task Completion Points (with alignment bonuses)
+// 2. Deposit Idea Creation Points (+1 each)
+// 3. Beat the Target Bonuses (+10 per day)
+// 4. Morning Spark Points (+5 or +10)
+// 5. Evening Review Points (+10)
+// 6. Reflection Points (+1 each, max 10/day, +1 for first rose)
+// 7. Aspiration Points (tiered: 5, 3, 1)
+// 8. Weekly Alignment Points (sum of all weekly bonuses)
+// 9. Minus: Withdrawal Points
 //
 export async function calculateAuthenticScore(
   supabase: SupabaseClient,
   userId: string
 ): Promise<number> {
   try {
-    console.log('[AuthenticScore] Starting calculation for user:', userId);
+    console.log('[AuthenticScore v1.0] Starting calculation for user:', userId);
 
-    // 1. Completed tasks (deposits)
+    let totalScore = 0;
+
+    // 1. TASK COMPLETION POINTS
     const { data: tasksData, error: tasksErr } = await supabase
       .from('0008-ap-tasks')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (tasksErr) throw tasksErr;
-    if (!tasksData || tasksData.length === 0) {
-      console.log('[AuthenticScore] No completed tasks found.');
-      return 0;
-    }
 
-    const taskIds = tasksData.map(t => t.id);
+    if (tasksData && tasksData.length > 0) {
+      const taskIds = tasksData.map(t => t.id);
 
-    // 2. Roles + Domains + Goals via join tables
-    const [
-      { data: rolesData, error: rolesErr },
-      { data: domainsData, error: domainsErr },
-      { data: goalsData, error: goalsErr }
-    ] = await Promise.all([
+      // Get alignment data
+      const [
+        { data: rolesData },
+        { data: domainsData },
+        { data: goalsData }
+      ] = await Promise.all([
         supabase
           .from('0008-ap-universal-roles-join')
           .select('parent_id, role:0008-ap-roles(id, label)')
@@ -103,61 +126,133 @@ export async function calculateAuthenticScore(
           .eq('parent_type', 'task'),
       ]);
 
-    if (rolesErr) throw rolesErr;
-    if (domainsErr) throw domainsErr;
-    if (goalsErr) throw goalsErr;
+      // Calculate task points
+      for (const task of tasksData) {
+        const roles =
+          rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) ?? [];
+        const domains =
+          domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) ?? [];
 
-    // 3. Calculate deposits
-    let totalDeposits = 0;
-    for (const task of tasksData) {
-      const roles =
-        rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) ?? [];
-      const domains =
-        domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) ?? [];
-
-      // Transform polymorphic goals
-      const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => {
-        if (g.goal_type === 'twelve_wk_goal' && g.twelve_wk_goal) {
-          const goal = g.twelve_wk_goal;
-          if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-            return null;
+        const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => {
+          if (g.goal_type === 'twelve_wk_goal' && g.twelve_wk_goal) {
+            const goal = g.twelve_wk_goal;
+            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+              return null;
+            }
+            return { ...goal, goal_type: '12week' };
+          } else if (g.goal_type === 'custom_goal' && g.custom_goal) {
+            const goal = g.custom_goal;
+            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+              return null;
+            }
+            return { ...goal, goal_type: 'custom' };
           }
-          return { ...goal, goal_type: '12week' };
-        } else if (g.goal_type === 'custom_goal' && g.custom_goal) {
-          const goal = g.custom_goal;
-          if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-            return null;
-          }
-          return { ...goal, goal_type: 'custom' };
-        }
-        return null;
-      }).filter(Boolean) || [];
+          return null;
+        }).filter(Boolean) || [];
 
-      const pts = calculateTaskPoints(task, roles, domains, taskGoals);
-      totalDeposits += pts;
-
+        const pts = calculateTaskPoints(task, roles, domains, taskGoals);
+        totalScore += pts;
+      }
     }
 
-    // 4. Withdrawals
-    const { data: withdrawalsData, error: withdrawalsErr } = await supabase
+    // 2. DEPOSIT IDEA CREATION POINTS (+1 each, only if not already awarded)
+    const { data: depositIdeas } = await supabase
+      .from('0008-ap-deposit-ideas')
+      .select('id, creation_points_awarded')
+      .eq('user_id', userId);
+
+    if (depositIdeas) {
+      // Count ideas where points were awarded (or should be)
+      const creationPoints = depositIdeas.length * 1;
+      totalScore += creationPoints;
+    }
+
+    // 3. BEAT THE TARGET BONUSES (+10 per day achieved)
+    const { data: beatTargetDays } = await supabase
+      .from('0008-ap-daily-sparks')
+      .select('beat_target_bonus_awarded')
+      .eq('user_id', userId)
+      .eq('beat_target_bonus_awarded', true);
+
+    if (beatTargetDays) {
+      totalScore += beatTargetDays.length * 10;
+    }
+
+    // 4. MORNING SPARK POINTS (stored in spark_points column)
+    const { data: sparks } = await supabase
+      .from('0008-ap-daily-sparks')
+      .select('spark_points')
+      .eq('user_id', userId)
+      .not('spark_points', 'is', null);
+
+    if (sparks) {
+      const sparkPoints = sparks.reduce((sum, s) => sum + (s.spark_points || 0), 0);
+      totalScore += sparkPoints;
+    }
+
+    // 5. EVENING REVIEW POINTS (stored in review_points column)
+    const { data: reviews } = await supabase
+      .from('0008-ap-daily-reviews')
+      .select('review_points')
+      .eq('user_id', userId)
+      .not('review_points', 'is', null);
+
+    if (reviews) {
+      const reviewPoints = reviews.reduce((sum, r) => sum + (r.review_points || 0), 0);
+      totalScore += reviewPoints;
+    }
+
+    // 6. REFLECTION POINTS (stored in points_awarded column)
+    const { data: reflections } = await supabase
+      .from('0008-ap-reflections')
+      .select('points_awarded')
+      .eq('user_id', userId)
+      .not('points_awarded', 'is', null);
+
+    if (reflections) {
+      const reflectionPoints = reflections.reduce((sum, r) => sum + (r.points_awarded || 0), 0);
+      totalScore += reflectionPoints;
+    }
+
+    // 7. ASPIRATION POINTS (stored in points_awarded column)
+    const { data: aspirations } = await supabase
+      .from('0008-ap-aspirations')
+      .select('points_awarded')
+      .eq('user_id', userId)
+      .not('points_awarded', 'is', null);
+
+    if (aspirations) {
+      const aspirationPoints = aspirations.reduce((sum, a) => sum + (a.points_awarded || 0), 0);
+      totalScore += aspirationPoints;
+    }
+
+    // 8. WEEKLY ALIGNMENT POINTS (sum of all weekly bonuses)
+    const { data: weeklyAlignments } = await supabase
+      .from('0008-ap-weekly-alignments')
+      .select('total_weekly_points')
+      .eq('user_id', userId);
+
+    if (weeklyAlignments) {
+      const weeklyPoints = weeklyAlignments.reduce((sum, w) => sum + (w.total_weekly_points || 0), 0);
+      totalScore += weeklyPoints;
+    }
+
+    // 9. WITHDRAWALS (subtract)
+    const { data: withdrawalsData } = await supabase
       .from('0008-ap-withdrawals')
       .select('amount')
       .eq('user_id', userId);
 
-    if (withdrawalsErr) throw withdrawalsErr;
+    if (withdrawalsData) {
+      const totalWithdrawals = withdrawalsData.reduce((sum, w) => sum + parseFloat(w.amount.toString()), 0);
+      totalScore -= totalWithdrawals;
+    }
 
-    const totalWithdrawals =
-      withdrawalsData?.reduce((sum, w) => sum + parseFloat(w.amount.toString()), 0) || 0;
+    console.log('[AuthenticScore v1.0] Final Score:', totalScore);
 
-    console.log('[AuthenticScore] Deposits:', totalDeposits);
-    console.log('[AuthenticScore] Withdrawals:', totalWithdrawals);
-
-    const finalScore = Math.round((totalDeposits - totalWithdrawals) * 10) / 10;
-    console.log('[AuthenticScore] Final Score:', finalScore);
-
-    return finalScore;
+    return Math.round(totalScore);
   } catch (err) {
-    console.error('Error calculating authentic score:', err);
+    console.error('Error calculating authentic score v1.0:', err);
     return 0;
   }
 }
@@ -201,6 +296,7 @@ export async function calculateAuthenticScoreForRole(
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (tasksErr) throw tasksErr;
@@ -313,6 +409,7 @@ export async function calculateAuthenticScoreForDomain(
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (tasksErr) throw tasksErr;
@@ -763,6 +860,7 @@ export async function calculateAuthenticScoreForPeriod(
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
+      .is('deleted_at', null)
       .not('completed_at', 'is', null);
 
     if (startDate) {

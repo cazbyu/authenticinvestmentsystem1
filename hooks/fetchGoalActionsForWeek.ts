@@ -137,6 +137,7 @@ export async function fetchGoalActionsForWeek(
       .eq('user_id', user.id)
       .in('id', taskIds)
       .eq('input_kind', 'count')
+      .is('deleted_at', null)
       .not('status', 'in', '(completed,cancelled)');
 
     if (tasksErr) {

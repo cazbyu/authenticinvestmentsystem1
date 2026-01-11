@@ -42,8 +42,6 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
     >
       <View style={styles.eventContent}>
         <View style={styles.titleRow}>
-          {isTask && <Text style={styles.typeIndicator}>📋</Text>}
-          {isEvent && <Text style={styles.typeIndicator}>📅</Text>}
           <Text style={[styles.eventTitle, isNoTimeTask && styles.noTimeTaskTitle, isCompleted && styles.completedTitle]} numberOfLines={2}>
             {task.title}
           </Text>
@@ -97,10 +95,6 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
-  typeIndicator: {
-    fontSize: 10,
   },
   eventTitle: {
     fontSize: 12,

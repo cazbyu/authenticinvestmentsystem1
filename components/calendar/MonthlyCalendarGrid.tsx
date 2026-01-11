@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, useWindowDimensions } from 'react-native';
 import { PriorityQuadrant } from './PriorityQuadrant';
 import { Task } from '../tasks/TaskCard';
-import { formatTimeForDisplay } from '@/lib/dateUtils';
-import { X } from 'lucide-react-native';
+import { formatTimeForDisplay, formatLocalDate } from '@/lib/dateUtils';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 interface MonthlyCalendarGridProps {
   currentDate: Date;
   tasks: Task[];
   onDayPress: (date: Date) => void;
+  onNavigate?: (direction: 'prev' | 'next') => void;
   holidays?: Array<{ date: string; name: string; color?: string }>;
 }
 
@@ -20,6 +21,9 @@ interface DayTasksModalProps {
 }
 
 const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) => {
+  const { width: screenWidth } = useWindowDimensions();
+  const isMobile = screenWidth < 600;
+
   const sortedTasks = [...tasks].sort((a, b) => {
     const aCompleted = a.status === 'completed' ? 1 : 0;
     const bCompleted = b.status === 'completed' ? 1 : 0;
@@ -48,8 +52,16 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
       transparent
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          style={styles.modalContent}
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+        >
           <View style={styles.modalHeader}>
             <View>
               <Text style={styles.modalTitle}>{dateLabel}</Text>
@@ -60,41 +72,58 @@ const DayTasksModal = ({ visible, date, tasks, onClose }: DayTasksModalProps) =>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalTasksList}>
-            {sortedTasks.map((task, index) => {
-              const priorityColor = task.is_urgent && task.is_important ? '#ef4444' :
-                                   !task.is_urgent && task.is_important ? '#22c55e' :
-                                   task.is_urgent && !task.is_important ? '#f59e0b' : '#9ca3af';
-              return (
-                <View key={`${task.id}-${index}`} style={[styles.modalTaskItem, task.status === 'completed' && styles.completedTaskItem]}>
-                  <View style={[styles.taskColorBar, { backgroundColor: priorityColor }]} />
-                  <View style={styles.taskContent}>
-                    {task.start_time && (
-                      <Text style={[styles.taskTime, task.status === 'completed' && styles.completedText]}>
-                        {formatTimeForDisplay(task.start_time)}
-                        {task.end_time && ` - ${formatTimeForDisplay(task.end_time)}`}
-                      </Text>
-                    )}
-                    <Text style={[styles.taskTitle, task.status === 'completed' && styles.completedText]}>{task.title}</Text>
-                    <View style={styles.taskMetadata}>
-                      {task.status === 'completed' ? (
-                        <Text style={styles.taskCompleted}>✓ Completed</Text>
-                      ) : (
-                        <Text style={styles.taskPending}>Pending</Text>
+          <View style={[styles.modalBody, isMobile && styles.modalBodyMobile]}>
+            <ScrollView style={[styles.modalTasksList, isMobile && styles.modalTasksListMobile]}>
+              {sortedTasks.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No tasks for this day</Text>
+                </View>
+              ) : (
+                sortedTasks.map((task, index) => {
+                const priorityColor = task.is_urgent && task.is_important ? '#ef4444' :
+                                     !task.is_urgent && task.is_important ? '#22c55e' :
+                                     task.is_urgent && !task.is_important ? '#f59e0b' : '#9ca3af';
+                return (
+                  <View key={`${task.id}-${index}`} style={[styles.modalTaskItem, task.status === 'completed' && styles.completedTaskItem]}>
+                    <View style={[styles.taskColorBar, { backgroundColor: priorityColor }]} />
+                    <View style={styles.taskContent}>
+                      {task.start_time && (
+                        <Text style={[styles.taskTime, task.status === 'completed' && styles.completedText]}>
+                          {formatTimeForDisplay(task.start_time)}
+                          {task.end_time && ` - ${formatTimeForDisplay(task.end_time)}`}
+                        </Text>
                       )}
+                      <Text style={[styles.taskTitle, task.status === 'completed' && styles.completedText]}>{task.title}</Text>
+                      <View style={styles.taskMetadata}>
+                        {task.status === 'completed' ? (
+                          <Text style={styles.taskCompleted}>✓ Completed</Text>
+                        ) : (
+                          <Text style={styles.taskPending}>Pending</Text>
+                        )}
+                      </View>
                     </View>
                   </View>
-                </View>
-              );
-            })}
-          </ScrollView>
-        </View>
-      </View>
+                );
+              }))}
+            </ScrollView>
+
+            <View style={[styles.quadrantSection, isMobile && styles.quadrantSectionMobile]}>
+              <Text style={styles.quadrantSectionTitle}>Priority Matrix</Text>
+              <View style={styles.quadrantContainer}>
+                <PriorityQuadrant
+                  tasks={tasks}
+                  size="large"
+                />
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 };
 
-export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays = [] }: MonthlyCalendarGridProps) {
+export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, onNavigate, holidays = [] }: MonthlyCalendarGridProps) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [selectedDayTasks, setSelectedDayTasks] = useState<Task[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -121,14 +150,30 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
       }
       tasksByDate[taskDate].push(task);
     }
+
+    // Also group completed tasks by their completion date (in local time)
+    if (task.status === 'completed' && task.completed_at) {
+      const completedDate = new Date(task.completed_at);
+      // Get local date string (YYYY-MM-DD)
+      const year = completedDate.getFullYear();
+      const month = String(completedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(completedDate.getDate()).padStart(2, '0');
+      const completedDateStr = `${year}-${month}-${day}`;
+
+      // Only add if it's different from the task's regular date to avoid duplicates
+      if (completedDateStr !== taskDate) {
+        if (!tasksByDate[completedDateStr]) {
+          tasksByDate[completedDateStr] = [];
+        }
+        tasksByDate[completedDateStr].push(task);
+      }
+    }
   });
 
   const handleDayPress = (date: Date, dayTasks: Task[]) => {
-    if (dayTasks.length > 0) {
-      setSelectedDay(date);
-      setSelectedDayTasks(dayTasks);
-      setModalVisible(true);
-    }
+    setSelectedDay(date);
+    setSelectedDayTasks(dayTasks);
+    setModalVisible(true);
     onDayPress(date);
   };
 
@@ -138,7 +183,8 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
     }
 
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNumber);
-    const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    // Use formatLocalDate to avoid UTC timezone conversion that shifts dates
+    const dateString = formatLocalDate(date);
     const dayTasks = tasksByDate[dateString] || [];
     const dayHoliday = holidays.find(h => h.date === dateString);
 
@@ -161,11 +207,6 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
               {dayNumber}
             </Text>
           </View>
-          {dayTasks.length > 0 && (
-            <View style={styles.quadrantContainer}>
-              <PriorityQuadrant tasks={dayTasks} size="small" />
-            </View>
-          )}
         </View>
       </TouchableOpacity>
     );
@@ -192,9 +233,55 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
     );
   };
 
+  // Calculate completed tasks for the current month for the quadrant
+  // Filter to only tasks completed within the current month (00:00:01 on day 1 to 23:59:59 on last day)
+  // Note: completed_at is stored in UTC but we need to compare in local timezone
+  const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1, 0, 0, 1);
+  const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59);
+
+  const allMonthTasks = Object.values(tasksByDate).flat();
+
+  // Deduplicate tasks by ID (a task may appear multiple times if its completion date differs from task date)
+  const uniqueTasks = Array.from(
+    new Map(allMonthTasks.map(task => [task.id, task])).values()
+  );
+
+  const completedThisMonth = uniqueTasks.filter(task => {
+    if (task.status !== 'completed' || !task.completed_at) return false;
+    // Parse the UTC timestamp and convert to local timezone
+    const completedDate = new Date(task.completed_at);
+    return completedDate >= monthStart && completedDate <= monthEnd;
+  });
+
   return (
     <>
+      {/* Monthly Subheader with Navigation and Quadrant */}
+      <View style={styles.monthlySubheader}>
+        <View style={styles.navigationSection}>
+          {onNavigate && (
+            <>
+              <TouchableOpacity onPress={() => onNavigate('prev')} style={styles.navButton}>
+                <ChevronLeft size={20} color="#0078d4" />
+              </TouchableOpacity>
+              <Text style={styles.monthYearText}>
+                {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </Text>
+              <TouchableOpacity onPress={() => onNavigate('next')} style={styles.navButton}>
+                <ChevronRight size={20} color="#0078d4" />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+        <View style={styles.spacer} />
+        <PriorityQuadrant
+          tasks={completedThisMonth}
+          size="medium"
+          style={styles.monthlyQuadrant}
+        />
+      </View>
+
       <View style={styles.container}>
+
         {/* Day headers */}
         <View style={styles.headerRow}>
           {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => (
@@ -221,6 +308,31 @@ export function MonthlyCalendarGrid({ currentDate, tasks, onDayPress, holidays =
 }
 
 const styles = StyleSheet.create({
+  monthlySubheader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  navigationSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  spacer: {
+    flex: 1,
+  },
+  monthlyQuadrant: {
+    marginLeft: 'auto',
+  },
   container: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
@@ -230,6 +342,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  navButton: {
+    padding: 6,
+    marginHorizontal: 4,
+  },
+  monthYearText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginHorizontal: 8,
   },
   headerRow: {
     flexDirection: 'row',
@@ -297,11 +419,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
   },
-  quadrantContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
 
   // Modal styles
   modalOverlay: {
@@ -315,13 +432,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 12,
     width: '100%',
-    maxWidth: 500,
+    maxWidth: 700,
     maxHeight: '80%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  modalBody: {
+    flexDirection: 'row',
+    flex: 1,
+    minHeight: 400,
+  },
+  modalBodyMobile: {
+    flexDirection: 'column',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -345,7 +470,36 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   modalTasksList: {
-    maxHeight: 400,
+    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+  },
+  modalTasksListMobile: {
+    borderRightWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  quadrantSection: {
+    padding: 20,
+    backgroundColor: '#f9fafb',
+    minWidth: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quadrantSectionMobile: {
+    minWidth: 'auto',
+    width: '100%',
+  },
+  quadrantSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  quadrantContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalTaskItem: {
     flexDirection: 'row',
@@ -394,5 +548,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     fontWeight: '500',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
 });

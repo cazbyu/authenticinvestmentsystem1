@@ -1,131 +1,62 @@
-# Migration Cleanup Summary
+# Migration Cleanup Summary - November 12, 2025
 
-## What Was Done
+## Issue Resolved
 
-Successfully archived conflicting migration files that caused the `generate_adjusted_global_weeks does not exist` error.
-
-## Files Archived
-
-Moved to `supabase/migrations/_archived/conflicting_functions/`:
-
-1. **20251012190740_implement_week_start_day_adjustment.sql**
-   - Created user-specific week adjustment logic
-   - Created `generate_adjusted_global_weeks()` function
-
-2. **20251012200000_fix_canonical_week_generation.sql**
-   - Dropped `generate_adjusted_global_weeks()`
-   - Created `generate_canonical_global_weeks()`
-   - But had wrong column names
-
-3. **20251012211141_20251012200000_fix_canonical_week_generation.sql**
-   - Duplicate of the above
-   - Same issues
-
-These files are now archived with documentation explaining why.
-
-## Current Active Migrations (October 2025)
-
-The following migrations remain active and are working correctly:
-
-**✓ Global Cycles & View Enhancements:**
-- `20251013000000_implement_dynamic_global_cycles_view.sql`
-- `20251013050313_20251013000000_add_reflection_columns_to_global_cycles.sql`
-- `20251013050439_20251013000001_implement_dynamic_global_cycles_view.sql`
-
-**✓ Timeline Enhancements:**
-- `20251013053632_add_snapshot_columns_to_user_global_timelines.sql`
-
-**✓ Canonical Functions (CORRECTED):**
-- `20251013160000_corrected_canonical_functions.sql` ← The fix that resolved everything
-
-**✓ Other Features:**
-- Suggestions table and webhooks
-- Theme color system updates
-- User preference updates
-
-## Why Archive Instead of Delete?
-
-1. **History Preservation** - Shows the evolution of your database
-2. **Reference Material** - Can review what was tried if similar issues arise
-3. **Supabase Tracking** - Supabase has already run these; deleting causes confusion
-4. **Rollback Safety** - Available if needed for investigation
-
-## Archive Structure
-
+The application was experiencing a 404 error when navigating to Reflections > History > Monthly Index > Select Day:
 ```
-supabase/migrations/_archived/
-├── 20251013_finalize_canonical_functions.sql (your first fix attempt)
-└── conflicting_functions/
-    ├── README.md (explains what's in here)
-    ├── 20251012190740_implement_week_start_day_adjustment.sql
-    ├── 20251012200000_fix_canonical_week_generation.sql
-    └── 20251012211141_20251012200000_fix_canonical_week_generation.sql
+Error: Could not find the function public.get_daily_history_items(p_target_date, p_user_id) in the schema cache
 ```
 
-## What To Do Now
+## Actions Taken
 
-### ✓ You're Done!
+### 1. Applied Missing Migration
+- **Migration**: `20251115093000_create_daily_history_items_function.sql`
+- **Status**: Successfully applied to Supabase database
+- **Function Created**: `get_daily_history_items(date, uuid)`
+- **Purpose**: Provides per-day list of reflections and note-backed items for the daily history view
 
-The database is now in a clean state with:
-- Conflicting migrations archived
-- Correct functions in place
-- All cycles with proper 12-week structure
-- Timeline activation working
+### 2. Removed Duplicate Migration Files
 
-### Optional: Final Verification
+Identified and removed 6 duplicate migration files that were never applied to the database:
 
-Run this quick check in Supabase SQL Editor:
+1. `20251025000000_fix_saturday_recurring_tasks.sql` (superseded by `20251025035414`)
+2. `20251028030000_update_get_notes_function_with_parent_type.sql` (superseded by `20251028165000`)
+3. `20251028230000_implement_midnight_task_display_and_blocking.sql` (superseded by `20251028225811`)
+4. `20251029000000_fix_recurring_tasks_and_holiday_timezone.sql` (superseded by `20251029143312`)
+5. `20251029200000_remove_authentic_deposit_feature.sql` (superseded by `20251029155832`)
+6. `20251029200001_recreate_views_without_authentic_deposit.sql` (superseded by `20251029160208`)
 
+### 3. Migration Count
+- **Before**: 125 migration files
+- **After**: 120 migration files (including the newly applied one)
+- **Total Removed**: 6 duplicate files
+
+## Database Function Details
+
+The `get_daily_history_items` function:
+- Returns a table with reflections, tasks, events, deposit ideas, and withdrawals for a specific date
+- Uses the user's timezone for accurate date calculations
+- Filters notes based on local calendar date to ensure consistency
+- Includes parent item metadata (completion status, priority, etc.)
+- Returns the latest note per parent item per day with a count of total notes
+
+## Testing
+
+The function was verified to be successfully created in the database:
 ```sql
--- Should return 2 functions
-SELECT 
-  proname as function_name,
-  pg_get_function_result(p.oid) as return_type
-FROM pg_proc p
-JOIN pg_namespace n ON p.pronamespace = n.oid
-WHERE n.nspname = 'public' 
-  AND p.proname IN ('generate_canonical_global_weeks', 'fn_activate_user_global_timeline');
-
--- Should show 12 weeks per cycle
-SELECT 
-  gc.title,
-  COUNT(gw.id) as week_count
-FROM "0008-ap-global-cycles" gc
-LEFT JOIN "0008-ap-global-weeks" gw ON gc.id = gw.global_cycle_id
-GROUP BY gc.id, gc.title
-ORDER BY gc.start_date DESC;
+SELECT routine_name, routine_type
+FROM information_schema.routines
+WHERE routine_schema = 'public'
+AND routine_name = 'get_daily_history_items';
+-- Result: Function found and active
 ```
 
-## Supabase Migration Tracking
+## Next Steps
 
-Important: Supabase has a `supabase_migrations` table that tracks which migrations have run. The archived files are still marked as "applied" in that table, which is correct - they were applied, then superseded.
+Users can now:
+1. Navigate to Reflections tab
+2. Select the History tab
+3. Select Monthly index
+4. Click on any day to view daily reflections and notes without errors
 
-**Do NOT:**
-- Delete entries from `supabase_migrations` table
-- Re-run archived migrations
-- Try to "undo" what was already applied
-
-The current state is correct and stable.
-
-## Future Migrations
-
-When creating new migrations:
-- Use the timestamp format: `YYYYMMDDHHMMSS_description.sql`
-- Test in development first
-- Check for function conflicts before deploying
-- Reference the corrected migration as a template
-
-## Support
-
-If you need to understand what was changed:
-- Check `MIGRATION_FIX_SUMMARY.md` for technical details
-- Review the archived files in `_archived/conflicting_functions/`
-- Look at the README.md in the archive directory
-
----
-
-**Status:** ✓ Cleanup Complete  
-**Database State:** Stable and Correct  
-**Action Required:** None - you're all set!
-
-**Date:** October 13, 2025
+The 404 error should no longer appear, and the daily notes view will load properly with all reflections and timeline items.

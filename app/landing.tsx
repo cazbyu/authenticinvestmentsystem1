@@ -16,7 +16,7 @@ export default function LandingPage() {
       <View style={styles.navContainer}>
         <View style={styles.logo}>
           <Brain size={28} color="#0078d4" />
-          <Text style={styles.logoText}>Authentic Investments</Text>
+          <Text style={styles.logoText}>Authentic Intelligence</Text>
         </View>
       </View>
     </View>
@@ -27,7 +27,7 @@ export default function LandingPage() {
       <View style={styles.hero}>
         <View style={styles.heroContent}>
           <Text style={styles.heroTagline}>
-            Authentic Investments
+            Authentic Intelligence
           </Text>
           <Text style={styles.heroSubtitle}>
             It's Time to Invest in What Matters Most

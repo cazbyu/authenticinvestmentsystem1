@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import {
   View,
   Text,
@@ -100,7 +101,7 @@ export function OneYearGoalsManager({ onUpdate }: OneYearGoalsManagerProps) {
           .from('0008-ap-goals-1y')
           .update({
             ...goalData,
-            updated_at: new Date().toISOString(),
+            updated_at: toLocalISOString(new Date()),
           })
           .eq('id', editingGoal.id);
 
@@ -150,7 +151,7 @@ export function OneYearGoalsManager({ onUpdate }: OneYearGoalsManagerProps) {
               const supabase = getSupabaseClient();
               const { error } = await supabase
                 .from('0008-ap-goals-1y')
-                .update({ status: 'archived', updated_at: new Date().toISOString() })
+                .update({ status: 'archived', updated_at: toLocalISOString(new Date()) })
                 .eq('id', goal.id);
 
               if (error) throw error;

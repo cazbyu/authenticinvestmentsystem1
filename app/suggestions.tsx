@@ -35,6 +35,7 @@ export default function SuggestionsScreen() {
           universal_domains:0008-ap-universal-domains-join!parent_id(domain_id)
         `)
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .not('completed_at', 'is', null)
         .gte('completed_at', startOfDay.toISOString())
         .lt('completed_at', endOfDay.toISOString());
@@ -53,7 +54,6 @@ export default function SuggestionsScreen() {
 
           if (roles.length > 0) points += roles.length;
           if (domains.length > 0) points += domains.length;
-          if (task.is_authentic_deposit) points += 2;
           if (task.is_urgent && task.is_important) points += 1.5;
           else if (!task.is_urgent && task.is_important) points += 3;
           else if (task.is_urgent && !task.is_important) points += 1;

@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
+import { toLocalISOString } from '@/lib/dateUtils';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import JournalForm from '@/components/reflections/JournalForm';
+import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
+import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { BalanceScoresView } from '@/components/wellness/BalanceScoresView';
 import { getSupabaseClient } from '@/lib/supabase';
-import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, Edit2 } from 'lucide-react-native';
+import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, CreditCard as Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
@@ -22,6 +26,9 @@ import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { WebNavigationMenu } from '@/components/WebNavigationMenu';
+import { DomainCard } from '@/components/wellness/DomainCard';
+import { getDomainStatistics, DomainStatistics } from '@/lib/roleStatistics';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -36,6 +43,7 @@ export default function Wellness() {
   const { authenticScore, refreshScoreForDomain } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -45,11 +53,16 @@ export default function Wellness() {
 
   // Main tab navigation state
   const [activeMainTab, setActiveMainTab] = useState<'domains' | 'balance'>('domains');
+  const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
 
   // Modal states
   const [taskFormVisible, setTaskFormVisible] = useState(false);
   const [taskDetailVisible, setTaskDetailVisible] = useState(false);
   const [depositIdeaDetailVisible, setDepositIdeaDetailVisible] = useState(false);
+  const [reflectionFormVisible, setReflectionFormVisible] = useState(false);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
+  const [reflectionDetailVisible, setReflectionDetailVisible] = useState(false);
+  const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<ReflectionWithRelations | null>(null);
 
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -61,6 +74,18 @@ export default function Wellness() {
   const scoreAbortControllerRef = useRef<AbortController | null>(null);
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
   const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
+
+  // Follow-through TaskEventForm state
+  const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
+  const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [followThroughParentId, setFollowThroughParentId] = useState<string>('');
+  const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
+  // Domain Bank statistics
+  const [domainStatsPeriod, setDomainStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
+  const [domainStatistics, setDomainStatistics] = useState<Record<string, DomainStatistics>>({});
+  const [loadingStatistics, setLoadingStatistics] = useState(false);
 
   // 12-Week Goals for selected domain (only fetch when domain is selected)
   const goalProgressScope = useMemo(() =>
@@ -285,6 +310,7 @@ export default function Wellness() {
           .eq('user_id', user.id)
           .in('id', domainDepositIdeaIds)
           .eq('archived', false)
+          .eq('is_active', true)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
@@ -467,6 +493,44 @@ export default function Wellness() {
     }
   }, [activeView, selectedDomain?.id, journalDateRange, calculatePeriodScore]);
 
+  // Fetch domain statistics when viewing main wellness bank and period changes
+  useEffect(() => {
+    const fetchDomainStatistics = async () => {
+      if (activeMainTab === 'domains' && !selectedDomain && domains.length > 0) {
+        setLoadingStatistics(true);
+        try {
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const statsArray = await Promise.all(
+            domains.map(domain =>
+              getDomainStatistics(
+                supabase,
+                user.id,
+                domain.id,
+                domainStatsPeriod
+              ).then(stats => ({ domainId: domain.id, stats }))
+            )
+          );
+
+          const stats: Record<string, DomainStatistics> = {};
+          statsArray.forEach(({ domainId, stats: domainStats }) => {
+            stats[domainId] = domainStats;
+          });
+
+          setDomainStatistics(stats);
+        } catch (error) {
+          console.error('Error fetching domain statistics:', error);
+        } finally {
+          setLoadingStatistics(false);
+        }
+      }
+    };
+
+    fetchDomainStatistics();
+  }, [activeMainTab, domains.length, domainStatsPeriod, selectedDomain]);
+
   const handleViewChange = useCallback((view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
     if (selectedDomain && (view === 'deposits' || view === 'ideas')) {
@@ -479,7 +543,7 @@ export default function Wellness() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
         .eq('id', taskId);
 
       if (error) throw error;
@@ -499,7 +563,10 @@ export default function Wellness() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ deleted_at: new Date().toISOString() })
+        .update({
+          deleted_at: toLocalISOString(new Date()),
+          status: 'cancelled'
+        })
         .eq('id', taskId);
 
       if (error) throw error;
@@ -511,6 +578,25 @@ export default function Wellness() {
       fetchAuthenticScoreLocal(true);
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
+    }
+  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
+
+  const handleDeleteReflection = useCallback(async (reflection: ReflectionWithRelations) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .delete()
+        .eq('id', reflection.id);
+
+      if (error) throw error;
+
+      if (selectedDomain) {
+        fetchDomainTasks(selectedDomain.id, activeView);
+      }
+      fetchAuthenticScoreLocal(true);
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
     }
   }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
 
@@ -532,7 +618,7 @@ export default function Wellness() {
         .update({
           is_active: false,
           archived: true,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', depositIdea.id);
 
@@ -620,11 +706,28 @@ export default function Wellness() {
     setEditingTask(null);
   }, []);
 
+  const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
+    setFollowThroughPreSelectedType(type);
+    setFollowThroughParentId(parentId);
+    setFollowThroughParentType(parentType);
+    setFollowThroughFormVisible(true);
+  };
+
+  const handleFollowThroughFormClose = () => {
+    setFollowThroughFormVisible(false);
+    setRefreshAssociatedItemsKey(prev => prev + 1);
+    if (selectedDomain) {
+      fetchDomainTasks(selectedDomain.id, activeView);
+    }
+    refreshGoals();
+    fetchAuthenticScoreLocal(true);
+  };
+
   const handleDomainPress = useCallback((domain: Domain) => {
     setSelectedDomain(domain);
   }, []);
 
-  const handleJournalEntryPress = useCallback((entry: any) => {
+  const handleJournalEntryPress = useCallback(async (entry: any) => {
     if (entry.source_type === 'task') {
       setSelectedTask(entry.source_data);
       setTaskDetailVisible(true);
@@ -636,6 +739,22 @@ export default function Wellness() {
       };
       setEditingTask(editData);
       setTaskFormVisible(true);
+    } else if (entry.source_type === 'depositIdea') {
+      // Open TaskEventForm in depositIdea reflection mode for editing
+      const editData = {
+        ...entry.source_data,
+        type: 'reflection',
+        reflectionMode: 'depositIdea'
+      };
+      setEditingTask(editData);
+      setTaskFormVisible(true);
+    } else if (entry.source_type === 'reflection') {
+      // Fetch full reflection data and open ReflectionDetailsModal
+      const reflection = await fetchReflectionById(entry.source_id);
+      if (reflection) {
+        setSelectedReflectionDetail(reflection);
+        setReflectionDetailVisible(true);
+      }
     }
   }, []);
 
@@ -671,7 +790,7 @@ export default function Wellness() {
               style={styles.customBackButton}
               onPress={() => setSelectedDomain(null)}
             >
-              <Text style={styles.customBackButtonText}>← Back to Wellness Bank</Text>
+              <Text style={styles.customBackButtonText}>← Wellness Bank</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedDomain.name}</Text>
@@ -708,7 +827,13 @@ export default function Wellness() {
         <View style={styles.customHeaderTop}>
           <TouchableOpacity
             style={styles.customMenuButton}
-            onPress={() => navigation.openDrawer()}
+            onPress={() => {
+              if (Platform.OS === 'web') {
+                setIsWebMenuVisible(true);
+              } else if (typeof navigation.openDrawer === 'function') {
+                navigation.openDrawer();
+              }
+            }}
           >
             <Menu size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -748,8 +873,7 @@ export default function Wellness() {
     if (selectedDomain) {
       // Domain view
       return (
-        <View style={styles.content}>
-
+        <View style={styles.content} pointerEvents="box-none">
           {/* 12-Week Goals Section */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && (
             <View style={styles.goalsSection}>
@@ -758,7 +882,7 @@ export default function Wellness() {
                 {twelveWeekGoals.map(goal => {
                   const progress = goalProgress[goal.id];
                   if (!progress) return null;
-                  
+
                   return (
                     <GoalProgressCard
                       key={goal.id}
@@ -784,7 +908,8 @@ export default function Wellness() {
               <JournalView
                 scope={{ type: 'domain', id: selectedDomain.id, name: selectedDomain.name }}
                 onEntryPress={handleJournalEntryPress}
-                periodScore={periodScore}
+                dateRange={journalDateRange}
+                showTimePeriodSelector={true}
                 onDateRangeChange={handleJournalDateRangeChange}
               />
             ) : activeView === 'analytics' ? (
@@ -837,40 +962,82 @@ export default function Wellness() {
 
     // Main Wellness Bank view with tabs
     return (
-      <View style={styles.content}>
+      <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'domains' && (
-          <ScrollView style={styles.domainsList}>
+          <ScrollView style={styles.domainsContent}>
+            {/* Time Period Selector */}
+            <View style={styles.timePeriodContainer}>
+              <View style={styles.timePeriodSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'today' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('today')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'today' && styles.timePeriodButtonTextActive
+                  ]}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'week' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('week')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'week' && styles.timePeriodButtonTextActive
+                  ]}>Week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'month' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('month')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'month' && styles.timePeriodButtonTextActive
+                  ]}>Month</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'all' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('all')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'all' && styles.timePeriodButtonTextActive
+                  ]}>All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Domain Cards */}
             {domains.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No domains found</Text>
               </View>
             ) : (
               <View style={styles.domainsGrid}>
-                {domains.map(domain => (
-                  <TouchableOpacity
-                    key={domain.id}
-                    style={[
-                      styles.domainCard,
-                      { borderLeftColor: getDomainColor(domain.name) }
-                    ]}
-                    onPress={() => handleDomainPress(domain)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.domainCardContent}>
-                      <View style={[styles.domainIcon, { backgroundColor: getDomainColor(domain.name) }]}>
-                        <Heart size={24} color="#ffffff" />
-                      </View>
-                      <View style={styles.domainInfo}>
-                        <Text style={styles.domainName}>{domain.name}</Text>
-                        {domain.description && (
-                          <Text style={styles.domainDescription} numberOfLines={2}>
-                            {domain.description}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                {domains.map(domain => {
+                  const stats = domainStatistics[domain.id];
+                  return (
+                    <DomainCard
+                      key={domain.id}
+                      domain={domain}
+                      statistics={stats || null}
+                      onPress={handleDomainPress}
+                      color={getDomainColor(domain.name)}
+                    />
+                  );
+                })}
               </View>
             )}
           </ScrollView>
@@ -899,8 +1066,8 @@ export default function Wellness() {
           setEditingTask(null);
           setTaskFormVisible(true);
         }
-      }}>
-        <Plus size={24} color="#ffffff" />
+      }} size={44}>
+        <Plus size={28} color="#ffffff" />
       </DraggableFab>
 
       {/* Modals */}
@@ -913,13 +1080,15 @@ export default function Wellness() {
         />
       </Modal>
 
-      <TaskDetailModal
+      <ActionDetailsModal
         visible={taskDetailVisible}
         task={selectedTask}
         onClose={() => setTaskDetailVisible(false)}
-        onUpdate={handleUpdateTask}
+        onEdit={handleUpdateTask}
         onDelegate={handleDelegateTask}
         onCancel={handleCancelTask}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
 
       <DepositIdeaDetailModal
@@ -928,6 +1097,62 @@ export default function Wellness() {
         onClose={() => setDepositIdeaDetailVisible(false)}
         onUpdate={handleUpdateDepositIdea}
         onCancel={handleCancelDepositIdea}
+        onOpenFollowThrough={handleOpenFollowThrough}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+      />
+
+      {/* Follow-through TaskEventForm Modal */}
+      <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleFollowThroughFormClose}
+          onClose={() => setFollowThroughFormVisible(false)}
+          parentId={followThroughParentId}
+          parentType={followThroughParentType as any}
+          preSelectedType={followThroughPreSelectedType}
+        />
+      </Modal>
+
+      <JournalForm
+        visible={reflectionFormVisible}
+        mode={selectedReflection ? 'edit' : 'create'}
+        initialData={selectedReflection || undefined}
+        openedFromJournal={true}
+        onClose={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+        }}
+        onSaveSuccess={() => {
+          setReflectionFormVisible(false);
+          setSelectedReflection(null);
+          if (selectedDomain) {
+            fetchDomainTasks(selectedDomain.id);
+          }
+        }}
+      />
+
+      <ReflectionDetailsModal
+        visible={reflectionDetailVisible}
+        reflection={selectedReflectionDetail}
+        onClose={() => {
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onEdit={(reflection) => {
+          setReflectionDetailVisible(false);
+          setSelectedReflection(reflection);
+          setReflectionFormVisible(true);
+        }}
+        onDelete={(reflection) => {
+          handleDeleteReflection(reflection);
+          setReflectionDetailVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+      />
+
+      <WebNavigationMenu
+        visible={isWebMenuVisible}
+        onClose={() => setIsWebMenuVisible(false)}
       />
     </SafeAreaView>
   );
@@ -941,54 +1166,50 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  domainsList: {
+  domainsContent: {
     flex: 1,
-    padding: 16,
+    backgroundColor: '#f8fafc',
+  },
+  timePeriodContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    alignItems: 'flex-end',
+  },
+  timePeriodSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  timePeriodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 6,
+  },
+  timePeriodButtonActive: {
+    backgroundColor: '#0078d4',
+  },
+  timePeriodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  timePeriodButtonTextActive: {
+    color: '#ffffff',
   },
   domainsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 12,
-  },
-  domainCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    width: '48%',
-  },
-  domainCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  domainIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  domainInfo: {
-    flex: 1,
-  },
-  domainName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  domainDescription: {
-    fontSize: 12,
-    color: '#6b7280',
-    lineHeight: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   taskListContainer: {
     flex: 1,

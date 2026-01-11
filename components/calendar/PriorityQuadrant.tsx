@@ -17,23 +17,19 @@ export interface PriorityQuadrantProps {
   size?: 'small' | 'medium' | 'large';
   onPress?: (quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4') => void;
   style?: object;
-  showCompleted?: boolean;
   customSize?: number;
 }
 
 export function calculateQuadrantCounts(
-  tasks: PriorityQuadrantProps['tasks'],
-  showCompleted?: boolean
+  tasks: PriorityQuadrantProps['tasks']
 ): QuadrantCounts {
   const counts: QuadrantCounts = { Q1: 0, Q2: 0, Q3: 0, Q4: 0 };
 
-  tasks.forEach((task) => {
-    // Filter by completion status based on toggle
-    if (showCompleted !== undefined) {
-      if (showCompleted && task.status !== 'completed') return;
-      if (!showCompleted && task.status === 'completed') return;
-    }
+  // Filter to only completed tasks and count each occurrence separately
+  const completedTasks = tasks.filter((task) => task.status === 'completed');
 
+  // Count each completed task occurrence
+  completedTasks.forEach((task) => {
     if (task.is_urgent && task.is_important) {
       counts.Q1++;
     } else if (!task.is_urgent && task.is_important) {
@@ -53,10 +49,9 @@ export function PriorityQuadrant({
   size = 'medium',
   onPress,
   style,
-  showCompleted,
   customSize
 }: PriorityQuadrantProps) {
-  const counts = calculateQuadrantCounts(tasks, showCompleted);
+  const counts = calculateQuadrantCounts(tasks);
 
   const predefinedDimensions = {
     small: { container: 48, text: 10 },

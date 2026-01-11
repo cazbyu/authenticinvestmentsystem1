@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -16,21 +17,66 @@ import {
   fetchGoalActionsSummary,
 } from '@/lib/weeklyReflectionData';
 import { WeeklyAggregationData, GoalActionSummary } from '@/types/reflections';
-import { Target, Users, Activity, CircleAlert as AlertCircle } from 'lucide-react-native';
-import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRange } from '@/lib/reflectionUtils';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { fetchReflectionsByDateRange, ReflectionWithRelations, calculateWeekRange, ReflectionAttachment, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
+import { fetchAttachmentsForNotes, NoteAttachment } from '@/lib/noteAttachmentUtils';
+import AttachmentBadge from '../attachments/AttachmentBadge';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import { Linking } from 'react-native';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import ImageViewerModal, { ImageAttachment } from './ImageViewerModal';
 
-export default function WeeklyReflectionView() {
+type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
+
+interface ParentItemData {
+  id: string;
+  title?: string;
+  completed_at?: string;
+  archived?: boolean;
+  is_urgent?: boolean;
+  is_important?: boolean;
+  type?: string;
+}
+
+interface TimelineItem {
+  id: string;
+  type: TimelineItemType;
+  created_at: string;
+  content?: string;
+  date?: string;
+  parent_type?: string;
+  attachments?: ReflectionAttachment[];
+  noteAttachments?: NoteAttachment[];
+  parentItem?: ParentItemData;
+  isActive?: boolean;
+  priorityColor?: string;
+}
+
+interface WeeklyReflectionViewProps {
+  onNotePress?: (item: TimelineItem) => void;
+}
+
+export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionViewProps = {}) {
   const { colors } = useTheme();
   const [weekRange, setWeekRange] = useState(getWeekDateRange());
   const [aggregationData, setAggregationData] = useState<WeeklyAggregationData | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<ImageAttachment[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [goalSummaries, setGoalSummaries] = useState<GoalActionSummary[]>([]);
-  const [weekReflections, setWeekReflections] = useState<ReflectionWithRelations[]>([]);
+  const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
+
+  const [expandedSections, setExpandedSections] = useState({
+    leadingIndicators: true,
+    roleInvestment: true,
+    domainBalance: true,
+    lessons: true,
+  });
 
   useEffect(() => {
     loadData();
@@ -55,7 +101,7 @@ export default function WeeklyReflectionView() {
     try {
       await Promise.all([
         fetchWeeklyData(),
-        fetchWeekReflections(),
+        fetchWeekTimelineData(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -108,13 +154,13 @@ export default function WeeklyReflectionView() {
     setGoalSummaries(summaries);
   };
 
-  const fetchWeekReflections = async () => {
+  const fetchWeekTimelineData = async () => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data: prefsData } = await supabase
-      .from('0008-ap-user-preferences')
+      .from('0008-ap-users')
       .select('week_start_day')
       .eq('user_id', user.id)
       .maybeSingle();
@@ -122,8 +168,146 @@ export default function WeeklyReflectionView() {
     const weekStartDay = prefsData?.week_start_day || 'sunday';
     const { weekStart, weekEnd } = calculateWeekRange(new Date(), weekStartDay);
 
+    // Fetch reflections for the week
     const reflections = await fetchReflectionsByDateRange(user.id, weekStart, weekEnd);
-    setWeekReflections(reflections);
+
+    // Fetch attachments for all reflections in batch
+    const reflectionIds = reflections.map((r) => r.id);
+    const attachmentsMap = await fetchAttachmentsForReflections(reflectionIds);
+
+    // Fetch all notes for the week with parent item data
+    const { data: notesData, error: notesError } = await supabase
+      .from('0008-ap-universal-notes-join')
+      .select(`
+        parent_id,
+        parent_type,
+        note:0008-ap-notes(
+          id,
+          content,
+          created_at
+        )
+      `)
+      .eq('user_id', user.id)
+      .gte('created_at', weekStart)
+      .lte('created_at', weekEnd);
+
+    if (notesError) {
+      console.error('Error fetching week notes:', notesError);
+    }
+
+    // Get unique parent IDs by type
+    const taskParentIds = notesData?.filter((n: any) => n.parent_type === 'task').map((n: any) => n.parent_id) || [];
+    const depositIdeaIds = notesData?.filter((n: any) => n.parent_type === 'depositIdea').map((n: any) => n.parent_id) || [];
+    const withdrawalIds = notesData?.filter((n: any) => n.parent_type === 'withdrawal').map((n: any) => n.parent_id) || [];
+
+    // Fetch parent item data
+    const parentItemsMap = new Map<string, ParentItemData>();
+
+    if (taskParentIds.length > 0) {
+    const { data: tasksData } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, title, completed_at, is_urgent, is_important, type')
+      .in('id', taskParentIds)
+      .is('deleted_at', null);
+    tasksData?.forEach((task: any) => {
+      parentItemsMap.set(task.id, task);
+    });
+  }
+
+  if (depositIdeaIds.length > 0) {
+    const { data: depositIdeasData } = await supabase
+      .from('0008-ap-deposit-ideas')
+      .select('id, title, archived')
+      .in('id', depositIdeaIds)
+      .eq('archived', false)
+      .eq('is_active', true);
+    depositIdeasData?.forEach((di: any) => {
+      parentItemsMap.set(di.id, di);
+    });
+  }
+
+    if (withdrawalIds.length > 0) {
+      const { data: withdrawalsData } = await supabase
+        .from('0008-ap-withdrawals')
+        .select('id, title')
+        .in('id', withdrawalIds);
+      withdrawalsData?.forEach((w: any) => {
+        parentItemsMap.set(w.id, { ...w, completed_at: toLocalISOString(new Date()) });
+      });
+    }
+
+    // Fetch attachments for all notes in batch
+    const noteIds = notesData?.filter((item: any) => item.note && item.note.id).map((item: any) => item.note.id) || [];
+    const noteAttachmentsMap = noteIds.length > 0 ? await fetchAttachmentsForNotes(noteIds) : new Map();
+
+    // Transform reflections to timeline items
+    const reflectionItems: TimelineItem[] = reflections.map(r => ({
+      id: r.id,
+      type: 'reflection' as TimelineItemType,
+      created_at: r.created_at,
+      content: r.content,
+      date: r.date,
+      attachments: attachmentsMap.get(r.id) || [],
+    }));
+
+    // Transform notes to timeline items with parent item data
+    const noteItems: TimelineItem[] = notesData
+      ? notesData
+          .filter((item: any) => item.note && item.note.id)
+          .map((item: any) => {
+            const parentItem = parentItemsMap.get(item.parent_id);
+            let type = item.parent_type || 'note';
+
+            // If parent is a task, determine if it's task or event
+            if (item.parent_type === 'task' && parentItem?.type) {
+              type = parentItem.type;
+            }
+
+            // Determine if item is active
+            let isActive = false;
+            let priorityColor = undefined;
+
+            if (parentItem) {
+              if (item.parent_type === 'task') {
+                isActive = !parentItem.completed_at;
+                if (isActive) {
+                  // Calculate priority color
+                  if (parentItem.is_urgent && parentItem.is_important) {
+                    priorityColor = '#ef4444';
+                  } else if (!parentItem.is_urgent && parentItem.is_important) {
+                    priorityColor = '#10b981';
+                  } else if (parentItem.is_urgent && !parentItem.is_important) {
+                    priorityColor = '#f59e0b';
+                  } else {
+                    priorityColor = '#6b7280';
+                  }
+                }
+              } else if (item.parent_type === 'depositIdea') {
+                isActive = !parentItem.archived;
+                if (isActive) priorityColor = '#8b5cf6';
+              }
+            }
+
+            return {
+              id: item.note.id,
+              type: type as TimelineItemType,
+              content: item.note.content,
+              created_at: item.note.created_at,
+              parent_type: item.parent_type,
+              noteAttachments: noteAttachmentsMap.get(item.note.id) || [],
+              parentItem,
+              isActive,
+              priorityColor,
+            };
+          })
+      : [];
+
+    // Merge and sort by created_at
+    const combined = [...reflectionItems, ...noteItems].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setTimelineItems(combined);
   };
 
 
@@ -152,6 +336,47 @@ export default function WeeklyReflectionView() {
     return content.substring(0, maxLength) + '...';
   };
 
+  const getItemTypeBadgeColor = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return '#10b981';
+      case 'task':
+        return '#0078d4';
+      case 'depositIdea':
+        return '#8b5cf6';
+      case 'withdrawal':
+        return '#f59e0b';
+      case 'reflection':
+        return colors.primary;
+      default:
+        return colors.primary;
+    }
+  };
+
+  const getItemTypeLabel = (type: TimelineItemType) => {
+    switch (type) {
+      case 'event':
+        return 'Event';
+      case 'task':
+        return 'Task';
+      case 'depositIdea':
+        return 'Deposit Idea';
+      case 'withdrawal':
+        return 'Withdrawal';
+      case 'reflection':
+        return 'Reflection';
+      default:
+        return 'Note';
+    }
+  };
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  };
+
 
   if (loading) {
     return (
@@ -178,140 +403,294 @@ export default function WeeklyReflectionView() {
         {aggregationData && (
           <>
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
+              <TouchableOpacity
+                style={styles.cardHeader}
+                onPress={() => toggleSection('leadingIndicators')}
+                activeOpacity={0.7}
+              >
                 <Target size={24} color={colors.primary} />
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
-              </View>
+                {expandedSections.leadingIndicators ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
 
-              {goalSummaries.length === 0 ? (
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  You completed no actions towards your goals this week.
-                </Text>
-              ) : (
-                <View style={styles.goalsList}>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    This week, you completed {goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {goalSummaries.length} {goalSummaries.length === 1 ? 'goal' : 'goals'}.
-                  </Text>
-                  {goalSummaries.map(goal => (
-                    <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
-                      For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
+              {expandedSections.leadingIndicators && (
+                <>
+                  {goalSummaries.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      You completed no actions towards your goals this week.
                     </Text>
-                  ))}
-                </View>
+                  ) : (
+                    <View style={styles.goalsList}>
+                      <Text style={[styles.highlightText, { color: colors.text }]}>
+                        This week, you completed {goalSummaries.reduce((sum, g) => sum + g.action_count, 0)} {goalSummaries.reduce((sum, g) => sum + g.action_count, 0) === 1 ? 'action' : 'actions'} towards {goalSummaries.length} {goalSummaries.length === 1 ? 'goal' : 'goals'}.
+                      </Text>
+                      {goalSummaries.map(goal => (
+                        <Text key={goal.goal_id} style={[styles.goalText, { color: colors.text }]}>
+                          For your goal to {goal.goal_title}, you completed {goal.action_count} {goal.action_count === 1 ? 'action' : 'actions'}.
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
             </View>
 
             {/* Role Investment */}
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
+              <TouchableOpacity
+                style={styles.cardHeader}
+                onPress={() => toggleSection('roleInvestment')}
+                activeOpacity={0.7}
+              >
                 <Users size={24} color={colors.primary} />
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Role Investment Summary</Text>
-              </View>
+                {expandedSections.roleInvestment ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
 
-              {aggregationData.roleInvestments.length === 0 ? (
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  You invested in no roles this week.
-                </Text>
-              ) : (
-                <View style={styles.rolesList}>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    You invested in the following roles this week:
-                  </Text>
-                  {aggregationData.roleInvestments.map(role => {
-                    const totalDeposits = role.task_count + role.deposit_idea_count;
-                    return (
-                      <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
-                        • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
+              {expandedSections.roleInvestment && (
+                <>
+                  {aggregationData.roleInvestments.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      You invested in no roles this week.
+                    </Text>
+                  ) : (
+                    <View style={styles.rolesList}>
+                      <Text style={[styles.highlightText, { color: colors.text }]}>
+                        You invested in the following roles this week:
                       </Text>
-                    );
-                  })}
-                </View>
+                      {aggregationData.roleInvestments.map(role => {
+                        const totalDeposits = role.task_count + role.deposit_idea_count;
+                        return (
+                          <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
+                            • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
+                          </Text>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
               )}
             </View>
 
             {/* Domain Balance */}
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
+              <TouchableOpacity
+                style={styles.cardHeader}
+                onPress={() => toggleSection('domainBalance')}
+                activeOpacity={0.7}
+              >
                 <Activity size={24} color={colors.primary} />
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Wellness Domain Balance</Text>
-              </View>
+                {expandedSections.domainBalance ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
 
-              {aggregationData.domainBalance.length === 0 ? (
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  You invested in no wellness domains this week.
-                </Text>
-              ) : (
-                <View style={styles.domainsList}>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    You have invested in the following domains this week:
-                  </Text>
-                  {aggregationData.domainBalance.map(domain => (
-                    <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
-                      • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
+              {expandedSections.domainBalance && (
+                <>
+                  {aggregationData.domainBalance.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      You invested in no wellness domains this week.
                     </Text>
-                  ))}
-                </View>
+                  ) : (
+                    <View style={styles.domainsList}>
+                      <Text style={[styles.highlightText, { color: colors.text }]}>
+                        You have invested in the following domains this week:
+                      </Text>
+                      {aggregationData.domainBalance.map(domain => (
+                        <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
+                          • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
             </View>
 
             {/* Withdrawals */}
             <View style={[styles.card, { backgroundColor: colors.surface }]}>
-              <View style={styles.cardHeader}>
+              <TouchableOpacity
+                style={styles.cardHeader}
+                onPress={() => toggleSection('lessons')}
+                activeOpacity={0.7}
+              >
                 <AlertCircle size={24} color={aggregationData.withdrawalAnalysis.length > 0 ? '#f59e0b' : '#10b981'} />
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Withdrawals and Lessons</Text>
-              </View>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Lessons</Text>
+                {expandedSections.lessons ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
 
-              {aggregationData.withdrawalAnalysis.length === 0 ? (
-                <Text style={[styles.successText, { color: '#10b981' }]}>
-                  You made no withdrawals this week.
-                </Text>
-              ) : (
-                <View>
-                  <Text style={[styles.highlightText, { color: colors.text }]}>
-                    You made {aggregationData.withdrawalAnalysis.reduce((sum, w) => sum + w.withdrawal_count, 0)} {aggregationData.withdrawalAnalysis.reduce((sum, w) => sum + w.withdrawal_count, 0) === 1 ? 'withdrawal' : 'withdrawals'} this week in the following roles:
-                  </Text>
-                  <View style={styles.withdrawalsList}>
-                    {aggregationData.withdrawalAnalysis.map(withdrawal => (
-                      <Text key={withdrawal.role_id} style={[styles.withdrawalText, { color: colors.text }]}>
-                        • {withdrawal.role_label} ({withdrawal.withdrawal_count})
+              {expandedSections.lessons && (
+                <>
+                  {aggregationData.withdrawalAnalysis.length === 0 ? (
+                    <Text style={[styles.successText, { color: '#10b981' }]}>
+                      You made no withdrawals this week.
+                    </Text>
+                  ) : (
+                    <View>
+                      <Text style={[styles.highlightText, { color: colors.text }]}>
+                        You made {aggregationData.withdrawalAnalysis.reduce((sum, w) => sum + w.withdrawal_count, 0)} {aggregationData.withdrawalAnalysis.reduce((sum, w) => sum + w.withdrawal_count, 0) === 1 ? 'withdrawal' : 'withdrawals'} this week in the following roles:
                       </Text>
-                    ))}
-                  </View>
-                </View>
+                      <View style={styles.withdrawalsList}>
+                        {aggregationData.withdrawalAnalysis.map(withdrawal => (
+                          <Text key={withdrawal.role_id} style={[styles.withdrawalText, { color: colors.text }]}>
+                            • {withdrawal.role_label} ({withdrawal.withdrawal_count})
+                          </Text>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </>
               )}
             </View>
           </>
         )}
 
-        {/* Week Reflections */}
-        {weekReflections.length > 0 && (
+        {/* Week Timeline */}
+        {timelineItems.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>This Week's Reflections and Notes</Text>
 
             <View style={styles.previousList}>
-              {weekReflections.map(reflection => (
-                <TouchableOpacity
-                  key={reflection.id}
-                  style={[styles.previousCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                >
-                  <View style={styles.reflectionHeader}>
-                    <Text style={[styles.previousWeek, { color: colors.text }]}>
-                      {formatDateTime(reflection.date, reflection.created_at)}
-                    </Text>
-                    <View style={[styles.tagBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.tagBadgeText}>Reflection</Text>
+              {timelineItems.map(item => {
+                const reflectionAttachments = item.attachments || [];
+                const noteAttachments = item.noteAttachments || [];
+                const allAttachments = [...reflectionAttachments, ...noteAttachments];
+                const allImageAttachments = allAttachments.filter((att) => att.file_type?.startsWith('image/'));
+                const documentAttachments = allAttachments.filter(
+                  (att) => att.file_type && !att.file_type.startsWith('image/')
+                );
+                const totalAttachmentCount = allAttachments.length;
+
+                return (
+                  <TouchableOpacity
+                    key={`${item.type}-${item.id}`}
+                    style={[
+                      styles.previousCard,
+                      {
+                        backgroundColor: item.isActive ? '#f3f4f6' : colors.background,
+                        borderColor: item.isActive && item.priorityColor ? item.priorityColor : colors.border,
+                        borderLeftColor: item.isActive && item.priorityColor ? item.priorityColor : getItemTypeBadgeColor(item.type),
+                        borderLeftWidth: 3,
+                        borderWidth: item.isActive ? 2 : 1,
+                      },
+                    ]}
+                    onPress={() => onNotePress?.(item)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.reflectionHeader}>
+                      <Text style={[styles.previousWeek, { color: colors.text }]}>
+                        {new Date(item.created_at).toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        })}
+                      </Text>
+                      <View style={styles.headerRight}>
+                        {totalAttachmentCount > 0 && (
+                          <AttachmentBadge count={totalAttachmentCount} size="small" />
+                        )}
+                        <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+                          <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                  <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {truncateContent(reflection.content)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text style={[styles.previousPreview, { color: colors.textSecondary }]} numberOfLines={3}>
+                      {truncateContent(item.content || '')}
+                    </Text>
+
+                    {allImageAttachments.length > 0 && (
+                      <View style={styles.imagePreviewContainer}>
+                        {allImageAttachments.slice(0, 3).map((attachment, index) => (
+                          <TouchableOpacity
+                            key={attachment.id}
+                            onPress={() => {
+                              setSelectedImages(allImageAttachments);
+                              setSelectedImageIndex(index);
+                              setImageViewerVisible(true);
+                            }}
+                            style={styles.imageThumbnail}
+                          >
+                            <Image
+                              source={{ uri: attachment.public_url }}
+                              style={styles.thumbnailImage}
+                              resizeMode="cover"
+                            />
+                          </TouchableOpacity>
+                        ))}
+                        {allImageAttachments.length > 3 && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              setSelectedImages(allImageAttachments);
+                              setSelectedImageIndex(3);
+                              setImageViewerVisible(true);
+                            }}
+                            style={[styles.imageThumbnail, styles.moreImagesThumbnail]}
+                          >
+                            <View style={styles.moreImagesOverlay}>
+                              <Text style={styles.moreImagesText}>+{allImageAttachments.length - 3}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+
+                    {documentAttachments.length > 0 && (
+                      <View style={styles.documentAttachmentsContainer}>
+                        {documentAttachments.slice(0, 3).map((attachment) => (
+                          <TouchableOpacity
+                            key={attachment.id}
+                            onPress={() => {
+                              if (attachment.public_url) {
+                                Linking.openURL(attachment.public_url);
+                              }
+                            }}
+                            style={styles.documentAttachmentItem}
+                          >
+                            <AttachmentThumbnail
+                              uri={attachment.public_url || ''}
+                              fileType={attachment.file_type}
+                              fileName={attachment.file_name}
+                              size="small"
+                            />
+                            <Text style={[styles.documentFileName, { color: colors.text }]} numberOfLines={1}>
+                              {attachment.file_name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         )}
       </View>
 
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        images={selectedImages}
+        initialIndex={selectedImageIndex}
+        onClose={() => setImageViewerVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -518,6 +897,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   tagBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -527,6 +911,32 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '600',
+  },
+  notesSection: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  notesSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  notePreview: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 4,
+    borderLeftWidth: 2,
+    borderLeftColor: '#0078d4',
+  },
+  noteText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  moreNotesText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   modalContainer: {
     flex: 1,
@@ -554,5 +964,60 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 8,
+  },
+  imageThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  moreImagesThumbnail: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreImagesText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  documentAttachmentsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 8,
+  },
+  documentAttachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    maxWidth: '100%',
+  },
+  documentFileName: {
+    fontSize: 12,
+    flex: 1,
   },
 });

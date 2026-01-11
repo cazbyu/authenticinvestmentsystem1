@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import {
   View,
   Text,
@@ -105,7 +106,7 @@ export function NorthStarEditor({ onUpdate, initialSection = 'mission' }: NorthS
         .update({
           mission_text: missionText.trim() || null,
           vision_text: visionText.trim() || null,
-          updated_at: new Date().toISOString(),
+          updated_at: toLocalISOString(new Date()),
         })
         .eq('id', user.id);
 

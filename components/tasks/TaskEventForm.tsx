@@ -13,19 +13,30 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { X, Calendar as CalendarIcon, Repeat } from 'lucide-react-native';
+import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { Platform, Image, Linking } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { formatLocalDate, parseLocalDate, formatTimeString } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, parseLocalDate, formatTimeString, convert12HourTo24Hour } from '@/lib/dateUtils';
 import ActionEffortModal from '../goals/ActionEffortModal';
 import { TimePickerDropdown } from './TimePickerDropdown';
 import { RecurrenceDropdown } from './RecurrenceDropdown';
 import { CustomRecurrenceModal } from './CustomRecurrenceModal';
+import DelegateModal from './DelegateModal';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { fetchAuthenticUsage, getWeekResetDay, formatAuthenticUsageText, invalidateCache } from '@/lib/authenticDepositUtils';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import AttachmentBadge from '../attachments/AttachmentBadge';
+import ImageViewerModal from '../reflections/ImageViewerModal';
+import { uploadNoteAttachment, saveNoteAttachmentMetadata, fetchNoteAttachments, deleteNoteAttachment, getNoteAttachmentSignedUrl } from '@/lib/noteAttachmentUtils';
+import ReflectionModePills from '../reflections/ReflectionModePills';
+import FollowUpToggleSection from '../reflections/FollowUpToggleSection';
+import RichTextInput from '../reflections/RichTextInput';
 
 // ------------ Types & Models ------------
-type SchedulingType = 'task' | 'event' | 'depositIdea' | 'withdrawal';
+type SchedulingType = 'task' | 'event' | 'reflection';
+type ReflectionMode = 'rose' | 'thorn' | 'depositIdea' | 'reflection';
 
 interface Role { 
   id: string; 
@@ -67,8 +78,16 @@ interface CycleWeek {
   user_custom_timeline_id?: string;
 }
 
+interface Delegate {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
 interface FormData {
   type: SchedulingType;
+  reflectionMode: ReflectionMode;
   title: string;
   dueDate: string;
   dueTime: string;
@@ -81,18 +100,32 @@ interface FormData {
   isAnytime: boolean;
   isUrgent: boolean;
   isImportant: boolean;
-  isAuthenticDeposit: boolean;
   isGoal: boolean;
   selectedRoleIds: string[];
   selectedDomainIds: string[];
   selectedKeyRelationshipIds: string[];
   selectedGoalIds: string[];
   notes: string;
-  
+  content: string; // For reflection content
+
   // New fields for recurrence and goals
   recurrenceRule?: string;
   recurrenceEndDate?: string | null;
   selectedGoal?: UnifiedGoal;
+
+  // Delegate field
+  isDelegated: boolean;
+  selectedDelegateId?: string;
+
+  // Follow-up fields
+  followUpEnabled: boolean;
+  followUpDate: string;
+  followUpTime: string;
+  isAnytimeFollowUp: boolean;
+
+  // Parent relationship fields (for follow-through items)
+  parentId?: string;
+  parentType?: 'task' | 'depositIdea' | 'reflection';
 }
 
 interface TaskEventFormProps {
@@ -100,9 +133,12 @@ interface TaskEventFormProps {
   initialData?: any;
   onSubmitSuccess: () => void;
   onClose: () => void;
+  preSelectedType?: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection';
+  parentId?: string;
+  parentType?: 'task' | 'depositIdea' | 'reflection';
 }
 
-export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose }: TaskEventFormProps) {
+export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, preSelectedType, parentId, parentType }: TaskEventFormProps) {
   const { colors, isDarkMode } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
@@ -126,6 +162,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   // Form state
   const [formData, setFormData] = useState<FormData>({
     type: 'task',
+    reflectionMode: 'rose',
     title: '',
     dueDate: formatLocalDate(new Date()),
     dueTime: getInitialDefaultTime(),
@@ -138,14 +175,20 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     isAnytime: false,
     isUrgent: false,
     isImportant: false,
-    isAuthenticDeposit: false,
     isGoal: false,
     selectedRoleIds: [],
     selectedDomainIds: [],
     selectedKeyRelationshipIds: [],
     selectedGoalIds: [],
     notes: '',
+    content: '',
     recurrenceEndDate: null,
+    isDelegated: false,
+    selectedDelegateId: undefined,
+    followUpEnabled: false,
+    followUpDate: formatLocalDate(new Date()),
+    followUpTime: '',
+    isAnytimeFollowUp: true,
   });
 
   // Data state
@@ -175,10 +218,24 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   const [dontShowWarningAgain, setDontShowWarningAgain] = useState(false);
   const [isEditingCompletedTask, setIsEditingCompletedTask] = useState(false);
 
-  // Authentic deposit tracking state
-  const [authenticUsage, setAuthenticUsage] = useState<{ used: number; remaining: number } | null>(null);
-  const [isCheckingAuthenticLimit, setIsCheckingAuthenticLimit] = useState(false);
-  const [weekStartDay, setWeekStartDay] = useState<'sunday' | 'monday'>('sunday');
+  // Track if we're still in the initial load phase (to prevent auto-scroll)
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Delegate state
+  const [delegates, setDelegates] = useState<Delegate[]>([]);
+  const [showDelegateModal, setShowDelegateModal] = useState(false);
+  const [userId, setUserId] = useState<string>('');
+
+  // Attachment state
+  const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
+  const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<any[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
+  // Goals collapsible state
+  const [showGoalsSection, setShowGoalsSection] = useState(false);
+
 
   // Helper function to get next 15-minute interval + 15 min buffer
   const getDefaultStartTime = () => {
@@ -249,34 +306,53 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   };
 
   useEffect(() => {
-    fetchFormData();
-    if (initialData) {
-      loadInitialData();
-    }
-    loadAuthenticUsage();
+    const initialize = async () => {
+      // Mark that we're in initial load phase
+      setIsInitialLoad(true);
+      await fetchFormData();
+      if (initialData) {
+        await loadInitialData();
+      }
+      // Mark initial load as complete
+      setIsInitialLoad(false);
+    };
+
+    initialize();
   }, [mode, initialData]);
 
-  const loadAuthenticUsage = async () => {
-    if (mode === 'edit' && initialData?.is_authentic_deposit) {
-      return;
-    }
+  // Handle pre-selected type
+  useEffect(() => {
+    if (mode === 'create' && preSelectedType) {
+      setFormData(prev => {
+        const updates: Partial<FormData> = {};
 
-    if (formData.type !== 'task') {
-      return;
-    }
+        // Set pre-selected type
+        if (preSelectedType === 'task' || preSelectedType === 'event') {
+          updates.type = preSelectedType;
+        } else if (preSelectedType === 'reflection') {
+          updates.type = 'reflection';
+          updates.reflectionMode = 'reflection';
+        } else {
+          // Handle reflection modes: rose, thorn, depositIdea
+          updates.type = 'reflection';
+          updates.reflectionMode = preSelectedType as ReflectionMode;
+        }
 
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const usage = await fetchAuthenticUsage(supabase, user.id);
-      setAuthenticUsage({ used: usage.used, remaining: usage.remaining });
-      setWeekStartDay(await supabase.rpc('fn_get_user_week_start_day', { p_user_id: user.id }) || 'sunday');
-    } catch (error) {
-      console.error('Error loading authentic usage:', error);
+        return { ...prev, ...updates };
+      });
     }
-  };
+  }, [mode, preSelectedType]);
+
+  // Handle parent relationship fields for follow-through items
+  useEffect(() => {
+    if (mode === 'create' && parentId && parentType) {
+      setFormData(prev => ({
+        ...prev,
+        parentId,
+        parentType,
+      }));
+    }
+  }, [mode, parentId, parentType]);
 
   // Check if editing a completed task and show warning
   useEffect(() => {
@@ -290,17 +366,23 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
-          const { data: userProfile } = await supabase
+          const { data: userProfile, error: profileError } = await supabase
             .from('0008-ap-users')
             .select('hide_completed_task_warning')
             .eq('id', user.id)
             .maybeSingle();
 
-          if (!userProfile?.hide_completed_task_warning) {
+          // If the column doesn't exist or query fails, default to showing the warning
+          if (profileError) {
+            console.warn('Could not fetch completed task warning preference (column may not exist):', profileError.message);
+            setShowCompletedWarning(true);
+          } else if (!userProfile?.hide_completed_task_warning) {
             setShowCompletedWarning(true);
           }
         } catch (error) {
-          console.error('Error checking completed task warning preference:', error);
+          console.warn('Error checking completed task warning preference (non-critical):', error);
+          // Default to showing warning on any error - this is a non-critical preference
+          setShowCompletedWarning(true);
         }
       }
     };
@@ -312,7 +394,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   useEffect(() => {
     const enabled = !!formData.isGoal && !!formData.selectedGoal && !!formData.recurrenceRule;
     setGoalMode(enabled);
-    if (enabled) {
+
+    // Only trigger prefill, modal opening, and scroll when user actively changes goal settings
+    // (not during initial data load)
+    if (enabled && !isInitialLoad) {
       // Prefill from goal
       const g = formData.selectedGoal!;
       setFormData(prev => ({
@@ -327,7 +412,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       // Scroll to bottom to show goal area controls
       scrollRef.current?.scrollToEnd({ animated: true });
     }
-  }, [formData.isGoal, formData.selectedGoal, formData.recurrenceRule]);
+  }, [formData.isGoal, formData.selectedGoal, formData.recurrenceRule, isInitialLoad]);
 
   const fetchFormData = async () => {
     setLoading(true);
@@ -335,23 +420,27 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       const [
         { data: rolesData },
         { data: domainsData },
         { data: krData },
-        { data: goalsData }
+        { data: goalsData },
+        { data: delegatesData }
       ] = await Promise.all([
         supabase.from('0008-ap-roles').select('id, label, color').eq('user_id', user.id).eq('is_active', true).order('label'),
         supabase.from('0008-ap-domains').select('id, name').order('name'),
         supabase.from('0008-ap-key-relationships').select('id, name, role_id').eq('user_id', user.id),
-        supabase.from('0008-ap-goals-12wk').select('id, title').eq('user_id', user.id).eq('status', 'active').order('title')
+        supabase.from('0008-ap-goals-12wk').select('id, title').eq('user_id', user.id).eq('status', 'active').order('title'),
+        supabase.from('0008-ap-delegates').select('id, name, email, phone').eq('user_id', user.id).order('name')
       ]);
 
       setRoles(rolesData || []);
       setDomains(domainsData || []);
       setKeyRelationships(krData || []);
       setTwelveWeekGoals(goalsData || []);
+      setDelegates(delegatesData || []);
 
       // Fetch unified goals
       await fetchGoalsUnified();
@@ -402,7 +491,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     setCycleWeeks(fakeWeeks);
   };
 
-  const loadInitialData = () => {
+  const loadInitialData = async () => {
     if (!initialData) return;
 
     // Handle notes - can be string or array of note objects
@@ -417,6 +506,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
     setExistingNotes(notesArray);
 
+    // Load attachments for existing notes
+    if (notesArray.length > 0) {
+      await loadAttachmentsForExistingNotes(notesArray);
+    }
+
     // Check if there are active goals associated with this task
     const hasActiveGoals = initialData.goals && Array.isArray(initialData.goals) && initialData.goals.length > 0;
     let firstActiveGoal = null;
@@ -426,10 +520,30 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       firstActiveGoal = initialData.goals[0];
     }
 
+    // Determine reflection mode from database flags
+    let reflectionMode: ReflectionMode = 'rose';
+    let determinedType: SchedulingType = initialData.type || 'task';
+
+    if (initialData.daily_rose) {
+      reflectionMode = 'rose';
+      determinedType = 'reflection';
+    } else if (initialData.daily_thorn) {
+      reflectionMode = 'thorn';
+      determinedType = 'reflection';
+    } else if (initialData.type === 'depositIdea') {
+      reflectionMode = 'depositIdea';
+      determinedType = 'reflection';
+    } else if (initialData.content && !initialData.due_date && !initialData.start_date) {
+      // If there's content but no date fields, it's likely a reflection
+      reflectionMode = 'reflection';
+      determinedType = 'reflection';
+    }
+
     // Build formData, handling both edit mode (with id) and create mode (pre-fill only)
     const newFormData: FormData = {
-      type: initialData.type || 'task',
-      title: initialData.title || '',
+      type: determinedType,
+      reflectionMode,
+      title: initialData.title || initialData.reflection_title || '',
       dueDate: initialData.due_date || formatLocalDate(new Date()),
       dueTime: (initialData.type === 'task' ? initialData.end_time : '') || '',
       startDate: initialData.start_date || formatLocalDate(new Date()),
@@ -441,7 +555,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       isAnytime: initialData.is_all_day || false,
       isUrgent: initialData.is_urgent || false,
       isImportant: initialData.is_important || false,
-      isAuthenticDeposit: initialData.is_authentic_deposit || false,
       isGoal: hasActiveGoals || initialData.is_twelve_week_goal || false,
       selectedRoleIds: initialData.roles?.map((r: any) => r.id) || initialData.selectedRoleIds || [],
       selectedDomainIds: initialData.domains?.map((d: any) => d.id) || initialData.selectedDomainIds || [],
@@ -449,11 +562,280 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       selectedGoalIds: initialData.goals?.map((g: any) => g.id) || initialData.selectedGoalIds || [],
       selectedGoal: firstActiveGoal,
       notes: notesString,
+      content: initialData.content || '',
       recurrenceRule: initialData.recurrence_rule || undefined,
       recurrenceEndDate: initialData.recurrence_end_date || null,
+      isDelegated: initialData.delegates && initialData.delegates.length > 0,
+      selectedDelegateId: initialData.delegates && initialData.delegates.length > 0 ? initialData.delegates[0].id : undefined,
+      followUpEnabled: initialData.follow_up || false,
+      followUpDate: initialData.follow_up_date || formatLocalDate(new Date()),
+      followUpTime: '',
+      isAnytimeFollowUp: true,
+      parentId: parentId || initialData.parent_id,
+      parentType: parentType || initialData.parent_type,
     };
 
     setFormData(newFormData);
+  };
+
+  const loadAttachmentsForExistingNotes = async (notes: Array<{id: string; content: string; created_at: string}>) => {
+    try {
+      const attachmentsMap = new Map<string, any[]>();
+
+      for (const note of notes) {
+        const attachments = await fetchNoteAttachments(note.id);
+        if (attachments.length > 0) {
+          const formattedAttachments = attachments.map(att => ({
+            id: att.id,
+            uri: att.public_url,
+            filePath: att.file_path,
+            name: att.file_name,
+            type: att.file_type,
+            size: att.file_size,
+            isExisting: true,
+            noteId: note.id,
+          }));
+          attachmentsMap.set(note.id, formattedAttachments);
+        }
+      }
+
+      setNoteAttachmentsMap(attachmentsMap);
+    } catch (error) {
+      console.error('Error loading note attachments:', error);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.fileSize || 0;
+          const fileName = asset.fileName || 'image.jpg';
+
+          let mimeType = 'image/jpeg';
+          if (asset.uri) {
+            const lowerUri = asset.uri.toLowerCase();
+            if (lowerUri.endsWith('.png')) mimeType = 'image/png';
+            else if (lowerUri.endsWith('.gif')) mimeType = 'image/gif';
+            else if (lowerUri.endsWith('.webp')) mimeType = 'image/webp';
+            else if (lowerUri.endsWith('.heic')) mimeType = 'image/heic';
+          }
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: mimeType,
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.size || 0;
+          const fileName = asset.name;
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.mimeType || 'application/octet-stream',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const handlePickFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.size || 0;
+          const fileName = asset.name;
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.mimeType || 'application/octet-stream',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking file:', error);
+      Alert.alert('Error', 'Failed to pick file');
+    }
+  };
+
+  const handleRemoveAttachment = async (index: number) => {
+    const fileToRemove = attachedFiles[index];
+
+    if (fileToRemove.isExisting && fileToRemove.id && fileToRemove.noteId) {
+      try {
+        const success = await deleteNoteAttachment(fileToRemove.id, fileToRemove.filePath);
+        if (!success) {
+          Alert.alert('Error', 'Failed to delete attachment');
+          return;
+        }
+
+        // Update the noteAttachmentsMap
+        const noteAttachments = noteAttachmentsMap.get(fileToRemove.noteId) || [];
+        const updatedNoteAttachments = noteAttachments.filter(att => att.id !== fileToRemove.id);
+        const newMap = new Map(noteAttachmentsMap);
+        if (updatedNoteAttachments.length > 0) {
+          newMap.set(fileToRemove.noteId, updatedNoteAttachments);
+        } else {
+          newMap.delete(fileToRemove.noteId);
+        }
+        setNoteAttachmentsMap(newMap);
+      } catch (error) {
+        console.error('Error deleting attachment:', error);
+        Alert.alert('Error', 'Failed to delete attachment');
+        return;
+      }
+    }
+
+    const newFiles = attachedFiles.filter((_, i) => i !== index);
+    setAttachedFiles(newFiles);
+  };
+
+  const uploadFileToStorage = async (file: any, userId: string): Promise<string | null> => {
+    try {
+      let fileData: any;
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      } else {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      }
+
+      const filePath = await uploadNoteAttachment(fileData, file.name, file.type, userId);
+      return filePath;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    }
+  };
+
+  const uploadFileToReflectionStorage = async (file: any, userId: string): Promise<string | null> => {
+    try {
+      const supabase = getSupabaseClient();
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      let fileData: any;
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      } else {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      }
+
+      const { data, error } = await supabase.storage
+        .from('0008-reflection-attachments')
+        .upload(filePath, fileData, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error('Upload error:', error);
+        return null;
+      }
+
+      return filePath;
+    } catch (error) {
+      console.error('Error uploading file to reflection storage:', error);
+      return null;
+    }
   };
 
   const handleCalendarOpen = (mode: 'due' | 'start' | 'end' | 'withdrawal') => {
@@ -554,22 +936,57 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         const supabase = getSupabaseClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await supabase
+          const { error: updateError } = await supabase
             .from('0008-ap-users')
             .update({ hide_completed_task_warning: true })
             .eq('id', user.id);
+
+          if (updateError) {
+            console.warn('Could not save warning preference (column may not exist):', updateError.message);
+            // Continue anyway - this is a non-critical preference
+          }
         }
       } catch (error) {
-        console.error('Error updating completed task warning preference:', error);
+        console.warn('Error updating completed task warning preference (non-critical):', error);
+        // Continue anyway - this is a non-critical preference
       }
     }
     setShowCompletedWarning(false);
   };
 
   const handleSubmit = async () => {
-    if (!formData.title.trim()) {
+    // Validation based on type
+    if (formData.type !== 'reflection' && !formData.title.trim()) {
       Alert.alert('Error', 'Please enter a title');
       return;
+    }
+
+    if (formData.type === 'reflection') {
+      if ((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') && !formData.content.trim()) {
+        Alert.alert('Error', 'Please enter reflection content');
+        return;
+      }
+    }
+
+    // Validate Follow-Up date/time if enabled
+    if (formData.followUpEnabled && !formData.isAnytimeFollowUp) {
+      const now = new Date();
+      const followUpDate = new Date(formData.followUpDate);
+
+      if (formData.followUpTime) {
+        const time24h = convert12HourTo24Hour(formData.followUpTime);
+        if (!time24h) {
+          Alert.alert('Error', 'Invalid follow-up time format');
+          return;
+        }
+        const [hours, minutes] = time24h.split(':').map(Number);
+        followUpDate.setHours(hours, minutes, 0, 0);
+
+        if (followUpDate < now) {
+          Alert.alert('Error', 'Follow-up date and time cannot be in the past');
+          return;
+        }
+      }
     }
 
     setSaving(true);
@@ -582,154 +999,386 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       let mainRecord;
       let mainRecordId;
 
-      if (formData.type === 'withdrawal') {
-        const withdrawalPayload = {
-          user_id: user.id,
-          title: formData.title.trim(),
-          amount: parseFloat(formData.amount) || 0,
-          withdrawn_at: new Date(formData.withdrawalDate + 'T12:00:00').toISOString(),
-          ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
-        };
+      // Handle reflection type with its four modes
+      if (formData.type === 'reflection') {
+        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') {
+          // Save to reflections table
+          const reflectionPayload = {
+  user_id: user.id,
+  content: formData.content.trim(),
+  reflection_title: formData.title.trim() || null,
+  reflection_type: 'daily',
+  date: formatLocalDate(new Date()),
+  archived: false,
+  follow_up: formData.followUpEnabled ? formData.followUpDate : null,  // ✅ Date field
+  daily_rose: formData.reflectionMode === 'rose',
+  daily_thorn: formData.reflectionMode === 'thorn',
+  parent_id: formData.parentId || null,
+  parent_type: formData.parentType || null,
+  ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
+};
 
-        if (mode === 'edit' && initialData?.id) {
-          const { data, error } = await supabase
-            .from('0008-ap-withdrawals')
-            .update(withdrawalPayload)
-            .eq('id', initialData.id)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        } else {
-          const { data, error } = await supabase
-            .from('0008-ap-withdrawals')
-            .insert(withdrawalPayload)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        }
-        mainRecordId = mainRecord.id;
-      } else if (formData.type === 'depositIdea') {
-        const depositIdeaPayload = {
-          user_id: user.id,
-          title: formData.title.trim(),
-          is_active: true,
-          archived: false,
-          follow_up: formData.isGoal,
-          ...(mode === 'edit' && initialData?.id ? { updated_at: new Date().toISOString() } : {})
-        };
+          if (mode === 'edit' && initialData?.id) {
+            const { data, error } = await supabase
+              .from('0008-ap-reflections')
+              .update(reflectionPayload)
+              .eq('id', initialData.id)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          } else {
+            const { data, error } = await supabase
+              .from('0008-ap-reflections')
+              .insert(reflectionPayload)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          }
+          mainRecordId = mainRecord.id;
 
-        if (mode === 'edit' && initialData?.id) {
-          const { data, error } = await supabase
-            .from('0008-ap-deposit-ideas')
-            .update(depositIdeaPayload)
-            .eq('id', initialData.id)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        } else {
-          const { data, error } = await supabase
-            .from('0008-ap-deposit-ideas')
-            .insert(depositIdeaPayload)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        }
-        mainRecordId = mainRecord.id;
-      } else {
-        // Task or Event
-        // Log to verify status preservation
-        if (mode === 'edit' && initialData?.id) {
-          console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
-        }
+          // Save follow-up if enabled
+          if (formData.followUpEnabled && formData.followUpDate) {
+            let followUpTimeISO = null;
 
-        // For recurring tasks/events without a date, default to today
-        const effectiveDueDate = formData.type === 'task'
-          ? (formData.dueDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
-          : null;
-        const effectiveStartDate = formData.type === 'event'
-          ? (formData.startDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
-          : null;
-
-        // For tasks with a due time, we set both start_time and end_time to the same value
-        // so they display correctly on the calendar (not at midnight)
-        const dueTimeFormatted = formData.type === 'task' && formData.dueTime && !formData.isAnytime
-          ? formatTimeForDatabase(formData.dueTime, effectiveDueDate)
-          : null;
-
-        const taskPayload = {
-          user_id: user.id,
-          title: formData.title.trim(),
-          type: formData.type,
-          due_date: effectiveDueDate,
-          start_date: effectiveStartDate,
-          end_date: formData.type === 'event' ? formData.endDate : null,
-          start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.startTime, effectiveStartDate)
-            : dueTimeFormatted,
-          end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
-            ? formatTimeForDatabase(formData.endTime, formData.endDate || effectiveStartDate)
-            : dueTimeFormatted,
-          is_all_day: formData.isAnytime,
-          is_urgent: formData.isUrgent,
-          is_important: formData.isImportant,
-          is_authentic_deposit: formData.isAuthenticDeposit,
-          is_twelve_week_goal: formData.isGoal,
-          recurrence_rule: formData.recurrenceRule || null,
-          recurrence_end_date: formData.recurrenceEndDate || null,
-          // Preserve completion status and timestamp when editing
-          ...(mode === 'edit' && initialData?.id ? {
-            // Explicitly preserve completed status - never change it back to pending
-            status: initialData.status === 'completed' ? 'completed' : (initialData.status || 'pending'),
-            completed_at: initialData.completed_at || null,
-            updated_at: new Date().toISOString()
-          } : {
-            status: 'pending'
-          })
-        };
-
-        // Sanitize: Convert any empty strings to null for timestamp fields
-        const sanitizeTimestamps = (payload: any) => {
-          const timestampFields = ['start_time', 'end_time', 'completed_at'];
-          timestampFields.forEach(field => {
-            if (payload[field] === '') {
-              console.warn(`[TaskEventForm] Converting empty string to null for field: ${field}`);
-              payload[field] = null;
+            // Only create timestamp if not "Anytime"
+            if (!formData.isAnytimeFollowUp && formData.followUpTime) {
+              const time24h = convert12HourTo24Hour(formData.followUpTime);
+              if (time24h) {
+                const followUpDateTime = new Date(formData.followUpDate + 'T' + time24h + ':00');
+                followUpTimeISO = followUpDateTime.toISOString();
+              }
             }
-          });
-          return payload;
-        };
 
-        const sanitizedPayload = sanitizeTimestamps(taskPayload);
-        console.log('[TaskEventForm] Complete task payload:', JSON.stringify(sanitizedPayload, null, 2));
+            const followUpPayload = {
+              user_id: user.id,
+              parent_type: 'reflection',
+              parent_id: mainRecordId,
+              follow_up_date: formData.followUpDate,
+              follow_up_time: followUpTimeISO,
+              status: 'pending',
+            };
 
-        if (mode === 'edit' && initialData?.id) {
-          const { data, error } = await supabase
-            .from('0008-ap-tasks')
-            .update(sanitizedPayload)
-            .eq('id', initialData.id)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
-        } else {
-          const { data, error } = await supabase
-            .from('0008-ap-tasks')
-            .insert(sanitizedPayload)
-            .select()
-            .single();
-          if (error) throw error;
-          mainRecord = data;
+            if (mode === 'edit' && initialData?.id) {
+              // Delete existing follow-up and insert new one
+              await supabase
+                .from('0008-ap-universal-follow-up-join')
+                .delete()
+                .eq('parent_id', mainRecordId)
+                .eq('parent_type', 'reflection');
+            }
+
+            const { error: followUpError } = await supabase
+              .from('0008-ap-universal-follow-up-join')
+              .insert(followUpPayload);
+
+            if (followUpError) throw followUpError;
+          }
+
+          // Handle reflection attachments
+          const newAttachments = attachedFiles.filter(file => !file.isExisting);
+          if (newAttachments.length > 0) {
+            const uploadPromises = newAttachments.map(async (file) => {
+              const filePath = await uploadFileToReflectionStorage(file, user.id);
+              if (filePath) {
+                const { error: attachmentError } = await supabase
+                  .from('0008-ap-reflection-attachments')
+                  .insert({
+                    reflection_id: mainRecordId,
+                    user_id: user.id,
+                    file_name: file.name,
+                    file_path: filePath,
+                    file_type: file.type,
+                    file_size: file.size,
+                  });
+
+                if (attachmentError) {
+                  console.error('Error saving reflection attachment metadata:', attachmentError);
+                }
+              }
+            });
+
+            await Promise.all(uploadPromises);
+          }
+        } else if (formData.reflectionMode === 'depositIdea') {
+          // Save to deposit ideas table
+          const depositIdeaPayload = {
+  user_id: user.id,
+  title: formData.title.trim() || 'Untitled Idea',
+  is_active: true,
+  archived: false,
+  follow_up: formData.followUpEnabled ? formData.followUpDate : null,  // ✅ Send date or null
+  parent_id: formData.parentId || null,
+  parent_type: formData.parentType || null,
+  ...(mode === 'edit' && initialData?.id ? { updated_at: toLocalISOString(new Date()) } : {})
+};
+
+          if (mode === 'edit' && initialData?.id) {
+            const { data, error } = await supabase
+              .from('0008-ap-deposit-ideas')
+              .update(depositIdeaPayload)
+              .eq('id', initialData.id)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          } else {
+            const { data, error } = await supabase
+              .from('0008-ap-deposit-ideas')
+              .insert(depositIdeaPayload)
+              .select()
+              .single();
+            if (error) throw error;
+            mainRecord = data;
+          }
+          mainRecordId = mainRecord.id;
+
+          // Save content as note or create note for attachments
+          let noteId = null;
+          if (formData.content.trim() || attachedFiles.length > 0) {
+            const { data: noteData, error: noteError } = await supabase
+              .from('0008-ap-notes')
+              .insert({
+                user_id: user.id,
+                content: formData.content.trim() || '',
+              })
+              .select()
+              .single();
+
+            if (noteError) throw noteError;
+            noteId = noteData.id;
+
+            const { error: noteJoinError } = await supabase
+              .from('0008-ap-universal-notes-join')
+              .insert({
+                parent_id: mainRecordId,
+                parent_type: 'depositIdea',
+                note_id: noteData.id,
+                user_id: user.id,
+              });
+
+            if (noteJoinError) throw noteJoinError;
+
+            // Handle note attachments for deposit idea
+            const newAttachments = attachedFiles.filter(file => !file.isExisting);
+            if (newAttachments.length > 0 && noteId) {
+              const uploadPromises = newAttachments.map(async (file) => {
+                const filePath = await uploadFileToStorage(file, user.id);
+                if (filePath) {
+                  await saveNoteAttachmentMetadata(
+                    noteId!,
+                    user.id,
+                    file.name,
+                    filePath,
+                    file.type,
+                    file.size
+                  );
+                }
+              });
+
+              await Promise.all(uploadPromises);
+            }
+          }
+
+          // Save follow-up if enabled
+          if (formData.followUpEnabled && formData.followUpDate) {
+            let followUpTimeISO = null;
+
+            // Only create timestamp if not "Anytime"
+            if (!formData.isAnytimeFollowUp && formData.followUpTime) {
+              const time24h = convert12HourTo24Hour(formData.followUpTime);
+              if (time24h) {
+                const followUpDateTime = new Date(formData.followUpDate + 'T' + time24h + ':00');
+                followUpTimeISO = followUpDateTime.toISOString();
+              }
+            }
+
+            const followUpPayload = {
+              user_id: user.id,
+              parent_type: 'depositIdea',
+              parent_id: mainRecordId,
+              follow_up_date: formData.followUpDate,
+              follow_up_time: followUpTimeISO,
+              status: 'pending',
+            };
+
+            if (mode === 'edit' && initialData?.id) {
+              await supabase
+                .from('0008-ap-universal-follow-up-join')
+                .delete()
+                .eq('parent_id', mainRecordId)
+                .eq('parent_type', 'depositIdea');
+            }
+
+            const { error: followUpError } = await supabase
+              .from('0008-ap-universal-follow-up-join')
+              .insert(followUpPayload);
+
+            if (followUpError) throw followUpError;
+          }
         }
-        mainRecordId = mainRecord.id;
+
+        // Handle joins for reflection types
+        const parentType = (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') ? 'reflection' : 'depositIdea';
+
+        // Clear existing joins if editing
+        if (mode === 'edit' && initialData?.id) {
+          await Promise.all([
+            supabase.from('0008-ap-universal-roles-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+            supabase.from('0008-ap-universal-domains-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+            supabase.from('0008-ap-universal-key-relationships-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+          ]);
+        }
+
+        // Insert new joins
+        const joinPromises = [];
+
+        if (formData.selectedRoleIds.length > 0) {
+          const roleJoins = formData.selectedRoleIds.map(role_id => ({
+            parent_id: mainRecordId,
+            parent_type: parentType,
+            role_id,
+            user_id: user.id,
+          }));
+          joinPromises.push(supabase.from('0008-ap-universal-roles-join').insert(roleJoins));
+        }
+
+        if (formData.selectedDomainIds.length > 0) {
+          const domainJoins = formData.selectedDomainIds.map(domain_id => ({
+            parent_id: mainRecordId,
+            parent_type: parentType,
+            domain_id,
+            user_id: user.id,
+          }));
+          joinPromises.push(supabase.from('0008-ap-universal-domains-join').insert(domainJoins));
+        }
+
+        if (formData.selectedKeyRelationshipIds.length > 0) {
+          const krJoins = formData.selectedKeyRelationshipIds.map(key_relationship_id => ({
+            parent_id: mainRecordId,
+            parent_type: parentType,
+            key_relationship_id,
+            user_id: user.id,
+          }));
+          joinPromises.push(supabase.from('0008-ap-universal-key-relationships-join').insert(krJoins));
+        }
+
+        if (joinPromises.length > 0) {
+          const results = await Promise.all(joinPromises);
+          for (const result of results) {
+            if (result.error) throw result.error;
+          }
+        }
+
+        // Success message and event broadcasting
+        const modeName = formData.reflectionMode === 'rose' ? 'Rose' :
+                        formData.reflectionMode === 'thorn' ? 'Thorn' :
+                        formData.reflectionMode === 'reflection' ? 'Reflection' : 'Deposit Idea';
+        Alert.alert('Success', `${modeName} ${mode === 'edit' ? 'updated' : 'saved'} successfully!`);
+
+        if (formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection') {
+          eventBus.emit(mode === 'edit' ? EVENTS.REFLECTION_UPDATED : EVENTS.REFLECTION_CREATED);
+        } else if (formData.reflectionMode === 'depositIdea') {
+          eventBus.emit(mode === 'edit' ? EVENTS.DEPOSIT_IDEA_UPDATED : EVENTS.DEPOSIT_IDEA_CREATED);
+        }
+
+        onSubmitSuccess();
+        return; // Exit early for reflections
       }
 
+      // Original code continues for task/event
+      // Task or Event
+      // Log to verify status preservation
+      if (mode === 'edit' && initialData?.id) {
+        console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
+      }
+
+      // For recurring tasks/events without a date, default to today
+      const effectiveDueDate = formData.type === 'task'
+        ? (formData.dueDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+        : null;
+      const effectiveStartDate = formData.type === 'event'
+        ? (formData.startDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+        : null;
+
+      // For tasks with a due time, we set both start_time and end_time to the same value
+      // so they display correctly on the calendar (not at midnight)
+      const dueTimeFormatted = formData.type === 'task' && formData.dueTime && !formData.isAnytime
+        ? formatTimeForDatabase(formData.dueTime, effectiveDueDate)
+        : null;
+
+      const taskPayload = {
+        user_id: user.id,
+        title: formData.title.trim(),
+        type: formData.type,
+        due_date: effectiveDueDate,
+        start_date: effectiveStartDate,
+        end_date: formData.type === 'event' ? formData.endDate : null,
+        start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
+          ? formatTimeForDatabase(formData.startTime, effectiveStartDate)
+          : dueTimeFormatted,
+        end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
+          ? formatTimeForDatabase(formData.endTime, formData.endDate || effectiveStartDate)
+          : dueTimeFormatted,
+        is_all_day: formData.isAnytime,
+        is_urgent: formData.isUrgent,
+        is_important: formData.isImportant,
+        is_twelve_week_goal: formData.isGoal,
+        is_deposit_idea: initialData?.is_deposit_idea || false,
+        recurrence_rule: formData.recurrenceRule || null,
+        recurrence_end_date: formData.recurrenceEndDate || null,
+        // Parent relationship for follow-through items
+        parent_id: formData.parentId || null,
+        parent_type: formData.parentType || null,
+        // Preserve completion status and timestamp when editing
+        ...(mode === 'edit' && initialData?.id ? {
+          // Explicitly preserve completed status - never change it back to pending
+          status: initialData.status === 'completed' ? 'completed' : (initialData.status || 'pending'),
+          completed_at: initialData.completed_at || null,
+          updated_at: toLocalISOString(new Date())
+        } : {
+          status: 'pending'
+        })
+      };
+
+      // Sanitize: Convert any empty strings to null for timestamp fields
+      const sanitizeTimestamps = (payload: any) => {
+        const timestampFields = ['start_time', 'end_time', 'completed_at'];
+        timestampFields.forEach(field => {
+          if (payload[field] === '') {
+            console.warn(`[TaskEventForm] Converting empty string to null for field: ${field}`);
+            payload[field] = null;
+          }
+        });
+        return payload;
+      };
+
+      const sanitizedPayload = sanitizeTimestamps(taskPayload);
+      console.log('[TaskEventForm] Complete task payload:', JSON.stringify(sanitizedPayload, null, 2));
+
+      if (mode === 'edit' && initialData?.id) {
+        const { data, error } = await supabase
+          .from('0008-ap-tasks')
+          .update(sanitizedPayload)
+          .eq('id', initialData.id)
+          .select()
+          .single();
+        if (error) throw error;
+        mainRecord = data;
+      } else {
+        const { data, error } = await supabase
+          .from('0008-ap-tasks')
+          .insert(sanitizedPayload)
+          .select()
+          .single();
+        if (error) throw error;
+        mainRecord = data;
+      }
+      mainRecordId = mainRecord.id;
+
       // Handle joins for all types
-      const parentType = formData.type === 'depositIdea' ? 'depositIdea' : 
-                        formData.type === 'withdrawal' ? 'withdrawal' : 'task';
+      const parentType = 'task';
 
       // Clear existing joins if editing
       if (mode === 'edit' && initialData?.id) {
@@ -738,6 +1387,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           supabase.from('0008-ap-universal-domains-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
           supabase.from('0008-ap-universal-key-relationships-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
           supabase.from('0008-ap-universal-goals-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
+          supabase.from('0008-ap-universal-delegates-join').delete().eq('parent_id', mainRecordId).eq('parent_type', parentType),
         ]);
       }
 
@@ -785,6 +1435,16 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         joinPromises.push(supabase.from('0008-ap-universal-goals-join').insert(goalJoins));
       }
 
+      if (formData.isDelegated && formData.selectedDelegateId && parentType === 'task') {
+        const delegateJoin = {
+          parent_id: mainRecordId,
+          parent_type: parentType,
+          delegate_id: formData.selectedDelegateId,
+          user_id: user.id,
+        };
+        joinPromises.push(supabase.from('0008-ap-universal-delegates-join').insert([delegateJoin]));
+      }
+
       if (joinPromises.length > 0) {
         const results = await Promise.all(joinPromises);
         for (const result of results) {
@@ -815,14 +1475,28 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           });
 
         if (noteJoinError) throw noteJoinError;
+
+        // Upload attachments for the new note
+        if (attachedFiles.length > 0) {
+          const uploadPromises = attachedFiles.map(async (file) => {
+            const filePath = await uploadFileToStorage(file, user.id);
+            if (filePath) {
+              await saveNoteAttachmentMetadata(
+                noteData.id,
+                user.id,
+                file.name,
+                filePath,
+                file.type,
+                file.size
+              );
+            }
+          });
+
+          await Promise.all(uploadPromises);
+        }
       }
 
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
-
-      // Invalidate authentic deposit cache if this is an authentic deposit task
-      if (formData.isAuthenticDeposit && formData.type === 'task') {
-        invalidateCache('authentic');
-      }
 
       // Broadcast event to notify other components
       if (formData.type === 'withdrawal') {
@@ -870,7 +1544,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>Type</Text>
       <View style={styles.typeSelector}>
-        {(['task', 'event', 'depositIdea', 'withdrawal'] as const).map((type) => (
+        {(['task', 'event', 'reflection'] as const).map((type) => (
           <TouchableOpacity
             key={type}
             style={[
@@ -881,6 +1555,17 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             onPress={() => {
               setFormData(prev => {
                 const updates: any = { type };
+
+                // Bidirectional content/notes flow when switching types
+                if (type === 'reflection' && (prev.type === 'task' || prev.type === 'event')) {
+                  // Moving from task/event to reflection: copy notes to content
+                  updates.content = prev.notes || prev.content;
+                  updates.reflectionMode = 'rose';
+                } else if ((type === 'task' || type === 'event') && prev.type === 'reflection') {
+                  // Moving from reflection to task/event: copy content to notes
+                  updates.notes = prev.content || prev.notes;
+                }
+
                 // Set smart defaults when switching to event type
                 if (type === 'event' && prev.type !== 'event' && mode !== 'edit') {
                   const defaultStart = getDefaultStartTime();
@@ -888,6 +1573,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   updates.endTime = defaultStart;
                   updates.endDate = prev.startDate;
                 }
+
                 return { ...prev, ...updates };
               });
             }}
@@ -896,7 +1582,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               styles.typeButtonText,
               { color: formData.type === type ? '#ffffff' : colors.text }
             ]}>
-              {type === 'depositIdea' ? 'Dep Idea' : type === 'withdrawal' ? 'Withdraw' : type.charAt(0).toUpperCase() + type.slice(1)}
+              {type.charAt(0).toUpperCase() + type.slice(1)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -936,29 +1622,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     </View>
   );
 
-  const handleAuthenticDepositToggle = async (value: boolean) => {
-    if (!value) {
-      setFormData(prev => ({ ...prev, isAuthenticDeposit: false }));
-      return;
-    }
-
-    if (mode === 'edit' && initialData?.is_authentic_deposit) {
-      setFormData(prev => ({ ...prev, isAuthenticDeposit: true }));
-      return;
-    }
-
-    if (!authenticUsage || authenticUsage.remaining <= 0) {
-      const resetDay = getWeekResetDay(weekStartDay);
-      Alert.alert(
-        'Weekly Limit Reached',
-        `You've used all 14 authentic deposits this week. Your limit resets on ${resetDay} night.`,
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    setFormData(prev => ({ ...prev, isAuthenticDeposit: true }));
-  };
 
   const renderSwitchField = (label: string, value: boolean, onChange: (value: boolean) => void) => (
     <View style={styles.switchField}>
@@ -1031,7 +1694,21 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {initialData?.id ? 'Edit' : 'New'} {formData.type === 'depositIdea' ? 'Item' : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)}
+            {initialData?.id ? 'Edit' : 'New'} {
+              formData.type === 'reflection'
+                ? formData.reflectionMode === 'rose'
+                  ? 'Rose'
+                  : formData.reflectionMode === 'thorn'
+                    ? 'Thorn'
+                    : formData.reflectionMode === 'reflection'
+                      ? 'Reflection'
+                      : 'Deposit Idea'
+                : formData.type === 'withdrawal'
+                  ? initialData?.id ? 'Thorn' : 'Withdrawal'
+                  : formData.type === 'depositIdea'
+                    ? 'Item'
+                    : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
+            }
           </Text>
           {isEditingCompletedTask && (
             <View style={[styles.completedBadge, { backgroundColor: '#16a34a' }]}>
@@ -1043,10 +1720,10 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           style={[
             styles.saveButton,
             { backgroundColor: colors.primary },
-            (!formData.title.trim() || saving) && { backgroundColor: colors.textSecondary }
+            (formData.type !== 'reflection' && !formData.title.trim()) || saving ? { backgroundColor: colors.textSecondary } : null
           ]}
           onPress={handleSubmit}
-          disabled={!formData.title.trim() || saving}
+          disabled={(formData.type !== 'reflection' && !formData.title.trim()) || saving}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#ffffff" />
@@ -1058,20 +1735,199 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
       <ScrollView ref={scrollRef} style={styles.content}>
         <View style={styles.form}>
-          {/* Title */}
-          <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>Title *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-              value={formData.title}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
-              placeholder="What do you want to do?"
-              placeholderTextColor={colors.textSecondary}
-            />
-          </View>
+          {/* REFLECTION FORM LAYOUT */}
+          {formData.type === 'reflection' && (
+            <View style={styles.reflectionContainer}>
+              {/* Reflection Mode Pills - FIRST */}
+              <ReflectionModePills
+                selectedMode={formData.reflectionMode}
+                onModeChange={(mode) => setFormData(prev => ({ ...prev, reflectionMode: mode }))}
+              />
 
-          {/* Type Selector */}
-          {renderTypeSelector()}
+              {/* Title Field (Optional for reflections) - SECOND */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>Title</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                  value={formData.title}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+                  placeholder={
+                    formData.reflectionMode === 'rose' ? 'Simple description . . .' :
+                    formData.reflectionMode === 'thorn' ? 'Simple description . . .' :
+                    formData.reflectionMode === 'reflection' ? 'Simple description . . .' :
+                    'Deposit idea title...'
+                  }
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              {/* Type Selector - THIRD */}
+              {renderTypeSelector()}
+
+              {/* Content Area - Varies by reflection mode */}
+              {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>{
+                      formData.reflectionMode === 'rose' ? 'Rose *' : 'Thorn *'
+                    }</Text>
+                    <RichTextInput
+                      value={formData.content}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                      placeholder={
+                        formData.reflectionMode === 'rose'
+                          ? "Share a success, joy or meaningful moment you want to celebrate . . ."
+                          : "What didn't go smoothly or needs attention, care or improvement?"
+                      }
+                      minHeight={150}
+                      onAttachmentPress={handlePickFile}
+                    />
+                  </View>
+
+                  {/* Show attached files */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+
+              {formData.reflectionMode === 'reflection' && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: '#9333ea' }]}>Reflection *</Text>
+                    <RichTextInput
+                      value={formData.content}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                      placeholder="Capture a thought or idea that is important to you..."
+                      minHeight={150}
+                      onAttachmentPress={handlePickFile}
+                    />
+                  </View>
+
+                  {/* Show attached files */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+
+              {formData.reflectionMode === 'depositIdea' && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>Idea Notes</Text>
+                    <RichTextInput
+                      value={formData.content}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, content: text }))}
+                      placeholder="Describe your idea or thought that you may want to take future action on . . ."
+                      minHeight={120}
+                      onAttachmentPress={handlePickFile}
+                    />
+                  </View>
+
+                  {/* Show attached files */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={[styles.thumbnailFileName, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* Associations Section */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Is this {formData.reflectionMode === 'rose' ? 'celebration' : formData.reflectionMode === 'thorn' ? 'challenge' : 'idea'} associated with any roles, wellness zones, or goals?
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* TASK/EVENT FORM LAYOUT */}
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <>
+              {/* Title - for task/event types */}
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.text }]}>Title *</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                  value={formData.title}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+                  placeholder="What do you want to do?"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+
+              {/* Type Selector */}
+              {renderTypeSelector()}
+            </>
+          )}
 
           {/* Switches Row - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
@@ -1085,14 +1941,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
               <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
                 <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  <View style={styles.switchFieldContainer}>
-                    {renderSwitchField('Authentic Deposit', formData.isAuthenticDeposit, handleAuthenticDepositToggle)}
-                    {authenticUsage && formData.type === 'task' && (
-                      <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-                        {authenticUsage.used} of 14 used this week
-                      </Text>
-                    )}
-                  </View>
                   {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
                 </View>
               </View>
@@ -1290,6 +2138,42 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
+          {/* Delegate to Checkbox (only for tasks and events) */}
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+              <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                <View style={styles.switchField}>
+                  <Text style={[styles.switchLabel, { color: colors.text }]} numberOfLines={1}>
+                    Delegate to
+                  </Text>
+                  <Switch
+                    value={formData.isDelegated}
+                    onValueChange={(value) => {
+                      setFormData(prev => ({ ...prev, isDelegated: value }));
+                      if (value) {
+                        setShowDelegateModal(true);
+                      }
+                    }}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+              </View>
+              {formData.isDelegated && formData.selectedDelegateId && (
+                <View style={styles.delegateInfoContainer}>
+                  <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
+                    {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
+                    <Text style={[styles.changeDelegateText, { color: colors.primary }]}>
+                      Change
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Roles */}
           {renderCheckboxGrid(
             'Roles',
@@ -1306,45 +2190,166 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             (id) => handleMultiSelect('selectedKeyRelationshipIds', id)
           )}
 
-          {/* Domains */}
+          {/* Wellness Zones */}
           {renderCheckboxGrid(
-            'Domains',
+            'Wellness Zones',
             domains,
             formData.selectedDomainIds,
             (id) => handleMultiSelect('selectedDomainIds', id)
           )}
 
-          {/* 12-Week Goals */}
-          {formData.type === 'task' && formData.isGoal && twelveWeekGoals.length > 0 && renderCheckboxGrid(
-            '12-Week Goals',
-            twelveWeekGoals,
-            formData.selectedGoalIds,
-            (id) => handleMultiSelect('selectedGoalIds', id)
+          {/* Goals - Collapsible chip-based section */}
+          {((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && (
+            <View style={styles.field}>
+              <TouchableOpacity
+                style={styles.collapsibleHeader}
+                onPress={() => setShowGoalsSection(!showGoalsSection)}
+              >
+                <Text style={[styles.label, { color: colors.text }]}>Goals</Text>
+                {showGoalsSection ? (
+                  <ChevronUp size={20} color={colors.text} />
+                ) : (
+                  <ChevronDown size={20} color={colors.text} />
+                )}
+              </TouchableOpacity>
+              {showGoalsSection && (
+                <View style={styles.goalPickerRow}>
+                  {availableGoals.map(g => {
+                    const active = formData.selectedGoalIds.includes(g.id);
+                    return (
+                      <TouchableOpacity
+                        key={`${g.goal_type}-${g.id}`}
+                        style={[
+                          styles.goalChip,
+                          { borderColor: colors.border, backgroundColor: colors.surface },
+                          active && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => handleMultiSelect('selectedGoalIds', g.id)}
+                      >
+                        <Text style={[
+                          styles.goalChipText,
+                          { color: active ? '#ffffff' : colors.text }
+                        ]}>
+                          {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           )}
 
-          {/* Notes */}
+          {/* Follow Up Section - Only for reflection mode */}
+          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea') && (
+            <FollowUpToggleSection
+              enabled={formData.followUpEnabled}
+              date={formData.followUpDate}
+              time={formData.followUpTime}
+              isAnytime={formData.isAnytimeFollowUp}
+              onToggle={(enabled) => setFormData(prev => ({ ...prev, followUpEnabled: enabled }))}
+              onDateChange={(date) => setFormData(prev => ({ ...prev, followUpDate: date }))}
+              onTimeChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
+              onAnytimeChange={(isAnytime) => setFormData(prev => ({ ...prev, isAnytimeFollowUp: isAnytime }))}
+            />
+          )}
+
+
+          {/* Notes - Only for task and event types */}
+          {(formData.type === 'task' || formData.type === 'event') && (
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
+            <View style={styles.notesHeader}>
+              <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
+              <TouchableOpacity
+                style={styles.attachmentButton}
+                onPress={handlePickFile}
+              >
+                <Paperclip size={20} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
 
             {/* Display existing notes in stacked format */}
             {existingNotes.length > 0 && (
               <View style={styles.existingNotesContainer}>
-                {existingNotes.map((note) => (
-                  <View key={note.id} style={styles.existingNoteItem}>
-                    <Text style={[styles.existingNoteContent, { color: colors.text }]}>{note.content}</Text>
-                    <Text style={[styles.existingNoteDate, { color: colors.textSecondary }]}>
-                      {new Date(note.created_at).toLocaleDateString('en-US', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                      })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                      })})
-                    </Text>
-                  </View>
-                ))}
+                {existingNotes.map((note) => {
+                  const noteAttachments = noteAttachmentsMap.get(note.id) || [];
+                  return (
+                    <View key={note.id} style={styles.existingNoteItem}>
+                      <Text style={[styles.existingNoteContent, { color: colors.text }]}>{note.content}</Text>
+                      <Text style={[styles.existingNoteDate, { color: colors.textSecondary }]}>
+                        {new Date(note.created_at).toLocaleDateString('en-US', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        })})
+                      </Text>
+                      {noteAttachments.length > 0 && (
+                        <View style={styles.noteAttachmentsContainer}>
+                          <View style={styles.existingAttachmentsHeader}>
+                            <AttachmentBadge count={noteAttachments.length} size="small" />
+                          </View>
+                          <View style={styles.attachmentsGrid}>
+                            {noteAttachments.slice(0, 4).map((file, index) => {
+                              const isImage = file.type?.startsWith('image/');
+                              return (
+                                <TouchableOpacity
+                                  key={index}
+                                  style={styles.attachmentThumbnailWrapper}
+                                  onPress={() => {
+                                    if (isImage) {
+                                      const imageAttachments = noteAttachments.filter(f => f.type?.startsWith('image/'));
+                                      const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                                      setSelectedImages(imageAttachments);
+                                      setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                                      setImageViewerVisible(true);
+                                    } else {
+                                      Linking.openURL(file.uri);
+                                    }
+                                  }}
+                                  activeOpacity={0.7}
+                                >
+                                  {isImage ? (
+                                    <Image
+                                      source={{ uri: file.uri }}
+                                      style={styles.existingThumbnailImage}
+                                      resizeMode="cover"
+                                    />
+                                  ) : (
+                                    <View style={styles.existingDocumentThumbnail}>
+                                      <AttachmentThumbnail
+                                        uri={file.uri}
+                                        fileType={file.type}
+                                        fileName={file.name}
+                                        size="small"
+                                      />
+                                    </View>
+                                  )}
+                                  <Text
+                                    style={[styles.thumbnailFileName, { color: colors.text }]}
+                                    numberOfLines={1}
+                                  >
+                                    {file.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                            {noteAttachments.length > 4 && (
+                              <View style={styles.moreAttachmentsIndicator}>
+                                <Text style={[styles.moreAttachmentsText, { color: colors.textSecondary }]}>
+                                  +{noteAttachments.length - 4}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             )}
 
@@ -1358,7 +2363,41 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               multiline
               numberOfLines={3}
             />
+
+            {/* Attached Files Display for New Note */}
+            {attachedFiles.length > 0 && (
+              <View style={styles.attachmentsContainer}>
+                <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
+                  Attachments ({attachedFiles.length})
+                </Text>
+                <View style={styles.attachmentsGrid}>
+                  {attachedFiles.map((file, index) => (
+                    <View key={index} style={styles.attachmentThumbnailWrapper}>
+                      <AttachmentThumbnail
+                        uri={file.uri}
+                        fileType={file.type}
+                        fileName={file.name}
+                        size="medium"
+                      />
+                      <TouchableOpacity
+                        style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                        onPress={() => handleRemoveAttachment(index)}
+                      >
+                        <X size={14} color="#ffffff" />
+                      </TouchableOpacity>
+                      <Text
+                        style={[styles.thumbnailFileName, { color: colors.text }]}
+                        numberOfLines={1}
+                      >
+                        {file.name}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
+          )}
         </View>
       </ScrollView>
 
@@ -1506,6 +2545,35 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         initialRule={formData.recurrenceRule}
         initialEndDate={formData.recurrenceEndDate}
       />
+
+      {/* Delegate Modal */}
+      <DelegateModal
+        visible={showDelegateModal}
+        onClose={() => setShowDelegateModal(false)}
+        onSave={async (delegateId) => {
+          setFormData(prev => ({ ...prev, selectedDelegateId: delegateId, isDelegated: true }));
+          const supabase = getSupabaseClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data } = await supabase
+              .from('0008-ap-delegates')
+              .select('id, name, email, phone')
+              .eq('user_id', user.id)
+              .order('name');
+            if (data) setDelegates(data);
+          }
+        }}
+        existingDelegates={delegates}
+        userId={userId}
+      />
+
+      {/* Image Viewer Modal */}
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        images={selectedImages}
+        initialIndex={selectedImageIndex}
+        onClose={() => setImageViewerVisible(false)}
+      />
     </View>
   );
 }
@@ -1604,7 +2672,7 @@ const styles = StyleSheet.create({
   },
   switchesRowWrapper: {
     width: '100%',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 16,
     paddingHorizontal: 16,
   },
@@ -1614,8 +2682,8 @@ const styles = StyleSheet.create({
   switchesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '60%',
-    maxWidth: 600,
+    width: 300,
+    maxWidth: '100%',
     gap: 24,
   },
   switchesRowMobile: {
@@ -1629,7 +2697,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flex: 1,
+    width: 300,
+    maxWidth: '100%',
     minWidth: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -1645,8 +2714,8 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
-    flex: 1,
-    marginRight: 8,
+    flexShrink: 0,
+    marginRight: 12,
   },
   dateRow: {
     flexDirection: 'row',
@@ -1869,10 +2938,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 8,
+    width: 300,
+    maxWidth: '100%',
+    gap: 8,
+  },
   goalPickerRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginTop: 8,
+    width: 300,
+    maxWidth: '100%',
   },
   goalChip: {
     paddingHorizontal: 12,
@@ -2060,27 +3141,6 @@ const styles = StyleSheet.create({
   warningCheckboxRow: {
     alignItems: 'center',
   },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkmark: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  checkboxLabel: {
-    fontSize: 14,
-  },
   warningFooter: {
     padding: 20,
     borderTopWidth: 1,
@@ -2096,5 +3156,186 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  delegateInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 8,
+    width: 300,
+    maxWidth: '100%',
+  },
+  delegateInfoText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  changeDelegateText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  notesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  attachmentButton: {
+    padding: 8,
+  },
+  attachmentsContainer: {
+    marginTop: 12,
+  },
+  attachmentsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  attachmentsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  attachmentThumbnailWrapper: {
+    width: 80,
+    alignItems: 'center',
+    gap: 4,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  thumbnailFileName: {
+    fontSize: 10,
+    textAlign: 'center',
+    width: '100%',
+  },
+  attachmentPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentPickerContent: {
+    borderRadius: 12,
+    padding: 16,
+    width: '90%',
+    maxWidth: 400,
+  },
+  attachmentPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  attachmentPickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  attachmentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginVertical: 8,
+    gap: 12,
+  },
+  attachmentOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  noteAttachmentsContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  existingAttachmentsHeader: {
+    marginBottom: 8,
+  },
+  existingThumbnailImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  existingDocumentThumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreAttachmentsIndicator: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreAttachmentsText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  reflectionContainer: {
+    marginTop: 8,
+  },
+  associationSection: {
+    marginTop: 12,
+  },
+  associationLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  attachmentButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  attachmentButtonInline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  attachmentButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

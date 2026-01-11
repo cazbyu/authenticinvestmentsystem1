@@ -1,39 +1,47 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Platform, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Easing, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
-import { Header } from '@/components/Header';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import RecurringTaskActionModal from '@/components/tasks/RecurringTaskActionModal';
+import DelegateModal from '@/components/tasks/DelegateModal';
+import JournalForm from '@/components/reflections/JournalForm';
 import { getSupabaseClient } from '@/lib/supabase';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
+import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
-import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { DraggableFab } from '@/components/DraggableFab';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
+import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
+import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
+import { ReflectFilterButtons } from '@/components/dashboard/ReflectFilterButtons';
+import { ActFilterButtons } from '@/components/dashboard/ActFilterButtons';
+import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
+import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
+import { CompassView } from '@/components/compass/CompassView';
+import { router, useFocusEffect } from 'expo-router';
+import { shouldShowRitual } from '@/lib/ritualUtils';
 
-// --- Main Dashboard Screen Component ---
-// This screen has 4 views accessible via tabs in the header:
-// 1. DEPOSITS: Shows pending/in-progress tasks and events (your upcoming actions)
-//              Note: Despite the name "deposits", this shows PENDING TASKS, not completed authentic deposits
-//              Completed authentic deposits are shown in the Journal view
-// 2. IDEAS: Shows deposit ideas that haven't been activated yet
-// 3. JOURNAL: Shows historical data (completed tasks, withdrawals, reflections)
-// 4. ANALYTICS: Shows charts and visualizations of your progress
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
-  // activeView controls which of the 4 tabs is displayed
+
+  const [activeTab, setActiveTab] = useState<DashboardTab>('home');
+  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
+  const [journalPeriodScore, setJournalPeriodScore] = useState<number>(0);
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
+  const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('all');
+  const [actFilter, setActFilter] = useState<'all' | 'task' | 'event'>('all');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -45,10 +53,29 @@ export default function Dashboard() {
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isDelegateModalVisible, setIsDelegateModalVisible] = useState(false);
+  const [delegatingTask, setDelegatingTask] = useState<Task | null>(null);
+  const [delegates, setDelegates] = useState<Array<{id: string; name: string; email?: string; phone?: string}>>([]);
+  const [userId, setUserId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [journalRefreshKey, setJournalRefreshKey] = useState(0);
+  const [isReflectionModalVisible, setIsReflectionModalVisible] = useState(false);
+  const [editingReflection, setEditingReflection] = useState<any>(null);
+  const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
+  const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
+
+  // Ritual state
+  const [showMorningSpark, setShowMorningSpark] = useState(false);
+  const [showEveningReview, setShowEveningReview] = useState(false);
+  const [showWeeklyAlignment, setShowWeeklyAlignment] = useState(false);
+  const sparkAnimation = useState(new Animated.Value(1))[0];
+  const reviewAnimation = useState(new Animated.Value(1))[0];
+  const alignmentAnimation = useState(new Animated.Value(1))[0];
+
+  // Follow-through TaskEventForm state
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
 
   // Import functions from useGoalProgress hook
   const {
@@ -56,9 +83,122 @@ export default function Dashboard() {
   } = useGoalProgress();
   
 
-  // Reset to main Actions & Ideas view when tab is pressed
+  const loadJournalPeriodScore = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const now = new Date();
+      let startDate: Date;
+
+      switch (selectedPeriod) {
+        case 'today':
+          startDate = new Date(now);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'week':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 6);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'month':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 27);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'all':
+          startDate = new Date('2000-01-01');
+          break;
+      }
+
+      const startStr = startDate.toISOString();
+      const endStr = now.toISOString();
+
+      const { data: tasksData } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, is_urgent, is_important, is_twelve_week_goal')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .not('completed_at', 'is', null)
+        .gte('completed_at', startStr)
+        .lte('completed_at', endStr);
+
+      let depositsScore = 0;
+
+      if (tasksData && tasksData.length > 0) {
+        const taskIds = tasksData.map((t: any) => t.id);
+
+        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task')
+        ]);
+
+        const rolesCount = new Map<string, number>();
+        (rolesRes.data || []).forEach((r: any) => {
+          rolesCount.set(r.parent_id, (rolesCount.get(r.parent_id) || 0) + 1);
+        });
+
+        const domainsCount = new Map<string, number>();
+        (domainsRes.data || []).forEach((d: any) => {
+          domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
+        });
+
+        const goalsCount = new Map<string, number>();
+        (goalsRes.data || []).forEach((g: any) => {
+          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
+            goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
+          }
+        });
+
+        tasksData.forEach((task: any) => {
+          const roles = Array(rolesCount.get(task.id) || 0).fill({});
+          const domains = Array(domainsCount.get(task.id) || 0).fill({});
+          const goals = Array(goalsCount.get(task.id) || 0).fill({});
+          depositsScore += calculateTaskPoints(task, roles, domains, goals);
+        });
+      }
+
+      const { data: withdrawalsData } = await supabase
+        .from('0008-ap-withdrawals')
+        .select('amount')
+        .eq('user_id', user.id)
+        .gte('withdrawn_at', startStr)
+        .lte('withdrawn_at', endStr);
+
+      let withdrawalsScore = 0;
+      if (withdrawalsData) {
+        withdrawalsScore = withdrawalsData.reduce((sum, w) => sum + (parseFloat(String(w.amount)) || 0), 0);
+      }
+
+      setJournalPeriodScore(depositsScore - withdrawalsScore);
+    } catch (error) {
+      console.error('Error loading journal period score:', error);
+      setJournalPeriodScore(0);
+    }
+  };
+
   const resetToMain = useCallback(() => {
+    setActiveTab('home');
+    setSelectedPeriod('week');
     setActiveView('deposits');
+    setReflectFilter('all');
+    setActFilter('all');
     setSortOption('due_date');
     setIsSortModalVisible(false);
     setIsFormModalVisible(false);
@@ -77,6 +217,7 @@ export default function Dashboard() {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       if (activeView === 'deposits') {
         // DEPOSITS VIEW: Fetch pending/in-progress tasks and events
@@ -95,17 +236,16 @@ export default function Dashboard() {
         const weekStartStr = formatLocalDate(weekStart);
         const weekEndStr = formatLocalDate(weekEnd);
 
-        // Fetch tasks using the dashboard view for recurring task support
-        // The v_dashboard_next_occurrences view automatically:
-        // - Expands recurring tasks to show only the NEXT pending occurrence
-        // - Includes all non-recurring tasks
-        // - Filters out virtual occurrences that have been completed
+        // Fetch all pending/in-progress tasks directly from the tasks table
+        // This includes both recurring and non-recurring tasks
         const { data: tasksData, error: tasksError } = await supabase
-          .from('v_dashboard_next_occurrences')
+          .from('0008-ap-tasks')
           .select('*')
           .eq('user_id', user.id)
           .in('status', ['pending', 'in_progress'])
           .in('type', ['task', 'event'])
+          .is('deleted_at', null)
+          .is('parent_task_id', null)
           .order('created_at', { ascending: false });
 
         if (tasksError) throw tasksError;
@@ -216,20 +356,13 @@ export default function Dashboard() {
         });
 
         let sortedTasks = [...transformedTasks];
-        if (sortOption === 'due_date') sortedTasks.sort((a, b) => (new Date(a.due_date).getTime() || 0) - (new Date(b.due_date).getTime() || 0));
-        else if (sortOption === 'priority') sortedTasks.sort((a, b) => ((b.is_urgent ? 2 : 0) + (b.is_important ? 1 : 0)) - ((a.is_urgent ? 2 : 0) + (a.is_important ? 1 : 0)));
-        else if (sortOption === 'title') sortedTasks.sort((a, b) => a.title.localeCompare(b.title));
-        else if (sortOption === 'authentic_points') {
-          sortedTasks.sort((a, b) => {
-            const pointsA = calculateTaskPoints(a, a.roles, a.domains, a.goals);
-            const pointsB = calculateTaskPoints(b, b.roles, b.domains, b.goals);
-            return pointsB - pointsA; // Highest points first
-          });
+        if (sortOption === 'due_date') {
+          sortedTasks.sort((a, b) => (new Date(a.due_date).getTime() || 0) - (new Date(b.due_date).getTime() || 0));
+        } else if (sortOption === 'priority') {
+          sortedTasks.sort((a, b) => ((b.is_urgent ? 2 : 0) + (b.is_important ? 1 : 0)) - ((a.is_urgent ? 2 : 0) + (a.is_important ? 1 : 0)));
+        } else if (sortOption === 'delegated') {
+          sortedTasks.sort((a, b) => (b.has_delegates ? 1 : 0) - (a.has_delegates ? 1 : 0));
         }
-        else if (sortOption === 'roles') sortedTasks.sort((a, b) => (b.roles?.length || 0) - (a.roles?.length || 0));
-        else if (sortOption === 'domains') sortedTasks.sort((a, b) => (b.domains?.length || 0) - (a.domains?.length || 0));
-        else if (sortOption === 'goals') sortedTasks.sort((a, b) => (b.goals?.length || 0) - (a.goals?.length || 0));
-        else if (sortOption === 'delegated') sortedTasks.sort((a, b) => (b.has_delegates ? 1 : 0) - (a.has_delegates ? 1 : 0));
 
         console.log('[Dashboard] Setting tasks:', sortedTasks.length, 'tasks found');
         setTasks(sortedTasks);
@@ -242,6 +375,7 @@ export default function Dashboard() {
           .select('*')
           .eq('user_id', user.id)
           .eq('archived', false)
+          .eq('is_active', true)
           .is('activated_task_id', null);
 
         if (depositIdeasError) throw depositIdeasError;
@@ -304,29 +438,73 @@ export default function Dashboard() {
   };
 
 
+  // Automatic midnight refresh effect
+  // This ensures recurring tasks appear at 12:01 AM local time
+  useEffect(() => {
+    const scheduleNextMidnightRefresh = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 1, 0, 0); // Set to 12:01 AM
+
+      const msUntilMidnight = tomorrow.getTime() - now.getTime();
+
+      console.log('[Dashboard] Scheduling midnight refresh in', Math.round(msUntilMidnight / 1000 / 60), 'minutes');
+
+      const timeoutId = setTimeout(() => {
+        console.log('[Dashboard] Midnight refresh triggered - fetching new tasks');
+        fetchData();
+        // Schedule the next one for tomorrow
+        scheduleNextMidnightRefresh();
+      }, msUntilMidnight);
+
+      return timeoutId;
+    };
+
+    // Only schedule midnight refresh if we're on the deposits view
+    let midnightTimeoutId: NodeJS.Timeout | null = null;
+    if (activeView === 'deposits') {
+      midnightTimeoutId = scheduleNextMidnightRefresh();
+    }
+
+    return () => {
+      if (midnightTimeoutId) {
+        clearTimeout(midnightTimeoutId);
+      }
+    };
+  }, [activeView, fetchData]);
+
+  useEffect(() => {
+    loadJournalPeriodScore();
+  }, [selectedPeriod]);
+
   useEffect(() => {
     registerResetHandler('dashboard', resetToMain);
     fetchData();
+    loadJournalPeriodScore();
 
-    // Listen for task creation events from other components
     const handleTaskCreated = () => {
       console.log('[Dashboard] Received task created event, refreshing...');
       fetchData();
+      loadJournalPeriodScore();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Dashboard] Received task updated event, refreshing...');
       fetchData();
+      loadJournalPeriodScore();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Dashboard] Received task deleted event, refreshing...');
       fetchData();
+      loadJournalPeriodScore();
     };
 
     const handleRefreshAll = () => {
       console.log('[Dashboard] Received refresh all event, refreshing...');
       fetchData();
+      loadJournalPeriodScore();
     };
 
     eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
@@ -347,6 +525,134 @@ export default function Dashboard() {
     };
   }, [activeView, sortOption, registerResetHandler, unregisterResetHandler, resetToMain]);
 
+  const checkRitualAvailability = useCallback(async () => {
+    if (userId) {
+      console.log('[Dashboard] Checking ritual availability for user:', userId);
+
+      const [showSpark, showReview, showAlignment] = await Promise.all([
+        shouldShowRitual(userId, 'morning_spark'),
+        shouldShowRitual(userId, 'evening_review'),
+        shouldShowRitual(userId, 'weekly_alignment'),
+      ]);
+
+      console.log('=== RITUAL BUTTON DEBUG ===');
+      console.log('Show Morning Spark:', showSpark);
+      console.log('Show Evening Review:', showReview);
+      console.log('Show Weekly Alignment:', showAlignment);
+      console.log('=== END DEBUG ===');
+
+      setShowMorningSpark(showSpark);
+      setShowEveningReview(showReview);
+      setShowWeeklyAlignment(showAlignment);
+    }
+  }, [userId]);
+
+  const handleDevResetSpark = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = formatLocalDate(new Date());
+
+      const { error } = await supabase
+        .from('0008-ap-daily-sparks')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('spark_date', today);
+
+      if (error) throw error;
+
+      await checkRitualAvailability();
+      Alert.alert('Success', 'Today\'s spark has been reset and Morning Spark button should now appear');
+    } catch (error) {
+      console.error('Error resetting spark:', error);
+      Alert.alert('Error', 'Failed to reset spark');
+    }
+  };
+
+  useEffect(() => {
+    checkRitualAvailability();
+    const interval = setInterval(checkRitualAvailability, 60000);
+
+    return () => clearInterval(interval);
+  }, [checkRitualAvailability]);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkRitualAvailability();
+    }, [checkRitualAvailability])
+  );
+
+  useEffect(() => {
+    if (showMorningSpark) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(sparkAnimation, {
+            toValue: 1.05,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(sparkAnimation, {
+            toValue: 1,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [showMorningSpark, sparkAnimation]);
+
+  useEffect(() => {
+    if (showEveningReview) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(reviewAnimation, {
+            toValue: 1.05,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(reviewAnimation, {
+            toValue: 1,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [showEveningReview, reviewAnimation]);
+
+  useEffect(() => {
+    if (showWeeklyAlignment) {
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(alignmentAnimation, {
+            toValue: 1.05,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(alignmentAnimation, {
+            toValue: 1,
+            duration: 750,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [showWeeklyAlignment, alignmentAnimation]);
+
   const handleCompleteTask = async (task: Task) => {
     try {
       console.log('[Dashboard] Completing task:', task.id, task.title);
@@ -361,7 +667,7 @@ export default function Dashboard() {
           supabase,
           user.id,
           task,
-          task.occurrence_date || task.due_date
+          task.occurrence_date || task.due_date || formatLocalDate(new Date())
         );
 
         if (!result.success) {
@@ -371,14 +677,17 @@ export default function Dashboard() {
         // Regular standalone task - just update status
         const { error } = await supabase
           .from('0008-ap-tasks')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
           .eq('id', task.id);
 
         if (error) throw error;
       }
 
-      // Remove from UI after successful database update
+      // Remove from UI immediately (optimistic update)
       setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
+
+      // Emit event to notify other components and refresh data
+      eventBus.emit(EVENTS.TASK_UPDATED, { taskId: task.id });
 
       console.log('[Dashboard] Waiting for database commits, then refreshing score');
       // Small delay to ensure all database writes (including RPC joins) complete
@@ -387,6 +696,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('[Dashboard] Error completing task:', error);
       Alert.alert('Error', (error as Error).message || 'Failed to complete action.');
+      // Revert optimistic update and refresh from database
       fetchData();
     }
   };
@@ -494,7 +804,7 @@ export default function Dashboard() {
         .update({
           is_active: false,
           archived: true,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', depositIdea.id);
 
@@ -502,6 +812,21 @@ export default function Dashboard() {
       fetchData();
     } catch (error) {
       Alert.alert('Error', (error as Error).message || 'Failed to cancel deposit idea.');
+    }
+  };
+
+  const handleDeleteReflection = async (reflection: any) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .delete()
+        .eq('id', reflection.id);
+
+      if (error) throw error;
+      setJournalRefreshKey(prev => prev + 1);
+    } catch (error) {
+      Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
     }
   };
 
@@ -522,7 +847,7 @@ export default function Dashboard() {
           type: 'task',
           status: 'pending',
           due_date: formatLocalDate(new Date()),
-          is_authentic_deposit: true,
+          is_deposit_idea: true,
         })
         .select()
         .single();
@@ -536,7 +861,7 @@ export default function Dashboard() {
 
       // Copy role joins
       if (depositIdea.roles && depositIdea.roles.length > 0) {
-        const roleJoins = depositIdea.roles.map(role => ({
+        const roleJoins = depositIdea.roles.map((role: any) => ({
           parent_id: taskId,
           parent_type: 'task',
           role_id: role.id,
@@ -549,7 +874,7 @@ export default function Dashboard() {
 
       // Copy domain joins
       if (depositIdea.domains && depositIdea.domains.length > 0) {
-        const domainJoins = depositIdea.domains.map(domain => ({
+        const domainJoins = depositIdea.domains.map((domain: any) => ({
           parent_id: taskId,
           parent_type: 'task',
           domain_id: domain.id,
@@ -562,7 +887,7 @@ export default function Dashboard() {
 
       // Copy key relationship joins
       if (depositIdea.keyRelationships && depositIdea.keyRelationships.length > 0) {
-        const krJoins = depositIdea.keyRelationships.map(kr => ({
+        const krJoins = depositIdea.keyRelationships.map((kr: any) => ({
           parent_id: taskId,
           parent_type: 'task',
           key_relationship_id: kr.id,
@@ -587,9 +912,9 @@ export default function Dashboard() {
         .update({
           is_active: false,
           archived: true,
-          activated_at: new Date().toISOString(),
+          activated_at: toLocalISOString(new Date()),
           activated_task_id: taskId,
-          updated_at: new Date().toISOString()
+          updated_at: toLocalISOString(new Date())
         })
         .eq('id', depositIdea.id);
 
@@ -612,7 +937,11 @@ export default function Dashboard() {
 
     // Check if this is a recurring task
     if (task.recurrence_rule || task.is_virtual_occurrence) {
-      setRecurringActionModal({ visible: true, task, actionType: 'edit' });
+      // Close detail modal first, then show recurring action modal
+      setIsDetailModalVisible(false);
+      setTimeout(() => {
+        setRecurringActionModal({ visible: true, task, actionType: 'edit' });
+      }, 200);
       return;
     }
 
@@ -620,14 +949,39 @@ export default function Dashboard() {
     setIsDetailModalVisible(false);
     setTimeout(() => setIsFormModalVisible(true), 100); // Small delay to ensure modal transition
   };
-  const handleDelegateTask = (task: Task) => { Alert.alert('Delegate', 'Delegation functionality coming soon!'); setIsDetailModalVisible(false); };
+  const handleDelegateTask = async (task: Task) => {
+    setDelegatingTask(task);
+    setIsDetailModalVisible(false);
+
+    // Fetch delegates for the user
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        const { data } = await supabase
+          .from('0008-ap-delegates')
+          .select('id, name, email, phone')
+          .eq('user_id', user.id)
+          .order('name');
+        if (data) setDelegates(data);
+      }
+    } catch (error) {
+      console.error('Error fetching delegates:', error);
+    }
+
+    setTimeout(() => setIsDelegateModalVisible(true), 150);
+  };
   const handleFormSubmitSuccess = async () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
-    fetchData();
-    // Trigger Journal refresh if we're on Journal view
+
+    // Force complete data refresh
+    await fetchData();
+
     setJournalRefreshKey(prev => prev + 1);
-    // Refresh the authentic score
+
+    // Refresh score with force flag
     await refreshScore(true);
   };
 
@@ -635,6 +989,7 @@ export default function Dashboard() {
     setIsFormModalVisible(false);
     setEditingTask(null);
   };
+
 
   const handleJournalEntryPress = (entry: any) => {
     if (entry.source_type === 'task') {
@@ -654,37 +1009,271 @@ export default function Dashboard() {
       };
       setEditingTask(editData);
       setIsFormModalVisible(true);
+    } else if (entry.source_type === 'depositIdea') {
+      // Open DepositIdeaDetailModal for deposit ideas
+      setSelectedDepositIdea(entry.source_data);
+      setIsDepositIdeaDetailVisible(true);
+    } else if (entry.source_type === 'reflection') {
+      // Open ReflectionDetailsModal for reflections
+      setSelectedReflectionDetail(entry.source_data);
+      setIsReflectionDetailModalVisible(true);
     }
   };
+
+  const handleAssociatedItemPress = async (item: any) => {
+    console.log('[Dashboard] Associated item pressed:', item);
+
+    // Close all modals first
+    setIsDetailModalVisible(false);
+    setIsReflectionModalVisible(false);
+    setIsDepositIdeaDetailVisible(false);
+
+    // Wait a bit for the modal to close before opening the new one
+    setTimeout(async () => {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      if (item.type === 'task' || item.type === 'event') {
+        // Fetch full task data
+        const { data: taskData } = await supabase
+          .from('0008-ap-tasks')
+          .select('*')
+          .eq('id', item.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (taskData) {
+          setSelectedTask(taskData);
+          setIsDetailModalVisible(true);
+        }
+      } else if (item.type === 'rose' || item.type === 'thorn' || item.type === 'reflection') {
+        // Fetch full reflection data
+        const { data: reflectionData } = await supabase
+          .from('0008-ap-reflections')
+          .select('*')
+          .eq('id', item.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (reflectionData) {
+          setEditingReflection(reflectionData);
+          setIsReflectionModalVisible(true);
+        }
+      } else if (item.type === 'depositIdea') {
+        // Fetch full deposit idea data
+        const { data: depositIdeaData } = await supabase
+          .from('0008-ap-deposit-ideas')
+          .select('*')
+          .eq('id', item.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (depositIdeaData) {
+          setSelectedDepositIdea(depositIdeaData);
+          setIsDepositIdeaDetailVisible(true);
+        }
+      }
+    }, 300);
+  };
+
   const handleDragEnd = ({ data }: { data: Task[] }) => setTasks(data);
   const sortOptions = [
-    { value: 'due_date', label: 'Due Date' }, 
-    { value: 'priority', label: 'Priority' }, 
-    { value: 'title', label: 'Title' },
-    { value: 'authentic_points', label: 'Authentic Points' },
-    { value: 'roles', label: 'Roles' },
-    { value: 'domains', label: 'Domains' },
-    { value: 'goals', label: 'Goals' },
+    { value: 'due_date', label: 'Due Date' },
+    { value: 'priority', label: 'Priority' },
     { value: 'delegated', label: 'Delegated' },
   ];
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Authentic Investments" activeView={activeView} onViewChange={setActiveView} onSortPress={() => setIsSortModalVisible(true)} authenticScore={authenticScore} forceShowMenu={true} />
-      <View style={styles.content}>
-        
-        {activeView === 'journal' ? (
+      <DashboardTabbedHeader
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        authenticScore={authenticScore}
+      />
+
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
+        <View style={styles.summarySection}>
+          <View style={styles.controlsRow}>
+            <PeriodSelector
+              selectedPeriod={selectedPeriod}
+              onPeriodChange={setSelectedPeriod}
+              score={activeTab === 'journal' ? journalPeriodScore : undefined}
+            />
+            {activeTab === 'reflect' && (
+              <ReflectFilterButtons
+                activeFilter={reflectFilter}
+                onFilterChange={setReflectFilter}
+              />
+            )}
+            {activeTab === 'act' && (
+              <ActFilterButtons
+                activeFilter={actFilter}
+                onFilterChange={setActFilter}
+              />
+            )}
+          </View>
+        </View>
+
+        <View style={styles.content} pointerEvents="box-none">
+
+  {activeTab === 'home' && (
+    <>
+      {(showMorningSpark || showEveningReview || showWeeklyAlignment) && (
+        <View style={{ gap: 12, marginHorizontal: 16, marginTop: 16 }}>
+          {showMorningSpark && (
+            <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
+              <TouchableOpacity
+                onPress={() => router.push('/morning-spark')}
+                style={styles.ritualButton}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 32 }}>🔥</Text>
+                <Text style={styles.ritualButtonText}>Set Morning Spark</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {showEveningReview && (
+            <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
+              <TouchableOpacity
+                onPress={() => router.push('/evening-review')}
+                style={[styles.ritualButton, { backgroundColor: '#8B5CF6' }]}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 32 }}>🌙</Text>
+                <Text style={styles.ritualButtonText}>Complete Evening Review</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {showWeeklyAlignment && (
+            <Animated.View style={{ transform: [{ scale: alignmentAnimation }] }}>
+              <TouchableOpacity
+                onPress={() => router.push('/weekly-alignment')}
+                style={[styles.ritualButton, { backgroundColor: '#10B981' }]}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 32 }}>🎯</Text>
+                <Text style={styles.ritualButtonText}>Set Weekly Focus</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+        </View>
+      )}
+
+      <View style={{ marginHorizontal: 16, marginTop: (showMorningSpark || showEveningReview || showWeeklyAlignment) ? 12 : 16 }}>
+        <TouchableOpacity
+          style={styles.devResetButton}
+          onPress={handleDevResetSpark}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.devResetText}>
+            Reset Morning Spark (Dev)
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  )}
+
+  {activeTab === 'home' ? (
+    <CompassView />
+      
+        ) : activeTab === 'reflect' ? (
+          <ReflectionTableView
+            filter={reflectFilter}
+            period={selectedPeriod}
+            userId={userId}
+            onReflectionPress={(reflection: any) => {
+              setSelectedReflectionDetail(reflection);
+              setIsReflectionDetailModalVisible(true);
+            }}
+          />
+        ) : activeTab === 'act' ? (
+          <ActionsTableView
+            filter={actFilter}
+            period={selectedPeriod}
+            userId={userId}
+            onRefresh={() => {
+              refreshScore();
+              loadJournalPeriodScore();
+            }}
+            onTaskPress={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  setSelectedTask(task as Task);
+                  setIsDetailModalVisible(true);
+                }
+              } catch (error) {
+                console.error('Error loading task:', error);
+              }
+            }}
+            onComplete={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  await handleCompleteTask(task as Task);
+                }
+              } catch (error) {
+                console.error('Error completing task:', error);
+                Alert.alert('Error', 'Failed to complete task');
+              }
+            }}
+            onDelegate={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  await handleDelegateTask(task as Task);
+                  setIsDelegateModalVisible(true);
+                }
+              } catch (error) {
+                console.error('Error delegating task:', error);
+                Alert.alert('Error', 'Failed to delegate task');
+              }
+            }}
+            onDelete={async (taskId) => {
+              try {
+                const supabase = getSupabaseClient();
+                const { data: task } = await supabase
+                  .from('0008-ap-tasks')
+                  .select('*')
+                  .eq('id', taskId)
+                  .single();
+                if (task) {
+                  await handleDeleteTask(task as Task);
+                }
+              } catch (error) {
+                console.error('Error deleting task:', error);
+                Alert.alert('Error', 'Failed to delete task');
+              }
+            }}
+          />
+        ) : activeTab === 'journal' ? (
           <JournalView
-            scope={{ type: 'user' }}
+            scope={{ type: 'user', id: userId }}
             onEntryPress={handleJournalEntryPress}
+            dateRange={selectedPeriod}
             refreshKey={journalRefreshKey}
           />
-        ) : activeView === 'analytics' ? (
-          <AnalyticsView
-            scope={{ type: 'user' }}
-          />
         ) : loading ? null
-          : (activeView === 'deposits' && tasks.length === 0) || (activeView === 'ideas' && depositIdeas.length === 0) ? 
+          : (activeView === 'deposits' && tasks.length === 0) || (activeView === 'ideas' && depositIdeas.length === 0) ?
             <View style={styles.emptyContainer}><Text style={styles.emptyText}>No {activeView} found</Text></View>
           : activeView === 'deposits' ? 
             Platform.OS === 'web' ? (
@@ -733,21 +1322,24 @@ export default function Dashboard() {
               contentContainerStyle={styles.scrollContentContainer}
             >
               <View style={styles.taskList}>
-                {depositIdeas.map(depositIdea => 
+                {depositIdeas.map(depositIdea =>
                   <DepositIdeaCard
                     key={depositIdea.id}
                     depositIdea={depositIdea}
                     onUpdate={handleUpdateDepositIdea}
                     onCancel={handleCancelDepositIdea}
+                    onActivate={handleActivateDepositIdea}
                     onPress={handleDepositIdeaPress}
                   />
                 )}
               </View>
             </ScrollView>
         }
-      </View>
-      <DraggableFab onPress={() => setIsFormModalVisible(true)}>
-        <Plus size={24} color="#ffffff" />
+        </View>
+      </ScrollView>
+
+      <DraggableFab onPress={() => setIsFormModalVisible(true)} size={44}>
+        <Plus size={28} color="#ffffff" />
       </DraggableFab>
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
         <TaskEventForm
@@ -757,14 +1349,24 @@ export default function Dashboard() {
           onClose={handleFormClose}
         />
       </Modal>
-      <TaskDetailModal visible={isDetailModalVisible} task={selectedTask} onClose={() => setIsDetailModalVisible(false)} onUpdate={handleUpdateTask} onDelegate={handleDelegateTask} onCancel={handleCancelTask} />
-      <DepositIdeaDetailModal 
-        visible={isDepositIdeaDetailVisible} 
-        depositIdea={selectedDepositIdea} 
-        onClose={() => setIsDepositIdeaDetailVisible(false)} 
-        onUpdate={handleUpdateDepositIdea}
-        onCancel={handleCancelDepositIdea}
+      <ActionDetailsModal
+        visible={isDetailModalVisible}
+        task={selectedTask}
+        onClose={() => setIsDetailModalVisible(false)}
+        onDelete={handleDeleteTask}
+        onEdit={handleUpdateTask}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+        onItemPress={handleAssociatedItemPress}
+      />
+      <DepositIdeaDetailModal
+        visible={isDepositIdeaDetailVisible}
+        depositIdea={selectedDepositIdea}
+        onClose={() => setIsDepositIdeaDetailVisible(false)}
+        onDelete={handleCancelDepositIdea}
         onActivate={handleActivateDepositIdea}
+        onEdit={handleUpdateDepositIdea}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+        onItemPress={handleAssociatedItemPress}
       />
       <Modal visible={isSortModalVisible} transparent animationType="fade" onRequestClose={() => setIsSortModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -804,12 +1406,114 @@ export default function Dashboard() {
         actionType={recurringActionModal.actionType}
         taskTitle={recurringActionModal.task?.title || ''}
       />
+
+      <JournalForm
+        visible={isReflectionModalVisible}
+        mode="edit"
+        initialData={editingReflection}
+        onClose={() => {
+          setIsReflectionModalVisible(false);
+          setEditingReflection(null);
+        }}
+        onSaveSuccess={() => {
+          setIsReflectionModalVisible(false);
+          setEditingReflection(null);
+          setJournalRefreshKey(prev => prev + 1);
+        }}
+        openedFromJournal={true}
+      />
+
+      <ReflectionDetailsModal
+        visible={isReflectionDetailModalVisible}
+        reflection={selectedReflectionDetail}
+        onClose={() => {
+          setIsReflectionDetailModalVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onEdit={(reflection) => {
+          setIsReflectionDetailModalVisible(false);
+          setEditingReflection(reflection);
+          setIsReflectionModalVisible(true);
+        }}
+        onDelete={(reflection) => {
+          handleDeleteReflection(reflection);
+          setIsReflectionDetailModalVisible(false);
+          setSelectedReflectionDetail(null);
+        }}
+        onItemPress={handleAssociatedItemPress}
+      />
+
+      <DelegateModal
+        visible={isDelegateModalVisible}
+        onClose={() => {
+          setIsDelegateModalVisible(false);
+          setDelegatingTask(null);
+        }}
+        onSave={async (delegateId) => {
+          if (!delegatingTask) return;
+
+          try {
+            const supabase = getSupabaseClient();
+
+            // Clear existing delegate joins for this task
+            await supabase
+              .from('0008-ap-universal-delegates-join')
+              .delete()
+              .eq('parent_id', delegatingTask.id)
+              .eq('parent_type', 'task');
+
+            // Insert new delegate join
+            const { error } = await supabase
+              .from('0008-ap-universal-delegates-join')
+              .insert({
+                parent_id: delegatingTask.id,
+                parent_type: 'task',
+                delegate_id: delegateId,
+                user_id: userId,
+              });
+
+            if (error) throw error;
+
+            Alert.alert('Success', 'Task delegated successfully!');
+            setIsDelegateModalVisible(false);
+            setDelegatingTask(null);
+            fetchData(); // Refresh the task list
+
+            // Refresh delegates list
+            const { data } = await supabase
+              .from('0008-ap-delegates')
+              .select('id, name, email, phone')
+              .eq('user_id', userId)
+              .order('name');
+            if (data) setDelegates(data);
+          } catch (error) {
+            console.error('Error delegating task:', error);
+            Alert.alert('Error', 'Failed to delegate task. Please try again.');
+          }
+        }}
+        existingDelegates={delegates}
+        userId={userId}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f8fafc' },
+    scrollContainer: { flex: 1 },
+    summarySection: {
+      backgroundColor: '#fff',
+      paddingVertical: 16,
+      paddingHorizontal: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: '#e5e7eb',
+    },
+    controlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
     content: { flex: 1 },
     draggableList: { flex: 1 },
     scrollContent: { flex: 1 },
@@ -854,5 +1558,39 @@ const styles = StyleSheet.create({
     },
     goalsList: {
       gap: 12,
+    },
+    ritualButton: {
+      backgroundColor: '#EF4444',
+      padding: 20,
+      borderRadius: 12,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+    },
+    ritualButtonText: {
+      color: 'white',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    devResetButton: {
+      marginTop: 8,
+      padding: 12,
+      backgroundColor: '#fff',
+      borderRadius: 8,
+      borderWidth: 2,
+      borderColor: '#EF4444',
+      borderStyle: 'dashed',
+      alignItems: 'center',
+    },
+    devResetText: {
+      color: '#EF4444',
+      fontSize: 14,
+      fontWeight: '600',
     },
 });

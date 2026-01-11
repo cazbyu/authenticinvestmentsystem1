@@ -11,7 +11,20 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { X, Paperclip, Calendar as CalendarIcon, Bold, Italic, AlignCenter, List, ListOrdered, File, Image as ImageIcon } from 'lucide-react-native';
+import {
+  X,
+  Paperclip,
+  Calendar as CalendarIcon,
+  Bold,
+  Italic,
+  AlignCenter,
+  List,
+  ListOrdered,
+  Image as ImageIcon,
+  File
+} from 'lucide-react-native';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
+import { getAttachmentSignedUrl } from '@/lib/reflectionUtils';
 import { Calendar } from 'react-native-calendars';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -51,6 +64,7 @@ interface JournalFormProps {
   onClose: () => void;
   onSaveSuccess?: () => void;
   onActionSelected?: (action: ActionType, data: ActionData) => void;
+  openedFromJournal?: boolean;
 }
 
 type ActionType = 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'followUp';
@@ -69,6 +83,7 @@ export default function JournalForm({
   onClose,
   onSaveSuccess,
   onActionSelected,
+  openedFromJournal = false,
 }: JournalFormProps) {
   const { colors, isDarkMode } = useTheme();
 
@@ -148,14 +163,34 @@ export default function JournalForm({
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const attachments = data.map((att: any) => ({
-          id: att.id,
-          uri: att.file_path,
-          name: att.file_name,
-          type: att.file_type,
-          size: att.file_size,
-          isExisting: true,
-        }));
+        const attachmentsPromises = data.map(async (att: any) => {
+          let fileType = att.file_type;
+          if (!fileType || !fileType.includes('/')) {
+            const fileName = att.file_name.toLowerCase();
+            if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) fileType = 'image/jpeg';
+            else if (fileName.endsWith('.png')) fileType = 'image/png';
+            else if (fileName.endsWith('.gif')) fileType = 'image/gif';
+            else if (fileName.endsWith('.webp')) fileType = 'image/webp';
+            else if (fileName.endsWith('.heic')) fileType = 'image/heic';
+            else if (fileName.endsWith('.pdf')) fileType = 'application/pdf';
+            else if (fileName.endsWith('.txt')) fileType = 'text/plain';
+            else fileType = 'application/octet-stream';
+          }
+
+          const signedUrl = await getAttachmentSignedUrl(att.file_path);
+
+          return {
+            id: att.id,
+            uri: signedUrl,
+            filePath: att.file_path,
+            name: att.file_name,
+            type: fileType,
+            size: att.file_size,
+            isExisting: true,
+          };
+        });
+
+        const attachments = await Promise.all(attachmentsPromises);
         setAttachedFiles(attachments);
       }
     } catch (error) {
@@ -218,7 +253,7 @@ export default function JournalForm({
       });
 
       if (!result.canceled && result.assets) {
-        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB in bytes
         const validFiles: any[] = [];
         const oversizedFiles: string[] = [];
 
@@ -226,13 +261,23 @@ export default function JournalForm({
           const fileSize = asset.fileSize || 0;
           const fileName = asset.fileName || 'image.jpg';
 
+          // Determine MIME type from URI or filename
+          let mimeType = 'image/jpeg';
+          if (asset.uri) {
+            const lowerUri = asset.uri.toLowerCase();
+            if (lowerUri.endsWith('.png')) mimeType = 'image/png';
+            else if (lowerUri.endsWith('.gif')) mimeType = 'image/gif';
+            else if (lowerUri.endsWith('.webp')) mimeType = 'image/webp';
+            else if (lowerUri.endsWith('.heic')) mimeType = 'image/heic';
+          }
+
           if (fileSize > MAX_FILE_SIZE) {
             oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
           } else {
             validFiles.push({
               uri: asset.uri,
               name: fileName,
-              type: asset.type || 'image/jpeg',
+              type: mimeType,
               size: fileSize,
             });
           }
@@ -241,7 +286,7 @@ export default function JournalForm({
         if (oversizedFiles.length > 0) {
           Alert.alert(
             'File Size Limit Exceeded',
-            `The following files exceed the 5 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
+            `The following files exceed the 10 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
           );
         }
 
@@ -266,7 +311,7 @@ export default function JournalForm({
       });
 
       if (!result.canceled && result.assets) {
-        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB in bytes
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB in bytes
         const validFiles: any[] = [];
         const oversizedFiles: string[] = [];
 
@@ -289,7 +334,7 @@ export default function JournalForm({
         if (oversizedFiles.length > 0) {
           Alert.alert(
             'File Size Limit Exceeded',
-            `The following files exceed the 5 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
+            `The following files exceed the 10 MB limit and cannot be attached:\n\n${oversizedFiles.join('\n')}\n\nPlease choose smaller files.`
           );
         }
 
@@ -308,19 +353,16 @@ export default function JournalForm({
   const handleRemoveAttachment = async (index: number) => {
     const fileToRemove = attachedFiles[index];
 
-    // If it's an existing attachment from the database, delete it
     if (fileToRemove.isExisting && fileToRemove.id) {
       try {
         const supabase = getSupabaseClient();
 
-        // Delete from storage
-        if (fileToRemove.uri) {
+        if (fileToRemove.filePath) {
           await supabase.storage
             .from('0008-reflection-attachments')
-            .remove([fileToRemove.uri]);
+            .remove([fileToRemove.filePath]);
         }
 
-        // Delete from database
         await supabase
           .from('0008-ap-reflection-attachments')
           .delete()
@@ -592,7 +634,13 @@ export default function JournalForm({
             <X size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {mode === 'edit' ? 'Edit Reflection' : 'New Reflection'}
+            {mode === 'edit'
+              ? initialData?.daily_rose
+                ? 'Edit Rose'
+                : initialData?.daily_thorn
+                  ? 'Edit Thorn'
+                  : 'Edit Deposit Idea'
+              : 'New Reflection'}
           </Text>
           <View style={styles.headerRight}>
             {mode === 'edit' && (
@@ -616,6 +664,15 @@ export default function JournalForm({
           </View>
         ) : (
           <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+            {/* Journal Tab Message */}
+            {openedFromJournal && mode === 'edit' && (
+              <View style={styles.journalMessage}>
+                <Text style={styles.journalMessageText}>
+                  You are updating a reflection. Your changes will be saved and it will remain in your Journal with the updated information.
+                </Text>
+              </View>
+            )}
+
             {/* Reflection Content */}
             <View style={styles.section}>
               <Text style={styles.label}>Reflection</Text>
@@ -682,28 +739,30 @@ export default function JournalForm({
                   <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
                     Attachments ({attachedFiles.length})
                   </Text>
-                  {attachedFiles.map((file, index) => (
-                    <View key={index} style={[styles.attachmentItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      {file.type?.startsWith('image/') ? (
-                        <ImageIcon size={16} color={colors.primary} />
-                      ) : (
-                        <File size={16} color={colors.primary} />
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.attachmentName, { color: colors.text }]} numberOfLines={1}>
+                  <View style={styles.attachmentsGrid}>
+                    {attachedFiles.map((file, index) => (
+                      <View key={index} style={styles.attachmentThumbnailWrapper}>
+                        <AttachmentThumbnail
+                          uri={file.uri}
+                          fileType={file.type}
+                          fileName={file.name}
+                          size="medium"
+                        />
+                        <TouchableOpacity
+                          style={[styles.removeButton, { backgroundColor: colors.error }]}
+                          onPress={() => handleRemoveAttachment(index)}
+                        >
+                          <X size={14} color="#ffffff" />
+                        </TouchableOpacity>
+                        <Text
+                          style={[styles.thumbnailFileName, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
                           {file.name}
                         </Text>
-                        {file.size && (
-                          <Text style={[styles.attachmentSize, { color: colors.textSecondary }]}>
-                            {(file.size / (1024 * 1024)).toFixed(2)} MB
-                          </Text>
-                        )}
                       </View>
-                      <TouchableOpacity onPress={() => handleRemoveAttachment(index)}>
-                        <X size={16} color={colors.error} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                    ))}
+                  </View>
                 </View>
               )}
             </View>
@@ -826,46 +885,38 @@ export default function JournalForm({
             )}
 
             {/* Actions */}
-            {mode === 'create' && (
-              <View style={styles.section}>
-                <Text style={styles.label}>Actions</Text>
-                <Text style={styles.helperText}>
-                  Do you want to take any of the following actions on this reflection?
-                </Text>
-                <View style={styles.actionButtonsContainer}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('task')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Task</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('event')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create an Event</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('depositIdea')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Deposit Idea</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('withdrawal')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Withdrawal</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleActionButton('followUp')}
-                  >
-                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Follow Up</Text>
-                  </TouchableOpacity>
-                </View>
+            <View style={styles.section}>
+              <Text style={styles.label}>Actions</Text>
+              <Text style={styles.helperText}>
+                Do you want to take any of the following actions on this reflection?
+              </Text>
+              <View style={styles.actionButtonsContainer}>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('task')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Task</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('event')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create an Event</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('depositIdea')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Create a Deposit Idea</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleActionButton('followUp')}
+                >
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Follow Up</Text>
+                </TouchableOpacity>
               </View>
-            )}
+            </View>
 
             {/* Save Button */}
             <TouchableOpacity
@@ -1012,6 +1063,19 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     },
     contentContainer: {
       padding: 16,
+    },
+    journalMessage: {
+      backgroundColor: '#ede9fe',
+      borderLeftWidth: 4,
+      borderLeftColor: '#8b5cf6',
+      padding: 12,
+      marginBottom: 16,
+      borderRadius: 8,
+    },
+    journalMessageText: {
+      fontSize: 14,
+      color: '#5b21b6',
+      lineHeight: 20,
     },
     section: {
       marginBottom: 24,
@@ -1192,27 +1256,41 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     },
     attachmentsContainer: {
       marginTop: 12,
-      gap: 8,
     },
     attachmentsLabel: {
       fontSize: 12,
       fontWeight: '600',
-      marginBottom: 4,
+      marginBottom: 8,
     },
-    attachmentItem: {
+    attachmentsGrid: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    attachmentThumbnailWrapper: {
+      width: 80,
       alignItems: 'center',
-      padding: 8,
-      borderRadius: 6,
-      borderWidth: 1,
-      gap: 8,
+      gap: 4,
     },
-    attachmentName: {
-      fontSize: 14,
+    removeButton: {
+      position: 'absolute',
+      top: -6,
+      right: -6,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 3,
+      elevation: 4,
     },
-    attachmentSize: {
-      fontSize: 11,
-      marginTop: 2,
+    thumbnailFileName: {
+      fontSize: 10,
+      textAlign: 'center',
+      width: '100%',
     },
     attachmentPickerContent: {
       backgroundColor: colors.surface,

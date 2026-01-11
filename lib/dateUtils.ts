@@ -23,6 +23,27 @@ export function formatLocalDate(date: Date): string {
 }
 
 /**
+ * Formats a date as an ISO string with local timezone offset
+ * Example: 2025-01-04T15:30:00-05:00 (instead of UTC: 2025-01-04T20:30:00Z)
+ */
+export function toLocalISOString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  const timezoneOffset = -date.getTimezoneOffset();
+  const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+  const offsetMinutes = Math.abs(timezoneOffset) % 60;
+  const offsetSign = timezoneOffset >= 0 ? '+' : '-';
+  const offsetString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`;
+}
+
+/**
  * Parses a YYYY-MM-DD string as a local date (no timezone conversion)
  */
 export function parseLocalDate(dateString: string): Date {
@@ -401,6 +422,49 @@ export function formatTimeForDisplay(timeStr: string): string {
   const displayMinutes = String(minutes).padStart(2, '0');
 
   return `${displayHours}:${displayMinutes} ${isPM ? 'PM' : 'AM'}`;
+}
+
+/**
+ * Converts 12-hour time format (e.g., "2:30 pm") to 24-hour format (e.g., "14:30")
+ * Returns time in HH:MM format for ISO string creation
+ */
+export function convert12HourTo24Hour(time12h: string): string | null {
+  if (!time12h || typeof time12h !== 'string') {
+    return null;
+  }
+
+  const trimmed = time12h.trim().toLowerCase();
+  const isPM = trimmed.includes('pm');
+  const isAM = trimmed.includes('am');
+
+  if (!isPM && !isAM) {
+    return null;
+  }
+
+  const timeOnly = trimmed.replace(/am|pm/g, '').trim();
+  const parts = timeOnly.split(':');
+
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  let hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+
+  if (isNaN(hours) || isNaN(minutes)) {
+    return null;
+  }
+
+  if (isPM && hours !== 12) {
+    hours += 12;
+  } else if (isAM && hours === 12) {
+    hours = 0;
+  }
+
+  const h = String(hours).padStart(2, '0');
+  const m = String(minutes).padStart(2, '0');
+
+  return `${h}:${m}`;
 }
 
 /**

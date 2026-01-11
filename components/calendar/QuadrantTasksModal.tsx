@@ -37,7 +37,10 @@ const QUADRANT_INFO = {
 export function QuadrantTasksModal({ visible, quadrant, tasks, onClose }: QuadrantTasksModalProps) {
   const info = QUADRANT_INFO[quadrant];
 
-  const sortedTasks = [...tasks].sort((a, b) => {
+  // Filter to only show pending tasks (exclude completed)
+  const pendingTasks = tasks.filter(task => task.status !== 'completed');
+
+  const sortedTasks = [...pendingTasks].sort((a, b) => {
     const aCompleted = a.status === 'completed' ? 1 : 0;
     const bCompleted = b.status === 'completed' ? 1 : 0;
     if (aCompleted !== bCompleted) {
@@ -58,14 +61,22 @@ export function QuadrantTasksModal({ visible, quadrant, tasks, onClose }: Quadra
       transparent
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          style={styles.modalContent}
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+        >
           <View style={styles.modalHeader}>
             <View style={styles.headerLeft}>
               <View style={[styles.quadrantIndicator, { backgroundColor: info.color }]} />
               <View>
                 <Text style={styles.modalTitle}>{info.title}</Text>
-                <Text style={styles.modalSubtitle}>{info.description} • {tasks.length} task{tasks.length !== 1 ? 's' : ''}</Text>
+                <Text style={styles.modalSubtitle}>{info.description} • {pendingTasks.length} task{pendingTasks.length !== 1 ? 's' : ''}</Text>
               </View>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -108,8 +119,8 @@ export function QuadrantTasksModal({ visible, quadrant, tasks, onClose }: Quadra
               ))
             )}
           </ScrollView>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }

@@ -7,13 +7,14 @@ import {
   Text,
   TextInputProps,
 } from 'react-native';
-import { Bold, Italic, List, ListOrdered } from 'lucide-react-native';
+import { Bold, Italic, List, ListOrdered, Paperclip } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface RichTextInputProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
   value: string;
   onChangeText: (text: string) => void;
   minHeight?: number;
+  onAttachmentPress?: () => void;
 }
 
 export default function RichTextInput({
@@ -21,6 +22,7 @@ export default function RichTextInput({
   onChangeText,
   minHeight = 120,
   placeholder = 'Write your note...',
+  onAttachmentPress,
   ...textInputProps
 }: RichTextInputProps) {
   const { colors } = useTheme();
@@ -220,6 +222,15 @@ export default function RichTextInput({
         >
           <ListOrdered size={18} color={listType === 'numbered' ? colors.primary : colors.text} />
         </TouchableOpacity>
+
+        {onAttachmentPress && (
+          <TouchableOpacity
+            style={[styles.toolbarButton, { borderColor: colors.border }]}
+            onPress={onAttachmentPress}
+          >
+            <Paperclip size={18} color={colors.text} />
+          </TouchableOpacity>
+        )}
 
         <View style={styles.toolbarHint}>
           <Text style={[styles.hintText, { color: colors.textSecondary }]}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import {
   View,
   Text,
@@ -154,7 +155,7 @@ export function WithdrawalForm({
         title: formData.title.trim(),
         amount: parseFloat(formData.amount),
         withdrawn_at: formData.withdrawalDate.toISOString(),
-        updated_at: new Date().toISOString(),
+        updated_at: toLocalISOString(new Date()),
       };
 
       let withdrawalData;

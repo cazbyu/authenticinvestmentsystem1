@@ -46,13 +46,27 @@ export function useExpandedTasksForWeek(tasks: Task[], weekDates: Date[]) {
     const hasVirtualOccurrences = tasks.some(t => (t as any).is_virtual_occurrence);
 
     weekDates.forEach(date => {
-      const dateString = date.toISOString().split('T')[0];
+      // Get local date string (YYYY-MM-DD) instead of UTC
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
 
       let matchingTasks: Task[];
       if (hasVirtualOccurrences) {
         // Tasks are already expanded by the database view
         matchingTasks = tasks.filter(t => {
           const taskDate = (t as any).occurrence_date || t.start_date || t.due_date;
+          // Also include completed tasks where completion date (in local time) matches this date
+          if (t.status === 'completed' && (t as any).completed_at) {
+            const completedDate = new Date((t as any).completed_at);
+            // Get local date string (YYYY-MM-DD) instead of UTC
+            const year = completedDate.getFullYear();
+            const month = String(completedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(completedDate.getDate()).padStart(2, '0');
+            const completedDateStr = `${year}-${month}-${day}`;
+            if (completedDateStr === dateString) return true;
+          }
           return taskDate === dateString;
         });
       } else {
@@ -87,6 +101,16 @@ export function useExpandedTasksWithAnytime(
       // Tasks are already expanded by the database view, just filter by date
       matchingTasks = tasks.filter(t => {
         const taskDate = (t as any).occurrence_date || t.start_date || t.due_date;
+        // Also include completed tasks where completion date (in local time) matches this date
+        if (t.status === 'completed' && (t as any).completed_at) {
+          const completedDate = new Date((t as any).completed_at);
+          // Get local date string (YYYY-MM-DD) instead of UTC
+          const year = completedDate.getFullYear();
+          const month = String(completedDate.getMonth() + 1).padStart(2, '0');
+          const day = String(completedDate.getDate()).padStart(2, '0');
+          const completedDateStr = `${year}-${month}-${day}`;
+          if (completedDateStr === date) return true;
+        }
         return taskDate === date;
       });
     } else {

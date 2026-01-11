@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toLocalISOString } from '@/lib/dateUtils';
 import { useGoals } from './useGoals';
 import { getSupabaseClient } from '../lib/supabase';
 import { formatLocalDate } from '../lib/dateUtils';
@@ -224,6 +225,7 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
         0008-ap-task-week-plan!inner(target_days)
       `)
       .eq('type', 'task')
+      .is('deleted_at', null)
       .gte('due_date', weekStartISO)
       .lte('due_date', weekEndISO);
 
@@ -312,6 +314,7 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
       .from('0008-ap-tasks')
       .select('id, title')
       .eq('id', parentTaskId)
+      .is('deleted_at', null)
       .single();
     if (pErr || !parent) throw pErr ?? new Error('Parent task not found');
 
@@ -322,7 +325,7 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
       type: 'task',
       status: 'completed',
       due_date: whenISO,
-      completed_at: new Date().toISOString(),
+      completed_at: toLocalISOString(new Date()),
       parent_task_id: parentTaskId,
       is_twelve_week_goal: selectedTimeline.source === 'global',
       // Only set custom_timeline_id for custom timelines

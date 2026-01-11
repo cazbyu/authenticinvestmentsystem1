@@ -1,25 +1,23 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { PriorityQuadrant } from '@/components/calendar/PriorityQuadrant';
-import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
 import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
 import { WeeklyTimeGrid } from '@/components/calendar/WeeklyTimeGrid';
 import { MonthlyCalendarGrid } from '@/components/calendar/MonthlyCalendarGrid';
 import { QuadrantTasksModal } from '@/components/calendar/QuadrantTasksModal';
-import { CollapsibleQuadrantRow } from '@/components/calendar/CollapsibleQuadrantRow';
 import { getSupabaseClient } from '@/lib/supabase';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
 import { getVisibleWindow } from '@/lib/recurrenceUtils';
-import { formatLocalDate, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
 import { DraggableFab } from '@/components/DraggableFab';
-import { fetchWeeklyAuthenticCount } from '@/lib/authenticDepositUtils';
 import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/useRecurrenceCache';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { getHolidaysForMonth, US_HOLIDAYS } from '@/lib/holidays';
@@ -54,21 +52,29 @@ interface CalendarEvent {
 }
 
 export default function CalendarScreen() {
+  const { width: screenWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [authenticScore, setAuthenticScore] = useState(0);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
-  const [showCompleted, setShowCompleted] = useState(false);
   const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
   );
   const [scrollTrigger, setScrollTrigger] = useState(0);
-  const [isQuadrantRowExpanded, setIsQuadrantRowExpanded] = useState(true);
+
+  // Responsive breakpoints
+  const isMobile = screenWidth < 400;
+  const isTablet = screenWidth >= 400 && screenWidth < 768;
+  const isDesktop = screenWidth >= 768;
+
+  // Performance optimization: recurring templates cache
+  const [recurringTemplates, setRecurringTemplates] = useState<any[]>([]);
+  const latestFetchId = useRef(0);
 
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -78,15 +84,28 @@ export default function CalendarScreen() {
   const [isQuadrantModalVisible, setIsQuadrantModalVisible] = useState(false);
   const [selectedQuadrant, setSelectedQuadrant] = useState<'Q1' | 'Q2' | 'Q3' | 'Q4'>('Q1');
   const [quadrantTasks, setQuadrantTasks] = useState<Task[]>([]);
-  
+  const [isDayTasksModalVisible, setIsDayTasksModalVisible] = useState(false);
+  const [selectedDayDate, setSelectedDayDate] = useState<Date | null>(null);
+  const [selectedDayTasks, setSelectedDayTasks] = useState<Task[]>([]);
+
+  // Follow-through TaskEventForm state
+  const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
   // Layout measurements for proper centering
 
+  // Load recurring templates once on mount
   useEffect(() => {
-    fetchTasksAndEvents();
+    loadRecurringTemplates();
+  }, []);
+
+  useEffect(() => {
+    // Direct fetch without cache pre-rendering
+    fetchTasksAndEvents(currentDate, viewMode);
+
     if (viewMode === 'weekly') {
       setScrollTrigger(prev => prev + 1);
     }
-  }, [viewMode]);
+  }, [viewMode, currentDate]);
 
   useEffect(() => {
     calculateAuthenticScore();
@@ -117,25 +136,25 @@ export default function CalendarScreen() {
     // Event bus listeners for task lifecycle events
     const handleTaskCreated = () => {
       console.log('[Calendar] Received task created event, refreshing...');
-      fetchTasksAndEvents();
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Calendar] Received task updated event, refreshing...');
-      fetchTasksAndEvents();
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Calendar] Received task deleted event, refreshing...');
-      fetchTasksAndEvents();
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
     const handleRefreshAll = () => {
       console.log('[Calendar] Received refresh all event, refreshing...');
-      fetchTasksAndEvents();
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     };
 
@@ -161,7 +180,6 @@ export default function CalendarScreen() {
     let points = 0;
     if (roles && roles.length > 0) points += roles.length;
     if (domains && domains.length > 0) points += domains.length;
-    if (task.is_authentic_deposit) points += 2;
     if (task.is_urgent && task.is_important) points += 1.5;
     else if (!task.is_urgent && task.is_important) points += 3;
     else if (task.is_urgent && !task.is_important) points += 1;
@@ -183,20 +201,64 @@ export default function CalendarScreen() {
     }
   };
 
-  const fetchTasksAndEvents = async () => {
+  const loadRecurringTemplates = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .select(`
+          id, title, type, due_date, start_date, end_date, start_time, end_time,
+          is_all_day, is_anytime, is_urgent, is_important,
+          recurrence_rule, recurrence_end_date, recurrence_exceptions,
+          status, user_global_timeline_id, custom_timeline_id
+        `)
+        .eq('user_id', user.id)
+        .is('deleted_at', null)
+        .is('parent_task_id', null)
+        .not('recurrence_rule', 'is', null);
+
+      if (error) throw error;
+      if (data) {
+        const templateIds = data.map(t => t.id);
+        const { data: rolesData } = await supabase
+          .from('0008-ap-universal-roles-join')
+          .select('parent_id, role:0008-ap-roles(color)')
+          .in('parent_id', templateIds)
+          .eq('parent_type', 'task');
+
+        const templatesWithColors = data.map(t => {
+          const primaryRole = rolesData?.find(r => r.parent_id === t.id)?.role;
+          return {
+            ...t,
+            roleColor: primaryRole?.color || '#0078d4'
+          };
+        });
+        setRecurringTemplates(templatesWithColors);
+      }
+    } catch (error) {
+      console.error('Error loading recurring templates:', error);
+    }
+  };
+
+
+  const fetchTasksAndEvents = async (centerDate: Date = currentDate, mode: 'daily' | 'weekly' | 'monthly' = viewMode) => {
+    latestFetchId.current += 1;
+    const fetchId = latestFetchId.current;
+
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Calculate intelligent date range based on view mode
-      // Daily: today +/- 7 days, Weekly: current week +/- 2 weeks, Monthly: current month +/- 1 month
-      const today = new Date();
-      const startRange = new Date(today);
-      const endRange = new Date(today);
+      const center = centerDate || new Date();
+      const startRange = new Date(center);
+      const endRange = new Date(center);
 
-      switch (viewMode) {
+      switch (mode) {
         case 'daily':
           startRange.setDate(startRange.getDate() - 7);
           endRange.setDate(endRange.getDate() + 7);
@@ -214,19 +276,29 @@ export default function CalendarScreen() {
       const startStr = formatLocalDate(startRange);
       const endStr = formatLocalDate(endRange);
 
-      // Fetch tasks and events using expanded view for recurring task support
-      // Include ALL tasks (even completed recurring ones) so they show on calendar
-      // Exclude only cancelled tasks and goal action tasks
-      // Filter by occurrence_date for virtual occurrences, due_date/start_date for regular tasks
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch request');
+        return;
+      }
+
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
-        .select('*')
+        .select(`
+          id, title, type, status, due_date, start_date, end_date, start_time, end_time,
+          is_urgent, is_important, is_all_day, is_anytime,
+          occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule, completed_at
+        `)
         .eq('user_id', user.id)
         .neq('status', 'cancelled')
         .in('type', ['task', 'event'])
-        .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr})`);
+        .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr}),and(completed_at.gte.${startStr}T00:00:00,completed_at.lte.${endStr}T23:59:59)`);
 
       if (tasksError) throw tasksError;
+
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch after query');
+        return;
+      }
 
       if (!tasksData || tasksData.length === 0) {
         setTasks([]);
@@ -235,9 +307,13 @@ export default function CalendarScreen() {
         return;
       }
 
-      const taskIds = tasksData.map(t => t.id);
+      const visibleSourceIds = [...new Set(tasksData.map(t => t.source_task_id || t.id))];
 
-      // Fetch comprehensive task data
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch before joins');
+        return;
+      }
+
       const [
         { data: rolesData, error: rolesError },
         { data: domainsData, error: domainsError },
@@ -246,13 +322,18 @@ export default function CalendarScreen() {
         { data: delegatesData, error: delegatesError },
         { data: keyRelationshipsData, error: keyRelationshipsError }
       ] = await Promise.all([
-        supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label, color)').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIds).eq('parent_type', 'task')
+        supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label, color)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task')
       ]);
+
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch after joins');
+        return;
+      }
 
       if (rolesError) throw rolesError;
       if (domainsError) throw domainsError;
@@ -261,21 +342,21 @@ export default function CalendarScreen() {
       if (delegatesError) throw delegatesError;
       if (keyRelationshipsError) throw keyRelationshipsError;
 
-      // Transform tasks with role colors and filter out goal action tasks
       const transformedTasks = tasksData
         .map(task => {
-          const taskRoles = rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [];
+          const lookupId = task.source_task_id || task.id;
+          const taskRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
           const primaryRole = taskRoles[0];
-          const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => g.goal).filter(Boolean) || [];
+          const taskGoals = goalsData?.filter(g => g.parent_id === lookupId).map(g => g.goal).filter(Boolean) || [];
 
           return {
             ...task,
             roles: taskRoles,
-            domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
+            domains: domainsData?.filter(d => d.parent_id === lookupId).map(d => d.domain).filter(Boolean) || [],
             goals: taskGoals,
-            keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === task.id).map(kr => kr.key_relationship).filter(Boolean) || [],
-            has_notes: notesData?.some(n => n.parent_id === task.id),
-            has_delegates: delegatesData?.some(d => d.parent_id === task.id),
+            keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === lookupId).map(kr => kr.key_relationship).filter(Boolean) || [],
+            has_notes: notesData?.some(n => n.parent_id === lookupId),
+            has_delegates: delegatesData?.some(d => d.parent_id === lookupId),
             has_attachments: false,
             roleColor: primaryRole?.color || '#0078d4',
             isGoalActionTask: taskGoals.length > 0,
@@ -283,10 +364,13 @@ export default function CalendarScreen() {
         })
         .filter(task => !task.isGoalActionTask);
 
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch before setState');
+        return;
+      }
+
       setTasks(transformedTasks);
 
-      // Convert to calendar events
-      // Use occurrence_date for virtual recurring occurrences, otherwise use start_date or due_date
       const calendarEvents: CalendarEvent[] = transformedTasks.map(task => ({
         id: task.id,
         title: task.title,
@@ -313,7 +397,6 @@ export default function CalendarScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Find the task in our current data to check if it's recurring
       const task = [...tasks, ...events].find(t => t.id === taskId);
 
       if (task && (task.is_virtual_occurrence || task.recurrence_rule)) {
@@ -329,21 +412,20 @@ export default function CalendarScreen() {
           throw new Error(result.error || 'Failed to complete recurring task');
         }
       } else {
-        // Regular task - just update status
         const { error } = await supabase
           .from('0008-ap-tasks')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: 'completed', completed_at: toLocalISOString(new Date()) })
           .eq('id', taskId);
 
         if (error) throw error;
       }
 
-      fetchTasksAndEvents();
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
-  }, [tasks, events]);
+  }, [tasks, events, currentDate, viewMode]);
 
   const handleTaskPress = useCallback((task: Task) => {
     setSelectedTask(task);
@@ -352,8 +434,6 @@ export default function CalendarScreen() {
 
   const filterTasksByQuadrant = useCallback((tasks: Task[], quadrant: 'Q1' | 'Q2' | 'Q3' | 'Q4') => {
     return tasks.filter(task => {
-      if (task.status === 'completed') return false;
-
       switch (quadrant) {
         case 'Q1':
           return task.is_urgent && task.is_important;
@@ -376,29 +456,24 @@ export default function CalendarScreen() {
     setIsQuadrantModalVisible(true);
   }, [filterTasksByQuadrant]);
 
-  const handleUpdateTask = (task: Task) => {
-    setEditingTask(task);
-    setIsDetailModalVisible(false);
-    setTimeout(() => setIsFormModalVisible(true), 100);
-  };
+  const handleDayPress = useCallback((date: Date, tasks: Task[]) => {
+    setSelectedDayDate(date);
+    setSelectedDayTasks(tasks);
+    setIsDayTasksModalVisible(true);
+  }, []);
 
-  const handleDelegateTask = (task: Task) => {
-    Alert.alert('Delegate', 'Delegation functionality coming soon!');
-    setIsDetailModalVisible(false);
-  };
-
-  const handleCancelTask = async (task: Task) => {
+  const handleDeleteTask = async (task: Task) => {
     try {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('0008-ap-tasks')
-        .update({ status: 'cancelled' })
+        .update({ is_active: false })
         .eq('id', task.id);
 
       if (error) throw error;
-      Alert.alert('Success', 'Task has been cancelled');
+      Alert.alert('Success', 'Task has been deleted');
       setIsDetailModalVisible(false);
-      fetchTasksAndEvents();
+      fetchTasksAndEvents(currentDate, viewMode);
       calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
@@ -408,7 +483,7 @@ export default function CalendarScreen() {
   const handleFormSubmitSuccess = () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
-    fetchTasksAndEvents();
+    fetchTasksAndEvents(currentDate, viewMode);
     calculateAuthenticScore();
   };
 
@@ -416,6 +491,13 @@ export default function CalendarScreen() {
     setIsFormModalVisible(false);
     setEditingTask(null);
   };
+
+  const handleUpdateTask = (task: Task) => {
+    setEditingTask(task);
+    setIsDetailModalVisible(false);
+    setTimeout(() => setIsFormModalVisible(true), 100);
+  };
+
 
   const formatTime = (timeString: string) => {
     // Use the time-only string formatter from dateUtils
@@ -540,32 +622,43 @@ export default function CalendarScreen() {
   const dailyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, true);
 
   const renderDailyView = () => {
+    const filteredDailyTasks = dailyExpandedTasks;
+
+    // Filter to only tasks completed on this specific day for the quadrant
+    const selectedDateObj = parseLocalDate(selectedDate);
+    const dayStart = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate(), 0, 0, 0);
+    const dayEnd = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate(), 23, 59, 59);
+    const completedToday = filteredDailyTasks.filter(task => {
+      if (task.status !== 'completed' || !task.completed_at) return false;
+      const completedDate = new Date(task.completed_at);
+      return completedDate >= dayStart && completedDate <= dayEnd;
+    });
+
     return (
       <View style={styles.dailyViewContainer}>
         <View style={styles.dailyHeader}>
-          <View style={styles.dailyHeaderLeft}>
-            <TouchableOpacity onPress={() => navigateDate('prev')}>
-              <ChevronLeft size={24} color="#0078d4" />
-            </TouchableOpacity>
-            <Text style={styles.dailyTitle}>
-              {formatDateForDisplay(selectedDate)}
-            </Text>
-            <TouchableOpacity onPress={() => navigateDate('next')}>
-              <ChevronRight size={24} color="#0078d4" />
-            </TouchableOpacity>
-          </View>
-          <PriorityQuadrant
-            tasks={dailyExpandedTasks}
-            size="medium"
-            onPress={(quadrant) => handleQuadrantPress(quadrant, dailyExpandedTasks)}
-            showCompleted={showCompleted}
-          />
+          <TouchableOpacity onPress={() => navigateDate('prev')}>
+            <ChevronLeft size={24} color="#0078d4" />
+          </TouchableOpacity>
+          <Text style={styles.dailyTitle}>
+            {formatDateForDisplay(selectedDate)}
+          </Text>
+          <TouchableOpacity onPress={() => navigateDate('next')}>
+            <ChevronRight size={24} color="#0078d4" />
+          </TouchableOpacity>
+          <View style={styles.spacer} />
+          <TouchableOpacity onPress={() => handleDayPress(parseLocalDate(selectedDate), filteredDailyTasks)}>
+            <PriorityQuadrant
+              tasks={completedToday}
+              size={isMobile ? 'small' : 'medium'}
+            />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.dailyContent}>
           <HourlyCalendarGrid
             selectedDate={selectedDate}
-            expandedTasks={dailyExpandedTasks}
+            expandedTasks={filteredDailyTasks}
             currentTimePosition={currentTimePosition}
             currentTimeString={currentTimeString}
             onCompleteTask={handleCompleteTask}
@@ -594,59 +687,74 @@ export default function CalendarScreen() {
   };
 
   const filteredTasksByDate = useMemo(() => {
-    const filtered: Record<string, Task[]> = {};
-    Object.keys(weeklyTasksByDate).forEach(dateStr => {
-      filtered[dateStr] = weeklyTasksByDate[dateStr].filter(task =>
-        showCompleted ? task.status === 'completed' : task.status !== 'completed'
-      );
-    });
-    return filtered;
-  }, [weeklyTasksByDate, showCompleted]);
+    // Show all tasks regardless of completion status
+    return weeklyTasksByDate;
+  }, [weeklyTasksByDate]);
 
   const allWeekTasks = useMemo(() => {
     return Object.values(filteredTasksByDate).flat();
   }, [filteredTasksByDate]);
 
+  // Filter to only tasks completed during this specific week for the quadrant
+  const completedThisWeek = useMemo(() => {
+    if (weekDates.length === 0) return [];
+    const weekStart = new Date(weekDates[0].getFullYear(), weekDates[0].getMonth(), weekDates[0].getDate(), 0, 0, 0);
+    const weekEnd = new Date(weekDates[6].getFullYear(), weekDates[6].getMonth(), weekDates[6].getDate(), 23, 59, 59);
+
+    return allWeekTasks.filter(task => {
+      if (task.status !== 'completed' || !task.completed_at) return false;
+      const completedDate = new Date(task.completed_at);
+      return completedDate >= weekStart && completedDate <= weekEnd;
+    });
+  }, [allWeekTasks, weekDates]);
+
+  const getWeekDateRangeDisplay = () => {
+    const firstDate = weekDates[0];
+    const lastDate = weekDates[6];
+
+    const firstMonth = firstDate.getMonth();
+    const lastMonth = lastDate.getMonth();
+    const firstYear = firstDate.getFullYear();
+    const lastYear = lastDate.getFullYear();
+
+    if (firstMonth === lastMonth && firstYear === lastYear) {
+      return firstDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    } else {
+      const firstMonthYear = firstDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      const lastMonthYear = lastDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      return `${firstMonthYear} - ${lastMonthYear}`;
+    }
+  };
+
   const renderWeeklyView = () => {
+    const todayDate = new Date();
+    const todayDayNumber = todayDate.getDate();
+
     return (
       <View style={styles.weeklyViewRedesigned}>
         <View style={styles.weeklyHeaderRedesigned}>
-          <TouchableOpacity onPress={goToToday} style={styles.todayButton}>
-            <Text style={styles.todayButtonText}>Today</Text>
-          </TouchableOpacity>
-
           <View style={styles.navigationSection}>
             <TouchableOpacity onPress={() => navigateDate('prev')}>
               <ChevronLeft size={20} color="#0078d4" />
             </TouchableOpacity>
             <Text style={styles.monthYearText}>
-              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {getWeekDateRangeDisplay()}
             </Text>
             <TouchableOpacity onPress={() => navigateDate('next')}>
               <ChevronRight size={20} color="#0078d4" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={goToToday} style={styles.todayButtonNew}>
+              <Text style={styles.todayButtonNewText}>{todayDayNumber}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.spacer} />
 
-          <View style={styles.toggleContainer}>
-            <Text style={styles.toggleLabel}>Show:</Text>
-            <TouchableOpacity
-              onPress={() => setShowCompleted(!showCompleted)}
-              style={styles.toggleButton}
-            >
-              <Text style={styles.toggleButtonText}>
-                {showCompleted ? 'Completed' : 'Pending'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           <PriorityQuadrant
-            tasks={allWeekTasks}
+            tasks={completedThisWeek}
             size="medium"
             style={styles.weeklyQuadrant}
             onPress={(quadrant) => handleQuadrantPress(quadrant, allWeekTasks)}
-            showCompleted={showCompleted}
           />
         </View>
 
@@ -671,22 +779,12 @@ export default function CalendarScreen() {
                   dateNumber={date.getDate()}
                   isToday={isToday}
                   tasks={dayTasks}
-                  showCompleted={showCompleted}
                 />
               </View>
             );
           })}
         </View>
 
-        <CollapsibleQuadrantRow
-          weekDates={weekDates}
-          tasksByDate={filteredTasksByDate}
-          columnWidth={columnWidth}
-          isExpanded={isQuadrantRowExpanded}
-          onToggle={() => setIsQuadrantRowExpanded(!isQuadrantRowExpanded)}
-          onQuadrantPress={handleQuadrantPress}
-          showCompleted={showCompleted}
-        />
 
         <WeeklyTimeGrid
           weekDates={weekDates}
@@ -709,18 +807,6 @@ export default function CalendarScreen() {
 
     return (
       <View style={styles.monthlyView}>
-        <View style={styles.monthlyHeader}>
-          <TouchableOpacity onPress={() => navigateDate('prev')} style={styles.monthNavButton}>
-            <ChevronLeft size={24} color="#0078d4" />
-          </TouchableOpacity>
-          <Text style={styles.monthYearTitle}>
-            {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </Text>
-          <TouchableOpacity onPress={() => navigateDate('next')} style={styles.monthNavButton}>
-            <ChevronRight size={24} color="#0078d4" />
-          </TouchableOpacity>
-        </View>
-
         <MonthlyCalendarGrid
           currentDate={currentDate}
           tasks={tasks}
@@ -728,6 +814,7 @@ export default function CalendarScreen() {
           onDayPress={(date) => {
             setSelectedDate(formatLocalDate(date));
           }}
+          onNavigate={navigateDate}
         />
       </View>
     );
@@ -751,37 +838,27 @@ export default function CalendarScreen() {
       />
 
       {viewMode === 'daily' ? (
-        <View style={styles.dailyViewContainer}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading calendar...</Text>
-            </View>
-          ) : (
-            renderDailyView()
-          )}
+        <View style={styles.dailyViewContainer} pointerEvents="box-none">
+          {renderDailyView()}
         </View>
       ) : viewMode === 'weekly' ? (
-        <View style={styles.weeklyContainer}>
-          {loading ? null : renderContent()}
+        <View style={styles.weeklyContainer} pointerEvents="box-none">
+          {renderContent()}
         </View>
       ) : (
         <ScrollView style={styles.scrollViewBase} contentContainerStyle={styles.content}>
-          {loading ? (
-            null
-          ) : (
-            renderContent()
-          )}
+          {renderContent()}
         </ScrollView>
       )}
 
       {/* Modals */}
-      <TaskDetailModal
+      <ActionDetailsModal
         visible={isDetailModalVisible}
         task={selectedTask}
         onClose={() => setIsDetailModalVisible(false)}
-        onUpdate={handleUpdateTask}
-        onDelegate={handleDelegateTask}
-        onCancel={handleCancelTask}
+        onDelete={handleDeleteTask}
+        onEdit={handleUpdateTask}
+        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
       />
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
@@ -800,8 +877,95 @@ export default function CalendarScreen() {
         onClose={() => setIsQuadrantModalVisible(false)}
       />
 
-      <DraggableFab onPress={() => setIsFormModalVisible(true)}>
-        <Plus size={24} color="#ffffff" />
+      <Modal visible={isDayTasksModalVisible} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsDayTasksModalVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.dayTasksModalContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>
+                  {selectedDayDate?.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  {selectedDayTasks.length} task{selectedDayTasks.length !== 1 ? 's' : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsDayTasksModalVisible(false)}
+                style={styles.closeButton}
+              >
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.dayTasksList}>
+              {selectedDayTasks.length === 0 ? (
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyStateText}>No tasks for this day</Text>
+                </View>
+              ) : (
+                selectedDayTasks
+                  .sort((a, b) => {
+                    const aCompleted = a.status === 'completed' ? 1 : 0;
+                    const bCompleted = b.status === 'completed' ? 1 : 0;
+                    if (aCompleted !== bCompleted) return aCompleted - bCompleted;
+                    if (a.start_time && b.start_time) return a.start_time.localeCompare(b.start_time);
+                    if (a.start_time) return -1;
+                    if (b.start_time) return 1;
+                    return 0;
+                  })
+                  .map((task, index) => {
+                    const priorityColor = task.is_urgent && task.is_important ? '#ef4444' :
+                                         !task.is_urgent && task.is_important ? '#22c55e' :
+                                         task.is_urgent && !task.is_important ? '#f59e0b' : '#9ca3af';
+                    return (
+                      <TouchableOpacity
+                        key={`${task.id}-${index}`}
+                        style={[styles.dayTaskItem, task.status === 'completed' && styles.completedTaskItem]}
+                        onPress={() => handleTaskPress(task)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.taskColorBar, { backgroundColor: priorityColor }]} />
+                        <View style={styles.taskContent}>
+                          {task.start_time && (
+                            <Text style={[styles.taskTime, task.status === 'completed' && styles.completedText]}>
+                              {formatTimeForDisplay(task.start_time)}
+                              {task.end_time && ` - ${formatTimeForDisplay(task.end_time)}`}
+                            </Text>
+                          )}
+                          <Text style={[styles.taskTitle, task.status === 'completed' && styles.completedText]}>
+                            {task.title}
+                          </Text>
+                          <View style={styles.taskMetadata}>
+                            {task.status === 'completed' ? (
+                              <Text style={styles.taskCompleted}>✓ Completed</Text>
+                            ) : (
+                              <Text style={styles.taskPending}>Pending</Text>
+                            )}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+              )}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <DraggableFab onPress={() => setIsFormModalVisible(true)} size={44}>
+        <Plus size={28} color="#ffffff" />
       </DraggableFab>
     </SafeAreaView>
   );
@@ -913,17 +1077,11 @@ const styles = StyleSheet.create({
   dailyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 16,
     backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 8,
-  },
-  dailyHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
-    flex: 1,
   },
   dailyTitle: {
     fontSize: 18,
@@ -1048,23 +1206,29 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  todayButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 6,
-    backgroundColor: '#ffffff',
-  },
-  todayButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
   navigationSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 4,
+  },
+  todayButtonNew: {
+    width: 36,
+    height: 36,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 16,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  todayButtonNewText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
   },
   monthYearText: {
     fontSize: 16,
@@ -1076,28 +1240,8 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  toggleLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  toggleButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#0078d4',
-    borderRadius: 6,
-  },
-  toggleButtonText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#ffffff',
-  },
   weeklyQuadrant: {
-    marginLeft: 12,
+    marginLeft: 'auto',
   },
   weekColumnHeaders: {
     flexDirection: 'row',
@@ -1308,5 +1452,106 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#dc2626',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  dayTasksModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  dayTasksList: {
+    maxHeight: 400,
+  },
+  dayTaskItem: {
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  completedTaskItem: {
+    backgroundColor: '#f9fafb',
+  },
+  taskColorBar: {
+    width: 4,
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  taskContent: {
+    flex: 1,
+  },
+  taskTime: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0078d4',
+    marginBottom: 4,
+  },
+  taskTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  completedText: {
+    opacity: 0.6,
+    textDecorationLine: 'line-through',
+  },
+  taskMetadata: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  taskCompleted: {
+    fontSize: 12,
+    color: '#22c55e',
+    fontWeight: '500',
+  },
+  taskPending: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  emptyStateContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
 });

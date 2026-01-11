@@ -19,13 +19,14 @@ export interface Task {
   is_virtual_occurrence?: boolean;
   source_task_id?: string;
   parent_task_id?: string;
+  parent_id?: string;
+  parent_type?: string;
   user_global_timeline_id?: string;
   custom_timeline_id?: string;
   is_urgent?: boolean;
   is_important?: boolean;
   status?: string;
   type?: string;
-  is_authentic_deposit?: boolean;
   is_twelve_week_goal?: boolean;
   is_all_day?: boolean;
   is_anytime?: boolean;
@@ -36,6 +37,7 @@ export interface Task {
   has_notes?: boolean;
   has_attachments?: boolean;
   has_delegates?: boolean;
+  delegates?: Array<{id: string; name: string}>;
   logs?: Array<{ log_date: string; completed: boolean }>;
   keyRelationships?: Array<{id: string; name: string}>;
   weeklyCompletedCount?: number;

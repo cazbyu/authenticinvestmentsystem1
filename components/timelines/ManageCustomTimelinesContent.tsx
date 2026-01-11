@@ -13,7 +13,7 @@ import {
 import { Plus, Calendar, Target, Trash2, CreditCard as Edit, Archive, TriangleAlert as AlertTriangle, X } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Calendar as RNCalendar } from 'react-native-calendars';
-import { formatLocalDate, parseLocalDate, formatDateRange } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, parseLocalDate, formatDateRange } from '@/lib/dateUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface CustomTimeline {
@@ -153,7 +153,7 @@ export function ManageCustomTimelinesContent({ onUpdate }: ManageCustomTimelines
           .from('0008-ap-custom-timelines')
           .update({
             ...timelineData,
-            updated_at: new Date().toISOString(),
+            updated_at: toLocalISOString(new Date()),
           })
           .eq('id', editingTimeline.id);
 
@@ -214,7 +214,7 @@ export function ManageCustomTimelinesContent({ onUpdate }: ManageCustomTimelines
         .from('0008-ap-custom-timelines')
         .update({
           status: 'archived',
-          updated_at: new Date().toISOString(),
+          updated_at: toLocalISOString(new Date()),
         })
         .eq('id', archiveConfirmTimeline.id);
 
