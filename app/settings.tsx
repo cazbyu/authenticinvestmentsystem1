@@ -27,9 +27,12 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID';
-const redirectUri = AuthSession.makeRedirectUri({
-  scheme: 'myapp',
-});
+const redirectUri = 'http://localhost:19006';
+
+console.log('==================');
+console.log('REDIRECT URI:', redirectUri);
+console.log('GOOGLE CLIENT ID:', GOOGLE_CLIENT_ID);
+console.log('==================');
 
 export default function SettingsScreen() {
   const router = useRouter();
