@@ -71,16 +71,17 @@ export default function SettingsScreen() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CLIENT_ID,
-      scopes: ['https://www.googleapis.com/auth/calendar.events'],
-      redirectUri,
-      responseType: AuthSession.ResponseType.Token,
-    },
-    {
-      authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-    }
-  );
+  {
+    clientId: GOOGLE_CLIENT_ID,
+    scopes: ['https://www.googleapis.com/auth/calendar.events'],
+    redirectUri,
+    responseType: AuthSession.ResponseType.Token,
+    usePKCE: false, // Add this line
+  },
+  {
+    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+  }
+);
 
   useEffect(() => {
     if (response?.type === 'success') {
