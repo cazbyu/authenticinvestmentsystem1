@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toLocalISOString } from '@/lib/dateUtils';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, Alert, TextInput, Image, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, Alert, TextInput, Image, ActivityIndicator, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as AuthSession from 'expo-auth-session';
@@ -26,9 +26,16 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Get environment variables
-const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || '';
+// Get environment variables - use different clients for web vs native
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
+const GOOGLE_WEB_CLIENT_SECRET = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_SECRET || '';
+const GOOGLE_DESKTOP_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID || '';
+const GOOGLE_DESKTOP_CLIENT_SECRET = process.env.EXPO_PUBLIC_GOOGLE_DESKTOP_CLIENT_SECRET || '';
+
+// Use web client for web platform, desktop client for native
+const isWeb = Platform.OS === 'web';
+const GOOGLE_CLIENT_ID = isWeb ? GOOGLE_WEB_CLIENT_ID : GOOGLE_DESKTOP_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = isWeb ? GOOGLE_WEB_CLIENT_SECRET : GOOGLE_DESKTOP_CLIENT_SECRET;
 
 // Configure redirect URI for the environment
 const redirectUri = AuthSession.makeRedirectUri({
@@ -81,13 +88,14 @@ export default function SettingsScreen() {
   const [savingRituals, setSavingRituals] = useState(false);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
 
-  // Configure OAuth request with authorization code flow
+  // Configure OAuth request - disable PKCE on web, enable on native
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: GOOGLE_CLIENT_ID,
       scopes: ['https://www.googleapis.com/auth/calendar.events'],
       redirectUri,
       responseType: AuthSession.ResponseType.Code,
+      usePKCE: !isWeb, // Disable PKCE for web, enable for native
     },
     discovery
   );
