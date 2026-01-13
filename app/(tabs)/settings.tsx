@@ -215,7 +215,6 @@ console.log('==================');
 
     // --- STRATEGY 1: Standard Plugin Response (Native) ---
     if (response?.type === 'success') {
-       // Extract email from token manually since we don't have it yet
        fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
          headers: { Authorization: `Bearer ${response.params.access_token}` }
        })
@@ -226,12 +225,10 @@ console.log('==================');
     
     // --- STRATEGY 2: Manual URL Check (Web Fallback) ---
     else if (Platform.OS === 'web' && window.location.hash.includes('access_token')) {
-      // Manually parse the URL hash
       const params = new URLSearchParams(window.location.hash.substring(1));
       const accessToken = params.get('access_token');
       
       if (accessToken) {
-        // Fetch email to confirm identity
         fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
            headers: { Authorization: `Bearer ${accessToken}` }
         })
