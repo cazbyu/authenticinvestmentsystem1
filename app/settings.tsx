@@ -585,7 +585,8 @@ const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = googleCalenda
                 .eq('external_source', 'google');
 
               // Disconnect the calendar connection
-              const { disconnectGoogleCalendar } = await import('@/lib/googleCalendarSync');
+              const googleCalendarSync = await import('../lib/googleCalendarSync');
+              const { disconnectGoogleCalendar } = googleCalendarSync;
               const result = await disconnectGoogleCalendar(user.id);
               
               if (result.success) {
