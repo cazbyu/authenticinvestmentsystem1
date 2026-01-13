@@ -124,7 +124,7 @@ export default function SettingsScreen() {
           
           if (userInfo.email) {
             // Save to database
-            const googleCalendarSync = await import('../lib/GoogleCalendarSync');
+            const GoogleCalendarSync = await import('../lib/GoogleCalendarSync');
 const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = GoogleCalendarSync;
             
             const saveResult = await saveGoogleCalendarConnection(
@@ -585,7 +585,7 @@ const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = GoogleCalenda
                 .eq('external_source', 'google');
 
               // Disconnect the calendar connection
-              const googleCalendarSync = await import('../lib/GoogleCalendarSync');
+              const GoogleCalendarSync = await import('../lib/GoogleCalendarSync');
               const { disconnectGoogleCalendar } = GoogleCalendarSync;
               const result = await disconnectGoogleCalendar(user.id);
               
