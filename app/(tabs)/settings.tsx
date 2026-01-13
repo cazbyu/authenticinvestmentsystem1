@@ -26,12 +26,22 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 
 WebBrowser.maybeCompleteAuthSession();
 
-*const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID';
-const redirectUri = 'http://localhost:19006';
+// ... existing imports
+
+// REPLACES lines 30-35
+const isWeb = Platform.OS === 'web';
+
+const GOOGLE_CLIENT_ID = isWeb
+  ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID      // Uses Web ID for Browser
+  : process.env.EXPO_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID; // Uses Desktop ID for Mobile
+
+const redirectUri = AuthSession.makeRedirectUri({
+  path: 'auth/callback', // Recommended for Supabase/Netlify compatibility
+});
 
 console.log('==================');
-console.log('REDIRECT URI:', redirectUri);
-console.log('GOOGLE CLIENT ID:', GOOGLE_CLIENT_ID);
+console.log('PLATFORM:', isWeb ? 'WEB' : 'NATIVE');
+console.log('CLIENT ID:', GOOGLE_CLIENT_ID);
 console.log('==================');
 
 export default function SettingsScreen() {
