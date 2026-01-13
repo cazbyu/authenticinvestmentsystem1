@@ -527,7 +527,41 @@ const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = GoogleCalenda
   };
 
   const connectToGoogle = async () => {
-    setIsConnectingGoogle(true);
+  console.log('[Google OAuth] Connect button clicked');
+  setIsConnectingGoogle(true);
+  
+  try {
+    const supabase = getSupabaseClient();
+    console.log('[Google OAuth] Got Supabase client');
+    
+    // Initiate OAuth flow through Supabase
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: 'https://www.googleapis.com/auth/calendar.events',
+        redirectTo: `${window.location.origin}/settings`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    console.log('[Google OAuth] signInWithOAuth result:', { data, error });
+
+    if (error) {
+      console.error('[Google OAuth] Error from Supabase:', error);
+      throw error;
+    }
+    
+    console.log('[Google OAuth] Redirecting to Google...');
+    
+  } catch (error) {
+    console.error('[Google OAuth] Caught error:', error);
+    Alert.alert('Error', (error as Error).message);
+    setIsConnectingGoogle(false);
+  }
+};
     
     try {
       const supabase = getSupabaseClient();
