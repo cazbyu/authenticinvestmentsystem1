@@ -103,12 +103,26 @@ console.log('==================');
   );
 
   // --- 4. Function to Check Existing Connection on Load ---
+  // REPLACES the existing checkExistingConnection function
   const checkExistingConnection = async () => {
     try {
       const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      
+      // 1. PATIENT WAIT: Wait up to 5 seconds for the user session to restore
+      let user = null;
+      for (let i = 0; i < 10; i++) {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.user) {
+          user = data.session.user;
+          break; 
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // If still no user after 5 seconds, just exit silently (user is likely logged out)
       if (!user) return;
 
+      // 2. Now that we have a user, check the database
       const { data } = await supabase
         .from('google_calendar_connections')
         .select('access_token')
@@ -124,7 +138,7 @@ console.log('==================');
       console.error('Error checking connection:', error);
     }
   };
-
+  
   useEffect(() => {
     fetchProfile();
     refreshScore();
