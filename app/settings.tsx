@@ -1279,7 +1279,8 @@ const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = googleCalenda
 
                       Alert.alert('Syncing...', 'Fetching events from Google Calendar');
                       
-                      const { syncGoogleCalendarEvents } = await import('@/lib/googleCalendarSync');
+                      const googleCalendarSync = await import('../lib/googleCalendarSync');
+const { syncGoogleCalendarEvents } = googleCalendarSync;
                       const result = await syncGoogleCalendarEvents(user.id);
                       
                       if (result.success) {
