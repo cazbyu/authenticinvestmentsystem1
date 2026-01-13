@@ -136,65 +136,86 @@ console.log('==================');
     checkExistingConnection();
   }, []);
 
+  // REPLACES the useEffect that handles handleOAuthResponse
   useEffect(() => {
     const handleOAuthResponse = async () => {
-      if (response?.type === 'success') {
-        try {
-          setIsConnectingGoogle(true);
-          const { access_token, refresh_token, expires_in } = response.params;
-          
-          const supabase = getSupabaseClient();
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) throw new Error('No user found');
-
-          // Get user's email from Google
-          const { getGoogleUserEmail, saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
-            await import('@/lib/googleCalendarSync');
-          
-          const userEmail = await getGoogleUserEmail(access_token);
-          if (!userEmail) throw new Error('Could not retrieve Google account email');
-
-          // Save connection to database
-          const saveResult = await saveGoogleCalendarConnection(
-            user.id,
-            access_token,
-            refresh_token,
-            expires_in || 3600,
-            userEmail
-          );
-
-          if (!saveResult.success) {
-            throw new Error(saveResult.error);
-          }
-
-          // Immediately sync events
-          const syncResult = await syncGoogleCalendarEvents(user.id);
-          
-          if (syncResult.success) {
-            setGoogleAccessToken(access_token);
-            setSyncEnabled(true);
-            Alert.alert(
-              'Sync Complete!',
-              `Connected to ${userEmail}\n\nImported ${syncResult.eventsCreated} new events from Google Calendar.`
-            );
-            // Refresh calendar view
-            eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
-          } else {
-            Alert.alert('Sync Warning', syncResult.error || 'Could not sync events');
-          }
-        } catch (error) {
-          console.error('[Settings] OAuth error:', error);
-          Alert.alert('Error', (error as Error).message);
-        } finally {
+      // 1. Check if we have a successful response from Google
+      if (response?.type !== 'success') {
+        if (response?.type === 'error') {
           setIsConnectingGoogle(false);
+          Alert.alert('Error', 'Failed to connect to Google Calendar');
         }
-      } else if (response?.type === 'error') {
+        return;
+      }
+
+      setIsConnectingGoogle(true);
+
+      try {
+        const supabase = getSupabaseClient();
+        
+        // 2. WAITING LOGIC: Keep trying to get the user for up to 5 seconds
+        // This fixes the "No authenticated user" bug after a reload
+        let user = null;
+        for (let i = 0; i < 10; i++) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user) {
+            user = data.session.user;
+            break; 
+          }
+          // Wait 500ms before trying again
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        if (!user) throw new Error('Could not restore user session. Please try again.');
+
+        // 3. Proceed with saving the token
+        const { access_token, refresh_token, expires_in } = response.params;
+        
+        // Get user's email from Google
+        const { getGoogleUserEmail, saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
+          await import('@/lib/googleCalendarSync');
+        
+        const userEmail = await getGoogleUserEmail(access_token);
+        if (!userEmail) throw new Error('Could not retrieve Google account email');
+
+        // Save connection to database
+        const saveResult = await saveGoogleCalendarConnection(
+          user.id,
+          access_token,
+          refresh_token,
+          expires_in || 3600,
+          userEmail
+        );
+
+        if (!saveResult.success) {
+          throw new Error(saveResult.error);
+        }
+
+        // Immediately sync events
+        const syncResult = await syncGoogleCalendarEvents(user.id);
+        
+        if (syncResult.success) {
+          setGoogleAccessToken(access_token);
+          setSyncEnabled(true);
+          Alert.alert(
+            'Sync Complete!',
+            `Connected to ${userEmail}\n\nImported ${syncResult.eventsCreated} new events from Google Calendar.`
+          );
+          eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+        } else {
+          Alert.alert('Sync Warning', syncResult.error || 'Could not sync events');
+        }
+      } catch (error) {
+        console.error('[Settings] OAuth error:', error);
+        Alert.alert('Error', (error as Error).message);
+      } finally {
         setIsConnectingGoogle(false);
-        Alert.alert('Error', 'Failed to connect to Google Calendar');
       }
     };
 
-    handleOAuthResponse();
+    if (response) {
+      handleOAuthResponse();
+    }
   }, [response]);
 
   const themeColorOptions = [
