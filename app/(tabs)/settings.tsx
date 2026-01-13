@@ -150,26 +150,14 @@ console.log('==================');
     checkExistingConnection();
   }, []);
 
-  // REPLACES the useEffect that handles handleOAuthResponse
-  // REPLACES the useEffect that handles handleOAuthResponse
+// REPLACES the useEffect that handles handleOAuthResponse
   useEffect(() => {
-    const handleOAuthResponse = async () => {
-      // 1. Check if we have a successful response from Google
-      if (response?.type !== 'success') {
-        if (response?.type === 'error') {
-          setIsConnectingGoogle(false);
-          Alert.alert('Error', 'Failed to connect to Google Calendar');
-        }
-        return;
-      }
-
+    const handleAuth = async (token: string, email: string) => {
       setIsConnectingGoogle(true);
-
       try {
         const supabase = getSupabaseClient();
         
-        // 2. WAITING LOGIC: Keep trying to get the user for up to 5 seconds
-        // This fixes the "No authenticated user" bug after a reload
+        // 1. PATIENT WAIT (Wait for Supabase to wake up)
         let user = null;
         for (let i = 0; i < 10; i++) {
           const { data } = await supabase.auth.getSession();
@@ -177,62 +165,84 @@ console.log('==================');
             user = data.session.user;
             break; 
           }
-          // Wait 500ms before trying again
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         if (!user) {
-  console.log("PATIENT WAIT FAILED: Timer expired, still no user found."); // <--- Add this
-  throw new Error('Could not restore user session. Please try again.');
-}
-
-        // 3. Proceed with saving the token
-        const { access_token, refresh_token, expires_in } = response.params;
-        
-        // Get user's email from Google
-        const { getGoogleUserEmail, saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
-          await import('@/lib/googleCalendarSync');
-        
-        const userEmail = await getGoogleUserEmail(access_token);
-        if (!userEmail) throw new Error('Could not retrieve Google account email');
-
-        // Save connection to database
-        const saveResult = await saveGoogleCalendarConnection(
-          user.id,
-          access_token,
-          refresh_token,
-          expires_in || 3600,
-          userEmail
-        );
-
-        if (!saveResult.success) {
-          throw new Error(saveResult.error);
+           console.error("Manual Auth Failed: User never appeared.");
+           return;
         }
 
-        // Immediately sync events
+        // 2. Import helper functions
+        const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
+          await import('@/lib/googleCalendarSync');
+        
+        // 3. Save connection to "0008-ap-calendar-connections"
+        // Note: passing 3600 as default expiry since we parsed manually
+        const saveResult = await saveGoogleCalendarConnection(
+          user.id,
+          token,
+          '', // No refresh token in implicit flow
+          3600,
+          email
+        );
+
+        if (!saveResult.success) throw new Error(saveResult.error);
+
+        // 4. Sync
         const syncResult = await syncGoogleCalendarEvents(user.id);
         
         if (syncResult.success) {
-          setGoogleAccessToken(access_token);
+          setGoogleAccessToken(token);
           setSyncEnabled(true);
-          Alert.alert(
-            'Sync Complete!',
-            `Connected to ${userEmail}\n\nImported ${syncResult.eventsCreated} new events from Google Calendar.`
-          );
+          // Clean the URL so we don't try to save again on reload
+          if (Platform.OS === 'web') {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+          Alert.alert('Sync Complete!', `Connected to ${email}`);
           eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
         } else {
-          Alert.alert('Sync Warning', syncResult.error || 'Could not sync events');
+          Alert.alert('Sync Warning', syncResult.error);
         }
+
       } catch (error) {
-        console.error('[Settings] OAuth error:', error);
+        console.error('Auth Error:', error);
         Alert.alert('Error', (error as Error).message);
       } finally {
         setIsConnectingGoogle(false);
       }
     };
 
-    if (response) {
-      handleOAuthResponse();
+    // --- STRATEGY 1: Standard Plugin Response (Native) ---
+    if (response?.type === 'success') {
+       // Extract email from token manually since we don't have it yet
+       fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+         headers: { Authorization: `Bearer ${response.params.access_token}` }
+       })
+       .then(r => r.json())
+       .then(data => handleAuth(response.params.access_token, data.email))
+       .catch(e => console.error("Could not fetch email", e));
+    } 
+    
+    // --- STRATEGY 2: Manual URL Check (Web Fallback) ---
+    else if (Platform.OS === 'web' && window.location.hash.includes('access_token')) {
+      // Manually parse the URL hash
+      const params = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = params.get('access_token');
+      
+      if (accessToken) {
+        // Fetch email to confirm identity
+        fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+           headers: { Authorization: `Bearer ${accessToken}` }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.email) {
+              handleAuth(accessToken, data.email);
+            }
+        })
+        .catch(e => console.error("Manual fetch failed", e));
+      }
     }
   }, [response]);
 
