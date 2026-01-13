@@ -26,9 +26,6 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ... existing imports
-
-// REPLACES lines 30-35
 const isWeb = Platform.OS === 'web';
 
 const GOOGLE_CLIENT_ID = isWeb
