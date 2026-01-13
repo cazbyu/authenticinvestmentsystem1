@@ -182,7 +182,10 @@ console.log('==================');
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        if (!user) throw new Error('Could not restore user session. Please try again.');
+        if (!user) {
+  console.log("PATIENT WAIT FAILED: Timer expired, still no user found."); // <--- Add this
+  throw new Error('Could not restore user session. Please try again.');
+}
 
         // 3. Proceed with saving the token
         const { access_token, refresh_token, expires_in } = response.params;
