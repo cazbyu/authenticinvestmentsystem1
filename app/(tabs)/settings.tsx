@@ -78,8 +78,8 @@ export default function SettingsScreen() {
 // On Native: Use Expo's proxy authentication URL
 // FIX: Use 'origin + pathname' to strip out the messy #access_token stuff
 const redirectUri = isWeb 
-  ? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '') 
-  : AuthSession.makeRedirectUri({ path: 'auth/callback' });
+    ? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '') 
+    : AuthSession.makeRedirectUri({ path: 'auth/callback' });
 
 console.log('==================');
 console.log('PLATFORM:', isWeb ? 'WEB' : 'NATIVE');
