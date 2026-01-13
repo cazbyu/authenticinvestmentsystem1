@@ -33,19 +33,6 @@ const GOOGLE_CLIENT_ID = isWeb
   ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID      // Uses Web ID for Browser
   : process.env.EXPO_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID; // Uses Desktop ID for Mobile
 
-// --- 2. Dynamic Redirect URI ---
-// On Web: Send user back to exactly where they are (Settings page)
-// On Native: Use Expo's proxy authentication URL
-const redirectUri = isWeb 
-  ? (typeof window !== 'undefined' ? window.location.href : '') 
-  : AuthSession.makeRedirectUri({ path: 'auth/callback' });
-
-console.log('==================');
-console.log('PLATFORM:', isWeb ? 'WEB' : 'NATIVE');
-console.log('CLIENT ID:', GOOGLE_CLIENT_ID);
-console.log('REDIRECT URI:', redirectUri);
-console.log('==================');
-
 export default function SettingsScreen() {
   const router = useRouter();
   const { isDarkMode, toggleDarkMode, colors, setThemeColorImmediate } = useTheme();
@@ -85,6 +72,19 @@ export default function SettingsScreen() {
   });
   const [savingRituals, setSavingRituals] = useState(false);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
+
+  // --- 2. Dynamic Redirect URI ---
+// On Web: Send user back to exactly where they are (Settings page)
+// On Native: Use Expo's proxy authentication URL
+const redirectUri = isWeb 
+  ? (typeof window !== 'undefined' ? window.location.href : '') 
+  : AuthSession.makeRedirectUri({ path: 'auth/callback' });
+
+console.log('==================');
+console.log('PLATFORM:', isWeb ? 'WEB' : 'NATIVE');
+console.log('CLIENT ID:', GOOGLE_CLIENT_ID);
+console.log('REDIRECT URI:', redirectUri);
+console.log('==================');
 
   // --- 3. Auth Request Hook (With PKCE Fix) ---
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
