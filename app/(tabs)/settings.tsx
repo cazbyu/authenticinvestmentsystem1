@@ -566,6 +566,14 @@ console.log('==================');
   };
 
   const connectToGoogle = async () => {
+    // WEB FIX: Force a full page redirect to avoid the "Cross-Origin" popup blocker
+    if (isWeb && request?.url) {
+      // 1. Manually send the browser to Google
+      window.location.href = request.url;
+      return; 
+    }
+
+    // NATIVE: Keep using the standard popup/modal
     setIsConnectingGoogle(true);
     await promptAsync();
   };
