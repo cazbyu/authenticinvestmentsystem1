@@ -26,20 +26,24 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 
 WebBrowser.maybeCompleteAuthSession();
 
+// --- 1. Platform Detection & Configuration ---
 const isWeb = Platform.OS === 'web';
 
 const GOOGLE_CLIENT_ID = isWeb
   ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID      // Uses Web ID for Browser
   : process.env.EXPO_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID; // Uses Desktop ID for Mobile
 
-// REPLACES lines 35-37
-const redirectUri = Platform.OS === 'web' 
+// --- 2. Dynamic Redirect URI ---
+// On Web: Send user back to exactly where they are (Settings page)
+// On Native: Use Expo's proxy authentication URL
+const redirectUri = isWeb 
   ? (typeof window !== 'undefined' ? window.location.href : '') 
   : AuthSession.makeRedirectUri({ path: 'auth/callback' });
 
 console.log('==================');
 console.log('PLATFORM:', isWeb ? 'WEB' : 'NATIVE');
 console.log('CLIENT ID:', GOOGLE_CLIENT_ID);
+console.log('REDIRECT URI:', redirectUri);
 console.log('==================');
 
 export default function SettingsScreen() {
@@ -82,22 +86,55 @@ export default function SettingsScreen() {
   const [savingRituals, setSavingRituals] = useState(false);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
 
-  // REPLACES lines 81-90
+  // --- 3. Auth Request Hook (With PKCE Fix) ---
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: GOOGLE_CLIENT_ID,
       scopes: ['https://www.googleapis.com/auth/calendar.events'],
       redirectUri,
-      // Google prefers 'Code' flow for best security, but 'Token' works for simple client-side
-      responseType: AuthSession.ResponseType.Token, 
+      responseType: AuthSession.ResponseType.Token,
       
-      // CRITICAL FIX: This stops the "code_challenge_method" error on web
+      // CRITICAL FIX: Disable PKCE on web to prevent 400 error
       usePKCE: !isWeb, 
     },
     {
       authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
     }
   );
+
+  // --- 4. Function to Check Existing Connection on Load ---
+  const checkExistingConnection = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('google_calendar_connections')
+        .select('access_token')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (data && data.access_token) {
+        setGoogleAccessToken(data.access_token);
+        setSyncEnabled(true);
+        console.log("Found existing Google connection!");
+      }
+    } catch (error) {
+      console.error('Error checking connection:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+    refreshScore();
+    loadStorageUsage();
+    loadRitualSettings();
+    loadUserPreferences();
+    
+    // Check for existing Google token when screen loads
+    checkExistingConnection();
+  }, []);
 
   useEffect(() => {
     const handleOAuthResponse = async () => {
@@ -222,14 +259,6 @@ export default function SettingsScreen() {
       console.error('Error fetching profile:', error);
     }
   };
-
-  useEffect(() => {
-    fetchProfile();
-    refreshScore();
-    loadStorageUsage();
-    loadRitualSettings();
-    loadUserPreferences();
-  }, []);
 
   useEffect(() => {
     return () => { if (saveTimeout) clearTimeout(saveTimeout); };
