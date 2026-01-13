@@ -104,12 +104,12 @@ console.log('==================');
   );
 
   // --- 4. Function to Check Existing Connection on Load ---
-  // REPLACES the existing checkExistingConnection function
+  // REPLACES checkExistingConnection in settings.tsx
   const checkExistingConnection = async () => {
     try {
       const supabase = getSupabaseClient();
       
-      // 1. PATIENT WAIT: Wait up to 5 seconds for the user session to restore
+      // 1. Patiently wait for user session (keep this logic!)
       let user = null;
       for (let i = 0; i < 10; i++) {
         const { data } = await supabase.auth.getSession();
@@ -119,15 +119,14 @@ console.log('==================');
         }
         await new Promise(resolve => setTimeout(resolve, 500));
       }
-
-      // If still no user after 5 seconds, just exit silently (user is likely logged out)
       if (!user) return;
 
-      // 2. Now that we have a user, check the database
+      // 2. UPDATED: Check the correct table for a 'google' provider
       const { data } = await supabase
-        .from('google_calendar_connections')
+        .from('0008-ap-calendar-connections')
         .select('access_token')
         .eq('user_id', user.id)
+        .eq('provider', 'google') // <--- Only look for Google rows
         .maybeSingle();
 
       if (data && data.access_token) {
