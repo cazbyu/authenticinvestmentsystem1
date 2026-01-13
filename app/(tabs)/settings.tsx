@@ -137,6 +137,7 @@ console.log('==================');
   }, []);
 
   // REPLACES the useEffect that handles handleOAuthResponse
+  // REPLACES the useEffect that handles handleOAuthResponse
   useEffect(() => {
     const handleOAuthResponse = async () => {
       // 1. Check if we have a successful response from Google
