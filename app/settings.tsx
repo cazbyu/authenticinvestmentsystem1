@@ -97,66 +97,98 @@ export default function SettingsScreen() {
 
   // Handle OAuth callback from Supabase
   useEffect(() => {
-    const handleOAuthCallback = async () => {
-      const supabase = getSupabaseClient();
-      
-      // Check if we have a session with Google provider
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.provider_token) {
-        console.log('[Google OAuth] Session found with provider token');
-        
-        // We have a Google access token from Supabase!
-        const accessToken = session.provider_token;
-        const refreshToken = session.provider_refresh_token;
-        
-        // Get user info
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        
-        // Get email from Google
-        try {
-          const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${accessToken}` }
-          });
-          
-          const userInfo = await response.json();
-          
-          if (userInfo.email) {
-            // Save to database
-            const GoogleCalendarSync = await import('../lib/GoogleCalendarSync');
-const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = GoogleCalendarSync;
-            
-            const saveResult = await saveGoogleCalendarConnection(
-              user.id,
-              accessToken,
-              refreshToken || '',
-              3600, // Supabase manages expiry for us
-              userInfo.email
-            );
-            
-            if (saveResult.success) {
-              // Sync calendar events
-              const syncResult = await syncGoogleCalendarEvents(user.id);
-              
-              if (syncResult.success) {
-                setGoogleAccessToken(accessToken);
-                setSyncEnabled(true);
-                Alert.alert('Success!', `Connected to ${userInfo.email}`);
-                eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
-              } else {
-                Alert.alert('Sync Warning', syncResult.error);
-              }
-            }
-          }
-        } catch (error) {
-          console.error('[Google OAuth] Error fetching user info:', error);
-        }
-      }
-    };
+  const handleOAuthCallback = async () => {
+    console.log('[Google OAuth Callback] useEffect triggered');
     
-    handleOAuthCallback();
-  }, []);
+    const supabase = getSupabaseClient();
+    
+    // Check if we have a session with Google provider
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('[Google OAuth Callback] Session check:', { 
+      hasSession: !!session, 
+      hasProviderToken: !!session?.provider_token,
+      provider: session?.provider
+    });
+    
+    if (session?.provider_token) {
+      console.log('[Google OAuth Callback] Found provider token, processing...');
+      
+      const accessToken = session.provider_token;
+      const refreshToken = session.provider_refresh_token;
+      
+      console.log('[Google OAuth Callback] Tokens:', {
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        accessTokenPreview: accessToken?.substring(0, 20) + '...'
+      });
+      
+      // Get user info
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('[Google OAuth Callback] User:', { hasUser: !!user, userId: user?.id });
+      
+      if (!user) {
+        console.error('[Google OAuth Callback] No user found!');
+        return;
+      }
+      
+      // Get email from Google
+      try {
+        console.log('[Google OAuth Callback] Fetching user info from Google...');
+        const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        
+        console.log('[Google OAuth Callback] Google API response status:', response.status);
+        const userInfo = await response.json();
+        console.log('[Google OAuth Callback] User info:', { email: userInfo.email });
+        
+        if (userInfo.email) {
+          console.log('[Google OAuth Callback] Importing GoogleCalendarSync...');
+          const GoogleCalendarSync = await import('../lib/GoogleCalendarSync');
+          const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = GoogleCalendarSync;
+          
+          console.log('[Google OAuth Callback] Saving connection...');
+          const saveResult = await saveGoogleCalendarConnection(
+            user.id,
+            accessToken,
+            refreshToken || '',
+            3600,
+            userInfo.email
+          );
+          
+          console.log('[Google OAuth Callback] Save result:', saveResult);
+          
+          if (saveResult.success) {
+            console.log('[Google OAuth Callback] Connection saved, syncing events...');
+            const syncResult = await syncGoogleCalendarEvents(user.id);
+            console.log('[Google OAuth Callback] Sync result:', syncResult);
+            
+            if (syncResult.success) {
+              setGoogleAccessToken(accessToken);
+              setSyncEnabled(true);
+              Alert.alert('Success!', `Connected to ${userInfo.email}`);
+              eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+            } else {
+              Alert.alert('Sync Warning', syncResult.error);
+            }
+          } else {
+            console.error('[Google OAuth Callback] Failed to save connection:', saveResult.error);
+            Alert.alert('Error', saveResult.error || 'Failed to save connection');
+          }
+        } else {
+          console.error('[Google OAuth Callback] No email in user info');
+        }
+      } catch (error) {
+        console.error('[Google OAuth Callback] Error:', error);
+        Alert.alert('Error', (error as Error).message);
+      }
+    } else {
+      console.log('[Google OAuth Callback] No provider token in session');
+    }
+  };
+  
+  handleOAuthCallback();
+}, []);
 
   const themeColorOptions = [
     { name: 'Blue', value: '#0078d4' },
