@@ -32,9 +32,10 @@ const GOOGLE_CLIENT_ID = isWeb
   ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID      // Uses Web ID for Browser
   : process.env.EXPO_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID; // Uses Desktop ID for Mobile
 
-const redirectUri = AuthSession.makeRedirectUri({
-  path: 'auth/callback', // Recommended for Supabase/Netlify compatibility
-});
+// REPLACES lines 35-37
+const redirectUri = Platform.OS === 'web' 
+  ? (typeof window !== 'undefined' ? window.location.href : '') 
+  : AuthSession.makeRedirectUri({ path: 'auth/callback' });
 
 console.log('==================');
 console.log('PLATFORM:', isWeb ? 'WEB' : 'NATIVE');
