@@ -3,8 +3,6 @@ import { toLocalISOString } from '@/lib/dateUtils';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, Alert, TextInput, Image, ActivityIndicator, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
 import { Header } from '@/components/Header';
 import { ManageRolesModal } from '@/components/settings/ManageRolesModal';
@@ -23,15 +21,6 @@ import { TimePickerDropdown } from '@/components/tasks/TimePickerDropdown';
 import { getRitualSettings, updateRitualSettings, getDefaultRitualSettings, RitualSettings, RitualType } from '@/lib/ritualUtils';
 import { getUserPreferences, updateUserPreferences, UserPreferences } from '@/lib/userPreferences';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-
-WebBrowser.maybeCompleteAuthSession();
-
-// --- 1. Platform Detection & Configuration ---
-const isWeb = Platform.OS === 'web';
-
-const GOOGLE_CLIENT_ID = isWeb
-  ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID      // Uses Web ID for Browser
-  : process.env.EXPO_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID; // Uses Desktop ID for Mobile
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -73,190 +62,101 @@ export default function SettingsScreen() {
   const [savingRituals, setSavingRituals] = useState(false);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
 
-  // --- 2. Dynamic Redirect URI ---
-// On Web: Send user back to exactly where they are (Settings page)
-// On Native: Use Expo's proxy authentication URL
-// FIX: Use 'origin + pathname' to strip out the messy #access_token stuff
-const redirectUri = isWeb 
-    ? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '') 
-    : AuthSession.makeRedirectUri({ path: 'auth/callback' });
-
-console.log('==================');
-console.log('PLATFORM:', isWeb ? 'WEB' : 'NATIVE');
-console.log('CLIENT ID:', GOOGLE_CLIENT_ID);
-console.log('REDIRECT URI:', redirectUri);
-console.log('==================');
-
-  // --- 3. Auth Request Hook (With PKCE Fix) ---
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CLIENT_ID,
-      scopes: ['https://www.googleapis.com/auth/calendar.events'],
-      redirectUri,
-      responseType: AuthSession.ResponseType.Token,
-      
-      // CRITICAL FIX: Disable PKCE on web to prevent 400 error
-      usePKCE: !isWeb, 
-    },
-    {
-      authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-    }
-  );
-
-  // --- 4. Function to Check Existing Connection on Load ---
-  // REPLACES checkExistingConnection in settings.tsx
+  // Check for existing Google Calendar connection
   const checkExistingConnection = async () => {
     try {
       const supabase = getSupabaseClient();
-      
-      // 1. Patiently wait for user session (keep this logic!)
-      let user = null;
-      for (let i = 0; i < 10; i++) {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session?.user) {
-          user = data.session.user;
-          break; 
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const { data } = await supabase
+        .from('0008-ap-calendar-connections')
+        .select('access_token')
+        .eq('user_id', user.id)
+        .eq('provider', 'google')
+        .eq('sync_enabled', true)
+        .maybeSingle();
 
+      if (data?.access_token) {
+        setGoogleAccessToken(data.access_token);
+        setSyncEnabled(true);
+      }
     } catch (error) {
       console.error('Error checking connection:', error);
     }
   };
-  
+
   useEffect(() => {
     fetchProfile();
     refreshScore();
     loadStorageUsage();
     loadRitualSettings();
     loadUserPreferences();
-    
-    // Check for existing Google token when screen loads
     checkExistingConnection();
   }, []);
 
-// REPLACES the useEffect that handles handleOAuthResponse
+  // Handle OAuth callback from Supabase
   useEffect(() => {
-  console.log('[OAuth Debug] useEffect triggered, response:', response);
-  console.log('[OAuth Debug] Hash check:', Platform.OS === 'web' && window.location.hash.includes('access_token'));
-  
-  const handleAuth = async (token: string, email: string) => {
-    console.log('[OAuth Debug] handleAuth called with token:', token.substring(0, 20) + '...', 'email:', email);
-    setIsConnectingGoogle(true);
-    try {
+    const handleOAuthCallback = async () => {
       const supabase = getSupabaseClient();
       
-      // 1. PATIENT WAIT (Wait for Supabase to wake up)
-      console.log('[OAuth Debug] Waiting for user session...');
-      let user = null;
-      for (let i = 0; i < 10; i++) {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session?.user) {
-          user = data.session.user;
-          console.log('[OAuth Debug] User found:', user.id);
-          break; 
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      if (!user) {
-         console.error("[OAuth Debug] Manual Auth Failed: User never appeared.");
-         Alert.alert('Error', 'Could not verify user session');
-         return;
-      }
-
-      console.log('[OAuth Debug] Importing sync functions...');
-      // 2. Import helper functions
-      const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
-        await import('@/lib/googleCalendarSync');
+      // Check if we have a session with Google provider
+      const { data: { session } } = await supabase.auth.getSession();
       
-      console.log('[OAuth Debug] Saving connection to database...');
-      // 3. Save connection to "0008-ap-calendar-connections"
-      const saveResult = await saveGoogleCalendarConnection(
-        user.id,
-        token,
-        '', // No refresh token in implicit flow
-        3600,
-        email
-      );
-
-      console.log('[OAuth Debug] Save result:', saveResult);
-      if (!saveResult.success) throw new Error(saveResult.error);
-
-      console.log('[OAuth Debug] Starting calendar sync...');
-      // 4. Sync
-      const syncResult = await syncGoogleCalendarEvents(user.id);
-      console.log('[OAuth Debug] Sync result:', syncResult);
-      
-      if (syncResult.success) {
-        setGoogleAccessToken(token);
-        setSyncEnabled(true);
-        // Clean the URL so we don't try to save again on reload
-        if (Platform.OS === 'web') {
-          window.history.replaceState({}, document.title, window.location.pathname);
+      if (session?.provider_token) {
+        console.log('[Google OAuth] Session found with provider token');
+        
+        // We have a Google access token from Supabase!
+        const accessToken = session.provider_token;
+        const refreshToken = session.provider_refresh_token;
+        
+        // Get user info
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        
+        // Get email from Google
+        try {
+          const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          
+          const userInfo = await response.json();
+          
+          if (userInfo.email) {
+            // Save to database
+            const { saveGoogleCalendarConnection, syncGoogleCalendarEvents } = 
+              await import('@/lib/googleCalendarSync');
+            
+            const saveResult = await saveGoogleCalendarConnection(
+              user.id,
+              accessToken,
+              refreshToken || '',
+              3600, // Supabase manages expiry for us
+              userInfo.email
+            );
+            
+            if (saveResult.success) {
+              // Sync calendar events
+              const syncResult = await syncGoogleCalendarEvents(user.id);
+              
+              if (syncResult.success) {
+                setGoogleAccessToken(accessToken);
+                setSyncEnabled(true);
+                Alert.alert('Success!', `Connected to ${userInfo.email}`);
+                eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+              } else {
+                Alert.alert('Sync Warning', syncResult.error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[Google OAuth] Error fetching user info:', error);
         }
-        Alert.alert('Sync Complete!', `Connected to ${email}`);
-        eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
-      } else {
-        Alert.alert('Sync Warning', syncResult.error);
       }
-
-    } catch (error) {
-      console.error('[OAuth Debug] Auth Error:', error);
-      Alert.alert('Error', (error as Error).message);
-    } finally {
-      setIsConnectingGoogle(false);
-    }
-  };
-
-  // --- STRATEGY 1: Standard Plugin Response (Native) ---
-  if (response?.type === 'success') {
-     console.log('[OAuth Debug] STRATEGY 1: Native response detected');
-     fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-       headers: { Authorization: `Bearer ${response.params.access_token}` }
-     })
-     .then(r => r.json())
-     .then(data => {
-       console.log('[OAuth Debug] Native: User info fetched:', data);
-       handleAuth(response.params.access_token, data.email);
-     })
-     .catch(e => console.error("[OAuth Debug] Native: Could not fetch email", e));
-  } 
-  
-  // --- STRATEGY 2: Manual URL Check (Web Fallback) ---
-  else if (Platform.OS === 'web' && window.location.hash.includes('access_token')) {
-    console.log('[OAuth Debug] STRATEGY 2: Web fallback detected');
-    const params = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = params.get('access_token');
+    };
     
-    console.log('[OAuth Debug] Access token from URL:', accessToken?.substring(0, 20) + '...');
-    
-    if (accessToken) {
-      console.log('[OAuth Debug] Fetching user info from Google...');
-      fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-         headers: { Authorization: `Bearer ${accessToken}` }
-      })
-      .then(r => {
-        console.log('[OAuth Debug] Google response status:', r.status);
-        return r.json();
-      })
-      .then(data => {
-        console.log('[OAuth Debug] Web: User info fetched:', data);
-        if (data.email) {
-          handleAuth(accessToken, data.email);
-        } else {
-          console.error('[OAuth Debug] No email in response:', data);
-        }
-      })
-      .catch(e => console.error("[OAuth Debug] Web: Manual fetch failed", e));
-    }
-  } else {
-    console.log('[OAuth Debug] No OAuth flow detected');
-  }
-}, [response]);
+    handleOAuthCallback();
+  }, []);
 
   const themeColorOptions = [
     { name: 'Blue', value: '#0078d4' },
@@ -627,16 +527,36 @@ console.log('==================');
   };
 
   const connectToGoogle = async () => {
-    // WEB FIX: Force a full page redirect to avoid the "Cross-Origin" popup blocker
-    if (isWeb && request?.url) {
-      // 1. Manually send the browser to Google
-      window.location.href = request.url;
-      return; 
-    }
-
-    // NATIVE: Keep using the standard popup/modal
     setIsConnectingGoogle(true);
-    await promptAsync();
+    
+    try {
+      const supabase = getSupabaseClient();
+      
+      // Initiate OAuth flow through Supabase
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          scopes: 'https://www.googleapis.com/auth/calendar.events',
+          redirectTo: `${window.location.origin}/settings`,
+          queryParams: {
+            access_type: 'offline',  // Gets refresh token
+            prompt: 'consent',       // Forces consent screen to get refresh token
+          },
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+      
+      // OAuth flow initiated - user will be redirected to Google
+      // When they return, we'll handle it in the useEffect above
+      
+    } catch (error) {
+      console.error('[Google OAuth] Error:', error);
+      Alert.alert('Error', (error as Error).message);
+      setIsConnectingGoogle(false);
+    }
   };
 
   const disconnectGoogle = async () => {
