@@ -81,12 +81,17 @@ export default function SettingsScreen() {
   const [savingRituals, setSavingRituals] = useState(false);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
 
+  // REPLACES lines 81-90
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: GOOGLE_CLIENT_ID,
       scopes: ['https://www.googleapis.com/auth/calendar.events'],
       redirectUri,
-      responseType: AuthSession.ResponseType.Token,
+      // Google prefers 'Code' flow for best security, but 'Token' works for simple client-side
+      responseType: AuthSession.ResponseType.Token, 
+      
+      // CRITICAL FIX: This stops the "code_challenge_method" error on web
+      usePKCE: !isWeb, 
     },
     {
       authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
