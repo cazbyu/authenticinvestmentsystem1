@@ -64,45 +64,42 @@ export async function getGoogleCalendarConnection(userId: string) {
 /**
  * Save or update Google Calendar connection
  */
-export async function saveGoogleCalendarConnection(
+// UPDATED: Writes to the existing "0008-ap-calendar-connections" table
+export const saveGoogleCalendarConnection = async (
   userId: string,
   accessToken: string,
-  refreshToken: string | undefined,
-  expiresIn: number, // seconds until token expires
+  refreshToken: string,
+  expiresInSeconds: number,
   userEmail: string
-) {
+) => {
   const supabase = getSupabaseClient();
-  
-  const expiresAt = new Date();
-  expiresAt.setSeconds(expiresAt.getSeconds() + expiresIn);
 
-  const connectionData = {
-    user_id: userId,
-    provider: 'google',
-    access_token: accessToken,
-    refresh_token: refreshToken || null,
-    token_expires_at: expiresAt.toISOString(),
-    provider_email: userEmail,
-    connected_at: new Date().toISOString(),
-    sync_enabled: true,
-  };
+  // Calculate the actual timestamp when the token expires
+  const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
 
-  // Upsert (insert or update)
-  const { data, error } = await supabase
-    .from('0008-ap-calendar-connections')
-    .upsert(connectionData, {
-      onConflict: 'user_id,provider',
-    })
-    .select()
-    .single();
+  const { error } = await supabase
+    .from('0008-ap-calendar-connections') // <--- The CORRECT table
+    .upsert({
+      user_id: userId,
+      provider: 'google',               // <--- Explicitly set the provider
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_expires_at: expiresAt,      // <--- Mapped to your schema
+      provider_email: userEmail,
+      provider_user_id: userEmail,      // Using email as ID for simple Google auth
+      sync_enabled: true,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id,provider'    // <--- Uses your unique constraint
+    });
 
   if (error) {
-    console.error('[GoogleSync] Error saving connection:', error);
+    console.error('Error saving Google connection:', error);
     return { success: false, error: error.message };
   }
 
-  return { success: true, connection: data };
-}
+  return { success: true };
+};
 
 /**
  * Disconnect Google Calendar
