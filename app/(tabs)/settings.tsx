@@ -76,8 +76,9 @@ export default function SettingsScreen() {
   // --- 2. Dynamic Redirect URI ---
 // On Web: Send user back to exactly where they are (Settings page)
 // On Native: Use Expo's proxy authentication URL
+// FIX: Use 'origin + pathname' to strip out the messy #access_token stuff
 const redirectUri = isWeb 
-  ? (typeof window !== 'undefined' ? window.location.href : '') 
+  ? (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '') 
   : AuthSession.makeRedirectUri({ path: 'auth/callback' });
 
 console.log('==================');
