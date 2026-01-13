@@ -68,7 +68,7 @@ export const supabase = isValidUrl ? (() => {
         storage: getStorage(),
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
       },
     });
   } catch (error) {
