@@ -121,19 +121,7 @@ console.log('==================');
       }
       if (!user) return;
 
-      // 2. UPDATED: Check the correct table for a 'google' provider
-      const { data } = await supabase
-        .from('0008-ap-calendar-connections')
-        .select('access_token')
-        .eq('user_id', user.id)
-        .eq('provider', 'google') // <--- Only look for Google rows
-        .maybeSingle();
 
-      if (data && data.access_token) {
-        setGoogleAccessToken(data.access_token);
-        setSyncEnabled(true);
-        console.log("Found existing Google connection!");
-      }
     } catch (error) {
       console.error('Error checking connection:', error);
     }
