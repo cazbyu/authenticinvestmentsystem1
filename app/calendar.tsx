@@ -53,7 +53,7 @@ interface CalendarEvent {
 }
 
 export default function CalendarScreen() {
-  const { authenticScore } = useAuthenticScore(); // Remove the ": contextScore" part
+  const { authenticScore } = useAuthenticScore();
   const { width: screenWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
@@ -61,7 +61,7 @@ export default function CalendarScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
-    const [currentTimePosition, setCurrentTimePosition] = useState(0);
+  const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
   const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
@@ -108,7 +108,7 @@ export default function CalendarScreen() {
     }
   }, [viewMode, currentDate]);
 
-    useEffect(() => {
+  useEffect(() => {
     // Set up current time tracking
     const updateCurrentTime = () => {
       const now = new Date();
@@ -181,7 +181,7 @@ export default function CalendarScreen() {
     return Math.round(points * 10) / 10;
   };
 
-    const loadRecurringTemplates = async () => {
+  const loadRecurringTemplates = async () => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -274,50 +274,50 @@ export default function CalendarScreen() {
 
       if (tasksError) throw tasksError;
 
-// Fetch Google Calendar events
-const { data: calendarEvents, error: calendarError } = await supabase
-  .from('0008-ap-calendar-events')
-  .select('*')
-  .eq('user_id', user.id)
-  .gte('start_date', startStr)
-  .lte('start_date', endStr);
+      // Fetch Google Calendar events
+      const { data: googleCalendarEvents, error: calendarError } = await supabase
+        .from('0008-ap-calendar-events')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('start_date', startStr)
+        .lte('start_date', endStr);
 
-if (calendarError) {
-  console.error('[Calendar] Error fetching calendar events:', calendarError);
-}
+      if (calendarError) {
+        console.error('[Calendar] Error fetching calendar events:', calendarError);
+      }
 
-// Merge Google Calendar events with tasks
-const allTasksAndEvents = [
-  ...(tasksData || []),
-  ...(calendarEvents || []).map(event => ({
-    ...event,
-    is_google_calendar_event: true,
-    title: event.title,
-    type: 'event',
-    status: 'pending',
-    due_date: event.start_date,
-    start_date: event.start_date,
-    end_date: event.end_date,
-    start_time: event.start_time,
-    end_time: event.end_time,
-    is_all_day: event.is_all_day || false,
-    roleColor: '#EA4335',
-  }))
-];
+      // Merge Google Calendar events with tasks
+      const allTasksAndEvents = [
+        ...(tasksData || []),
+        ...(googleCalendarEvents || []).map(event => ({
+          ...event,
+          is_google_calendar_event: true,
+          title: event.title,
+          type: 'event',
+          status: 'pending',
+          due_date: event.start_date,
+          start_date: event.start_date,
+          end_date: event.end_date,
+          start_time: event.start_time,
+          end_time: event.end_time,
+          is_all_day: event.is_all_day || false,
+          roleColor: '#EA4335',
+        }))
+      ];
 
-if (fetchId !== latestFetchId.current) {
-  console.log('[Calendar] Discarding stale fetch after query');
-  return;
-}
+      if (fetchId !== latestFetchId.current) {
+        console.log('[Calendar] Discarding stale fetch after query');
+        return;
+      }
 
-if (!allTasksAndEvents || allTasksAndEvents.length === 0) {
-  setTasks([]);
-  setEvents([]);
-  setLoading(false);
-  return;
-}
+      if (!allTasksAndEvents || allTasksAndEvents.length === 0) {
+        setTasks([]);
+        setEvents([]);
+        setLoading(false);
+        return;
+      }
 
-const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id || t.id))];
+      const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id || t.id))];
 
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch before joins');
@@ -353,7 +353,7 @@ const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id
       if (keyRelationshipsError) throw keyRelationshipsError;
 
       const transformedTasks = allTasksAndEvents
-  .map(task => {
+        .map(task => {
           const lookupId = task.source_task_id || task.id;
           const taskRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
           const primaryRole = taskRoles[0];
@@ -368,7 +368,7 @@ const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id
             has_notes: notesData?.some(n => n.parent_id === lookupId),
             has_delegates: delegatesData?.some(d => d.parent_id === lookupId),
             has_attachments: false,
-            roleColor: primaryRole?.color || '#0078d4',
+            roleColor: task.roleColor || primaryRole?.color || '#0078d4',
             isGoalActionTask: taskGoals.length > 0,
           };
         })
@@ -492,7 +492,7 @@ const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id
     setIsFormModalVisible(false);
     setEditingTask(null);
     fetchTasksAndEvents(currentDate, viewMode);
-      };
+  };
 
   const handleFormClose = () => {
     setIsFormModalVisible(false);
