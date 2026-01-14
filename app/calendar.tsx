@@ -68,6 +68,8 @@ export default function CalendarScreen() {
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
   );
   const [scrollTrigger, setScrollTrigger] = useState(0);
+  // This handles background sync every 10 min + sync on tab focus
+const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
 
   // Responsive breakpoints
   const isMobile = screenWidth < 400;
