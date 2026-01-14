@@ -274,36 +274,9 @@ export default function CalendarScreen() {
 
       if (tasksError) throw tasksError;
 
-      // Fetch Google Calendar events
-      const { data: googleCalendarEvents, error: calendarError } = await supabase
-        .from('0008-ap-calendar-events')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('start_date', startStr)
-        .lte('start_date', endStr);
-
-      if (calendarError) {
-        console.error('[Calendar] Error fetching calendar events:', calendarError);
-      }
-
-      // Merge Google Calendar events with tasks
-      const allTasksAndEvents = [
-        ...(tasksData || []),
-        ...(googleCalendarEvents || []).map(event => ({
-          ...event,
-          is_google_calendar_event: true,
-          title: event.title,
-          type: 'event',
-          status: 'pending',
-          due_date: event.start_date,
-          start_date: event.start_date,
-          end_date: event.end_date,
-          start_time: event.start_time,
-          end_time: event.end_time,
-          is_all_day: event.is_all_day || false,
-          roleColor: '#EA4335',
-        }))
-      ];
+      // Google Calendar events are already in 0008-ap-tasks with type='event'
+      // No separate fetch needed - they come through v_tasks_with_recurrence_expanded
+      const allTasksAndEvents = tasksData || [];
 
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch after query');
