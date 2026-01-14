@@ -22,6 +22,7 @@ import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/us
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { getHolidaysForMonth, US_HOLIDAYS } from '@/lib/holidays';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync';
 
 // Constants
 const MINUTE_HEIGHT = 0.75;
