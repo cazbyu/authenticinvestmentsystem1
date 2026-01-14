@@ -30,12 +30,17 @@ interface SyncState {
 interface GoogleCalendarConnection {
   id: string;
   user_id: string;
+  provider: string;
   access_token: string;
-  refresh_token: string;
-  token_expires_at: string;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  provider_user_id: string | null;
+  provider_email: string | null;
+  sync_enabled: boolean;
   sync_token: string | null;
   last_synced_at: string | null;
-  google_email: string;
+  last_sync_status: string | null;
+  last_sync_error: string | null;
 }
 
 export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
@@ -62,13 +67,21 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       if (!user) return null;
 
       const { data, error } = await supabase
-        .from('0008-ap-google-calendar-connections')
+        .from('0008-ap-calendar-connections')
         .select('*')
         .eq('user_id', user.id)
+        .eq('provider', 'google')
         .single();
 
       if (error || !data) {
         setSyncState(prev => ({ ...prev, isConnected: false }));
+        return null;
+      }
+
+      // Check if sync is enabled for this connection
+      if (!data.sync_enabled) {
+        console.log('[GoogleCalendarSync] Sync is disabled for this connection');
+        setSyncState(prev => ({ ...prev, isConnected: true }));
         return null;
       }
 
@@ -104,12 +117,13 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
         if (session?.session?.provider_token) {
           // Update the stored token
           await supabase
-            .from('0008-ap-google-calendar-connections')
+            .from('0008-ap-calendar-connections')
             .update({
               access_token: session.session.provider_token,
               token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
             })
-            .eq('user_id', connection.user_id);
+            .eq('user_id', connection.user_id)
+            .eq('provider', 'google');
 
           return session.session.provider_token;
         }
@@ -199,9 +213,10 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
           console.log('[GoogleCalendarSync] Sync token expired, performing full sync');
           // Clear sync token and retry
           await supabase
-            .from('0008-ap-google-calendar-connections')
+            .from('0008-ap-calendar-connections')
             .update({ sync_token: null })
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .eq('provider', 'google');
           
           return performSync(true); // Retry with full sync
         }
@@ -267,12 +282,14 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
 
       // Save the new sync token and last sync time
       await supabase
-        .from('0008-ap-google-calendar-connections')
+        .from('0008-ap-calendar-connections')
         .update({
           sync_token: newSyncToken || connection.sync_token,
           last_synced_at: new Date().toISOString(),
+          last_sync_status: 'success',
         })
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('provider', 'google');
 
       if (isMountedRef.current) {
         setSyncState(prev => ({
