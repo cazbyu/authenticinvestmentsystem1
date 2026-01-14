@@ -281,7 +281,7 @@ export default function CalendarScreen() {
         return;
       }
 
-      *const { data: tasksData, error: tasksError } = await supabase
+      const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select(`
           id, title, type, status, due_date, start_date, end_date, start_time, end_time,
