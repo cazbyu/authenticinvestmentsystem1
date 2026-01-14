@@ -11,6 +11,7 @@ import { LinkedAccountsManager } from '@/components/settings/LinkedAccountsManag
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
 import { ManageCustomTimelinesModal } from '@/components/timelines/ManageCustomTimelinesModal';
 import { CalendarManagementModal } from '@/components/settings/CalendarManagementModal';
+import { CalendarSelectionSection } from '@/components/CalendarSelectionSection';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -1341,6 +1342,9 @@ const { syncGoogleCalendarEvents } = GoogleCalendarSync;
             </>
           )}
         </View>
+
+        {/* Calendar Selection Section */}
+        <CalendarSelectionSection />
 
         {/* Notifications Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
