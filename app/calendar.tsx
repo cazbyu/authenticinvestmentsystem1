@@ -108,11 +108,7 @@ export default function CalendarScreen() {
     }
   }, [viewMode, currentDate]);
 
-  useEffect(() => {
-    calculateAuthenticScore();
-  }, []);
-
-  useEffect(() => {
+    useEffect(() => {
     // Set up current time tracking
     const updateCurrentTime = () => {
       const now = new Date();
@@ -138,25 +134,21 @@ export default function CalendarScreen() {
     const handleTaskCreated = () => {
       console.log('[Calendar] Received task created event, refreshing...');
       fetchTasksAndEvents(currentDate, viewMode);
-      calculateAuthenticScore();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Calendar] Received task updated event, refreshing...');
       fetchTasksAndEvents(currentDate, viewMode);
-      calculateAuthenticScore();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Calendar] Received task deleted event, refreshing...');
       fetchTasksAndEvents(currentDate, viewMode);
-      calculateAuthenticScore();
     };
 
     const handleRefreshAll = () => {
       console.log('[Calendar] Received refresh all event, refreshing...');
       fetchTasksAndEvents(currentDate, viewMode);
-      calculateAuthenticScore();
     };
 
     eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
@@ -439,7 +431,6 @@ const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id
       }
 
       fetchTasksAndEvents(currentDate, viewMode);
-      calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
@@ -492,7 +483,6 @@ const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id
       Alert.alert('Success', 'Task has been deleted');
       setIsDetailModalVisible(false);
       fetchTasksAndEvents(currentDate, viewMode);
-      calculateAuthenticScore();
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
@@ -502,8 +492,7 @@ const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id
     setIsFormModalVisible(false);
     setEditingTask(null);
     fetchTasksAndEvents(currentDate, viewMode);
-    calculateAuthenticScore();
-  };
+      };
 
   const handleFormClose = () => {
     setIsFormModalVisible(false);
