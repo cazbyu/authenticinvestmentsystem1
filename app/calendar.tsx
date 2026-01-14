@@ -53,7 +53,7 @@ interface CalendarEvent {
 }
 
 export default function CalendarScreen() {
-  const { authenticScore: contextScore } = useAuthenticScore();
+  const { authenticScore } = useAuthenticScore(); // Remove the ": contextScore" part
   const { width: screenWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
@@ -61,8 +61,7 @@ export default function CalendarScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [authenticScore, setAuthenticScore] = useState(0);
-  const [currentTimePosition, setCurrentTimePosition] = useState(0);
+    const [currentTimePosition, setCurrentTimePosition] = useState(0);
   const [currentTimeString, setCurrentTimeString] = useState('');
   const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
@@ -190,20 +189,7 @@ export default function CalendarScreen() {
     return Math.round(points * 10) / 10;
   };
 
-  const calculateAuthenticScore = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const score = await fetchWeeklyAuthenticCount(supabase, user.id);
-      setAuthenticScore(score);
-    } catch (error) {
-      console.error('Error calculating authentic score:', error);
-    }
-  };
-
-  const loadRecurringTemplates = async () => {
+    const loadRecurringTemplates = async () => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
