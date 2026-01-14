@@ -624,7 +624,7 @@ export default function SettingsScreen() {
       setIsConnectingGoogle(false);
     }
   };
-,
+
   const disconnectGoogle = async () => {
     Alert.alert(
       'Disconnect Google Calendar?',
