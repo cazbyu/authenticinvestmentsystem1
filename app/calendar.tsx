@@ -21,6 +21,7 @@ import { DraggableFab } from '@/components/DraggableFab';
 import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/useRecurrenceCache';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { getHolidaysForMonth, US_HOLIDAYS } from '@/lib/holidays';
+import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 
 // Constants
 const MINUTE_HEIGHT = 0.75;
@@ -52,6 +53,7 @@ interface CalendarEvent {
 }
 
 export default function CalendarScreen() {
+  const { authenticScore: contextScore } = useAuthenticScore();
   const { width: screenWidth } = useWindowDimensions();
   const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
@@ -189,17 +191,17 @@ export default function CalendarScreen() {
   };
 
   const calculateAuthenticScore = async () => {
-  try {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // Placeholder - actual score calculation happens in context
-    setAuthenticScore(0);
-  } catch (error) {
-    console.error('Error calculating authentic score:', error);
-  }
-};
+      const score = await fetchWeeklyAuthenticCount(supabase, user.id);
+      setAuthenticScore(score);
+    } catch (error) {
+      console.error('Error calculating authentic score:', error);
+    }
+  };
 
   const loadRecurringTemplates = async () => {
     try {
@@ -280,7 +282,6 @@ export default function CalendarScreen() {
         console.log('[Calendar] Discarding stale fetch request');
         return;
       }
-      
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select(`
