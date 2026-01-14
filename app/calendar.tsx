@@ -189,17 +189,17 @@ export default function CalendarScreen() {
   };
 
   const calculateAuthenticScore = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const score = await fetchWeeklyAuthenticCount(supabase, user.id);
-      setAuthenticScore(score);
-    } catch (error) {
-      console.error('Error calculating authentic score:', error);
-    }
-  };
+    // Placeholder - actual score calculation happens in context
+    setAuthenticScore(0);
+  } catch (error) {
+    console.error('Error calculating authentic score:', error);
+  }
+};
 
   const loadRecurringTemplates = async () => {
     try {
