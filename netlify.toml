@@ -4,6 +4,11 @@
 [build]
   publish = "build"
   command = "npm run build:web"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@supabase/supabase-js"]
 
 # Redirect rules for SPA routing
 [[redirects]]
