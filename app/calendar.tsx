@@ -280,7 +280,6 @@ export default function CalendarScreen() {
         console.log('[Calendar] Discarding stale fetch request');
         return;
       }
-
       const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select(`
