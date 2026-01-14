@@ -373,8 +373,8 @@ const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id
       if (delegatesError) throw delegatesError;
       if (keyRelationshipsError) throw keyRelationshipsError;
 
-      const transformedTasks = tasksData
-        .map(task => {
+      const transformedTasks = allTasksAndEvents
+  .map(task => {
           const lookupId = task.source_task_id || task.id;
           const taskRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
           const primaryRole = taskRoles[0];
