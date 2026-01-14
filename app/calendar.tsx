@@ -281,7 +281,7 @@ export default function CalendarScreen() {
         return;
       }
 
-      const { data: tasksData, error: tasksError } = await supabase
+      *const { data: tasksData, error: tasksError } = await supabase
         .from('v_tasks_with_recurrence_expanded')
         .select(`
           id, title, type, status, due_date, start_date, end_date, start_time, end_time,
@@ -295,19 +295,50 @@ export default function CalendarScreen() {
 
       if (tasksError) throw tasksError;
 
-      if (fetchId !== latestFetchId.current) {
-        console.log('[Calendar] Discarding stale fetch after query');
-        return;
-      }
+// Fetch Google Calendar events
+const { data: calendarEvents, error: calendarError } = await supabase
+  .from('0008-ap-calendar-events')
+  .select('*')
+  .eq('user_id', user.id)
+  .gte('start_date', startStr)
+  .lte('start_date', endStr);
 
-      if (!tasksData || tasksData.length === 0) {
-        setTasks([]);
-        setEvents([]);
-        setLoading(false);
-        return;
-      }
+if (calendarError) {
+  console.error('[Calendar] Error fetching calendar events:', calendarError);
+}
 
-      const visibleSourceIds = [...new Set(tasksData.map(t => t.source_task_id || t.id))];
+// Merge Google Calendar events with tasks
+const allTasksAndEvents = [
+  ...(tasksData || []),
+  ...(calendarEvents || []).map(event => ({
+    ...event,
+    is_google_calendar_event: true,
+    title: event.title,
+    type: 'event',
+    status: 'pending',
+    due_date: event.start_date,
+    start_date: event.start_date,
+    end_date: event.end_date,
+    start_time: event.start_time,
+    end_time: event.end_time,
+    is_all_day: event.is_all_day || false,
+    roleColor: '#EA4335',
+  }))
+];
+
+if (fetchId !== latestFetchId.current) {
+  console.log('[Calendar] Discarding stale fetch after query');
+  return;
+}
+
+if (!allTasksAndEvents || allTasksAndEvents.length === 0) {
+  setTasks([]);
+  setEvents([]);
+  setLoading(false);
+  return;
+}
+
+const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id || t.id))];
 
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch before joins');
