@@ -595,36 +595,6 @@ export default function SettingsScreen() {
   }
 };
     
-    try {
-      const supabase = getSupabaseClient();
-      
-      // Initiate OAuth flow through Supabase
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          scopes: 'https://www.googleapis.com/auth/calendar.events',
-          redirectTo: `${window.location.origin}/settings`,
-          queryParams: {
-            access_type: 'offline',  // Gets refresh token
-            prompt: 'consent',       // Forces consent screen to get refresh token
-          },
-        },
-      });
-
-      if (error) {
-        throw error;
-      }
-      
-      // OAuth flow initiated - user will be redirected to Google
-      // When they return, we'll handle it in the useEffect above
-      
-    } catch (error) {
-      console.error('[Google OAuth] Error:', error);
-      Alert.alert('Error', (error as Error).message);
-      setIsConnectingGoogle(false);
-    }
-  };
-
   const disconnectGoogle = async () => {
     Alert.alert(
       'Disconnect Google Calendar?',
