@@ -22,6 +22,8 @@ interface ActionItem {
   type: 'task' | 'event';
   due_date: string | null;
   start_date: string | null;
+  start_time: string | null;  // ADD
+  end_time: string | null;    // ADD
   is_urgent: boolean;
   is_important: boolean;
   is_deposit_idea: boolean;
@@ -30,6 +32,7 @@ interface ActionItem {
   originalDate?: string;
   roles?: any[];
   domains?: any[];
+  delegateName?: string | null;  // ADD - first name of delegate
 }
 
 interface DateWithActions {
@@ -132,7 +135,7 @@ export function ActionsTableView({
       if (filter === 'task') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'task')
           .in('status', ['pending', 'in_progress'])
@@ -155,7 +158,7 @@ export function ActionsTableView({
 
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'event')
           .in('status', ['pending', 'in_progress'])
@@ -178,7 +181,7 @@ export function ActionsTableView({
         // Tasks: can be overdue, filtered by due_date
         let tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'task')
           .in('status', ['pending', 'in_progress'])
@@ -188,7 +191,7 @@ export function ActionsTableView({
         // Events: from today forward only (never past)
         let eventsQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
           .eq('type', 'event')
           .in('status', ['pending', 'in_progress'])
@@ -219,7 +222,7 @@ export function ActionsTableView({
       if (tasksData && tasksData.length > 0) {
         const taskIds = tasksData.map((t) => t.id);
 
-        const [rolesRes, domainsRes, goalsRes] = await Promise.all([
+        const [rolesRes, domainsRes, goalsRes, delegatesRes] = await Promise.all([
           supabase
             .from('0008-ap-universal-roles-join')
             .select('parent_id, role:0008-ap-roles(id, label)')
@@ -235,6 +238,11 @@ export function ActionsTableView({
             .select(
               'parent_id, goal_type, tw:0008-ap-goals-12wk(id, title, status), cg:0008-ap-goals-custom(id, title, status)'
             )
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-delegates-join')
+            .select('parent_id, delegate:0008-ap-delegates(id, name)')
             .in('parent_id', taskIds)
             .eq('parent_type', 'task'),
         ]);
@@ -260,6 +268,16 @@ export function ActionsTableView({
           }
         });
 
+        // Map delegates by task
+        const delegatesByTask = new Map<string, string>();
+        (delegatesRes.data || []).forEach((d: any) => {
+          if (d.delegate?.name) {
+            // Get first name only
+            const firstName = d.delegate.name.split(' ')[0];
+            delegatesByTask.set(d.parent_id, firstName);
+          }
+        });
+
         const now = new Date();
         now.setHours(0, 0, 0, 0);
         const todayStr = now.toISOString().split('T')[0];
@@ -279,6 +297,8 @@ export function ActionsTableView({
             type: task.type,
             due_date: task.due_date,
             start_date: task.start_date,
+            start_time: task.start_time,      // ADD
+            end_time: task.end_time,          // ADD
             is_urgent: task.is_urgent,
             is_important: task.is_important,
             is_deposit_idea: task.is_deposit_idea || false,
@@ -287,6 +307,7 @@ export function ActionsTableView({
             originalDate: isOverdue ? displayDate : undefined,
             roles: roles,
             domains: domains,
+            delegateName: delegatesByTask.get(task.id) || null,  // ADD
           };
         });
 
@@ -403,6 +424,22 @@ export function ActionsTableView({
   const renderActionItem = (action: ActionItem) => {
     const priorityColor = getPriorityColor(action);
 
+    // Format time display for events
+    const formatTime = (timeStr: string | null) => {
+      if (!timeStr) return null;
+      // timeStr is in HH:MM:SS format, convert to 12-hour
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const period = hours >= 12 ? 'pm' : 'am';
+      const displayHour = hours % 12 || 12;
+      return `${displayHour}:${minutes.toString().padStart(2, '0')} ${period}`;
+    };
+
+    const startTimeFormatted = formatTime(action.start_time);
+    const endTimeFormatted = formatTime(action.end_time);
+    const timeDisplay = startTimeFormatted && endTimeFormatted
+      ? `${startTimeFormatted} - ${endTimeFormatted}`
+      : startTimeFormatted || null;
+
     return (
       <View key={action.id} style={styles.actionRow}>
         <View style={styles.quickActionsContainer}>
@@ -441,14 +478,27 @@ export function ActionsTableView({
             )}
           </View>
           <View style={styles.actionContent}>
-            <Text style={[styles.actionText, { color: priorityColor }]} numberOfLines={1}>
-              {action.title}
-              {action.isOverdue && action.originalDate && (
-                <Text style={styles.overdueText}>
-                  {' '}(Overdue - {formatOverdueDate(action.originalDate)})
-                </Text>
+            <View style={styles.actionTitleRow}>
+              <Text style={[styles.actionText, { color: priorityColor }]} numberOfLines={1}>
+                {action.title}
+              </Text>
+              {/* Time display for events */}
+              {action.type === 'event' && timeDisplay && (
+                <Text style={styles.timeText}>({timeDisplay})</Text>
               )}
-            </Text>
+              {/* Delegate display */}
+              {action.delegateName && (
+                <View style={styles.delegateContainer}>
+                  <Text style={styles.delegateLabel}>Delegated</Text>
+                  <Text style={styles.delegateName}>{action.delegateName}</Text>
+                </View>
+              )}
+            </View>
+            {action.isOverdue && action.originalDate && (
+              <Text style={styles.overdueText}>
+                (Overdue - {formatOverdueDate(action.originalDate)})
+              </Text>
+            )}
           </View>
           <View style={styles.valueContainer}>
             <Text style={styles.valueText}>+{Math.round(action.depositValue)}</Text>
@@ -609,6 +659,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     fontWeight: '400',
+  },
+  actionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '400',
+  },
+  delegateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  delegateLabel: {
+    fontSize: 12,
+    color: '#3b82f6',
+    fontWeight: '500',
+  },
+  delegateName: {
+    fontSize: 12,
+    color: '#3b82f6',
+    fontWeight: '600',
   },
   valueContainer: {
     minWidth: 50,
