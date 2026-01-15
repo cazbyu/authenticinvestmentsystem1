@@ -219,6 +219,15 @@ export function ActionsTableView({
         ];
       }
 
+ // TEMPORARY DEBUG - Remove after testing
+    console.log('[ActionsTableView DEBUG] Raw tasksData:', tasksData?.map(t => ({
+      id: t.id,
+      title: t.title,
+      type: t.type,
+      start_time: t.start_time,
+      end_time: t.end_time,
+    })));
+      
       if (tasksData && tasksData.length > 0) {
         const taskIds = tasksData.map((t) => t.id);
 
