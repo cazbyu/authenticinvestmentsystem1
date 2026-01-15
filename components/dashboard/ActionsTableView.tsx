@@ -124,6 +124,9 @@ export function ActionsTableView({
       const startStr = start.toISOString().split('T')[0];
       const endStr = end.toISOString().split('T')[0];
 
+      // Get today's date for filtering past events
+      const todayStr = new Date().toISOString().split('T')[0];
+
       let tasksData: any[] = [];
 
       if (filter === 'task') {
@@ -153,7 +156,8 @@ export function ActionsTableView({
           .eq('type', 'event')
           .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
-          .is('parent_task_id', null);
+          .is('parent_task_id', null)
+          .gte('start_date', todayStr);
 
         if (period === 'today') {
           query = query.lte('start_date', endStr);
@@ -181,7 +185,8 @@ export function ActionsTableView({
           .eq('type', 'event')
           .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
-          .is('parent_task_id', null);
+          .is('parent_task_id', null)
+          .gte('start_date', todayStr);
 
         if (period === 'today') {
           tasksQuery.lte('due_date', endStr);
