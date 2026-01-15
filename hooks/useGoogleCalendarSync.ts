@@ -120,72 +120,95 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
   }, []);
 
   /**
-   * Refresh access token if expired using Supabase session management
-   * 
-   * KEY FIX: This uses Supabase's refreshSession() which handles token refresh
-   * SERVER-SIDE using the Google credentials stored in Supabase dashboard.
-   * No need for EXPO_PUBLIC_GOOGLE_CLIENT_SECRET in the frontend!
+   * Refresh the Google access token if expired or expiring soon
    */
   const refreshTokenIfNeeded = useCallback(async (connection: GoogleCalendarConnection): Promise<string | null> => {
     const supabase = getSupabaseClient();
-    
+
     // If token is still valid for more than 5 minutes, use it
     if (connection.token_expires_at) {
       const expiresAt = new Date(connection.token_expires_at);
       const now = new Date();
-      
+
       if (expiresAt.getTime() - now.getTime() > 5 * 60 * 1000) {
         return connection.access_token;
       }
     }
-    
+
     console.log('[GoogleCalendarSync] Token expired or expiring soon, refreshing...');
-    
+
     try {
-      // PRIMARY METHOD: Ask Supabase to refresh the session
-      // This refreshes the Google token SERVER-SIDE using credentials in Supabase dashboard
+      // METHOD 1: Ask Supabase to refresh the session
       const { data, error: refreshError } = await supabase.auth.refreshSession();
-      
+
       if (refreshError) {
         console.error('[GoogleCalendarSync] Supabase session refresh error:', refreshError);
       }
-      
-      // Check if we got a fresh provider token
+
+      // Check if we got a fresh provider token from Supabase
       if (data?.session?.provider_token) {
         console.log('[GoogleCalendarSync] Got fresh token from Supabase session refresh');
-        
+
         // Update our stored token in calendar connections table
-        const { error: updateError } = await supabase
+        await supabase
           .from('0008-ap-calendar-connections')
           .update({
             access_token: data.session.provider_token,
-            token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hour
+            token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
           })
           .eq('user_id', connection.user_id)
           .eq('provider', 'google');
-        
-        if (updateError) {
-          console.error('[GoogleCalendarSync] Error updating token in database:', updateError);
-        }
-        
+
         return data.session.provider_token;
       }
-      
-      // FALLBACK 1: Try getting current session's provider token
+
+      // METHOD 2: Try current session's provider token
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session?.provider_token) {
         console.log('[GoogleCalendarSync] Using provider token from current Supabase session');
         return sessionData.session.provider_token;
       }
-      
-      // FALLBACK 2: Use existing token - it might still work briefly
+
+      // METHOD 3: Use Netlify function with refresh_token
+      if (connection.refresh_token) {
+        console.log('[GoogleCalendarSync] Trying Netlify function for token refresh...');
+
+        try {
+          const response = await fetch('/.netlify/functions/refresh-google-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: connection.user_id }),
+          });
+
+          if (response.ok) {
+            const tokenData = await response.json();
+
+            if (tokenData.access_token) {
+              console.log('[GoogleCalendarSync] Got fresh token from Netlify function');
+
+              // Token is already updated in database by the function, just return it
+              return tokenData.access_token;
+            }
+          } else {
+            const errorData = await response.json();
+            console.error('[GoogleCalendarSync] Netlify function error:', response.status, errorData);
+
+            // If token needs reconnect, we should notify the user
+            if (errorData.needsReconnect) {
+              console.warn('[GoogleCalendarSync] Refresh token expired - user needs to reconnect');
+            }
+          }
+        } catch (netlifyError) {
+          console.error('[GoogleCalendarSync] Netlify function failed:', netlifyError);
+        }
+      }
+
+      // FALLBACK: Try existing token - it might still work briefly
       console.warn('[GoogleCalendarSync] No fresh token available, trying existing token');
       return connection.access_token;
-      
+
     } catch (error) {
       console.error('[GoogleCalendarSync] Error refreshing token:', error);
-      
-      // Final fallback: try existing token
       return connection.access_token;
     }
   }, []);
