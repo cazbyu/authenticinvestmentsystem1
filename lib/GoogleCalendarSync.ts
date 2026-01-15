@@ -378,10 +378,12 @@ export async function syncGoogleCalendarEvents(
             eventsUpdated++;
           }
         } else {
-          // Create new event
-          const { error: insertError } = await supabase
-            .from('0008-ap-tasks')
-            .insert(taskData);
+  // Create new event
+  console.log('[GoogleSync] Inserting taskData:', JSON.stringify(taskData, null, 2));
+  
+  const { error: insertError } = await supabase
+    .from('0008-ap-tasks')
+    .insert(taskData);
 
           if (insertError) {
             console.error('[GoogleSync] Error creating event:', insertError);
