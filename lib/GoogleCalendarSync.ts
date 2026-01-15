@@ -191,10 +191,11 @@ async function ensureValidToken(connection: any) {
  */
 async function fetchGoogleCalendarEvents(
   accessToken: string,
+  calendarId: string,
   timeMin: string,
   timeMax: string
 ): Promise<GoogleCalendarEvent[]> {
-  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events');
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
   url.searchParams.append('timeMin', timeMin);
   url.searchParams.append('timeMax', timeMax);
   url.searchParams.append('singleEvents', 'true');
@@ -222,10 +223,11 @@ async function fetchGoogleCalendarEvents(
  */
 function convertGoogleEventToTask(
   googleEvent: GoogleCalendarEvent,
-  userId: string
+  userId: string,
+  calendarId: string
 ): any {
   const isAllDay = !!googleEvent.start.date; // date field means all-day event
-  
+
   let startDate: string;
   let endDate: string | null = null;
   let startTime: string | null = null;
@@ -238,13 +240,13 @@ function convertGoogleEventToTask(
   } else {
     // Timed event
     const startDateTime = new Date(googleEvent.start.dateTime!);
-    const endDateTime = googleEvent.end.dateTime 
-      ? new Date(googleEvent.end.dateTime) 
+    const endDateTime = googleEvent.end.dateTime
+      ? new Date(googleEvent.end.dateTime)
       : startDateTime;
 
     startDate = formatLocalDate(startDateTime);
     endDate = formatLocalDate(endDateTime);
-    
+
     // Extract time portions
     startTime = startDateTime.toTimeString().split(' ')[0]; // HH:MM:SS
     endTime = endDateTime.toTimeString().split(' ')[0];
@@ -278,7 +280,7 @@ function convertGoogleEventToTask(
     status: googleEvent.status === 'cancelled' ? 'cancelled' : 'pending',
     external_source: 'google',
     external_event_id: googleEvent.id,
-    external_calendar_id: 'primary',
+    external_calendar_id: calendarId,
     external_sync_direction: 'pull',
     external_metadata: metadata,
     last_external_sync_at: new Date().toISOString(),
@@ -333,21 +335,40 @@ export async function syncGoogleCalendarEvents(
 
     console.log('[GoogleSync] Fetching events from', timeMin, 'to', timeMax);
 
-    // 4. Fetch events from Google Calendar
-    const googleEvents = await fetchGoogleCalendarEvents(
-      tokenResult.accessToken!,
-      timeMin.toISOString(),
-      timeMax.toISOString()
-    );
+    // 4. Get selected calendars (default to primary if none selected)
+    const selectedCalendars: string[] = connection.selected_calendars || ['primary'];
+    console.log('[GoogleSync] Syncing calendars:', selectedCalendars);
 
-    console.log('[GoogleSync] Fetched', googleEvents.length, 'events from Google');
+    let allGoogleEvents: { event: GoogleCalendarEvent; calendarId: string }[] = [];
+
+    // Fetch events from each selected calendar
+    for (const calendarId of selectedCalendars) {
+      try {
+        console.log('[GoogleSync] Fetching from calendar:', calendarId);
+        const events = await fetchGoogleCalendarEvents(
+          tokenResult.accessToken!,
+          calendarId,
+          timeMin.toISOString(),
+          timeMax.toISOString()
+        );
+
+        const taggedEvents = events.map(event => ({ event, calendarId }));
+        allGoogleEvents = [...allGoogleEvents, ...taggedEvents];
+
+        console.log(`[GoogleSync] Fetched ${events.length} events from ${calendarId}`);
+      } catch (calendarError) {
+        console.error(`[GoogleSync] Error fetching calendar ${calendarId}:`, calendarError);
+      }
+    }
+
+    console.log('[GoogleSync] Fetched', allGoogleEvents.length, 'total events from Google');
 
     let eventsCreated = 0;
     let eventsUpdated = 0;
     let eventsSkipped = 0;
 
     // 5. Process each event
-    for (const googleEvent of googleEvents) {
+    for (const { event: googleEvent, calendarId } of allGoogleEvents) {
       try {
         // Check if we already have this event
         const { data: existingTask } = await supabase
@@ -359,7 +380,7 @@ export async function syncGoogleCalendarEvents(
           .is('deleted_at', null)
           .maybeSingle();
 
-        const taskData = convertGoogleEventToTask(googleEvent, userId);
+        const taskData = convertGoogleEventToTask(googleEvent, userId, calendarId);
 
         if (existingTask) {
           // Update existing event
@@ -380,7 +401,7 @@ export async function syncGoogleCalendarEvents(
         } else {
   // Create new event
   console.log('[GoogleSync] Inserting taskData:', JSON.stringify(taskData, null, 2));
-  
+
   const { error: insertError } = await supabase
     .from('0008-ap-tasks')
     .insert(taskData);
@@ -410,7 +431,7 @@ export async function syncGoogleCalendarEvents(
       .eq('id', connection.id);
 
     console.log('[GoogleSync] Sync complete:', {
-      fetched: googleEvents.length,
+      fetched: allGoogleEvents.length,
       created: eventsCreated,
       updated: eventsUpdated,
       skipped: eventsSkipped,
@@ -418,7 +439,7 @@ export async function syncGoogleCalendarEvents(
 
     return {
       success: true,
-      eventsFetched: googleEvents.length,
+      eventsFetched: allGoogleEvents.length,
       eventsCreated,
       eventsUpdated,
       eventsSkipped,
