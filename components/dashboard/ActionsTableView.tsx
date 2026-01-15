@@ -120,6 +120,14 @@ export function ActionsTableView({
   }, []);
 
   const loadActions = async () => {
+    console.log('[ActionsTableView] loadActions called with:', { userId, filter, period });
+
+    if (!userId) {
+      console.log('[ActionsTableView] No userId provided, skipping load');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const supabase = getSupabaseClient();
