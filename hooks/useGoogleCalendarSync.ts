@@ -419,26 +419,29 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
 
       // Upsert the event
       const { error: upsertError } = await supabase
-        .from('0008-ap-tasks')
-        .upsert({
-          user_id: userId,
-          external_event_id: event.id,
-          external_calendar_id: calendarId, // Track which calendar this came from
-          title: event.summary || 'Untitled Event',
-          description: event.description || null,
-          type: 'event',
-          status: 'pending',
-          start_date: startDate,
-          end_date: endDate !== startDate ? endDate : null,
-          start_time: startTime,
-          end_time: endTime,
-          is_all_day: isAllDay,
-          location: event.location || null,
-          recurrence_rule: null,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'external_event_id,user_id',
-        });
+  .from('0008-ap-tasks')
+  .upsert({
+    user_id: userId,
+    external_event_id: event.id,
+    external_calendar_id: calendarId,
+    title: event.summary || 'Untitled Event',
+    description: event.description || null,
+    type: 'event',
+    status: 'pending',
+    start_date: startDate,
+    end_date: endDate !== startDate ? endDate : null,
+    start_time: startTime,
+    end_time: endTime,
+    is_all_day: isAllDay,
+    location: event.location || null,
+    recurrence_rule: null,
+    external_source: 'google',
+    external_sync_direction: 'pull',
+    last_external_sync_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }, {
+    onConflict: 'external_event_id,user_id',
+  });
 
       if (upsertError) {
         console.error('[GoogleCalendarSync] Error upserting event:', upsertError);
