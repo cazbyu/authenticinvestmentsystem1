@@ -287,6 +287,9 @@ export function ActionsTableView({
           }
         });
 
+        // TEMPORARY DEBUG - Remove after testing
+console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delegatesByTask));
+
         const now = new Date();
         now.setHours(0, 0, 0, 0);
         const todayStr = now.toISOString().split('T')[0];
