@@ -619,7 +619,7 @@ export default function SettingsScreen() {
                 .from('0008-ap-tasks')
                 .delete()
                 .eq('user_id', user.id)
-                .eq('source', 'google_calendar');
+                .eq('external_source', 'google');
 
               // Disconnect the calendar connection
               const GoogleCalendarSync = await import('../lib/GoogleCalendarSync');
