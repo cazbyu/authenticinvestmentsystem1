@@ -434,10 +434,19 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
   };
 
   const renderActionItem = (action: ActionItem) => {
-    const priorityColor = getPriorityColor(action);
+  const priorityColor = getPriorityColor(action);
 
-    // Format time display for events
-    const formatTime = (timeStr: string | null) => {
+  // TEMPORARY DEBUG - Remove after testing
+  console.log('[ActionsTableView DEBUG] Rendering action:', {
+    title: action.title,
+    type: action.type,
+    start_time: action.start_time,
+    end_time: action.end_time,
+    delegateName: action.delegateName,
+  });
+
+  // Format time display for events
+  const formatTime = (timeStr: string | null) => {
       if (!timeStr) return null;
       // timeStr is in HH:MM:SS format, convert to 12-hour
       const [hours, minutes] = timeStr.split(':').map(Number);
