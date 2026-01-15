@@ -149,8 +149,10 @@ export function ActionsTableView({
         if (error) throw error;
         tasksData = data || [];
       } else if (filter === 'event') {
-        // Events ONLY show on Act tab if start_date = TODAY
-        // Past events are gone, future events belong on Calendar
+        // Events show from TODAY through end of selected period
+        // Never show past events (start_date < today)
+        const todayStr = new Date().toISOString().split('T')[0];
+
         let query = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
@@ -159,13 +161,22 @@ export function ActionsTableView({
           .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .eq('start_date', todayStr);
+          .gte('start_date', todayStr);  // Never before today
+
+        // Add upper bound based on period
+        if (period !== 'all') {
+          query = query.lte('start_date', endStr);
+        }
 
         const { data, error } = await query.order('start_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
       } else {
-        const tasksQuery = supabase
+        // Combined view: tasks + events with different filtering rules
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // Tasks: can be overdue, filtered by due_date
+        let tasksQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
@@ -174,8 +185,8 @@ export function ActionsTableView({
           .is('deleted_at', null)
           .is('parent_task_id', null);
 
-        // Events ONLY show if start_date = TODAY
-        const eventsQuery = supabase
+        // Events: from today forward only (never past)
+        let eventsQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
           .eq('user_id', userId)
@@ -183,18 +194,17 @@ export function ActionsTableView({
           .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .eq('start_date', todayStr);
+          .gte('start_date', todayStr);  // Never before today
 
-        // Tasks can be overdue or upcoming
-        if (period === 'today') {
-          tasksQuery.lte('due_date', endStr);
-        } else {
-          tasksQuery.lte('due_date', endStr);
+        // Apply period upper bounds
+        if (period !== 'all') {
+          tasksQuery = tasksQuery.lte('due_date', endStr);
+          eventsQuery = eventsQuery.lte('start_date', endStr);
         }
 
         const [tasksResult, eventsResult] = await Promise.all([
-          tasksQuery,
-          eventsQuery,
+          tasksQuery.order('due_date', { ascending: true }),
+          eventsQuery.order('start_date', { ascending: true }),
         ]);
 
         if (tasksResult.error) throw tasksResult.error;
