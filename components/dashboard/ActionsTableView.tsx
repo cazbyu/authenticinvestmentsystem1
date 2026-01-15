@@ -149,6 +149,8 @@ export function ActionsTableView({
         if (error) throw error;
         tasksData = data || [];
       } else if (filter === 'event') {
+        // Events ONLY show on Act tab if start_date = TODAY
+        // Past events are gone, future events belong on Calendar
         let query = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
@@ -157,13 +159,7 @@ export function ActionsTableView({
           .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', todayStr);
-
-        if (period === 'today') {
-          query = query.lte('start_date', endStr);
-        } else {
-          query = query.lte('start_date', endStr);
-        }
+          .eq('start_date', todayStr);
 
         const { data, error } = await query.order('start_date', { ascending: true });
         if (error) throw error;
@@ -178,6 +174,7 @@ export function ActionsTableView({
           .is('deleted_at', null)
           .is('parent_task_id', null);
 
+        // Events ONLY show if start_date = TODAY
         const eventsQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, is_urgent, is_important, is_deposit_idea')
@@ -186,14 +183,13 @@ export function ActionsTableView({
           .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', todayStr);
+          .eq('start_date', todayStr);
 
+        // Tasks can be overdue or upcoming
         if (period === 'today') {
           tasksQuery.lte('due_date', endStr);
-          eventsQuery.lte('start_date', endStr);
         } else {
           tasksQuery.lte('due_date', endStr);
-          eventsQuery.lte('start_date', endStr);
         }
 
         const [tasksResult, eventsResult] = await Promise.all([
