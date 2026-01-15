@@ -571,7 +571,7 @@ export default function SettingsScreen() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        scopes: 'https://www.googleapis.com/auth/calendar.events',
+        scopes: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
         redirectTo: `${window.location.origin}/settings`,
         queryParams: {
           access_type: 'offline',
