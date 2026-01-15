@@ -435,7 +435,6 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
           is_all_day: isAllDay,
           location: event.location || null,
           recurrence_rule: null,
-          source: 'google_calendar',
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'external_event_id,user_id',
