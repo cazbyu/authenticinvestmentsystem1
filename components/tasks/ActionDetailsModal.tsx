@@ -62,6 +62,10 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
   const [domains, setDomains] = useState<any[]>([]);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
 
+  // Completion date editor state
+  const [showCompletionDatePicker, setShowCompletionDatePicker] = useState(false);
+  const [editingCompletionDate, setEditingCompletionDate] = useState<string | null>(null);
+
   useEffect(() => {
     if (visible && task?.id) {
       fetchTaskNotes();
@@ -617,6 +621,25 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
                task.is_urgent && !task.is_important ? 'Urgent' : 'Normal'}
             </Text>
           </View>
+          {/* Completion Date - Only for completed tasks */}
+          {task.status === 'completed' && task.completed_at && (
+            <View style={styles.detailSection}>
+              <Text style={styles.detailLabel}>Completed On:</Text>
+              <TouchableOpacity
+                style={styles.completionDateButton}
+                onPress={() => {
+                  const dateOnly = task.completed_at.split('T')[0];
+                  setEditingCompletionDate(dateOnly);
+                  setShowCompletionDatePicker(true);
+                }}
+              >
+                <Text style={styles.completionDateValue}>
+                  {formatDateTime(task.completed_at, true)}
+                </Text>
+                <Text style={styles.editIconText}>✎</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           {(roles.length > 0 || (task.roles && task.roles.length > 0)) && (
             <View style={styles.detailSection}>
               <Text style={styles.detailLabel}>Roles:</Text>
@@ -1035,6 +1058,30 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
+
+      {/* Completion Date Picker Modal */}
+      <Modal visible={showCompletionDatePicker} transparent animationType="fade">
+        <View style={styles.calendarOverlay}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarTitle}>Select Completion Date</Text>
+              <TouchableOpacity onPress={() => setShowCompletionDatePicker(false)}>
+                <X size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.calendarInstruction}>
+              Choose the date when this task was actually completed
+            </Text>
+            {/* Calendar implementation will be added in Step 2 */}
+            <TouchableOpacity
+              style={styles.calendarCancelButton}
+              onPress={() => setShowCompletionDatePicker(false)}
+            >
+              <Text style={styles.calendarCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Follow-through TaskEventForm Modal */}
       <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
@@ -1457,5 +1504,74 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
     fontStyle: 'italic',
+  },
+  completionDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  completionDateValue: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  editIconText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  calendarOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  calendarContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  calendarTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  calendarInstruction: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 16,
+  },
+  calendarCancelButton: {
+    padding: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  calendarCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
   },
 });
