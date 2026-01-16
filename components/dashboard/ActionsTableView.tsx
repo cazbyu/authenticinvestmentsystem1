@@ -15,7 +15,7 @@ import { calculateTaskPoints } from '@/lib/taskUtils';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import { ActFilter } from './ActFilterButtons';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 
 interface ActionItem {
   id: string;
@@ -140,6 +140,11 @@ export function ActionsTableView({
       // Get today's date for filtering past events
       const todayStr = formatLocalDate(new Date());
 
+      // Get start of today in local timezone (for completed_at comparison)
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartISO = toLocalISOString(todayStart);
+
       let tasksData: any[] = [];
 
       if (filter === 'task') {
@@ -158,7 +163,7 @@ export function ActionsTableView({
         }
 
         // Include pending/in_progress OR completed today
-        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
+        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
         const { data, error } = await query.order('due_date', { ascending: true });
         if (error) throw error;
@@ -166,8 +171,6 @@ export function ActionsTableView({
       } else if (filter === 'event') {
         // Events show from TODAY through end of selected period
         // Never show past events (start_date < today)
-        const todayStr = formatLocalDate(new Date());
-
         let query = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
@@ -183,15 +186,13 @@ export function ActionsTableView({
         }
 
         // Include pending/in_progress OR completed today
-        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
+        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
         const { data, error } = await query.order('start_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
       } else {
         // Combined view: tasks + events with different filtering rules
-        const todayStr = formatLocalDate(new Date());
-
         // Tasks: can be overdue, filtered by due_date
         let tasksQuery = supabase
           .from('0008-ap-tasks')
@@ -218,8 +219,8 @@ export function ActionsTableView({
         }
 
         // Include pending/in_progress OR completed today for both queries
-        tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
-        eventsQuery = eventsQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
+        tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
+        eventsQuery = eventsQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
         const [tasksResult, eventsResult] = await Promise.all([
           tasksQuery.order('due_date', { ascending: true }),
