@@ -34,6 +34,7 @@ interface ActionItem {
   roles?: any[];
   domains?: any[];
   delegateName?: string | null;  // ADD - first name of delegate
+  isCompleted?: boolean;  // ADD
 }
 
 interface DateWithActions {
@@ -144,10 +145,9 @@ export function ActionsTableView({
       if (filter === 'task') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
-          .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null);
 
@@ -156,6 +156,9 @@ export function ActionsTableView({
         } else {
           query = query.lte('due_date', endStr);
         }
+
+        // Include pending/in_progress OR completed today
+        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
 
         const { data, error } = await query.order('due_date', { ascending: true });
         if (error) throw error;
@@ -167,10 +170,9 @@ export function ActionsTableView({
 
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'event')
-          .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null)
           .gte('start_date', todayStr);  // Never before today
@@ -179,6 +181,9 @@ export function ActionsTableView({
         if (period !== 'all') {
           query = query.lte('start_date', endStr);
         }
+
+        // Include pending/in_progress OR completed today
+        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
 
         const { data, error } = await query.order('start_date', { ascending: true });
         if (error) throw error;
@@ -190,20 +195,18 @@ export function ActionsTableView({
         // Tasks: can be overdue, filtered by due_date
         let tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
-          .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null);
 
         // Events: from today forward only (never past)
         let eventsQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'event')
-          .in('status', ['pending', 'in_progress'])
           .is('deleted_at', null)
           .is('parent_task_id', null)
           .gte('start_date', todayStr);  // Never before today
@@ -213,6 +216,10 @@ export function ActionsTableView({
           tasksQuery = tasksQuery.lte('due_date', endStr);
           eventsQuery = eventsQuery.lte('start_date', endStr);
         }
+
+        // Include pending/in_progress OR completed today for both queries
+        tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
+        eventsQuery = eventsQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStr}T00:00:00)`);
 
         const [tasksResult, eventsResult] = await Promise.all([
           tasksQuery.order('due_date', { ascending: true }),
@@ -329,6 +336,7 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
             roles: roles,
             domains: domains,
             delegateName: delegatesByTask.get(task.id) || null,  // ADD
+            isCompleted: task.status === 'completed',  // ADD
           };
         });
 
@@ -406,11 +414,21 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
     }
   };
 
-  const handleComplete = (action: ActionItem) => {
-    if (onComplete) {
-      onComplete(action.id);
-      // Event bus will trigger refresh - no need to call loadActions() here
-    }
+  const handleComplete = async (action: ActionItem) => {
+    if (!onComplete) return;
+
+    // Optimistic UI update - mark as completed locally immediately
+    setDateGroups(prevGroups =>
+      prevGroups.map(group => ({
+        ...group,
+        actions: group.actions.map(a =>
+          a.id === action.id ? { ...a, isCompleted: true } : a
+        )
+      }))
+    );
+
+    // Then trigger the actual completion
+    onComplete(action.id);
   };
 
   const handleDelegate = (action: ActionItem) => {
@@ -432,9 +450,17 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            // Optimistic UI update - remove from list immediately
+            setDateGroups(prevGroups =>
+              prevGroups.map(group => ({
+                ...group,
+                actions: group.actions.filter(a => a.id !== action.id)
+              })).filter(group => group.actions.length > 0)
+            );
+
+            // Then trigger the actual deletion
             if (onDelete) {
               onDelete(action.id);
-              // Event bus will trigger refresh - no need to call loadActions() here
             }
           },
         },
@@ -443,21 +469,12 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
   };
 
   const renderActionItem = (action: ActionItem) => {
-  const priorityColor = getPriorityColor(action);
+    const priorityColor = getPriorityColor(action);
+    const isCompleted = action.isCompleted;
 
-  // TEMPORARY DEBUG - Remove after testing
-  console.log('[ActionsTableView DEBUG] Rendering action:', {
-    title: action.title,
-    type: action.type,
-    start_time: action.start_time,
-    end_time: action.end_time,
-    delegateName: action.delegateName,
-  });
-
-  // Format time display for events
-  const formatTime = (timeStr: string | null) => {
+    // Format time display for events
+    const formatTime = (timeStr: string | null) => {
       if (!timeStr) return null;
-      // timeStr is in HH:MM:SS format, convert to 12-hour
       const [hours, minutes] = timeStr.split(':').map(Number);
       const period = hours >= 12 ? 'pm' : 'am';
       const displayHour = hours % 12 || 12;
@@ -471,21 +488,28 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
       : startTimeFormatted || null;
 
     return (
-      <View key={action.id} style={styles.actionRow}>
+      <View key={action.id} style={[styles.actionRow, isCompleted && styles.completedRow]}>
         <View style={styles.quickActionsContainer}>
-          <TouchableOpacity
-            onPress={() => handleComplete(action)}
-            style={styles.quickActionButton}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Check size={18} color="#22c55e" strokeWidth={2.5} />
-          </TouchableOpacity>
+          {!isCompleted ? (
+            <TouchableOpacity
+              onPress={() => handleComplete(action)}
+              style={styles.quickActionButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Check size={18} color="#22c55e" strokeWidth={2.5} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.quickActionButton}>
+              <Check size={18} color="#9ca3af" strokeWidth={2.5} />
+            </View>
+          )}
           <TouchableOpacity
             onPress={() => handleDelegate(action)}
             style={styles.quickActionButton}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            disabled={isCompleted}
           >
-            <UserCircle size={18} color="#3b82f6" strokeWidth={2} />
+            <UserCircle size={18} color={isCompleted ? "#9ca3af" : "#3b82f6"} strokeWidth={2} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleDelete(action)}
@@ -499,36 +523,50 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
           style={styles.taskInfoContainer}
           onPress={() => onTaskPress && onTaskPress(action.id)}
           activeOpacity={0.7}
+          disabled={isCompleted}
         >
           <View style={styles.iconContainer}>
             {action.type === 'task' ? (
-              <CheckSquare size={16} color={colors.primary} />
+              <CheckSquare size={16} color={isCompleted ? "#9ca3af" : colors.primary} />
             ) : (
-              <Calendar size={16} color={colors.primary} />
+              <Calendar size={16} color={isCompleted ? "#9ca3af" : colors.primary} />
             )}
           </View>
           <View style={styles.actionContent}>
             <View style={styles.actionTitleRow}>
-              <Text style={[styles.actionText, { color: priorityColor }]} numberOfLines={1}>
+              <Text
+                style={[
+                  styles.actionText,
+                  { color: isCompleted ? '#9ca3af' : priorityColor },
+                  isCompleted && styles.completedText
+                ]}
+                numberOfLines={1}
+              >
                 {action.title}
               </Text>
               {/* Time display for events */}
               {action.type === 'event' && timeDisplay && (
-                <Text style={styles.timeText}>({timeDisplay})</Text>
+                <Text style={[styles.timeText, isCompleted && styles.completedText]}>
+                  ({timeDisplay})
+                </Text>
               )}
               {/* Delegate display */}
               {action.delegateName && (
-                <Text style={styles.delegateText}>(Delegated {action.delegateName})</Text>
+                <Text style={[styles.delegateText, isCompleted && { color: '#9ca3af' }]}>
+                  (Delegated {action.delegateName})
+                </Text>
               )}
             </View>
-            {action.isOverdue && action.originalDate && (
+            {action.isOverdue && action.originalDate && !isCompleted && (
               <Text style={styles.overdueText}>
                 (Overdue - {formatOverdueDate(action.originalDate)})
               </Text>
             )}
           </View>
           <View style={styles.valueContainer}>
-            <Text style={styles.valueText}>+{Math.round(action.depositValue)}</Text>
+            <Text style={[styles.valueText, isCompleted && { color: '#9ca3af' }]}>
+              +{Math.round(action.depositValue)}
+            </Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -754,5 +792,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  completedRow: {
+    opacity: 0.7,
+  },
+  completedText: {
+    textDecorationLine: 'line-through',
   },
 });
