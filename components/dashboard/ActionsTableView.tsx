@@ -15,6 +15,7 @@ import { calculateTaskPoints } from '@/lib/taskUtils';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import { ActFilter } from './ActFilterButtons';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { formatLocalDate } from '@/lib/dateUtils';
 
 interface ActionItem {
   id: string;
@@ -136,7 +137,7 @@ export function ActionsTableView({
       const endStr = end.toISOString().split('T')[0];
 
       // Get today's date for filtering past events
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = formatLocalDate(new Date());
 
       let tasksData: any[] = [];
 
@@ -162,7 +163,7 @@ export function ActionsTableView({
       } else if (filter === 'event') {
         // Events show from TODAY through end of selected period
         // Never show past events (start_date < today)
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = formatLocalDate(new Date());
 
         let query = supabase
           .from('0008-ap-tasks')
@@ -184,7 +185,7 @@ export function ActionsTableView({
         tasksData = data || [];
       } else {
         // Combined view: tasks + events with different filtering rules
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = formatLocalDate(new Date());
 
         // Tasks: can be overdue, filtered by due_date
         let tasksQuery = supabase
@@ -517,10 +518,7 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
               )}
               {/* Delegate display */}
               {action.delegateName && (
-                <View style={styles.delegateContainer}>
-                  <Text style={styles.delegateLabel}>Delegated</Text>
-                  <Text style={styles.delegateName}>{action.delegateName}</Text>
-                </View>
+                <Text style={styles.delegateText}>(Delegated {action.delegateName})</Text>
               )}
             </View>
             {action.isOverdue && action.originalDate && (
@@ -700,20 +698,10 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '400',
   },
-  delegateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  delegateLabel: {
+  delegateText: {
     fontSize: 12,
     color: '#3b82f6',
     fontWeight: '500',
-  },
-  delegateName: {
-    fontSize: 12,
-    color: '#3b82f6',
-    fontWeight: '600',
   },
   valueContainer: {
     minWidth: 50,
