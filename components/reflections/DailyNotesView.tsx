@@ -13,6 +13,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import Autolink from 'react-native-autolink';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
@@ -721,7 +722,12 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                     </View>
 
                     {item.content ? (
-                      <Text style={[styles.noteContent, { color: colors.text }]}>{item.content}</Text>
+                      <Autolink
+                        text={item.content}
+                        linkStyle={{ color: '#3b82f6', textDecorationLine: 'underline' }}
+                        onPress={(url) => Linking.openURL(url)}
+                        style={[styles.noteContent, { color: colors.text }]}
+                      />
                     ) : null}
 
                     {imageAttachments.length > 0 && (

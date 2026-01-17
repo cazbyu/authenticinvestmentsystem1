@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import {
   ClipboardList,
@@ -15,6 +16,7 @@ import {
   Clock,
   X,
 } from 'lucide-react-native';
+import Autolink from 'react-native-autolink';
 import { useTheme } from '@/contexts/ThemeContext';
 import { TimePickerDropdown } from '@/components/tasks/TimePickerDropdown';
 
@@ -113,9 +115,12 @@ export function NoteCard({
           { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
       >
-        <Text style={[styles.content, { color: colors.text }]}>
-          {truncateContent(note.content)}
-        </Text>
+        <Autolink
+          text={truncateContent(note.content)}
+          linkStyle={{ color: '#3b82f6', textDecorationLine: 'underline' }}
+          onPress={(url) => Linking.openURL(url)}
+          style={[styles.content, { color: colors.text }]}
+        />
 
         <View style={styles.actions}>
           <TouchableOpacity
