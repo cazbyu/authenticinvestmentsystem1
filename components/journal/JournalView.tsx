@@ -9,7 +9,7 @@ import { formatLocalDate } from '@/lib/dateUtils';
 
 interface JournalEntry {
   id: string;
-  date: string; // created_at (pending task) or completed_at (completed task) or withdrawn_at (withdrawal) or created_at (reflection)
+  date: string; // completed_at (task) or start_date (event) or withdrawn_at (withdrawal) or created_at (reflection)
   description: string;
   type: 'deposit' | 'withdrawal' | 'reflection';
   amount: number; // deposit points or withdrawal amount
@@ -19,7 +19,7 @@ interface JournalEntry {
   source_type: 'task' | 'withdrawal' | 'reflection';
   source_data?: any;
   linked_count?: number; // count of linked actions/reflections
-  status?: 'completed' | 'pending'; // track active (pending) vs completed tasks
+  status?: 'completed'; // all tasks/events are completed
 }
 
 interface JournalViewProps {
@@ -99,7 +99,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         let runningBalance = 0;
         const chronological = [...cacheRef.current.data].reverse();
         chronological.forEach((e) => {
-          if (e.type === 'deposit' && e.status !== 'pending') runningBalance += e.amount;
+          if (e.type === 'deposit') runningBalance += e.amount;
           else if (e.type === 'withdrawal') runningBalance -= e.amount;
         });
         setTotalBalance(runningBalance);
@@ -139,26 +139,56 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       const journalEntries: JournalEntry[] = [];
 
       // ---------------------------------------------------------
-      // 1) Deposits = completed tasks
+      // 1a) Completed TASKS - use completed_at for date
       // ---------------------------------------------------------
-        let tasksQuery = supabase
+        let completedTasksQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
           .eq('user_id', user.id)
+          .eq('type', 'task')
           .eq('status', 'completed')
           .is('deleted_at', null)
+          .is('parent_task_id', null)
           .not('completed_at', 'is', null);
 
         if (dateFilter) {
-          tasksQuery = tasksQuery.gte('completed_at', dateFilter);
+          completedTasksQuery = completedTasksQuery.gte('completed_at', dateFilter);
         }
 
-        const { data: tasksData, error: tasksError } = await tasksQuery;
-        console.log('[JournalView] Completed tasks query result:', tasksData?.length || 0, 'tasks found for user', user.id);
-        if (tasksError) {
-          console.error('[JournalView] Tasks query error:', tasksError);
-          throw tasksError;
+        const { data: completedTasksData, error: completedTasksError } = await completedTasksQuery;
+        console.log('[JournalView] Completed TASKS query result:', completedTasksData?.length || 0, 'tasks found');
+        if (completedTasksError) {
+          console.error('[JournalView] Completed tasks query error:', completedTasksError);
+          throw completedTasksError;
         }
+
+      // ---------------------------------------------------------
+      // 1b) Completed EVENTS - use start_date for date
+      // ---------------------------------------------------------
+        let completedEventsQuery = supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+          .eq('user_id', user.id)
+          .eq('type', 'event')
+          .eq('status', 'completed')
+          .is('deleted_at', null)
+          .is('parent_task_id', null)
+          .not('completed_at', 'is', null);
+
+        if (dateFilter) {
+          completedEventsQuery = completedEventsQuery.gte('start_date', dateFilter);
+        }
+
+        const { data: completedEventsData, error: completedEventsError } = await completedEventsQuery;
+        console.log('[JournalView] Completed EVENTS query result:', completedEventsData?.length || 0, 'events found');
+        if (completedEventsError) {
+          console.error('[JournalView] Completed events query error:', completedEventsError);
+          throw completedEventsError;
+        }
+
+        // Combine tasks and events data for processing
+        const tasksData = [...(completedTasksData || []), ...(completedEventsData || [])];
+        const tasksError = completedTasksError || completedEventsError;
 
         if (tasksData && tasksData.length) {
           const taskIds = tasksData.map((t: any) => t.id);
@@ -271,9 +301,12 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
             const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
             const points = calculateTaskPoints(t, roles, domains, goals);
 
+            // Use completed_at for tasks, start_date for events
+            const displayDate = t.type === 'event' ? (t.start_date || t.completed_at) : t.completed_at;
+
             journalEntries.push({
               id: t.id,
-              date: t.completed_at, // <-- completed_at for tasks
+              date: displayDate,
               description: t.title,
               type: 'deposit',
               amount: points,
@@ -283,151 +316,6 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
               source_type: 'task',
               source_data,
               status: 'completed',
-            });
-          }
-        }
-
-      // ---------------------------------------------------------
-      // 1b) Pending Tasks (active deposits)
-      // ---------------------------------------------------------
-        let pendingTasksQuery = supabase
-          .from('0008-ap-tasks')
-          .select('id, title, type, status, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id, created_at')
-          .eq('user_id', user.id)
-          .eq('status', 'pending')
-          .is('deleted_at', null);
-
-        if (dateFilter) {
-          pendingTasksQuery = pendingTasksQuery.gte('created_at', dateFilter);
-        }
-
-        const { data: pendingTasksData, error: pendingTasksError } = await pendingTasksQuery;
-        console.log('[JournalView] Pending tasks query result:', pendingTasksData?.length || 0, 'tasks found for user', user.id);
-        if (pendingTasksError) {
-          console.error('[JournalView] Pending tasks query error:', pendingTasksError);
-          throw pendingTasksError;
-        }
-
-        if (pendingTasksData && pendingTasksData.length) {
-          const pendingTaskIds = pendingTasksData.map((t: any) => t.id);
-
-          const [
-            pendingRolesRes,
-            pendingDomainsRes,
-            pendingKeyRelsRes,
-            pendingNotesRes,
-            pendingGoalsRes,
-          ] = await Promise.all([
-            supabase
-              .from('0008-ap-universal-roles-join')
-              .select('parent_id, role_id, role:0008-ap-roles(id,label)')
-              .in('parent_id', pendingTaskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-domains-join')
-              .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
-              .in('parent_id', pendingTaskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-key-relationships-join')
-              .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
-              .in('parent_id', pendingTaskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-notes-join')
-              .select('parent_id, note:0008-ap-notes(id,content,created_at)')
-              .in('parent_id', pendingTaskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-goals-join')
-              .select(`
-                parent_id,
-                goal_type,
-                twelve_wk_goal_id,
-                custom_goal_id,
-                tw:0008-ap-goals-12wk(id,title,status),
-                cg:0008-ap-goals-custom(id,title,status)
-              `)
-              .in('parent_id', pendingTaskIds)
-              .eq('parent_type', 'task'),
-          ]);
-
-          const pendingTaskRoles = pendingRolesRes.data ?? [];
-          const pendingTaskDomains = pendingDomainsRes.data ?? [];
-          const pendingTaskKeyRels = pendingKeyRelsRes.data ?? [];
-          const pendingTaskNotes = pendingNotesRes.data ?? [];
-          const pendingTaskGoals = pendingGoalsRes.data ?? [];
-
-          // scope filter for pending tasks
-          let allowedPendingTaskIds = new Set(pendingTaskIds);
-          if (scope.type !== 'user' && scope.id) {
-            if (scope.type === 'role') {
-              allowedPendingTaskIds = new Set(
-                pendingTaskRoles
-                  .filter((r: any) => r.role?.id === scope.id || r.role_id === scope.id)
-                  .map((r: any) => r.parent_id)
-              );
-            } else if (scope.type === 'domain') {
-              allowedPendingTaskIds = new Set(
-                pendingTaskDomains
-                  .filter((d: any) => d.domain?.id === scope.id || d.domain_id === scope.id)
-                  .map((d: any) => d.parent_id)
-              );
-            } else if (scope.type === 'key_relationship') {
-              allowedPendingTaskIds = new Set(
-                pendingTaskKeyRels
-                  .filter((k: any) => k.key_relationship?.id === scope.id || k.key_relationship_id === scope.id)
-                  .map((k: any) => k.parent_id)
-              );
-            }
-          }
-
-          const pendingRolesByTask = groupByParentId(pendingTaskRoles);
-          const pendingDomainsByTask = groupByParentId(pendingTaskDomains);
-          const pendingKeyRelsByTask = groupByParentId(pendingTaskKeyRels);
-          const pendingNotesByTask = groupByParentId(pendingTaskNotes);
-          const pendingGoalsByTask = groupByParentId(pendingTaskGoals);
-
-          for (const t of pendingTasksData) {
-            if (!allowedPendingTaskIds.has(t.id)) continue;
-
-            const roles = (pendingRolesByTask.get(t.id) ?? []).map((r: any) => r.role).filter(Boolean);
-            const domains = (pendingDomainsByTask.get(t.id) ?? []).map((d: any) => d.domain).filter(Boolean);
-            const keyRelationships = (pendingKeyRelsByTask.get(t.id) ?? [])
-              .map((k: any) => k.key_relationship)
-              .filter(Boolean);
-            const notes = (pendingNotesByTask.get(t.id) ?? []).map((n: any) => n.note).filter(Boolean);
-            const goals = (pendingGoalsByTask.get(t.id) ?? []).map((g: any) => {
-              if (g.goal_type === 'twelve_wk_goal' && g.tw) {
-                const goal = g.tw;
-                if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                  return null;
-                }
-                return { ...goal, goal_type: '12week' };
-              } else if (g.goal_type === 'custom_goal' && g.cg) {
-                const goal = g.cg;
-                if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                  return null;
-                }
-                return { ...goal, goal_type: 'custom' };
-              }
-              return null;
-            }).filter(Boolean);
-
-            const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
-
-            journalEntries.push({
-              id: t.id,
-              date: t.created_at, // use created_at for pending tasks
-              description: `${t.title} (active)`,
-              type: 'deposit',
-              amount: 0, // no points until completion
-              balance: 0,
-              has_notes: notes.length > 0,
-              source_id: t.id,
-              source_type: 'task',
-              source_data,
-              status: 'pending',
             });
           }
         }
@@ -757,21 +645,19 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       });
 
       // compute balance across time (oldest->newest), then assign (newest-first view)
-      // NOTE: Reflections and pending tasks don't affect balance
+      // NOTE: Reflections don't affect balance
       let runningBalance = 0;
       const chronological = [...journalEntries].reverse();
       chronological.forEach((e) => {
-        if (e.type === 'deposit' && e.status !== 'pending') runningBalance += e.amount;
+        if (e.type === 'deposit') runningBalance += e.amount;
         else if (e.type === 'withdrawal') runningBalance -= e.amount;
-        // reflections and pending tasks don't affect balance
       });
 
       let current = runningBalance;
       journalEntries.forEach((e) => {
         e.balance = current;
-        if (e.type === 'deposit' && e.status !== 'pending') current -= e.amount;
+        if (e.type === 'deposit') current -= e.amount;
         else if (e.type === 'withdrawal') current += e.amount;
-        // reflections and pending tasks don't affect balance
       });
 
       // ---------------------------------------------------------
@@ -1074,11 +960,11 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
                   <FileText size={14} color="#6b7280" />
                 ) : null}
               </View>
-              <Text style={[styles.cellImpact, entry.type === 'deposit' && entry.status !== 'pending' && { color: '#16a34a' }, entry.type === 'withdrawal' && { color: '#dc2626' }]}>
-                {entry.status === 'pending' ? '—' : entry.type === 'deposit' ? `+${entry.amount.toFixed(1)}` : entry.type === 'withdrawal' ? `-${entry.amount.toFixed(1)}` : '—'}
+              <Text style={[styles.cellImpact, entry.type === 'deposit' && { color: '#16a34a' }, entry.type === 'withdrawal' && { color: '#dc2626' }]}>
+                {entry.type === 'deposit' ? `+${entry.amount.toFixed(1)}` : entry.type === 'withdrawal' ? `-${entry.amount.toFixed(1)}` : '—'}
               </Text>
               <Text style={[styles.cellBalance, { color: getBalanceColor(entry.balance) }]}>
-                {entry.type === 'reflection' || entry.status === 'pending' ? '—' : formatBalance(entry.balance)}
+                {entry.type === 'reflection' ? '—' : formatBalance(entry.balance)}
               </Text>
             </TouchableOpacity>
           ))
