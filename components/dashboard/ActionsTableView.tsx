@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -96,8 +96,11 @@ export function ActionsTableView({
   const { colors } = useTheme();
   const [dateGroups, setDateGroups] = useState<DateWithActions[]>([]);
   const [loading, setLoading] = useState(true);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
+    // Reset initial load flag when filter/period/userId changes
+    isInitialLoad.current = true;
     loadActions();
   }, [filter, period, userId]);
 
@@ -105,7 +108,7 @@ export function ActionsTableView({
   useEffect(() => {
     const handleRefresh = () => {
       console.log('[ActionsTableView] Event received, refreshing...');
-      loadActions();
+      loadActions(true); // silent refresh - don't show loading state
     };
 
     eventBus.on(EVENTS.TASK_UPDATED, handleRefresh);
@@ -121,17 +124,21 @@ export function ActionsTableView({
     };
   }, []);
 
-  const loadActions = async () => {
-    console.log('[ActionsTableView] loadActions called with:', { userId, filter, period });
+  const loadActions = async (silent = false) => {
+    console.log('[ActionsTableView] loadActions called with:', { userId, filter, period, silent });
 
     if (!userId) {
       console.log('[ActionsTableView] No userId provided, skipping load');
       setLoading(false);
+      isInitialLoad.current = false;
       return;
     }
 
     try {
-      setLoading(true);
+      // Only show loading state on initial load or explicit user refresh
+      if (!silent && isInitialLoad.current) {
+        setLoading(true);
+      }
       const supabase = getSupabaseClient();
       const { start, end } = getDateRange(period);
       const startStr = start.toISOString().split('T')[0];
@@ -377,7 +384,10 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
       console.error('[ActionsTableView] Error loading actions:', error);
       setDateGroups([]);
     } finally {
-      setLoading(false);
+      if (!silent && isInitialLoad.current) {
+        setLoading(false);
+      }
+      isInitialLoad.current = false;
     }
   };
 
