@@ -121,11 +121,10 @@ export function ReflectionTableView({
   const formatDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    const monthStr = date.toLocaleDateString('en-US', { month: 'short' });
+    const dayNum = date.getDate();
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+    return `${monthStr} ${dayNum} (${weekday})`;
   };
 
   const getIconForItemType = (type: ItemDetail['type']) => {

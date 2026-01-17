@@ -396,11 +396,10 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
 
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    const monthStr = date.toLocaleDateString('en-US', { month: 'short' });
+    const dayNum = date.getDate();
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+    return `${monthStr} ${dayNum} (${weekday})`;
   };
 
   const formatOverdueDate = (dateString: string) => {
@@ -660,7 +659,7 @@ const styles = StyleSheet.create({
   headerDate: {
     fontSize: 14,
     fontWeight: '600',
-    width: 120,
+    width: 90,
   },
   headerActions: {
     fontSize: 14,
@@ -681,7 +680,7 @@ const styles = StyleSheet.create({
     minHeight: 60,
   },
   dateColumn: {
-    width: 120,
+    width: 90,
     justifyContent: 'center',
   },
   dateText: {

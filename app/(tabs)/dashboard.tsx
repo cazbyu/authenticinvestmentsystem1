@@ -25,7 +25,6 @@ import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/Dash
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 import { ReflectFilterButtons } from '@/components/dashboard/ReflectFilterButtons';
-import { ActFilterButtons } from '@/components/dashboard/ActFilterButtons';
 import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
@@ -41,7 +40,6 @@ export default function Dashboard() {
   const [journalPeriodScore, setJournalPeriodScore] = useState<number>(0);
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
   const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('all');
-  const [actFilter, setActFilter] = useState<'all' | 'task' | 'event'>('all');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -1107,12 +1105,6 @@ export default function Dashboard() {
                 onFilterChange={setReflectFilter}
               />
             )}
-            {activeTab === 'act' && (
-              <ActFilterButtons
-                activeFilter={actFilter}
-                onFilterChange={setActFilter}
-              />
-            )}
           </View>
         </View>
 
@@ -1192,7 +1184,7 @@ export default function Dashboard() {
           />
         ) : activeTab === 'act' ? (
           <ActionsTableView
-            filter={actFilter}
+            filter={'all'}
             period={selectedPeriod}
             userId={userId}
             onRefresh={() => {

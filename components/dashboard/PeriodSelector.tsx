@@ -12,8 +12,7 @@ export function PeriodSelector({ selectedPeriod, onPeriodChange, score }: Period
   const periods: { value: TimePeriod; label: string }[] = [
     { value: 'today', label: 'Today' },
     { value: 'week', label: 'Week' },
-    { value: 'month', label: 'Month' },
-    { value: 'all', label: 'All' }
+    { value: 'month', label: 'Month' }
   ];
 
   const formatScore = (value: number) => {
