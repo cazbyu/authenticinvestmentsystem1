@@ -172,7 +172,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     endTime: '',
     withdrawalDate: formatLocalDate(new Date()),
     amount: '',
-    isAnytime: false,
+    isAnytime: true, // Default to Anytime for tasks
     isUrgent: false,
     isImportant: false,
     isGoal: false,
@@ -329,6 +329,8 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         // Set pre-selected type
         if (preSelectedType === 'task' || preSelectedType === 'event') {
           updates.type = preSelectedType;
+          // Set isAnytime based on type: true for tasks, false for events
+          updates.isAnytime = preSelectedType === 'task';
         } else if (preSelectedType === 'reflection') {
           updates.type = 'reflection';
           updates.reflectionMode = 'reflection';
@@ -1566,12 +1568,18 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   updates.notes = prev.content || prev.notes;
                 }
 
+                // Set smart defaults when switching to task type
+                if (type === 'task' && prev.type !== 'task' && mode !== 'edit') {
+                  updates.isAnytime = true; // Tasks default to Anytime
+                }
+
                 // Set smart defaults when switching to event type
                 if (type === 'event' && prev.type !== 'event' && mode !== 'edit') {
                   const defaultStart = getDefaultStartTime();
                   updates.startTime = defaultStart;
                   updates.endTime = defaultStart;
                   updates.endDate = prev.startDate;
+                  updates.isAnytime = false; // Events require specific times
                 }
 
                 return { ...prev, ...updates };
