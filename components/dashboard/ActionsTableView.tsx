@@ -141,8 +141,8 @@ export function ActionsTableView({
       }
       const supabase = getSupabaseClient();
       const { start, end } = getDateRange(period);
-      const startStr = start.toISOString().split('T')[0];
-      const endStr = end.toISOString().split('T')[0];
+      const startStr = formatLocalDate(start);
+      const endStr = formatLocalDate(end);
 
       // Get today's date for filtering past events
       const todayStr = formatLocalDate(new Date());
@@ -316,7 +316,7 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
 
         const now = new Date();
         now.setHours(0, 0, 0, 0);
-        const todayStr = now.toISOString().split('T')[0];
+        const todayStr = formatLocalDate(now);
 
         const actionsWithScores: ActionItem[] = tasksData.map((task) => {
           const roles = rolesByTask.get(task.id) || [];

@@ -39,7 +39,10 @@ export const DepositIdeaCard = React.forwardRef<View, DepositIdeaCardProps>(
     // Formats the created date string
     const formatCreatedDate = (date?: string) => {
       if (!date) return "";
-      const d = new Date(date);
+      // Parse as local date to avoid timezone shift
+      const dateOnly = date.split('T')[0];
+      const [year, month, day] = dateOnly.split('-').map(Number);
+      const d = new Date(year, month - 1, day);
       return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     };
 

@@ -1,5 +1,6 @@
 // lib/taskUtils.ts
 import { SupabaseClient } from '@supabase/supabase-js';
+import { formatLocalDate } from './dateUtils';
 
 /**
  * CRITICAL: This is the CENTRALIZED point calculation function.
@@ -650,7 +651,7 @@ export async function calculateTotalGoalProgress(
     }
 
     // Get current date to filter out future weeks
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatLocalDate(new Date());
     const currentWeekNumber = timelineWeeks.find(w => w.week_start <= today && w.week_end >= today)?.week_number;
     const maxWeekNumber = currentWeekNumber || timelineWeeks[timelineWeeks.length - 1].week_number;
 
@@ -851,7 +852,7 @@ export async function calculateAuthenticScoreForPeriod(
       const now = new Date();
       const days = dateRange === 'week' ? 7 : 30;
       const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-      startDate = since.toISOString().split('T')[0];
+      startDate = formatLocalDate(since);
     }
 
     // 1. Completed tasks (deposits) with optional date filter

@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase';
+import { formatLocalDate } from './dateUtils';
 
 interface Task {
   id: string;
@@ -18,7 +19,7 @@ export async function recommendTasks(userId: string, limit: number = 3): Promise
 
     const topRoleIds = await getTopRoles(userId);
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatLocalDate(new Date());
 
     const { data: tasks, error } = await supabase
       .from('0008-ap-tasks')

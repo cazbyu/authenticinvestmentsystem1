@@ -5,6 +5,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
 import { fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
+import { formatLocalDate } from '@/lib/dateUtils';
 
 interface JournalEntry {
   id: string;
@@ -73,12 +74,12 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     if (dateRange === 'today') {
       const todayStart = new Date(now);
       todayStart.setHours(0, 0, 0, 0);
-      return todayStart.toISOString().split('T')[0];
+      return formatLocalDate(todayStart);
     } else if (dateRange === 'week') {
       days = 7;
     }
     const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    return since.toISOString().split('T')[0];
+    return formatLocalDate(since);
   };
 
   const fetchJournalEntries = async (forceRefresh: boolean = false) => {

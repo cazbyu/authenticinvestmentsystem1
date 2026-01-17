@@ -1,3 +1,5 @@
+import { formatLocalDate } from './dateUtils';
+
 export interface ParsedRRule {
   freq: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
   interval: number;
@@ -105,7 +107,7 @@ export function calculateNextOccurrence(
   const maxIterations = 1000;
 
   while (currentDate <= endDate && iterations < maxIterations) {
-    const dateStr = currentDate.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(currentDate);
 
     if (currentDate >= today && !exceptions.has(dateStr)) {
       return currentDate;
@@ -218,7 +220,7 @@ export function generateOccurrenceDates(
   let count = 0;
 
   while (currentDate <= endDate && count < maxCount && (!parsed.count || count < parsed.count)) {
-    const dateStr = currentDate.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(currentDate);
 
     if (!exceptions.has(dateStr)) {
       occurrences.push(new Date(currentDate));

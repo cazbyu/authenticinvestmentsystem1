@@ -23,6 +23,7 @@ import { calculateTaskPoints } from '@/lib/taskUtils';
 import { recommendTasks } from '@/lib/recommendTasks';
 import { RescheduleModal } from './RescheduleModal';
 import { DelegateModal } from './DelegateModal';
+import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
 
 interface Task {
   id: string;
@@ -78,7 +79,7 @@ export function TasksSection({
       setLoading(true);
       const supabase = getSupabaseClient();
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatLocalDate(new Date());
 
       let query = supabase
         .from('0008-ap-tasks')
@@ -307,7 +308,7 @@ export function TasksSection({
           .from('0008-ap-tasks')
           .update({
             status: 'cancelled',
-            deleted_at: new Date().toISOString(),
+            deleted_at: toLocalISOString(new Date()),
           })
           .in('id', tasksToCancel);
 

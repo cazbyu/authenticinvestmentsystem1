@@ -8,6 +8,7 @@ import {
   DailyAggregationData,
   GoalActionSummary,
 } from '@/types/reflections';
+import { formatLocalDate } from './dateUtils';
 
 /**
  * Get week date range using database function
@@ -381,7 +382,7 @@ export const fetchDailyAggregationData = async (
     }
 
     const withdrawalDate = new Date(withdrawal.withdrawn_at);
-    const withdrawalDateString = withdrawalDate.toISOString().split('T')[0];
+    const withdrawalDateString = formatLocalDate(withdrawalDate);
     return withdrawalDateString === normalizedTargetDate;
   });
 

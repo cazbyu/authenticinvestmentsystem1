@@ -1,5 +1,5 @@
 import { getSupabaseClient } from './supabase';
-import { toLocalISOString } from '@/lib/dateUtils';
+import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
 import { calculateTaskPoints } from './taskUtils';
 
 export interface DailySpark {
@@ -315,7 +315,7 @@ export async function getBrainDumpItems(userId: string): Promise<BrainDumpItem[]
   const supabase = getSupabaseClient();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayDate = yesterday.toISOString().split('T')[0];
+  const yesterdayDate = formatLocalDate(yesterday);
 
   const { data, error } = await supabase
     .from('0008-ap-reflections')

@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { calculateAuthenticScoreForPeriod } from './taskUtils';
+import { formatLocalDate } from './dateUtils';
 
 export interface RoleStatistics {
   completedDeposits: number;
@@ -309,9 +310,9 @@ export async function getReflectionStatistics(
       .is('archived', false);
 
     if (startDate) {
-      reflectionsQuery = reflectionsQuery.gte('date', startDate.toISOString().split('T')[0]);
+      reflectionsQuery = reflectionsQuery.gte('date', formatLocalDate(startDate));
     }
-    reflectionsQuery = reflectionsQuery.lte('date', endDate.toISOString().split('T')[0]);
+    reflectionsQuery = reflectionsQuery.lte('date', formatLocalDate(endDate));
 
     const { data: reflections, error: reflectionsError } = await reflectionsQuery;
 

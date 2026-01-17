@@ -13,6 +13,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { RescheduleModal } from './RescheduleModal';
+import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
 
 interface Event {
   id: string;
@@ -61,7 +62,7 @@ export function ScheduledEvents({
       setLoading(true);
       const supabase = getSupabaseClient();
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatLocalDate(new Date());
 
       const { data, error } = await supabase
         .from('0008-ap-tasks')
@@ -193,7 +194,7 @@ export function ScheduledEvents({
           .from('0008-ap-tasks')
           .update({
             status: 'cancelled',
-            deleted_at: new Date().toISOString(),
+            deleted_at: toLocalISOString(new Date()),
           })
           .in('id', eventsToCancel);
 
