@@ -700,20 +700,28 @@ export default function Dashboard() {
   };
 
   const handleDeleteTask = async (task: Task) => {
+    console.log('[Dashboard] handleDeleteTask called for:', task.id, task.title);
+
     // Check if this is a recurring task
     if (task.recurrence_rule || task.is_virtual_occurrence) {
+      console.log('[Dashboard] Task is recurring, showing modal');
       setRecurringActionModal({ visible: true, task, actionType: 'delete' });
       return;
     }
 
     try {
+      console.log('[Dashboard] Performing soft delete for task:', task.id);
       // Optimistically remove the task from the list immediately
       setTasks(prevTasks => prevTasks.filter(t => t.id !== task.id));
 
       // Use the soft delete function from useGoals hook
       await deleteTask(task.id);
+      console.log('[Dashboard] Task soft deleted successfully');
+
+      // Emit event to notify other components
+      eventBus.emit(EVENTS.TASK_DELETED, { taskId: task.id });
     } catch (error) {
-      console.error('Error deleting task:', error);
+      console.error('[Dashboard] Error deleting task:', error);
       Alert.alert('Error', (error as Error).message || 'Failed to delete task');
       // Revert optimistic update on error
       fetchData();
@@ -1241,6 +1249,7 @@ export default function Dashboard() {
               }
             }}
             onDelete={async (taskId) => {
+              console.log('[Dashboard] onDelete called for taskId:', taskId);
               try {
                 const supabase = getSupabaseClient();
                 const { data: task } = await supabase
@@ -1248,11 +1257,17 @@ export default function Dashboard() {
                   .select('*')
                   .eq('id', taskId)
                   .single();
+                console.log('[Dashboard] Fetched task for deletion:', task);
                 if (task) {
                   await handleDeleteTask(task as Task);
+                  console.log('[Dashboard] Task deleted successfully');
+                  // Emit event to notify other components
+                  eventBus.emit(EVENTS.TASK_DELETED, { taskId });
+                  // Refresh score after deletion
+                  await refreshScore(true);
                 }
               } catch (error) {
-                console.error('Error deleting task:', error);
+                console.error('[Dashboard] Error deleting task:', error);
                 Alert.alert('Error', 'Failed to delete task');
               }
             }}

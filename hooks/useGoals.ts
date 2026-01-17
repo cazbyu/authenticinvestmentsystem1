@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '../lib/supabase';
 import { Alert } from 'react-native';
 import { generateCycleWeeks, formatLocalDate, parseLocalDate } from '../lib/dateUtils';
+import { eventBus, EVENTS } from '../lib/eventBus';
 
 /* ================================
  * DB TABLE / VIEW CONSTANTS (single source of truth)
@@ -656,9 +657,12 @@ export function useGoals(options: UseGoalsOptions = {}) {
 
       if (deleteError) throw deleteError;
 
-      console.log('Task soft deleted successfully:', taskId);
+      console.log('[useGoals] Task soft deleted successfully:', taskId);
+
+      // Emit event to notify other components
+      eventBus.emit(EVENTS.TASK_DELETED, { taskId });
     } catch (error) {
-      console.error('Error deleting task:', error);
+      console.error('[useGoals] Error deleting task:', error);
       throw error;
     }
   };

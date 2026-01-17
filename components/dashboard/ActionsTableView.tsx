@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { CheckSquare, Calendar, Check, UserCircle, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -448,34 +449,50 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
   };
 
   const handleDelete = (action: ActionItem) => {
-    Alert.alert(
-      'Delete Action',
-      `Are you sure you want to delete "${action.title}"?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            // Optimistic UI update - remove from list immediately
-            setDateGroups(prevGroups =>
-              prevGroups.map(group => ({
-                ...group,
-                actions: group.actions.filter(a => a.id !== action.id)
-              })).filter(group => group.actions.length > 0)
-            );
+    console.log('[ActionsTableView] handleDelete called for:', action.id, action.title);
 
-            // Then trigger the actual deletion
-            if (onDelete) {
-              onDelete(action.id);
-            }
+    const performDelete = () => {
+      console.log('[ActionsTableView] Performing delete for:', action.id);
+      // Optimistic UI update - remove from list immediately
+      setDateGroups(prevGroups =>
+        prevGroups.map(group => ({
+          ...group,
+          actions: group.actions.filter(a => a.id !== action.id)
+        })).filter(group => group.actions.length > 0)
+      );
+
+      // Then trigger the actual deletion
+      if (onDelete) {
+        console.log('[ActionsTableView] Calling onDelete callback');
+        onDelete(action.id);
+      } else {
+        console.warn('[ActionsTableView] No onDelete callback provided');
+      }
+    };
+
+    // Use platform-specific confirmation dialog
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(`Are you sure you want to delete "${action.title}"?`);
+      if (confirmed) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete Action',
+        `Are you sure you want to delete "${action.title}"?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
           },
-        },
-      ]
-    );
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: performDelete,
+          },
+        ]
+      );
+    }
   };
 
   const renderActionItem = (action: ActionItem) => {
