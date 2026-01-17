@@ -602,7 +602,7 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
 
   const renderDateRow = ({ item }: { item: DateWithActions }) => {
     return (
-      <TouchableOpacity
+      <View
         style={[
           styles.dateRow,
           {
@@ -610,7 +610,6 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
             borderBottomColor: colors.border,
           },
         ]}
-        activeOpacity={0.7}
       >
         <View style={styles.dateColumn}>
           <Text style={[styles.dateText, { color: colors.text }]}>
@@ -622,7 +621,7 @@ console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delega
             {item.actions.map((action) => renderActionItem(action))}
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
