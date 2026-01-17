@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { X, Repeat, Save, Trash2, Paperclip, Image as ImageIcon, File, Plus, Bold, Italic, List, ListOrdered, Edit } from 'lucide-react-native';
+import Autolink from 'react-native-autolink';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -776,7 +777,12 @@ export function ActionDetailsModal({ visible, task, onClose, onDelete, onEdit, o
                       return (
                       <View key={note.id} style={styles.noteItem}>
                         {hasContent && (
-                          <Text style={styles.noteContent}>{note.content}</Text>
+                          <Autolink
+                            text={note.content}
+                            linkStyle={{ color: '#3b82f6', textDecorationLine: 'underline' }}
+                            onPress={(url) => Linking.openURL(url)}
+                            style={styles.noteContent}
+                          />
                         )}
                         <Text style={styles.noteDate}>
                           {new Date(note.created_at).toLocaleDateString('en-US', {
