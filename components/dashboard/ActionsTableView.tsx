@@ -9,7 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { CheckSquare, Calendar, Check, UserCircle, Trash2, Circle } from 'lucide-react-native';
+import { CheckSquare, Calendar, Check, UserCircle, Trash2, Circle, List } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
@@ -22,7 +22,6 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSequence,
-  withDelay,
   runOnJS
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -47,9 +46,14 @@ interface ActionItem {
   isCompleted?: boolean;
 }
 
+interface TypeGroup {
+  type: 'event' | 'task';
+  items: ActionItem[];
+}
+
 interface DateSection {
   title: string;
-  data: ActionItem[];
+  data: TypeGroup[];
 }
 
 interface ActionsTableViewProps {
@@ -66,27 +70,26 @@ interface ActionsTableViewProps {
 function getDateRange(period: TimePeriod): { start: Date; end: Date } {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  const past = new Date('1900-01-01');
 
   switch (period) {
     case 'today':
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
-      return { start: past, end: todayEnd };
+      return { start: now, end: todayEnd };
 
     case 'week':
       const weekEnd = new Date(now);
       weekEnd.setDate(now.getDate() + 6);
       weekEnd.setHours(23, 59, 59, 999);
-      return { start: past, end: weekEnd };
+      return { start: now, end: weekEnd };
 
     case 'month':
-      const monthEnd = new Date(now);
-      monthEnd.setDate(now.getDate() + 27);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       monthEnd.setHours(23, 59, 59, 999);
-      return { start: past, end: monthEnd };
+      return { start: now, end: monthEnd };
 
     case 'all':
+      const past = new Date('1900-01-01');
       const allEnd = new Date('2099-12-31');
       allEnd.setHours(23, 59, 59, 999);
       return { start: past, end: allEnd };
@@ -112,18 +115,15 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
 
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
-      // Only allow left swipe (negative translation)
       if (event.translationX < 0) {
         translateX.value = event.translationX;
       }
     })
     .onEnd((event) => {
       if (event.translationX < SWIPE_THRESHOLD) {
-        // Reveal actions
         translateX.value = withTiming(-ACTION_WIDTH * 2);
         runOnJS(setIsRevealed)(true);
       } else {
-        // Hide actions
         translateX.value = withTiming(0);
         runOnJS(setIsRevealed)(false);
       }
@@ -140,7 +140,6 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
 
   return (
     <View style={styles.swipeContainer}>
-      {/* Hidden Action Buttons */}
       <View style={styles.hiddenActionsContainer}>
         <TouchableOpacity
           style={[styles.hiddenActionButton, styles.delegateButton]}
@@ -164,7 +163,6 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
         </TouchableOpacity>
       </View>
 
-      {/* Swipeable Content */}
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[animatedStyle]}>
           {children}
@@ -174,52 +172,58 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
   );
 }
 
-// Floating Points Animation Component
-interface FloatingPointsProps {
+// Ghost Points Animation Component
+interface GhostPointsProps {
   points: number;
-  trigger: boolean;
   isCompleted: boolean;
+  triggerTimestamp: number;
 }
 
-function FloatingPoints({ points, trigger, isCompleted }: FloatingPointsProps) {
-  const opacity = useSharedValue(0);
+function GhostPoints({ points, isCompleted, triggerTimestamp }: GhostPointsProps) {
+  const opacity = useSharedValue(isCompleted ? 0.5 : 0);
   const translateY = useSharedValue(0);
+  const scale = useSharedValue(1);
 
   useEffect(() => {
-    if (trigger && isCompleted) {
-      // Reset
+    if (isCompleted && triggerTimestamp > 0) {
+      // Reset for new animation
       opacity.value = 0;
       translateY.value = 0;
+      scale.value = 1;
 
-      // Animate: fade in, move up, fade out
+      // Animate: fade in, float up, scale slightly, then settle to faint
       opacity.value = withSequence(
         withTiming(1, { duration: 200 }),
-        withDelay(800, withTiming(0, { duration: 400 }))
+        withTiming(0.5, { duration: 300 })
       );
 
       translateY.value = withSequence(
-        withTiming(-20, { duration: 1000 })
+        withTiming(-25, { duration: 600 })
+      );
+
+      scale.value = withSequence(
+        withTiming(1.2, { duration: 300 }),
+        withTiming(1, { duration: 300 })
       );
     } else if (!isCompleted) {
-      // Hide immediately when unchecked
-      opacity.value = 0;
+      // Hide when unchecked
+      opacity.value = withTiming(0, { duration: 200 });
       translateY.value = 0;
+      scale.value = 1;
     }
-  }, [trigger, isCompleted]);
+  }, [isCompleted, triggerTimestamp]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
+    transform: [
+      { translateY: translateY.value },
+      { scale: scale.value }
+    ],
   }));
 
-  // Only render if completed (for the brief animation moment)
-  if (!isCompleted) {
-    return null;
-  }
-
   return (
-    <Animated.View style={[styles.floatingPointsContainer, animatedStyle]}>
-      <Text style={styles.floatingPointsText}>
+    <Animated.View style={[styles.ghostPointsContainer, animatedStyle]}>
+      <Text style={styles.ghostPointsText}>
         +{Math.round(points)}
       </Text>
     </Animated.View>
@@ -296,13 +300,9 @@ export function ActionsTableView({
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
-          .is('parent_task_id', null);
-
-        if (period === 'today') {
-          query = query.lte('due_date', endStr);
-        } else {
-          query = query.lte('due_date', endStr);
-        }
+          .is('parent_task_id', null)
+          .gte('due_date', startStr)
+          .lte('due_date', endStr);
 
         query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
@@ -317,11 +317,8 @@ export function ActionsTableView({
           .eq('type', 'event')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', todayStr);
-
-        if (period !== 'all') {
-          query = query.lte('start_date', endStr);
-        }
+          .gte('start_date', startStr)
+          .lte('start_date', endStr);
 
         query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
@@ -335,7 +332,9 @@ export function ActionsTableView({
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
-          .is('parent_task_id', null);
+          .is('parent_task_id', null)
+          .gte('due_date', startStr)
+          .lte('due_date', endStr);
 
         let eventsQuery = supabase
           .from('0008-ap-tasks')
@@ -344,12 +343,8 @@ export function ActionsTableView({
           .eq('type', 'event')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', todayStr);
-
-        if (period !== 'all') {
-          tasksQuery = tasksQuery.lte('due_date', endStr);
-          eventsQuery = eventsQuery.lte('start_date', endStr);
-        }
+          .gte('start_date', startStr)
+          .lte('start_date', endStr);
 
         tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
         eventsQuery = eventsQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
@@ -459,33 +454,53 @@ export function ActionsTableView({
           };
         });
 
-        const grouped = new Map<string, ActionItem[]>();
+        // Group by date first
+        const groupedByDate = new Map<string, ActionItem[]>();
 
         actionsWithScores.forEach((action) => {
           let displayDate = action.type === 'event' ? action.start_date : action.due_date;
 
           if (!displayDate) {
             displayDate = 'No Date';
-          } else if (action.isOverdue) {
-            displayDate = todayStr;
           }
 
-          if (!grouped.has(displayDate)) {
-            grouped.set(displayDate, []);
+          if (!groupedByDate.has(displayDate)) {
+            groupedByDate.set(displayDate, []);
           }
-          grouped.get(displayDate)!.push(action);
+          groupedByDate.get(displayDate)!.push(action);
         });
 
-        const sortedDates = Array.from(grouped.keys()).sort((a, b) => {
+        const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => {
           if (a === 'No Date') return 1;
           if (b === 'No Date') return -1;
           return a.localeCompare(b);
         });
 
-        const sectionsData: DateSection[] = sortedDates.map((date) => ({
-          title: date,
-          data: grouped.get(date) || [],
-        }));
+        // Create hierarchical structure: Date > Type Groups > Items
+        const sectionsData: DateSection[] = sortedDates.map((date) => {
+          const items = groupedByDate.get(date) || [];
+
+          // Separate events and tasks
+          const events = items.filter(item => item.type === 'event');
+          const tasks = items.filter(item => item.type === 'task');
+
+          const typeGroups: TypeGroup[] = [];
+
+          // Events always come first
+          if (events.length > 0) {
+            typeGroups.push({ type: 'event', items: events });
+          }
+
+          // Then tasks
+          if (tasks.length > 0) {
+            typeGroups.push({ type: 'task', items: tasks });
+          }
+
+          return {
+            title: date,
+            data: typeGroups,
+          };
+        });
 
         setSections(sectionsData);
       } else {
@@ -507,10 +522,10 @@ export function ActionsTableView({
 
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
-    const monthStr = date.toLocaleDateString('en-US', { month: 'short' });
+    const monthStr = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
     const dayNum = date.getDate();
-    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-    return `${monthStr} ${dayNum} (${weekday})`;
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+    return `${monthStr} ${dayNum} ${year} (${weekday})`;
   };
 
   const formatOverdueDate = (dateString: string) => {
@@ -552,13 +567,16 @@ export function ActionsTableView({
     setSections(prevSections =>
       prevSections.map(section => ({
         ...section,
-        data: section.data.map(a =>
-          a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
-        )
+        data: section.data.map(typeGroup => ({
+          ...typeGroup,
+          items: typeGroup.items.map(a =>
+            a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
+          )
+        }))
       }))
     );
 
-    // Trigger animation only when completing (not uncompleting)
+    // Trigger animation when completing
     if (newCompletedState) {
       setCompletionTriggers(prev => ({
         ...prev,
@@ -566,7 +584,6 @@ export function ActionsTableView({
       }));
     }
 
-    // Call the completion handler
     onComplete(action.id);
   };
 
@@ -581,7 +598,10 @@ export function ActionsTableView({
       setSections(prevSections =>
         prevSections.map(section => ({
           ...section,
-          data: section.data.filter(a => a.id !== action.id)
+          data: section.data.map(typeGroup => ({
+            ...typeGroup,
+            items: typeGroup.items.filter(a => a.id !== action.id)
+          })).filter(typeGroup => typeGroup.items.length > 0)
         })).filter(section => section.data.length > 0)
       );
 
@@ -622,118 +642,121 @@ export function ActionsTableView({
     </View>
   );
 
-  const renderItem = ({ item }: { item: ActionItem }) => {
-    const priorityColor = getPriorityColor(item);
-    const isCompleted = item.isCompleted;
+  const renderTypeHeader = (type: 'event' | 'task') => (
+    <View style={styles.typeHeader}>
+      {type === 'event' ? (
+        <>
+          <Calendar size={14} color="#6b7280" strokeWidth={2} />
+          <Text style={styles.typeHeaderText}>EVENTS</Text>
+        </>
+      ) : (
+        <>
+          <List size={14} color="#6b7280" strokeWidth={2} />
+          <Text style={styles.typeHeaderText}>TASKS</Text>
+        </>
+      )}
+    </View>
+  );
 
-    const startTimeFormatted = formatTime(item.start_time);
-    const endTimeFormatted = formatTime(item.end_time);
-    const timeDisplay = startTimeFormatted && endTimeFormatted
-      ? `${startTimeFormatted} - ${endTimeFormatted}`
-      : startTimeFormatted || null;
-
-    // Build metadata string
-    const metadataParts: string[] = [];
-    if (item.isOverdue && item.originalDate && !isCompleted) {
-      metadataParts.push(`Overdue - ${formatOverdueDate(item.originalDate)}`);
-    }
-    if (item.type === 'event' && timeDisplay) {
-      metadataParts.push(timeDisplay);
-    }
-    if (item.delegateName) {
-      metadataParts.push(`Delegated to ${item.delegateName}`);
-    }
-
+  const renderItem = ({ item: typeGroup }: { item: TypeGroup }) => {
     return (
-      <SwipeableRow
-        action={item}
-        onComplete={() => handleComplete(item)}
-        onDelegate={() => handleDelegate(item)}
-        onDelete={() => handleDelete(item)}
-        onPress={() => onTaskPress && onTaskPress(item.id)}
-      >
-        <View
-          style={[
-            styles.itemContainer,
-            {
-              backgroundColor: colors.background,
-              borderLeftColor: priorityColor,
-              borderLeftWidth: 4,
-            },
-            isCompleted && styles.completedItem
-          ]}
-        >
-          {/* Left: Checkbox - SEPARATE from body */}
-          <TouchableOpacity
-            onPress={() => handleComplete(item)}
-            style={styles.checkboxContainer}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            {isCompleted ? (
-              <View style={[styles.checkbox, styles.checkboxCompleted]}>
-                <Check size={16} color="#fff" strokeWidth={3} />
-              </View>
-            ) : (
-              <View style={[styles.checkbox, { borderColor: priorityColor }]}>
-                <Circle size={12} color={priorityColor} strokeWidth={0} fill={priorityColor} opacity={0.2} />
-              </View>
-            )}
-          </TouchableOpacity>
+      <View>
+        {renderTypeHeader(typeGroup.type)}
+        {typeGroup.items.map((item) => {
+          const priorityColor = getPriorityColor(item);
+          const isCompleted = item.isCompleted;
 
-          {/* Center: Content - Tappable to open modal */}
-          <TouchableOpacity
-            style={styles.contentContainer}
-            onPress={() => onTaskPress && onTaskPress(item.id)}
-            activeOpacity={0.7}
-          >
-            {/* Title Row */}
-            <View style={styles.titleRow}>
-              {/* Type Icon */}
-              {item.type === 'task' ? (
-                <CheckSquare size={16} color={isCompleted ? "#9ca3af" : colors.primary} strokeWidth={2} />
-              ) : (
-                <Calendar size={16} color={isCompleted ? "#9ca3af" : colors.primary} strokeWidth={2} />
-              )}
+          const startTimeFormatted = formatTime(item.start_time);
+          const endTimeFormatted = formatTime(item.end_time);
+          const timeDisplay = startTimeFormatted && endTimeFormatted
+            ? `${startTimeFormatted} - ${endTimeFormatted}`
+            : startTimeFormatted || null;
 
-              {/* Title */}
-              <Text
+          const metadataParts: string[] = [];
+          if (item.isOverdue && item.originalDate && !isCompleted) {
+            metadataParts.push(`Overdue - ${formatOverdueDate(item.originalDate)}`);
+          }
+          if (item.type === 'event' && timeDisplay) {
+            metadataParts.push(timeDisplay);
+          }
+          if (item.delegateName) {
+            metadataParts.push(`Delegated to ${item.delegateName}`);
+          }
+
+          return (
+            <SwipeableRow
+              key={item.id}
+              action={item}
+              onComplete={() => handleComplete(item)}
+              onDelegate={() => handleDelegate(item)}
+              onDelete={() => handleDelete(item)}
+              onPress={() => onTaskPress && onTaskPress(item.id)}
+            >
+              <View
                 style={[
-                  styles.titleText,
-                  { color: isCompleted ? '#9ca3af' : priorityColor },
-                  isCompleted && styles.completedText
+                  styles.itemContainer,
+                  {
+                    backgroundColor: colors.background,
+                    borderLeftColor: priorityColor,
+                    borderLeftWidth: 4,
+                  },
+                  isCompleted && styles.completedItem
                 ]}
-                numberOfLines={2}
               >
-                {item.title}
-              </Text>
-            </View>
+                {/* Left: Checkbox */}
+                <TouchableOpacity
+                  onPress={() => handleComplete(item)}
+                  style={styles.checkboxContainer}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  {isCompleted ? (
+                    <View style={[styles.checkbox, styles.checkboxCompleted]}>
+                      <Check size={16} color="#fff" strokeWidth={3} />
+                    </View>
+                  ) : (
+                    <View style={[styles.checkbox, { borderColor: priorityColor }]}>
+                      <Circle size={12} color={priorityColor} strokeWidth={0} fill={priorityColor} opacity={0.2} />
+                    </View>
+                  )}
+                </TouchableOpacity>
 
-            {/* Metadata Row */}
-            {metadataParts.length > 0 && (
-              <Text style={[styles.metadataText, isCompleted && { color: '#9ca3af' }]}>
-                {metadataParts.join(' • ')}
-              </Text>
-            )}
-          </TouchableOpacity>
+                {/* Center: Content */}
+                <TouchableOpacity
+                  style={styles.contentContainer}
+                  onPress={() => onTaskPress && onTaskPress(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.titleText,
+                      { color: isCompleted ? '#9ca3af' : priorityColor },
+                      isCompleted && styles.completedText
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {item.title}
+                  </Text>
 
-          {/* Right: Points Area - Shows static points when completed, floating animation on completion */}
-          <View style={styles.pointsContainer}>
-            {/* Static points display for completed items */}
-            {isCompleted && (
-              <Text style={[styles.pointsText, { color: '#9ca3af' }]}>
-                +{Math.round(item.depositValue)}
-              </Text>
-            )}
+                  {metadataParts.length > 0 && (
+                    <Text style={[styles.metadataText, isCompleted && { color: '#9ca3af' }]}>
+                      {metadataParts.join(' • ')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
 
-            {/* Floating animation trigger */}
-            <FloatingPoints
-              points={item.depositValue}
-              trigger={!!completionTriggers[item.id]}
-              isCompleted={!!isCompleted}
-            />
-          </View>
-        </View>
-      </SwipeableRow>
+                {/* Right: Ghost Points */}
+                <View style={styles.pointsContainer}>
+                  <GhostPoints
+                    points={item.depositValue}
+                    isCompleted={!!isCompleted}
+                    triggerTimestamp={completionTriggers[item.id] || 0}
+                  />
+                </View>
+              </View>
+            </SwipeableRow>
+          );
+        })}
+      </View>
     );
   };
 
@@ -757,7 +780,7 @@ export function ActionsTableView({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SectionList
         sections={sections}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => `${item.type}-${index}`}
         renderSectionHeader={renderSectionHeader}
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
@@ -778,15 +801,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionHeader: {
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
   sectionHeaderText: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  typeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f9fafb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  typeHeaderText: {
+    fontSize: 11,
     fontWeight: '600',
-    textTransform: 'uppercase',
+    color: '#6b7280',
     letterSpacing: 0.5,
   },
   swipeContainer: {
@@ -848,13 +886,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
   titleText: {
-    flex: 1,
     fontSize: 15,
     fontWeight: '600',
     lineHeight: 20,
@@ -866,25 +898,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     lineHeight: 16,
-    paddingLeft: 24,
   },
   pointsContainer: {
     minWidth: 50,
     alignItems: 'flex-end',
-    position: 'relative',
+    justifyContent: 'center',
   },
-  pointsText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#16a34a',
+  ghostPointsContainer: {
+    alignItems: 'flex-end',
   },
-  floatingPointsContainer: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  floatingPointsText: {
-    fontSize: 20,
+  ghostPointsText: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#16a34a',
   },
