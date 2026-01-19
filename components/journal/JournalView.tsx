@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Flower2, Lightbulb, Sparkles, SquareCheck, Cactus } from 'lucide-react-native';
+import { Flower2, Lightbulb, Sparkles, SquareCheck, AlertTriangle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
@@ -855,7 +855,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     // Thorn (Challenge)
     if (entry.source_data?.daily_thorn) {
       return {
-        icon: Cactus,
+        icon: AlertTriangle,
         bgColor: '#f1f5f9',
         iconColor: '#475569',
       };
@@ -973,9 +973,15 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
 
   return (
     <View style={styles.container}>
-      {/* Time Period Selector */}
+      {/* Time Period Selector with Total Impact */}
       {showTimePeriodSelector && (
         <View style={styles.timePeriodContainer}>
+          <View style={styles.impactSection}>
+            <Text style={styles.impactLabel}>Total Impact:</Text>
+            <Text style={[styles.impactValue, { color: totalImpact >= 0 ? '#16a34a' : '#dc2626' }]}>
+              {totalImpact >= 0 ? '+' : ''}{totalImpact.toFixed(1)}
+            </Text>
+          </View>
           <View style={styles.timePeriodSelector}>
             <TouchableOpacity
               style={[
@@ -1029,14 +1035,6 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         </View>
       )}
 
-      {/* Header with Total Impact */}
-      <View style={styles.header}>
-        <Text style={styles.headerLabel}>Total Impact</Text>
-        <Text style={[styles.headerTotal, { color: totalImpact >= 0 ? '#16a34a' : '#dc2626' }]}>
-          {totalImpact >= 0 ? '+' : ''}{totalImpact.toFixed(1)}
-        </Text>
-      </View>
-
       {/* Feed */}
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -1071,12 +1069,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff'
   },
   timePeriodContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    alignItems: 'flex-end',
     backgroundColor: '#f8fafc',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+  },
+  impactSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  impactLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  impactValue: {
+    fontSize: 20,
+    fontWeight: '700',
   },
   timePeriodSelector: {
     flexDirection: 'row',
@@ -1104,26 +1118,6 @@ const styles = StyleSheet.create({
   },
   timePeriodButtonTextActive: {
     color: '#ffffff',
-  },
-  header: {
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    backgroundColor: '#f8fafc',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  headerLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  headerTotal: {
-    fontSize: 36,
-    fontWeight: '700',
   },
   sectionHeader: {
     backgroundColor: '#f8fafc',
