@@ -109,14 +109,23 @@ interface SwipeableRowProps {
 function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, children }: SwipeableRowProps) {
   const translateX = useSharedValue(0);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [isSwiping, setIsSwiping] = useState(false);
 
   const SWIPE_THRESHOLD = -80;
   const ACTION_WIDTH = 70;
+  const SWIPE_DETECTION_THRESHOLD = 10; // Minimum movement to consider it a swipe
 
   const panGesture = Gesture.Pan()
+    .onStart(() => {
+      runOnJS(setIsSwiping)(false);
+    })
     .onUpdate((event) => {
       if (event.translationX < 0) {
         translateX.value = event.translationX;
+        // Mark as swiping if moved more than threshold
+        if (Math.abs(event.translationX) > SWIPE_DETECTION_THRESHOLD) {
+          runOnJS(setIsSwiping)(true);
+        }
       }
     })
     .onEnd((event) => {
@@ -127,6 +136,12 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
         translateX.value = withTiming(0);
         runOnJS(setIsRevealed)(false);
       }
+    })
+    .onFinalize(() => {
+      // Reset swiping state after gesture finishes
+      setTimeout(() => {
+        setIsSwiping(false);
+      }, 150);
     });
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -137,6 +152,14 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
     translateX.value = withTiming(0);
     setIsRevealed(false);
   };
+
+  // Clone children and inject isSwiping prop
+  const childrenWithProps = React.Children.map(children, child => {
+    if (React.isValidElement(child)) {
+      return React.cloneElement(child as React.ReactElement<any>, { isSwiping });
+    }
+    return child;
+  });
 
   return (
     <View style={styles.swipeContainer}>
@@ -165,9 +188,105 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
 
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[animatedStyle]}>
-          {children}
+          {childrenWithProps}
         </Animated.View>
       </GestureDetector>
+    </View>
+  );
+}
+
+// Item Row Component
+interface ItemRowProps {
+  item: ActionItem;
+  priorityColor: string;
+  isCompleted: boolean;
+  metadataParts: string[];
+  onComplete: () => void;
+  onTaskPress: () => void;
+  completionTrigger: number;
+  colors: any;
+  isSwiping?: boolean;
+}
+
+function ItemRow({
+  item,
+  priorityColor,
+  isCompleted,
+  metadataParts,
+  onComplete,
+  onTaskPress,
+  completionTrigger,
+  colors,
+  isSwiping = false,
+}: ItemRowProps) {
+  const handlePress = () => {
+    // Prevent opening modal if currently swiping
+    if (!isSwiping) {
+      onTaskPress();
+    }
+  };
+
+  return (
+    <View
+      style={[
+        styles.itemContainer,
+        {
+          backgroundColor: colors.background,
+          borderLeftColor: priorityColor,
+          borderLeftWidth: 4,
+        },
+        isCompleted && styles.completedItem
+      ]}
+    >
+      {/* Left: Checkbox */}
+      <TouchableOpacity
+        onPress={onComplete}
+        style={styles.checkboxContainer}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        {isCompleted ? (
+          <View style={[styles.checkbox, styles.checkboxCompleted]}>
+            <Check size={16} color="#fff" strokeWidth={3} />
+          </View>
+        ) : (
+          <View style={[styles.checkbox, { borderColor: priorityColor }]}>
+            <Circle size={12} color={priorityColor} strokeWidth={0} fill={priorityColor} opacity={0.2} />
+          </View>
+        )}
+      </TouchableOpacity>
+
+      {/* Center: Content */}
+      <TouchableOpacity
+        style={styles.contentContainer}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
+        <Text
+          style={[
+            styles.titleText,
+            { color: isCompleted ? '#9ca3af' : priorityColor },
+            isCompleted && styles.completedText
+          ]}
+          numberOfLines={2}
+        >
+          {item.title}
+        </Text>
+
+        {metadataParts.length > 0 && (
+          <Text style={[styles.metadataText, isCompleted && { color: '#9ca3af' }]}>
+            {metadataParts.join(' • ')}
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Right: Ghost Points */}
+      <View style={styles.pointsContainer}>
+        <GhostPoints
+          points={item.depositValue}
+          isCompleted={!!isCompleted}
+          triggerTimestamp={completionTrigger}
+        />
+      </View>
     </View>
   );
 }
@@ -693,67 +812,16 @@ export function ActionsTableView({
               onDelete={() => handleDelete(item)}
               onPress={() => onTaskPress && onTaskPress(item.id)}
             >
-              <View
-                style={[
-                  styles.itemContainer,
-                  {
-                    backgroundColor: colors.background,
-                    borderLeftColor: priorityColor,
-                    borderLeftWidth: 4,
-                  },
-                  isCompleted && styles.completedItem
-                ]}
-              >
-                {/* Left: Checkbox */}
-                <TouchableOpacity
-                  onPress={() => handleComplete(item)}
-                  style={styles.checkboxContainer}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                >
-                  {isCompleted ? (
-                    <View style={[styles.checkbox, styles.checkboxCompleted]}>
-                      <Check size={16} color="#fff" strokeWidth={3} />
-                    </View>
-                  ) : (
-                    <View style={[styles.checkbox, { borderColor: priorityColor }]}>
-                      <Circle size={12} color={priorityColor} strokeWidth={0} fill={priorityColor} opacity={0.2} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                {/* Center: Content */}
-                <TouchableOpacity
-                  style={styles.contentContainer}
-                  onPress={() => onTaskPress && onTaskPress(item.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.titleText,
-                      { color: isCompleted ? '#9ca3af' : priorityColor },
-                      isCompleted && styles.completedText
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {item.title}
-                  </Text>
-
-                  {metadataParts.length > 0 && (
-                    <Text style={[styles.metadataText, isCompleted && { color: '#9ca3af' }]}>
-                      {metadataParts.join(' • ')}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                {/* Right: Ghost Points */}
-                <View style={styles.pointsContainer}>
-                  <GhostPoints
-                    points={item.depositValue}
-                    isCompleted={!!isCompleted}
-                    triggerTimestamp={completionTriggers[item.id] || 0}
-                  />
-                </View>
-              </View>
+              <ItemRow
+                item={item}
+                priorityColor={priorityColor}
+                isCompleted={isCompleted}
+                metadataParts={metadataParts}
+                onComplete={() => handleComplete(item)}
+                onTaskPress={() => onTaskPress && onTaskPress(item.id)}
+                completionTrigger={completionTriggers[item.id] || 0}
+                colors={colors}
+              />
             </SwipeableRow>
           );
         })}
