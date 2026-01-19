@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Flower2, Lightbulb, Sparkles, SquareCheck, Octagon as XOctagon, BookOpen } from 'lucide-react-native';
+import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
+import { SquareCheck, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';
 import { fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { formatLocalDate } from '@/lib/dateUtils';
+
+const roseImage = require('@/assets/images/rose-81.png');
+const thornImage = require('@/assets/images/thorn-81.png');
+const reflectionImage = require('@/assets/images/reflections-72.png');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface JournalEntry {
   id: string;
@@ -855,27 +860,24 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     // Rose (Beauty)
     if (entry.source_data?.daily_rose) {
       return {
-        icon: Flower2,
+        image: roseImage,
         bgColor: '#ffe4e6',
-        iconColor: '#e11d48',
       };
     }
 
     // Thorn (Challenge)
     if (entry.source_data?.daily_thorn) {
       return {
-        icon: XOctagon,
+        image: thornImage,
         bgColor: '#f1f5f9',
-        iconColor: '#475569',
       };
     }
 
     // Deposit Idea (Future)
     if (entry.source_type === 'depositIdea') {
       return {
-        icon: Lightbulb,
+        image: depositIdeaImage,
         bgColor: '#fef3c7',
-        iconColor: '#d97706',
       };
     }
 
@@ -890,9 +892,8 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
 
     // Reflection (Thought) - default
     return {
-      icon: Sparkles,
+      image: reflectionImage,
       bgColor: '#f3e8ff',
-      iconColor: '#9333ea',
     };
   };
 
@@ -943,7 +944,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     if (linkedCounts.depositIdeas > 0) {
       badges.push(
         <View key="ideas" style={styles.linkedBadge}>
-          <Lightbulb size={12} color="#6b7280" strokeWidth={2} />
+          <Image source={depositIdeaImage} style={styles.linkedBadgeImage} resizeMode="contain" />
           <Text style={styles.linkedBadgeText}>{linkedCounts.depositIdeas}</Text>
         </View>
       );
@@ -963,7 +964,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
   );
 
   const renderItem = ({ item }: { item: JournalEntry }) => {
-    const { icon: Icon, bgColor, iconColor } = getEntryIcon(item);
+    const iconData = getEntryIcon(item);
     const previewText = getPreviewText(item);
     const impactText = item.type === 'deposit'
       ? `+${item.amount.toFixed(1)}`
@@ -977,8 +978,12 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         style={styles.entryRow}
         onPress={() => onEntryPress(item)}
       >
-        <View style={[styles.avatar, { backgroundColor: bgColor }]}>
-          <Icon size={20} color={iconColor} strokeWidth={2} />
+        <View style={[styles.avatar, { backgroundColor: iconData.bgColor }]}>
+          {iconData.image ? (
+            <Image source={iconData.image} style={styles.avatarImage} resizeMode="contain" />
+          ) : iconData.icon ? (
+            React.createElement(iconData.icon, { size: 20, color: iconData.iconColor, strokeWidth: 2 })
+          ) : null}
         </View>
 
         <View style={styles.content}>
@@ -1200,6 +1205,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
+  avatarImage: {
+    width: 24,
+    height: 24,
+  },
   content: {
     flex: 1,
     gap: 4,
@@ -1246,6 +1255,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#6b7280',
+  },
+  linkedBadgeImage: {
+    width: 12,
+    height: 12,
   },
   impact: {
     fontSize: 16,
