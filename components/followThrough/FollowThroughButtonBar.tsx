@@ -1,7 +1,12 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { CircleCheck as CheckCircle, Calendar, BookOpen, Lightbulb, Flower2, Octagon as XOctagon } from 'lucide-react-native';
+import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { CircleCheck as CheckCircle, Calendar } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+
+const roseImage = require('@/assets/images/rose-81.png');
+const thornImage = require('@/assets/images/thorn-81.png');
+const reflectionImage = require('@/assets/images/reflections-72.png');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface FollowThroughButtonBarProps {
   onPressTask: () => void;
@@ -25,16 +30,15 @@ export default function FollowThroughButtonBar({
   const buttonItems = [
     { icon: CheckCircle, onPress: onPressTask, color: colors.primary },
     { icon: Calendar, onPress: onPressEvent, color: colors.secondary },
-    { icon: Flower2, onPress: onPressRose, color: '#10b981' },
-    { icon: XOctagon, onPress: onPressThorn, color: '#ef4444' },
-    { icon: BookOpen, onPress: onPressReflection, color: '#8b5cf6' },
-    { icon: Lightbulb, onPress: onPressDepositIdea, color: '#f59e0b' },
+    { image: roseImage, onPress: onPressRose, color: '#10b981' },
+    { image: thornImage, onPress: onPressThorn, color: '#ef4444' },
+    { image: reflectionImage, onPress: onPressReflection, color: '#8b5cf6' },
+    { image: depositIdeaImage, onPress: onPressDepositIdea, color: '#f59e0b' },
   ];
 
   return (
     <View style={styles.container}>
       {buttonItems.map((item, index) => {
-        const Icon = item.icon;
         return (
           <TouchableOpacity
             key={index}
@@ -42,7 +46,11 @@ export default function FollowThroughButtonBar({
             onPress={item.onPress}
             activeOpacity={0.7}
           >
-            <Icon size={24} color={item.color} strokeWidth={2} />
+            {item.image ? (
+              <Image source={item.image} style={styles.buttonImage} resizeMode="contain" />
+            ) : item.icon ? (
+              React.createElement(item.icon, { size: 24, color: item.color, strokeWidth: 2 })
+            ) : null}
           </TouchableOpacity>
         );
       })}
@@ -68,5 +76,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  buttonImage: {
+    width: 28,
+    height: 28,
   },
 });
