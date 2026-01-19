@@ -2000,12 +2000,14 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     </Text>
                   </TouchableOpacity>
                 </View>
-                <TimePickerDropdown
-                  value={formData.dueTime}
-                  onChange={(time) => setFormData(prev => ({ ...prev, dueTime: time }))}
-                  placeholder="Select time"
-                  isDark={isDarkMode}
-                />
+                {!formData.isAnytime && (
+                  <TimePickerDropdown
+                    value={formData.dueTime}
+                    onChange={(time) => setFormData(prev => ({ ...prev, dueTime: time }))}
+                    placeholder="Select time"
+                    isDark={isDarkMode}
+                  />
+                )}
                 <View style={styles.anytimeToggleInline}>
                   <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
                   <Switch
@@ -2137,10 +2139,74 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
               <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
                 <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                  {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
+                    setFormData(prev => ({ ...prev, isDelegated: value }));
+                    if (value) {
+                      setShowDelegateModal(true);
+                    }
+                  })}
+                  {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
                 </View>
               </View>
             </>
+          )}
+
+          {/* Delegate Info */}
+          {(formData.type === 'task' || formData.type === 'event') && formData.isDelegated && formData.selectedDelegateId && (
+            <View style={styles.delegateInfoContainer}>
+              <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
+                {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
+                <Text style={[styles.changeDelegateText, { color: colors.primary }]}>
+                  Change
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Follow Up Date/Time (when enabled) */}
+          {(formData.type === 'task' || formData.type === 'event') && formData.followUpEnabled && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Follow Up Date & Time</Text>
+              <View style={styles.dateTimeRow}>
+                <View style={styles.dateFieldWrapper}>
+                  <TouchableOpacity
+                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('followUp')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.followUpDate)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <TimePickerDropdown
+                  value={formData.followUpTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+                <View style={styles.anytimeToggleInline}>
+                  <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
+                  <Switch
+                    value={formData.isAnytimeFollowUp}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytimeFollowUp: value }))}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Goal Toggle */}
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+              <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+              </View>
+            </View>
           )}
 
           {/* Goal picker (shows when Goal toggle ON) */}
@@ -2192,72 +2258,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
-          {/* Delegate to & Follow Up (only for tasks and events) */}
-          {(formData.type === 'task' || formData.type === 'event') && (
-            <>
-              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
-                    setFormData(prev => ({ ...prev, isDelegated: value }));
-                    if (value) {
-                      setShowDelegateModal(true);
-                    }
-                  })}
-                  {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
-                </View>
-              </View>
-
-              {/* Delegate Info */}
-              {formData.isDelegated && formData.selectedDelegateId && (
-                <View style={styles.delegateInfoContainer}>
-                  <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
-                    {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
-                    <Text style={[styles.changeDelegateText, { color: colors.primary }]}>
-                      Change
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Follow Up Date/Time (when enabled) */}
-              {formData.followUpEnabled && (
-                <View style={styles.field}>
-                  <Text style={[styles.label, { color: colors.text }]}>Follow Up Date & Time</Text>
-                  <View style={styles.dateTimeRow}>
-                    <View style={styles.dateFieldWrapper}>
-                      <TouchableOpacity
-                        style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                        onPress={() => handleCalendarOpen('followUp')}
-                      >
-                        <CalendarIcon size={16} color={colors.textSecondary} />
-                        <Text style={[styles.dateButtonText, { color: colors.text }]}>
-                          {formatDateForDisplay(formData.followUpDate)}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    <TimePickerDropdown
-                      value={formData.followUpTime}
-                      onChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
-                      placeholder="Select time"
-                      isDark={isDarkMode}
-                    />
-                    <View style={styles.anytimeToggleInline}>
-                      <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
-                      <Switch
-                        value={formData.isAnytimeFollowUp}
-                        onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytimeFollowUp: value }))}
-                        trackColor={{ false: colors.border, true: colors.primary }}
-                        thumbColor={colors.surface}
-                      />
-                    </View>
-                  </View>
-                </View>
-              )}
-            </>
-          )}
-
           {/* Roles */}
           {renderToggleSwitchGrid(
             'Roles',
@@ -2267,7 +2267,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Key Relationships */}
-          {filteredKeyRelationships.length > 0 && renderCheckboxGrid(
+          {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid(
             'Key Relationships',
             filteredKeyRelationships,
             formData.selectedKeyRelationshipIds,
