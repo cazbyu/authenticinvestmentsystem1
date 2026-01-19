@@ -187,28 +187,30 @@ function SwipeableRow({
 
   return (
     <View style={styles.swipeContainer}>
-      <View style={styles.hiddenActionsContainer}>
-        <TouchableOpacity
-          style={[styles.hiddenActionButton, styles.delegateButton]}
-          onPress={() => {
-            closeSwipe();
-            onDelegate();
-          }}
-        >
-          <UserCircle size={20} color="#fff" strokeWidth={2} />
-          <Text style={styles.hiddenActionText}>Delegate</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.hiddenActionButton, styles.deleteButton]}
-          onPress={() => {
-            closeSwipe();
-            onDelete();
-          }}
-        >
-          <Trash2 size={20} color="#fff" strokeWidth={2} />
-          <Text style={styles.hiddenActionText}>Delete</Text>
-        </TouchableOpacity>
-      </View>
+      {!isDisabled && (
+        <View style={styles.hiddenActionsContainer}>
+          <TouchableOpacity
+            style={[styles.hiddenActionButton, styles.delegateButton]}
+            onPress={() => {
+              closeSwipe();
+              onDelegate();
+            }}
+          >
+            <UserCircle size={20} color="#fff" strokeWidth={2} />
+            <Text style={styles.hiddenActionText}>Delegate</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.hiddenActionButton, styles.deleteButton]}
+            onPress={() => {
+              closeSwipe();
+              onDelete();
+            }}
+          >
+            <Trash2 size={20} color="#fff" strokeWidth={2} />
+            <Text style={styles.hiddenActionText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[animatedStyle]}>
