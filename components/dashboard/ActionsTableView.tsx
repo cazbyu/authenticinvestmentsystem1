@@ -225,6 +225,7 @@ interface ItemRowProps {
   priorityColor: string;
   isCompleted: boolean;
   metadataParts: string[];
+  delegateName?: string | null;
   onComplete: () => void;
   onTaskPress: () => void;
   completionTrigger: number;
@@ -237,6 +238,7 @@ function ItemRow({
   priorityColor,
   isCompleted,
   metadataParts,
+  delegateName,
   onComplete,
   onTaskPress,
   completionTrigger,
@@ -299,6 +301,12 @@ function ItemRow({
         {metadataParts.length > 0 && (
           <Text style={[styles.metadataText, isCompleted && { color: '#9ca3af' }]}>
             {metadataParts.join(' • ')}
+          </Text>
+        )}
+
+        {delegateName && (
+          <Text style={[styles.delegateText, isCompleted && { color: '#9ca3af' }]}>
+            (Delegated to {delegateName})
           </Text>
         )}
       </TouchableOpacity>
@@ -811,7 +819,7 @@ export function ActionsTableView({
   );
 
   const renderTypeHeader = (type: 'event' | 'task') => (
-    <View style={styles.typeHeader}>
+    <View style={styles.typeHeaderCentered}>
       {type === 'event' ? (
         <>
           <Calendar size={14} color="#6b7280" strokeWidth={2} />
@@ -847,9 +855,6 @@ export function ActionsTableView({
           if (item.type === 'event' && timeDisplay) {
             metadataParts.push(timeDisplay);
           }
-          if (item.delegateName) {
-            metadataParts.push(`Delegated to ${item.delegateName}`);
-          }
 
           return (
             <SwipeableRow
@@ -868,6 +873,7 @@ export function ActionsTableView({
                 priorityColor={priorityColor}
                 isCompleted={isCompleted}
                 metadataParts={metadataParts}
+                delegateName={item.delegateName}
                 onComplete={() => handleComplete(item)}
                 onTaskPress={() => onTaskPress && onTaskPress(item.id)}
                 completionTrigger={completionTriggers[item.id] || 0}
@@ -934,6 +940,17 @@ const styles = StyleSheet.create({
   typeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f9fafb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  typeHeaderCentered: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -1017,6 +1034,11 @@ const styles = StyleSheet.create({
   metadataText: {
     fontSize: 12,
     color: '#6b7280',
+    lineHeight: 16,
+  },
+  delegateText: {
+    fontSize: 12,
+    color: '#3b82f6',
     lineHeight: 16,
   },
   pointsContainer: {
