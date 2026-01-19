@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { FileText, Lightbulb, Flower2, AlertTriangle } from 'lucide-react-native';
+import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Flower2, Lightbulb, Sparkles, SquareCheck, Cactus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
@@ -9,17 +9,22 @@ import { formatLocalDate } from '@/lib/dateUtils';
 
 interface JournalEntry {
   id: string;
-  date: string; // completed_at (task) or start_date (event) or withdrawn_at (withdrawal) or created_at (reflection)
+  date: string;
   description: string;
   type: 'deposit' | 'withdrawal' | 'reflection';
-  amount: number; // deposit points or withdrawal amount
-  balance: number; // running balance
+  amount: number;
+  balance: number;
   has_notes: boolean;
-  source_id: string; // task_id or withdrawal_id or reflection_id
-  source_type: 'task' | 'withdrawal' | 'reflection';
+  source_id: string;
+  source_type: 'task' | 'withdrawal' | 'reflection' | 'depositIdea';
   source_data?: any;
-  linked_count?: number; // count of linked actions/reflections
-  status?: 'completed'; // all tasks/events are completed
+  linked_count?: number;
+  status?: 'completed';
+}
+
+interface DateSection {
+  title: string;
+  data: JournalEntry[];
 }
 
 interface JournalViewProps {
@@ -36,14 +41,13 @@ interface JournalViewProps {
 }
 
 export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKey, showTimePeriodSelector = false, onDateRangeChange }: JournalViewProps) {
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [sections, setSections] = useState<DateSection[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>(dateRange || 'week');
   const [loadingMore, setLoadingMore] = useState(false);
-  const [totalBalance, setTotalBalance] = useState(0);
-  const [pageSize] = useState(30);
-  const [displayedCount, setDisplayedCount] = useState(30);
+  const [totalImpact, setTotalImpact] = useState(0);
   const [allEntries, setAllEntries] = useState<JournalEntry[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const previousScopeRef = React.useRef<string>('');
@@ -54,8 +58,9 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     dateRange: string;
   } | null>(null);
   const CACHE_TTL = 30000;
+  const INITIAL_LOAD = 20;
 
-  // helper to group records by parent_id for fast lookup
+  // Helper to group records by parent_id for fast lookup
   const groupByParentId = <T extends { parent_id: string }>(rows: T[] | null | undefined) => {
     const map = new Map<string, T[]>();
     (rows ?? []).forEach((r) => {
@@ -66,7 +71,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     return map;
   };
 
-  // calculate start date for the range filter (YYYY-MM-DD)
+  // Calculate start date for the range filter (YYYY-MM-DD)
   const getDateFilter = (): string | '' => {
     if (dateRange === 'all') return '';
     const now = new Date();
@@ -94,20 +99,21 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       if (cacheMatch && cacheAge < CACHE_TTL) {
         console.log('[JournalView] Using cached data, age:', Math.round(cacheAge / 1000), 'seconds');
         setAllEntries(cacheRef.current.data);
-        setEntries(cacheRef.current.data.slice(0, Math.min(displayedCount, cacheRef.current.data.length)));
 
-        let runningBalance = 0;
-        const chronological = [...cacheRef.current.data].reverse();
-        chronological.forEach((e) => {
-          if (e.type === 'deposit') runningBalance += e.amount;
-          else if (e.type === 'withdrawal') runningBalance -= e.amount;
-        });
-        setTotalBalance(runningBalance);
+        const sectionsData = groupEntriesByDate(cacheRef.current.data, selectedPeriod === 'all' ? INITIAL_LOAD : cacheRef.current.data.length);
+        setSections(sectionsData);
+        setHasMore(selectedPeriod === 'all' && cacheRef.current.data.length > INITIAL_LOAD);
+
+        const impact = cacheRef.current.data.reduce((sum, e) => {
+          if (e.type === 'deposit') return sum + e.amount;
+          if (e.type === 'withdrawal') return sum - e.amount;
+          return sum;
+        }, 0);
+        setTotalImpact(impact);
         return;
       }
     }
 
-    // Create new AbortController for this fetch
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -122,15 +128,14 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
 
       if (!user) {
         console.log('[JournalView] No user found, showing empty journal');
-        setEntries([]);
+        setSections([]);
         setAllEntries([]);
-        setTotalBalance(0);
+        setTotalImpact(0);
         setLoading(false);
         cacheRef.current = null;
         return;
       }
 
-      // Check if aborted
       if (controller.signal.aborted) {
         return;
       }
@@ -138,296 +143,281 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       const dateFilter = getDateFilter();
       const journalEntries: JournalEntry[] = [];
 
-      // ---------------------------------------------------------
-      // 1a) Completed TASKS - use completed_at for date
-      // ---------------------------------------------------------
-        let completedTasksQuery = supabase
-          .from('0008-ap-tasks')
-          .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
-          .eq('user_id', user.id)
-          .eq('type', 'task')
-          .eq('status', 'completed')
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .not('completed_at', 'is', null);
+      // 1a) Completed TASKS
+      let completedTasksQuery = supabase
+        .from('0008-ap-tasks')
+        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+        .eq('user_id', user.id)
+        .eq('type', 'task')
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .is('parent_task_id', null)
+        .not('completed_at', 'is', null);
 
-        if (dateFilter) {
-          completedTasksQuery = completedTasksQuery.gte('completed_at', dateFilter);
-        }
+      if (dateFilter) {
+        completedTasksQuery = completedTasksQuery.gte('completed_at', dateFilter);
+      }
 
-        const { data: completedTasksData, error: completedTasksError } = await completedTasksQuery;
-        console.log('[JournalView] Completed TASKS query result:', completedTasksData?.length || 0, 'tasks found');
-        if (completedTasksError) {
-          console.error('[JournalView] Completed tasks query error:', completedTasksError);
-          throw completedTasksError;
-        }
+      const { data: completedTasksData, error: completedTasksError } = await completedTasksQuery;
+      console.log('[JournalView] Completed TASKS query result:', completedTasksData?.length || 0, 'tasks found');
+      if (completedTasksError) {
+        console.error('[JournalView] Completed tasks query error:', completedTasksError);
+        throw completedTasksError;
+      }
 
-      // ---------------------------------------------------------
-      // 1b) Completed EVENTS - use start_date for date
-      // ---------------------------------------------------------
-        let completedEventsQuery = supabase
-          .from('0008-ap-tasks')
-          .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
-          .eq('user_id', user.id)
-          .eq('type', 'event')
-          .eq('status', 'completed')
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .not('completed_at', 'is', null);
+      // 1b) Completed EVENTS
+      let completedEventsQuery = supabase
+        .from('0008-ap-tasks')
+        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+        .eq('user_id', user.id)
+        .eq('type', 'event')
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .is('parent_task_id', null)
+        .not('completed_at', 'is', null);
 
-        if (dateFilter) {
-          completedEventsQuery = completedEventsQuery.gte('start_date', dateFilter);
-        }
+      if (dateFilter) {
+        completedEventsQuery = completedEventsQuery.gte('start_date', dateFilter);
+      }
 
-        const { data: completedEventsData, error: completedEventsError } = await completedEventsQuery;
-        console.log('[JournalView] Completed EVENTS query result:', completedEventsData?.length || 0, 'events found');
-        if (completedEventsError) {
-          console.error('[JournalView] Completed events query error:', completedEventsError);
-          throw completedEventsError;
-        }
+      const { data: completedEventsData, error: completedEventsError } = await completedEventsQuery;
+      console.log('[JournalView] Completed EVENTS query result:', completedEventsData?.length || 0, 'events found');
+      if (completedEventsError) {
+        console.error('[JournalView] Completed events query error:', completedEventsError);
+        throw completedEventsError;
+      }
 
-        // Combine tasks and events data for processing
-        const tasksData = [...(completedTasksData || []), ...(completedEventsData || [])];
-        const tasksError = completedTasksError || completedEventsError;
+      const tasksData = [...(completedTasksData || []), ...(completedEventsData || [])];
 
-        if (tasksData && tasksData.length) {
-          const taskIds = tasksData.map((t: any) => t.id);
+      if (tasksData && tasksData.length) {
+        const taskIds = tasksData.map((t: any) => t.id);
 
-          // pull role/domain/keyRel/notes/goals for these tasks
-          const [
-            rolesRes,
-            domainsRes,
-            keyRelsRes,
-            notesRes,
-            goalsRes,
-          ] = await Promise.all([
-            supabase
-              .from('0008-ap-universal-roles-join')
-              .select('parent_id, role_id, role:0008-ap-roles(id,label)')
-              .in('parent_id', taskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-domains-join')
-              .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
-              .in('parent_id', taskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-key-relationships-join')
-              .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
-              .in('parent_id', taskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-notes-join')
-              .select('parent_id, note:0008-ap-notes(id,content,created_at)')
-              .in('parent_id', taskIds)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-goals-join')
-              .select(`
-                parent_id,
-                goal_type,
-                twelve_wk_goal_id,
-                custom_goal_id,
-                tw:0008-ap-goals-12wk(id,title,status),
-                cg:0008-ap-goals-custom(id,title,status)
-              `)
-              .in('parent_id', taskIds)
-              .eq('parent_type', 'task'),
-          ]);
+        const [
+          rolesRes,
+          domainsRes,
+          keyRelsRes,
+          notesRes,
+          goalsRes,
+        ] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id, role_id, role:0008-ap-roles(id,label)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-key-relationships-join')
+            .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-notes-join')
+            .select('parent_id, note:0008-ap-notes(id,content,created_at)')
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select(`
+              parent_id,
+              goal_type,
+              twelve_wk_goal_id,
+              custom_goal_id,
+              tw:0008-ap-goals-12wk(id,title,status),
+              cg:0008-ap-goals-custom(id,title,status)
+            `)
+            .in('parent_id', taskIds)
+            .eq('parent_type', 'task'),
+        ]);
 
-          const taskRoles = rolesRes.data ?? [];
-          const taskDomains = domainsRes.data ?? [];
-          const taskKeyRels = keyRelsRes.data ?? [];
-          const taskNotes = notesRes.data ?? [];
-          const taskGoals = goalsRes.data ?? [];
+        const taskRoles = rolesRes.data ?? [];
+        const taskDomains = domainsRes.data ?? [];
+        const taskKeyRels = keyRelsRes.data ?? [];
+        const taskNotes = notesRes.data ?? [];
+        const taskGoals = goalsRes.data ?? [];
 
-          // scope filter for tasks (role/domain/key_relationship)
-          let allowedTaskIds = new Set(taskIds);
-          if (scope.type !== 'user' && scope.id) {
-            if (scope.type === 'role') {
-              allowedTaskIds = new Set(
-                taskRoles
-                  .filter((r: any) => r.role?.id === scope.id || r.role_id === scope.id)
-                  .map((r: any) => r.parent_id)
-              );
-            } else if (scope.type === 'domain') {
-              allowedTaskIds = new Set(
-                taskDomains
-                  .filter((d: any) => d.domain?.id === scope.id || d.domain_id === scope.id)
-                  .map((d: any) => d.parent_id)
-              );
-            } else if (scope.type === 'key_relationship') {
-              allowedTaskIds = new Set(
-                taskKeyRels
-                  .filter((k: any) => k.key_relationship?.id === scope.id || k.key_relationship_id === scope.id)
-                  .map((k: any) => k.parent_id)
-              );
-            }
+        let allowedTaskIds = new Set(taskIds);
+        if (scope.type !== 'user' && scope.id) {
+          if (scope.type === 'role') {
+            allowedTaskIds = new Set(
+              taskRoles
+                .filter((r: any) => r.role?.id === scope.id || r.role_id === scope.id)
+                .map((r: any) => r.parent_id)
+            );
+          } else if (scope.type === 'domain') {
+            allowedTaskIds = new Set(
+              taskDomains
+                .filter((d: any) => d.domain?.id === scope.id || d.domain_id === scope.id)
+                .map((d: any) => d.parent_id)
+            );
+          } else if (scope.type === 'key_relationship') {
+            allowedTaskIds = new Set(
+              taskKeyRels
+                .filter((k: any) => k.key_relationship?.id === scope.id || k.key_relationship_id === scope.id)
+                .map((k: any) => k.parent_id)
+            );
           }
+        }
 
-          // index lookups
-          const rolesByTask = groupByParentId(taskRoles);
-          const domainsByTask = groupByParentId(taskDomains);
-          const keyRelsByTask = groupByParentId(taskKeyRels);
-          const notesByTask = groupByParentId(taskNotes);
-          const goalsByTask = groupByParentId(taskGoals);
+        const rolesByTask = groupByParentId(taskRoles);
+        const domainsByTask = groupByParentId(taskDomains);
+        const keyRelsByTask = groupByParentId(taskKeyRels);
+        const notesByTask = groupByParentId(taskNotes);
+        const goalsByTask = groupByParentId(taskGoals);
 
-          for (const t of tasksData) {
-            if (!allowedTaskIds.has(t.id)) continue;
+        for (const t of tasksData) {
+          if (!allowedTaskIds.has(t.id)) continue;
 
-            const roles = (rolesByTask.get(t.id) ?? []).map((r: any) => r.role).filter(Boolean);
-            const domains = (domainsByTask.get(t.id) ?? []).map((d: any) => d.domain).filter(Boolean);
-            const keyRelationships = (keyRelsByTask.get(t.id) ?? [])
-              .map((k: any) => k.key_relationship)
-              .filter(Boolean);
-            const notes = (notesByTask.get(t.id) ?? []).map((n: any) => n.note).filter(Boolean);
-            const goals = (goalsByTask.get(t.id) ?? []).map((g: any) => {
-              if (g.goal_type === 'twelve_wk_goal' && g.tw) {
-                const goal = g.tw;
-                if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                  return null;
-                }
-                return { ...goal, goal_type: '12week' };
-              } else if (g.goal_type === 'custom_goal' && g.cg) {
-                const goal = g.cg;
-                if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                  return null;
-                }
-                return { ...goal, goal_type: 'custom' };
+          const roles = (rolesByTask.get(t.id) ?? []).map((r: any) => r.role).filter(Boolean);
+          const domains = (domainsByTask.get(t.id) ?? []).map((d: any) => d.domain).filter(Boolean);
+          const keyRelationships = (keyRelsByTask.get(t.id) ?? [])
+            .map((k: any) => k.key_relationship)
+            .filter(Boolean);
+          const notes = (notesByTask.get(t.id) ?? []).map((n: any) => n.note).filter(Boolean);
+          const goals = (goalsByTask.get(t.id) ?? []).map((g: any) => {
+            if (g.goal_type === 'twelve_wk_goal' && g.tw) {
+              const goal = g.tw;
+              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                return null;
               }
-              return null;
-            }).filter(Boolean);
-
-            const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
-            const points = calculateTaskPoints(t, roles, domains, goals);
-
-            // Use completed_at for tasks, start_date for events
-            const displayDate = t.type === 'event' ? (t.start_date || t.completed_at) : t.completed_at;
-
-            journalEntries.push({
-              id: t.id,
-              date: displayDate,
-              description: t.title,
-              type: 'deposit',
-              amount: points,
-              balance: 0,
-              has_notes: notes.length > 0,
-              source_id: t.id,
-              source_type: 'task',
-              source_data,
-              status: 'completed',
-            });
-          }
-        }
-
-      // ---------------------------------------------------------
-      // 2) Withdrawals
-      // ---------------------------------------------------------
-        let withdrawalsQuery = supabase
-          .from('0008-ap-withdrawals')
-          .select('id, title, amount, withdrawn_at, user_id')
-          .eq('user_id', user.id);
-
-        if (dateFilter) {
-          withdrawalsQuery = withdrawalsQuery.gte('withdrawn_at', dateFilter);
-        }
-
-        const { data: withdrawalsData, error: withdrawalsError } = await withdrawalsQuery;
-        if (withdrawalsError) {
-          console.error('Withdrawals query error:', withdrawalsError);
-          throw withdrawalsError;
-        }
-
-        if (withdrawalsData && withdrawalsData.length) {
-          const wIds = withdrawalsData.map((w: any) => w.id);
-
-          const [wRolesRes, wDomainsRes, wKeyRelsRes, wNotesRes] = await Promise.all([
-            supabase
-              .from('0008-ap-universal-roles-join')
-              .select('parent_id, role_id, role:0008-ap-roles(id,label)')
-              .in('parent_id', wIds)
-              .eq('parent_type', 'withdrawal'),
-            supabase
-              .from('0008-ap-universal-domains-join')
-              .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
-              .in('parent_id', wIds)
-              .eq('parent_type', 'withdrawal'),
-            supabase
-              .from('0008-ap-universal-key-relationships-join')
-              .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
-              .in('parent_id', wIds)
-              .eq('parent_type', 'withdrawal'),
-            supabase
-              .from('0008-ap-universal-notes-join')
-              .select('parent_id, note:0008-ap-notes(id,content,created_at)')
-              .in('parent_id', wIds)
-              .eq('parent_type', 'withdrawal'),
-          ]);
-
-          const wRoles = wRolesRes.data ?? [];
-          const wDomains = wDomainsRes.data ?? [];
-          const wKeyRels = wKeyRelsRes.data ?? [];
-          const wNotes = wNotesRes.data ?? [];
-
-          // scope filter for withdrawals
-          let allowedWids = new Set(wIds);
-          if (scope.type !== 'user' && scope.id) {
-            if (scope.type === 'role') {
-              allowedWids = new Set(
-                wRoles
-                  .filter((r: any) => r.role?.id === scope.id || r.role_id === scope.id)
-                  .map((r: any) => r.parent_id)
-              );
-            } else if (scope.type === 'domain') {
-              allowedWids = new Set(
-                wDomains
-                  .filter((d: any) => d.domain?.id === scope.id || d.domain_id === scope.id)
-                  .map((d: any) => d.parent_id)
-              );
-            } else if (scope.type === 'key_relationship') {
-              allowedWids = new Set(
-                wKeyRels
-                  .filter((k: any) => k.key_relationship?.id === scope.id || k.key_relationship_id === scope.id)
-                  .map((k: any) => k.parent_id)
-              );
+              return { ...goal, goal_type: '12week' };
+            } else if (g.goal_type === 'custom_goal' && g.cg) {
+              const goal = g.cg;
+              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
+                return null;
+              }
+              return { ...goal, goal_type: 'custom' };
             }
-          }
+            return null;
+          }).filter(Boolean);
 
-          const rolesByW = groupByParentId(wRoles);
-          const domainsByW = groupByParentId(wDomains);
-          const keyRelsByW = groupByParentId(wKeyRels);
-          const notesByW = groupByParentId(wNotes);
+          const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
+          const points = calculateTaskPoints(t, roles, domains, goals);
 
-          for (const w of withdrawalsData) {
-            if (!allowedWids.has(w.id)) continue;
+          const displayDate = t.type === 'event' ? (t.start_date || t.completed_at) : t.completed_at;
 
-            const roles = (rolesByW.get(w.id) ?? []).map((r: any) => r.role).filter(Boolean);
-            const domains = (domainsByW.get(w.id) ?? []).map((d: any) => d.domain).filter(Boolean);
-            const keyRelationships = (keyRelsByW.get(w.id) ?? [])
-              .map((k: any) => k.key_relationship)
-              .filter(Boolean);
-            const notes = (notesByW.get(w.id) ?? []).map((n: any) => n.note).filter(Boolean);
-            const amountNum = parseFloat(String(w.amount ?? 0)) || 0;
+          journalEntries.push({
+            id: t.id,
+            date: displayDate,
+            description: t.title,
+            type: 'deposit',
+            amount: points,
+            balance: 0,
+            has_notes: notes.length > 0,
+            source_id: t.id,
+            source_type: 'task',
+            source_data,
+            status: 'completed',
+          });
+        }
+      }
 
-            journalEntries.push({
-              id: w.id,
-              date: w.withdrawn_at, // <-- withdrawn_at for withdrawals
-              description: w.title,
-              type: 'withdrawal',
-              amount: amountNum,
-              balance: 0,
-              has_notes: notes.length > 0,
-              source_id: w.id,
-              source_type: 'withdrawal',
-              source_data: { ...w, roles, domains, keyRelationships, notes },
-            });
+      // 2) Withdrawals
+      let withdrawalsQuery = supabase
+        .from('0008-ap-withdrawals')
+        .select('id, title, amount, withdrawn_at, user_id')
+        .eq('user_id', user.id);
+
+      if (dateFilter) {
+        withdrawalsQuery = withdrawalsQuery.gte('withdrawn_at', dateFilter);
+      }
+
+      const { data: withdrawalsData, error: withdrawalsError } = await withdrawalsQuery;
+      if (withdrawalsError) {
+        console.error('Withdrawals query error:', withdrawalsError);
+        throw withdrawalsError;
+      }
+
+      if (withdrawalsData && withdrawalsData.length) {
+        const wIds = withdrawalsData.map((w: any) => w.id);
+
+        const [wRolesRes, wDomainsRes, wKeyRelsRes, wNotesRes] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id, role_id, role:0008-ap-roles(id,label)')
+            .in('parent_id', wIds)
+            .eq('parent_type', 'withdrawal'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id, domain_id, domain:0008-ap-domains(id,name)')
+            .in('parent_id', wIds)
+            .eq('parent_type', 'withdrawal'),
+          supabase
+            .from('0008-ap-universal-key-relationships-join')
+            .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
+            .in('parent_id', wIds)
+            .eq('parent_type', 'withdrawal'),
+          supabase
+            .from('0008-ap-universal-notes-join')
+            .select('parent_id, note:0008-ap-notes(id,content,created_at)')
+            .in('parent_id', wIds)
+            .eq('parent_type', 'withdrawal'),
+        ]);
+
+        const wRoles = wRolesRes.data ?? [];
+        const wDomains = wDomainsRes.data ?? [];
+        const wKeyRels = wKeyRelsRes.data ?? [];
+        const wNotes = wNotesRes.data ?? [];
+
+        let allowedWids = new Set(wIds);
+        if (scope.type !== 'user' && scope.id) {
+          if (scope.type === 'role') {
+            allowedWids = new Set(
+              wRoles
+                .filter((r: any) => r.role?.id === scope.id || r.role_id === scope.id)
+                .map((r: any) => r.parent_id)
+            );
+          } else if (scope.type === 'domain') {
+            allowedWids = new Set(
+              wDomains
+                .filter((d: any) => d.domain?.id === scope.id || d.domain_id === scope.id)
+                .map((d: any) => d.parent_id)
+            );
+          } else if (scope.type === 'key_relationship') {
+            allowedWids = new Set(
+              wKeyRels
+                .filter((k: any) => k.key_relationship?.id === scope.id || k.key_relationship_id === scope.id)
+                .map((k: any) => k.parent_id)
+            );
           }
         }
 
-      // ---------------------------------------------------------
-      // 3) Reflections (don't affect balance)
-      // ---------------------------------------------------------
-        let reflectionsQuery = supabase
+        const rolesByW = groupByParentId(wRoles);
+        const domainsByW = groupByParentId(wDomains);
+        const keyRelsByW = groupByParentId(wKeyRels);
+        const notesByW = groupByParentId(wNotes);
+
+        for (const w of withdrawalsData) {
+          if (!allowedWids.has(w.id)) continue;
+
+          const roles = (rolesByW.get(w.id) ?? []).map((r: any) => r.role).filter(Boolean);
+          const domains = (domainsByW.get(w.id) ?? []).map((d: any) => d.domain).filter(Boolean);
+          const keyRelationships = (keyRelsByW.get(w.id) ?? [])
+            .map((k: any) => k.key_relationship)
+            .filter(Boolean);
+          const notes = (notesByW.get(w.id) ?? []).map((n: any) => n.note).filter(Boolean);
+          const amountNum = parseFloat(String(w.amount ?? 0)) || 0;
+
+          journalEntries.push({
+            id: w.id,
+            date: w.withdrawn_at,
+            description: w.title,
+            type: 'withdrawal',
+            amount: amountNum,
+            balance: 0,
+            has_notes: notes.length > 0,
+            source_id: w.id,
+            source_type: 'withdrawal',
+            source_data: { ...w, roles, domains, keyRelationships, notes },
+          });
+        }
+      }
+
+      // 3) Reflections
+      let reflectionsQuery = supabase
         .from('0008-ap-reflections')
         .select('id, content, date, created_at, reflection_type, daily_rose, daily_thorn')
         .eq('user_id', user.id)
@@ -475,7 +465,6 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         const rKeyRels = rKeyRelsRes.data ?? [];
         const rNotes = rNotesRes.data ?? [];
 
-        // scope filter for reflections
         let allowedRids = new Set(rIds);
         if (scope.type !== 'user' && scope.id) {
           if (scope.type === 'role') {
@@ -520,7 +509,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
             date: r.created_at,
             description: r.content.substring(0, 100) + (r.content.length > 100 ? '...' : ''),
             type: 'reflection',
-            amount: 0, // reflections don't affect balance
+            amount: 0,
             balance: 0,
             has_notes: notes.length > 0,
             source_id: r.id,
@@ -530,10 +519,8 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         }
       }
 
-      // ---------------------------------------------------------
-      // 4) Deposit Ideas (stored separately, appear as reflections)
-      // ---------------------------------------------------------
-        let depositIdeasQuery = supabase
+      // 4) Deposit Ideas
+      let depositIdeasQuery = supabase
         .from('0008-ap-deposit-ideas')
         .select('id, title, created_at, user_id, is_active')
         .eq('user_id', user.id)
@@ -581,7 +568,6 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         const dKeyRels = dKeyRelsRes.data ?? [];
         const dNotes = dNotesRes.data ?? [];
 
-        // scope filter for deposit ideas
         let allowedDids = new Set(dIds);
         if (scope.type !== 'user' && scope.id) {
           if (scope.type === 'role') {
@@ -624,45 +610,25 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
             id: d.id,
             date: d.created_at,
             description: d.title,
-            type: 'reflection', // Display as reflection type
-            amount: 0, // deposit ideas don't affect balance
+            type: 'reflection',
+            amount: 0,
             balance: 0,
             has_notes: notes.length > 0,
             source_id: d.id,
-            source_type: 'depositIdea' as any, // Store actual type for icon display
+            source_type: 'depositIdea',
             source_data: { ...d, roles, domains, keyRelationships, notes, is_deposit_idea: true },
           });
         }
       }
 
-      // ---------------------------------------------------------
-      // 5) Sort & compute running balance
-      // ---------------------------------------------------------
+      // Sort entries by date (newest first)
       journalEntries.sort((a, b) => {
         const ta = new Date(a.date).getTime();
         const tb = new Date(b.date).getTime();
         return tb - ta;
       });
 
-      // compute balance across time (oldest->newest), then assign (newest-first view)
-      // NOTE: Reflections don't affect balance
-      let runningBalance = 0;
-      const chronological = [...journalEntries].reverse();
-      chronological.forEach((e) => {
-        if (e.type === 'deposit') runningBalance += e.amount;
-        else if (e.type === 'withdrawal') runningBalance -= e.amount;
-      });
-
-      let current = runningBalance;
-      journalEntries.forEach((e) => {
-        e.balance = current;
-        if (e.type === 'deposit') current -= e.amount;
-        else if (e.type === 'withdrawal') current += e.amount;
-      });
-
-      // ---------------------------------------------------------
-      // 6) Fetch linked items count for all entries in bulk
-      // ---------------------------------------------------------
+      // Fetch linked items count
       const parentEntries = journalEntries
         .filter(entry => entry.source_type !== 'withdrawal')
         .map(entry => ({
@@ -681,12 +647,18 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         }
       });
 
-      // Final abort check before setting state
       if (controller.signal.aborted) {
         return;
       }
 
-      console.log('[JournalView] Setting', journalEntries.length, 'journal entries, total balance:', runningBalance);
+      // Calculate total impact
+      const impact = journalEntries.reduce((sum, e) => {
+        if (e.type === 'deposit') return sum + e.amount;
+        if (e.type === 'withdrawal') return sum - e.amount;
+        return sum;
+      }, 0);
+
+      console.log('[JournalView] Setting', journalEntries.length, 'journal entries, total impact:', impact);
 
       cacheRef.current = {
         data: journalEntries,
@@ -696,20 +668,22 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       };
 
       setAllEntries(journalEntries);
-      setEntries(journalEntries.slice(0, pageSize));
-      setDisplayedCount(Math.min(pageSize, journalEntries.length));
-      setTotalBalance(runningBalance);
+
+      // For "All" tab, initially load only first 20 items
+      const initialCount = selectedPeriod === 'all' ? INITIAL_LOAD : journalEntries.length;
+      const sectionsData = groupEntriesByDate(journalEntries, initialCount);
+      setSections(sectionsData);
+      setHasMore(selectedPeriod === 'all' && journalEntries.length > INITIAL_LOAD);
+      setTotalImpact(impact);
     } catch (err: any) {
-      // Don't show errors if request was aborted
       if (controller.signal.aborted) {
         return;
       }
       console.error('Error fetching journal entries:', err);
       Alert.alert('Error loading journal', err?.message ?? String(err));
-      setEntries([]);
+      setSections([]);
       setAllEntries([]);
-      setDisplayedCount(0);
-      setTotalBalance(0);
+      setTotalImpact(0);
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);
@@ -717,19 +691,36 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     }
   };
 
+  const groupEntriesByDate = (entries: JournalEntry[], count: number): DateSection[] => {
+    const limitedEntries = entries.slice(0, count);
+    const grouped = new Map<string, JournalEntry[]>();
+
+    limitedEntries.forEach(entry => {
+      const dateKey = formatDate(entry.date);
+      if (!grouped.has(dateKey)) {
+        grouped.set(dateKey, []);
+      }
+      grouped.get(dateKey)!.push(entry);
+    });
+
+    return Array.from(grouped.entries()).map(([title, data]) => ({ title, data }));
+  };
+
   const loadMore = () => {
-    if (loadingMore || displayedCount >= allEntries.length) {
+    if (loadingMore || !hasMore || selectedPeriod !== 'all') {
       return;
     }
 
     setLoadingMore(true);
 
     setTimeout(() => {
-      const newCount = Math.min(displayedCount + pageSize, allEntries.length);
-      setEntries(allEntries.slice(0, newCount));
-      setDisplayedCount(newCount);
+      const currentCount = sections.reduce((sum, section) => sum + section.data.length, 0);
+      const newCount = Math.min(currentCount + INITIAL_LOAD, allEntries.length);
+      const newSections = groupEntriesByDate(allEntries, newCount);
+      setSections(newSections);
+      setHasMore(newCount < allEntries.length);
       setLoadingMore(false);
-    }, 100);
+    }, 300);
   };
 
   useEffect(() => {
@@ -739,9 +730,8 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
   }, [dateRange]);
 
   useEffect(() => {
-    setDisplayedCount(pageSize);
     cacheRef.current = null;
-  }, [dateRange, pageSize]);
+  }, [dateRange]);
 
   const handlePeriodChange = (period: 'today' | 'week' | 'month' | 'all') => {
     setSelectedPeriod(period);
@@ -751,27 +741,22 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
   };
 
   useEffect(() => {
-    // Create a stable scope key for comparison
     const scopeKey = JSON.stringify(scope);
 
-    // Only fetch if scope actually changed (unless refreshKey changed which forces refresh)
     if (scopeKey === previousScopeRef.current && !dateRange && refreshKey === undefined) {
       return;
     }
 
     previousScopeRef.current = scopeKey;
 
-    // Clear any pending fetch timeout
     if (fetchTimeoutRef.current) {
       clearTimeout(fetchTimeoutRef.current);
     }
 
-    // Abort any in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
 
-    // Debounce the fetch to prevent rapid consecutive calls
     fetchTimeoutRef.current = setTimeout(() => {
       const forceRefresh = refreshKey !== undefined;
       if (forceRefresh) {
@@ -788,10 +773,9 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         abortControllerRef.current.abort();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, dateRange, refreshKey]);
 
-  // Real-time subscription for task status changes
+  // Real-time subscription
   useEffect(() => {
     const supabase = getSupabaseClient();
     let subscription: any = null;
@@ -829,29 +813,167 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         subscription.unsubscribe();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const formatDate = (dateString: string) => {
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return '—';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const entryDate = new Date(d);
+    entryDate.setHours(0, 0, 0, 0);
+
+    if (entryDate.getTime() === today.getTime()) {
+      return 'Today';
+    }
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (entryDate.getTime() === yesterday.getTime()) {
+      return 'Yesterday';
+    }
+
     return d.toLocaleDateString('en-US', {
+      weekday: 'short',
       month: 'short',
       day: 'numeric',
       year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
     });
   };
 
-  const formatBalance = (balance: number) => {
-    const prefix = balance >= 0 ? '+' : '';
-    return `${prefix}${balance.toFixed(1)}`;
+  const getEntryIcon = (entry: JournalEntry) => {
+    // Rose (Beauty)
+    if (entry.source_data?.daily_rose) {
+      return {
+        icon: Flower2,
+        bgColor: '#ffe4e6',
+        iconColor: '#e11d48',
+      };
+    }
+
+    // Thorn (Challenge)
+    if (entry.source_data?.daily_thorn) {
+      return {
+        icon: Cactus,
+        bgColor: '#f1f5f9',
+        iconColor: '#475569',
+      };
+    }
+
+    // Deposit Idea (Future)
+    if (entry.source_type === 'depositIdea') {
+      return {
+        icon: Lightbulb,
+        bgColor: '#fef3c7',
+        iconColor: '#d97706',
+      };
+    }
+
+    // Action (Task/Deposit)
+    if (entry.type === 'deposit') {
+      return {
+        icon: SquareCheck,
+        bgColor: '#dbeafe',
+        iconColor: '#2563eb',
+      };
+    }
+
+    // Reflection (Thought) - default
+    return {
+      icon: Sparkles,
+      bgColor: '#f3e8ff',
+      iconColor: '#9333ea',
+    };
   };
 
-  const getBalanceColor = (balance: number) => (balance >= 0 ? '#16a34a' : '#dc2626');
+  const getPreviewText = (entry: JournalEntry): string => {
+    const linkedText = entry.linked_count ? `Linked: ${entry.linked_count}` : '';
+
+    if (entry.source_data?.roles?.length > 0) {
+      const roleNames = entry.source_data.roles.map((r: any) => r.label).join(', ');
+      return linkedText ? `${linkedText} • ${roleNames}` : roleNames;
+    }
+
+    if (entry.source_data?.keyRelationships?.length > 0) {
+      const krName = entry.source_data.keyRelationships[0].name;
+      return linkedText ? `${linkedText} • ${krName}` : `Linked: ${krName}`;
+    }
+
+    if (linkedText) {
+      return linkedText;
+    }
+
+    // Show content preview for reflections
+    if (entry.source_data?.content) {
+      return entry.source_data.content.substring(0, 60) + (entry.source_data.content.length > 60 ? '...' : '');
+    }
+
+    return '';
+  };
+
+  const renderSectionHeader = ({ section }: { section: DateSection }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>{section.title}</Text>
+    </View>
+  );
+
+  const renderItem = ({ item }: { item: JournalEntry }) => {
+    const { icon: Icon, bgColor, iconColor } = getEntryIcon(item);
+    const previewText = getPreviewText(item);
+    const impactText = item.type === 'deposit'
+      ? `+${item.amount.toFixed(1)}`
+      : item.type === 'withdrawal'
+      ? `-${item.amount.toFixed(1)}`
+      : '';
+    const impactColor = item.type === 'deposit' ? '#16a34a' : '#dc2626';
+
+    return (
+      <TouchableOpacity
+        style={styles.entryRow}
+        onPress={() => onEntryPress(item)}
+      >
+        <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+          <Icon size={20} color={iconColor} strokeWidth={2} />
+        </View>
+
+        <View style={styles.content}>
+          <Text style={styles.title} numberOfLines={1}>
+            {item.description}
+          </Text>
+          {previewText ? (
+            <Text style={styles.preview} numberOfLines={1}>
+              {previewText}
+            </Text>
+          ) : null}
+        </View>
+
+        {impactText ? (
+          <Text style={[styles.impact, { color: impactColor }]}>
+            {impactText}
+          </Text>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderFooter = () => {
+    if (!hasMore || selectedPeriod !== 'all') return null;
+
+    if (loadingMore) {
+      return (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color="#3b82f6" />
+        </View>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View style={styles.container}>
-      {/* Time Period Selector (if enabled) */}
+      {/* Time Period Selector */}
       {showTimePeriodSelector && (
         <View style={styles.timePeriodContainer}>
           <View style={styles.timePeriodSelector}>
@@ -907,162 +1029,54 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         </View>
       )}
 
-      {/* Journal Header */}
-      <View style={styles.journalHeader}>
-        <Text style={styles.headerDate}>Date</Text>
-        <Text style={styles.headerDescription}>Description</Text>
-        <Text style={styles.headerLinked}>Linked</Text>
-        <Text style={styles.headerNotes}>Notes</Text>
-        <Text style={styles.headerDeposit}>Impact</Text>
-        <Text style={styles.headerBalance}>Balance</Text>
+      {/* Header with Total Impact */}
+      <View style={styles.header}>
+        <Text style={styles.headerLabel}>Total Impact</Text>
+        <Text style={[styles.headerTotal, { color: totalImpact >= 0 ? '#16a34a' : '#dc2626' }]}>
+          {totalImpact >= 0 ? '+' : ''}{totalImpact.toFixed(1)}
+        </Text>
       </View>
 
-      {/* Journal Entries */}
-      <ScrollView style={styles.journalContent}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading journal...</Text>
-          </View>
-        ) : entries.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No journal entries found</Text>
-          </View>
-        ) : (
-          entries.map((entry, index) => (
-            <TouchableOpacity
-              key={`${entry.source_type}-${entry.id}`}
-              style={[styles.journalRow, index % 2 === 0 ? styles.evenRow : styles.oddRow]}
-              onPress={() => onEntryPress(entry)}
-            >
-              <Text style={styles.cellDate}>{formatDate(entry.date)}</Text>
-              <Text style={styles.cellDescription} numberOfLines={2}>
-                {entry.description}
-              </Text>
-              <Text style={styles.cellLinked}>
-                {entry.linked_count !== undefined && entry.linked_count > 0 ? entry.linked_count : '—'}
-              </Text>
-              <View style={styles.cellNotes}>
-                {entry.type === 'reflection' ? (
-                  entry.source_type === 'depositIdea' ? (
-                    <Lightbulb size={16} color="#f59e0b" />
-                  ) : entry.source_data?.daily_rose ? (
-                    <Flower2 size={16} color="#ec4899" />
-                  ) : entry.source_data?.daily_thorn ? (
-                    <AlertTriangle size={16} color="#ef4444" />
-                  ) : (
-                    <View style={styles.reflectionBadge}>
-                      <Text style={styles.reflectionBadgeText}>R</Text>
-                    </View>
-                  )
-                ) : entry.type === 'withdrawal' ? (
-                  <AlertTriangle size={16} color="#ef4444" />
-                ) : entry.has_notes ? (
-                  <FileText size={14} color="#6b7280" />
-                ) : null}
-              </View>
-              <Text style={[styles.cellImpact, entry.type === 'deposit' && { color: '#16a34a' }, entry.type === 'withdrawal' && { color: '#dc2626' }]}>
-                {entry.type === 'deposit' ? `+${entry.amount.toFixed(1)}` : entry.type === 'withdrawal' ? `-${entry.amount.toFixed(1)}` : '—'}
-              </Text>
-              <Text style={[styles.cellBalance, { color: getBalanceColor(entry.balance) }]}>
-                {entry.type === 'reflection' ? '—' : formatBalance(entry.balance)}
-              </Text>
-            </TouchableOpacity>
-          ))
-        )}
-
-        {!loading && entries.length > 0 && displayedCount < allEntries.length && (
-          <View style={styles.loadMoreContainer}>
-            <TouchableOpacity
-              style={styles.loadMoreButton}
-              onPress={loadMore}
-              disabled={loadingMore}
-            >
-              <Text style={styles.loadMoreText}>
-                {loadingMore ? 'Loading...' : `Load More (${allEntries.length - displayedCount} remaining)`}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
+      {/* Feed */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={styles.loadingText}>Loading journal...</Text>
+        </View>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => `${item.source_type}-${item.id}`}
+          renderSectionHeader={renderSectionHeader}
+          renderItem={renderItem}
+          stickySectionHeadersEnabled={true}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No journal entries found</Text>
+            </View>
+          }
+          contentContainerStyle={sections.length === 0 ? styles.emptyList : undefined}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
-  journalHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#f8fafc',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: '#d1d5db',
-  },
-  headerDate: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  headerDescription: { flex: 1, fontSize: 12, fontWeight: '600', color: '#374151', paddingHorizontal: 8 },
-  headerLinked: { width: 50, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  headerNotes: { width: 40, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  headerDeposit: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
-  headerBalance: { width: 70, fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'right' },
-  journalContent: { flex: 1 },
-  journalRow: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  evenRow: { backgroundColor: '#ffffff' },
-  oddRow: { backgroundColor: '#f1f5f9' },
-  cellDate: { width: 70, fontSize: 12, color: '#374151', textAlign: 'center' },
-  cellDescription: { flex: 1, fontSize: 14, color: '#1f2937', paddingHorizontal: 8, lineHeight: 18 },
-  cellLinked: { width: 50, fontSize: 14, color: '#6b7280', textAlign: 'center', fontWeight: '500' },
-  cellNotes: { width: 40, alignItems: 'center', justifyContent: 'center' },
-  cellImpact: { width: 70, fontSize: 14, fontWeight: '600', textAlign: 'right' },
-  cellBalance: { width: 70, fontSize: 14, fontWeight: '700', textAlign: 'right' },
-  loadingContainer: { padding: 40, alignItems: 'center' },
-  loadingText: { color: '#6b7280', fontSize: 16 },
-  emptyContainer: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#6b7280', fontSize: 16, textAlign: 'center' },
-  reflectionBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#8b5cf6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#7c3aed',
-  },
-  reflectionBadgeText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  loadMoreContainer: {
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  loadMoreButton: {
-    backgroundColor: '#0078d4',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 200,
-    alignItems: 'center',
-  },
-  loadMoreText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff'
   },
   timePeriodContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     alignItems: 'flex-end',
     backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   timePeriodSelector: {
     flexDirection: 'row',
@@ -1081,7 +1095,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   timePeriodButtonActive: {
-    backgroundColor: '#0078d4',
+    backgroundColor: '#3b82f6',
   },
   timePeriodButtonText: {
     fontSize: 14,
@@ -1090,5 +1104,103 @@ const styles = StyleSheet.create({
   },
   timePeriodButtonTextActive: {
     color: '#ffffff',
+  },
+  header: {
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  headerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  headerTotal: {
+    fontSize: 36,
+    fontWeight: '700',
+  },
+  sectionHeader: {
+    backgroundColor: '#f8fafc',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  sectionHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  content: {
+    flex: 1,
+    gap: 4,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f2937',
+    lineHeight: 20,
+  },
+  preview: {
+    fontSize: 13,
+    color: '#6b7280',
+    lineHeight: 18,
+  },
+  impact: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    color: '#6b7280',
+    fontSize: 16,
+    marginTop: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    color: '#6b7280',
+    fontSize: 16,
+    textAlign: 'center'
+  },
+  emptyList: {
+    flexGrow: 1,
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
 });
