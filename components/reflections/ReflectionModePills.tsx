@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Lightbulb, FileText, Flower2, AlertTriangle } from 'lucide-react-native';
+import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { FileText } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import Tooltip from '@/components/common/Tooltip';
 
@@ -40,24 +40,26 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
   const renderIcon = (icon: 'rose' | 'thorn' | 'idea' | 'note', isSelected: boolean) => {
     if (icon === 'rose') {
       return (
-        <Flower2
-          size={24}
-          color={isSelected ? '#ffffff' : colors.text}
+        <Image
+          source={require('@/assets/images/rose-192.png')}
+          style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
+          resizeMode="contain"
         />
       );
     } else if (icon === 'thorn') {
       return (
-        <AlertTriangle
-          size={24}
-          color={isSelected ? '#ffffff' : colors.text}
+        <Image
+          source={require('@/assets/images/thorn_b-01.jpg')}
+          style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
+          resizeMode="contain"
         />
       );
     } else if (icon === 'idea') {
       return (
-        <Lightbulb
-          size={24}
-          color={isSelected ? '#ffffff' : colors.text}
-          fill={isSelected ? '#ffffff' : 'none'}
+        <Image
+          source={require('@/assets/images/deposit-idea.png')}
+          style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
+          resizeMode="contain"
         />
       );
     } else {
@@ -122,5 +124,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 8,
+  },
+  iconImage: {
+    width: 32,
+    height: 32,
   },
 });
