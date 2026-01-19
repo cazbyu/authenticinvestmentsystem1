@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { CheckCircle, Calendar, BookOpen, Lightbulb, Flower2, XOctagon } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Calendar, BookOpen, Lightbulb, Flower2, Octagon as XOctagon } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface FollowThroughButtonBarProps {

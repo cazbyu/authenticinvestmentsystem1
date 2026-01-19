@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Flower2, Lightbulb, Sparkles, SquareCheck, XOctagon, BookOpen } from 'lucide-react-native';
+import { Flower2, Lightbulb, Sparkles, SquareCheck, Octagon as XOctagon, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { ChevronRight, Calendar, CheckSquare, Flower2, XOctagon, Lightbulb, BookOpen } from 'lucide-react-native';
+import { ChevronRight, Calendar, SquareCheck as CheckSquare, Flower2, Octagon as XOctagon, Lightbulb, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 
 interface ParentItemInfoProps {

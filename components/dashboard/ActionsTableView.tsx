@@ -9,7 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { CheckSquare, Calendar, Check, UserCircle, Trash2, Circle } from 'lucide-react-native';
+import { SquareCheck as CheckSquare, Calendar, Check, CircleUser as UserCircle, Trash2, Circle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
