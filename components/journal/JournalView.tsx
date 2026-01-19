@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Flower2, Lightbulb, Sparkles, SquareCheck, XOctagon } from 'lucide-react-native';
+import { Flower2, Lightbulb, Sparkles, SquareCheck, XOctagon, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
-import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
+import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';
 import { fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { formatLocalDate } from '@/lib/dateUtils';
 
@@ -19,6 +19,7 @@ interface JournalEntry {
   source_type: 'task' | 'withdrawal' | 'reflection' | 'depositIdea';
   source_data?: any;
   linked_count?: number;
+  linkedCounts?: LinkedItemCounts;
   status?: 'completed';
 }
 
@@ -637,12 +638,20 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
                 entry.source_type === 'depositIdea' ? 'depositIdea' : 'reflection') as any
         }));
 
-      const linkedCountsMap = await fetchBulkLinkedItemsCounts(parentEntries, user.id);
+      const linkedCountsMap = await fetchBulkLinkedItemsCountsDetailed(parentEntries, user.id);
 
       journalEntries.forEach(entry => {
         if (entry.source_type !== 'withdrawal') {
-          entry.linked_count = linkedCountsMap.get(entry.source_id) || 0;
+          const counts = linkedCountsMap.get(entry.source_id);
+          if (counts) {
+            entry.linkedCounts = counts;
+            entry.linked_count = counts.total;
+          } else {
+            entry.linkedCounts = { tasks: 0, reflections: 0, depositIdeas: 0, total: 0 };
+            entry.linked_count = 0;
+          }
         } else {
+          entry.linkedCounts = { tasks: 0, reflections: 0, depositIdeas: 0, total: 0 };
           entry.linked_count = 0;
         }
       });
@@ -888,20 +897,14 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
   };
 
   const getPreviewText = (entry: JournalEntry): string => {
-    const linkedText = entry.linked_count ? `Linked: ${entry.linked_count}` : '';
-
     if (entry.source_data?.roles?.length > 0) {
       const roleNames = entry.source_data.roles.map((r: any) => r.label).join(', ');
-      return linkedText ? `${linkedText} • ${roleNames}` : roleNames;
+      return roleNames;
     }
 
     if (entry.source_data?.keyRelationships?.length > 0) {
       const krName = entry.source_data.keyRelationships[0].name;
-      return linkedText ? `${linkedText} • ${krName}` : `Linked: ${krName}`;
-    }
-
-    if (linkedText) {
-      return linkedText;
+      return krName;
     }
 
     // Show content preview for reflections
@@ -910,6 +913,47 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     }
 
     return '';
+  };
+
+  const renderLinkedBadges = (linkedCounts?: LinkedItemCounts) => {
+    if (!linkedCounts || linkedCounts.total === 0) {
+      return null;
+    }
+
+    const badges = [];
+
+    if (linkedCounts.tasks > 0) {
+      badges.push(
+        <View key="tasks" style={styles.linkedBadge}>
+          <SquareCheck size={12} color="#6b7280" strokeWidth={2} />
+          <Text style={styles.linkedBadgeText}>{linkedCounts.tasks}</Text>
+        </View>
+      );
+    }
+
+    if (linkedCounts.reflections > 0) {
+      badges.push(
+        <View key="reflections" style={styles.linkedBadge}>
+          <BookOpen size={12} color="#6b7280" strokeWidth={2} />
+          <Text style={styles.linkedBadgeText}>{linkedCounts.reflections}</Text>
+        </View>
+      );
+    }
+
+    if (linkedCounts.depositIdeas > 0) {
+      badges.push(
+        <View key="ideas" style={styles.linkedBadge}>
+          <Lightbulb size={12} color="#6b7280" strokeWidth={2} />
+          <Text style={styles.linkedBadgeText}>{linkedCounts.depositIdeas}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.linkedBadgesContainer}>
+        {badges}
+      </View>
+    );
   };
 
   const renderSectionHeader = ({ section }: { section: DateSection }) => (
@@ -941,10 +985,18 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
           <Text style={styles.title} numberOfLines={1}>
             {item.description}
           </Text>
-          {previewText ? (
-            <Text style={styles.preview} numberOfLines={1}>
-              {previewText}
-            </Text>
+          {(previewText || item.linkedCounts) ? (
+            <View style={styles.previewRow}>
+              {previewText ? (
+                <Text style={styles.preview} numberOfLines={1}>
+                  {previewText}
+                </Text>
+              ) : null}
+              {previewText && item.linkedCounts && item.linkedCounts.total > 0 ? (
+                <Text style={styles.previewSeparator}>•</Text>
+              ) : null}
+              {renderLinkedBadges(item.linkedCounts)}
+            </View>
           ) : null}
         </View>
 
@@ -1158,10 +1210,42 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     lineHeight: 20,
   },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
   preview: {
     fontSize: 13,
     color: '#6b7280',
     lineHeight: 18,
+    flexShrink: 1,
+  },
+  previewSeparator: {
+    fontSize: 13,
+    color: '#d1d5db',
+    marginHorizontal: 4,
+  },
+  linkedBadgesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  linkedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  linkedBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
   },
   impact: {
     fontSize: 16,
