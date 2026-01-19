@@ -1678,6 +1678,34 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     </View>
   );
 
+  const renderToggleSwitchGrid = (
+    title: string,
+    items: Array<{ id: string; label?: string; name?: string }>,
+    selectedIds: string[],
+    onToggle: (id: string) => void
+  ) => (
+    <View style={styles.field}>
+      <Text style={[styles.label, { color: colors.text }]}>{title}</Text>
+      <View style={styles.toggleSwitchContainer}>
+        {items.map(item => {
+          const isSelected = selectedIds.includes(item.id);
+          const displayName = item.label || item.name || '';
+          return (
+            <View key={item.id} style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+              <Switch
+                value={isSelected}
+                onValueChange={() => onToggle(item.id)}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.surface}
+              />
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1950,6 +1978,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
                 <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
                   {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                  {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
                 </View>
               </View>
             </>
@@ -2183,7 +2212,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Roles */}
-          {renderCheckboxGrid(
+          {renderToggleSwitchGrid(
             'Roles',
             roles,
             formData.selectedRoleIds,
@@ -2199,53 +2228,11 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           )}
 
           {/* Wellness Zones */}
-          {renderCheckboxGrid(
+          {renderToggleSwitchGrid(
             'Wellness Zones',
             domains,
             formData.selectedDomainIds,
             (id) => handleMultiSelect('selectedDomainIds', id)
-          )}
-
-          {/* Goals - Collapsible chip-based section */}
-          {((formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea') || (formData.type === 'task' && formData.isGoal)) && availableGoals.length > 0 && (
-            <View style={styles.field}>
-              <TouchableOpacity
-                style={styles.collapsibleHeader}
-                onPress={() => setShowGoalsSection(!showGoalsSection)}
-              >
-                <Text style={[styles.label, { color: colors.text }]}>Goals</Text>
-                {showGoalsSection ? (
-                  <ChevronUp size={20} color={colors.text} />
-                ) : (
-                  <ChevronDown size={20} color={colors.text} />
-                )}
-              </TouchableOpacity>
-              {showGoalsSection && (
-                <View style={styles.goalPickerRow}>
-                  {availableGoals.map(g => {
-                    const active = formData.selectedGoalIds.includes(g.id);
-                    return (
-                      <TouchableOpacity
-                        key={`${g.goal_type}-${g.id}`}
-                        style={[
-                          styles.goalChip,
-                          { borderColor: colors.border, backgroundColor: colors.surface },
-                          active && { backgroundColor: colors.primary, borderColor: colors.primary }
-                        ]}
-                        onPress={() => handleMultiSelect('selectedGoalIds', g.id)}
-                      >
-                        <Text style={[
-                          styles.goalChipText,
-                          { color: active ? '#ffffff' : colors.text }
-                        ]}>
-                          {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
           )}
 
           {/* Follow Up Section - Only for reflection mode */}
@@ -2911,6 +2898,24 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 14,
     flex: 1,
+  },
+  toggleSwitchContainer: {
+    gap: 8,
+  },
+  toggleSwitchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  toggleSwitchLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    flex: 1,
+    marginRight: 12,
   },
   loadingContainer: {
     flex: 1,
