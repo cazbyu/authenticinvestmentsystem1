@@ -9,7 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { CheckSquare, Calendar, Check, UserCircle, Trash2, Circle, List } from 'lucide-react-native';
+import { CheckSquare, Calendar, Check, UserCircle, Trash2, Circle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
@@ -104,9 +104,22 @@ interface SwipeableRowProps {
   onDelete: () => void;
   onPress: () => void;
   children: React.ReactNode;
+  isDisabled?: boolean;
+  onOpen?: (id: string) => void;
+  shouldClose?: boolean;
 }
 
-function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, children }: SwipeableRowProps) {
+function SwipeableRow({
+  action,
+  onComplete,
+  onDelegate,
+  onDelete,
+  onPress,
+  children,
+  isDisabled = false,
+  onOpen,
+  shouldClose = false,
+}: SwipeableRowProps) {
   const translateX = useSharedValue(0);
   const [isRevealed, setIsRevealed] = useState(false);
   const [isSwiping, setIsSwiping] = useState(false);
@@ -115,7 +128,15 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
   const ACTION_WIDTH = 70;
   const SWIPE_DETECTION_THRESHOLD = 10; // Minimum movement to consider it a swipe
 
+  // Close swipe when shouldClose changes to true
+  useEffect(() => {
+    if (shouldClose && isRevealed) {
+      closeSwipe();
+    }
+  }, [shouldClose]);
+
   const panGesture = Gesture.Pan()
+    .enabled(!isDisabled)
     .onStart(() => {
       runOnJS(setIsSwiping)(false);
     })
@@ -132,6 +153,9 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
       if (event.translationX < SWIPE_THRESHOLD) {
         translateX.value = withTiming(-ACTION_WIDTH * 2);
         runOnJS(setIsRevealed)(true);
+        if (onOpen) {
+          runOnJS(onOpen)(action.id);
+        }
       } else {
         translateX.value = withTiming(0);
         runOnJS(setIsRevealed)(false);
@@ -364,6 +388,7 @@ export function ActionsTableView({
   const [loading, setLoading] = useState(true);
   const isInitialLoad = useRef(true);
   const [completionTriggers, setCompletionTriggers] = useState<Record<string, number>>({});
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   useEffect(() => {
     isInitialLoad.current = true;
@@ -604,6 +629,12 @@ export function ActionsTableView({
           const events = items.filter(item => item.type === 'event');
           const tasks = items.filter(item => item.type === 'task');
 
+          // Sort tasks: incomplete first, then completed
+          const sortedTasks = tasks.sort((a, b) => {
+            if (a.isCompleted === b.isCompleted) return 0;
+            return a.isCompleted ? 1 : -1;
+          });
+
           const typeGroups: TypeGroup[] = [];
 
           // Events always come first
@@ -611,9 +642,9 @@ export function ActionsTableView({
             typeGroups.push({ type: 'event', items: events });
           }
 
-          // Then tasks
-          if (tasks.length > 0) {
-            typeGroups.push({ type: 'task', items: tasks });
+          // Then tasks (sorted)
+          if (sortedTasks.length > 0) {
+            typeGroups.push({ type: 'task', items: sortedTasks });
           }
 
           return {
@@ -683,16 +714,33 @@ export function ActionsTableView({
     const wasCompleted = action.isCompleted;
     const newCompletedState = !wasCompleted;
 
-    // Optimistic UI update
+    // Close any open swipe row
+    setOpenRowId(null);
+
+    // Optimistic UI update with re-sorting
     setSections(prevSections =>
       prevSections.map(section => ({
         ...section,
-        data: section.data.map(typeGroup => ({
-          ...typeGroup,
-          items: typeGroup.items.map(a =>
-            a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
-          )
-        }))
+        data: section.data.map(typeGroup => {
+          if (typeGroup.type === 'task') {
+            // Update completion status
+            const updatedItems = typeGroup.items.map(a =>
+              a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
+            );
+            // Re-sort: incomplete first, then completed
+            const sortedItems = updatedItems.sort((a, b) => {
+              if (a.isCompleted === b.isCompleted) return 0;
+              return a.isCompleted ? 1 : -1;
+            });
+            return { ...typeGroup, items: sortedItems };
+          }
+          return {
+            ...typeGroup,
+            items: typeGroup.items.map(a =>
+              a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
+            )
+          };
+        })
       }))
     );
 
@@ -771,7 +819,7 @@ export function ActionsTableView({
         </>
       ) : (
         <>
-          <List size={14} color="#6b7280" strokeWidth={2} />
+          <CheckSquare size={14} color="#6b7280" strokeWidth={2} />
           <Text style={styles.typeHeaderText}>TASKS</Text>
         </>
       )}
@@ -811,6 +859,9 @@ export function ActionsTableView({
               onDelegate={() => handleDelegate(item)}
               onDelete={() => handleDelete(item)}
               onPress={() => onTaskPress && onTaskPress(item.id)}
+              isDisabled={!!isCompleted}
+              onOpen={(id) => setOpenRowId(id)}
+              shouldClose={openRowId !== null && openRowId !== item.id}
             >
               <ItemRow
                 item={item}
