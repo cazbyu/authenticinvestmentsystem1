@@ -2696,17 +2696,16 @@ const styles = StyleSheet.create({
   },
   switchesRowMobile: {
     width: '100%',
-    gap: 12,
+    gap: 8,
   },
   switchFieldContainer: {
     flex: 1,
   },
   switchField: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: 300,
-    maxWidth: '100%',
     minWidth: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -2722,8 +2721,8 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
-    flexShrink: 0,
-    marginRight: 12,
+    flexShrink: 1,
+    marginRight: 8,
   },
   dateRow: {
     flexDirection: 'row',
