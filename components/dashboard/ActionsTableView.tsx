@@ -70,26 +70,26 @@ interface ActionsTableViewProps {
 function getDateRange(period: TimePeriod): { start: Date; end: Date } {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
+  const past = new Date('1900-01-01');
 
   switch (period) {
     case 'today':
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
-      return { start: now, end: todayEnd };
+      return { start: past, end: todayEnd };
 
     case 'week':
       const weekEnd = new Date(now);
       weekEnd.setDate(now.getDate() + 6);
       weekEnd.setHours(23, 59, 59, 999);
-      return { start: now, end: weekEnd };
+      return { start: past, end: weekEnd };
 
     case 'month':
       const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       monthEnd.setHours(23, 59, 59, 999);
-      return { start: now, end: monthEnd };
+      return { start: past, end: monthEnd };
 
     case 'all':
-      const past = new Date('1900-01-01');
       const allEnd = new Date('2099-12-31');
       allEnd.setHours(23, 59, 59, 999);
       return { start: past, end: allEnd };
@@ -301,7 +301,6 @@ export function ActionsTableView({
           .eq('type', 'task')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('due_date', startStr)
           .lte('due_date', endStr);
 
         query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
@@ -317,7 +316,7 @@ export function ActionsTableView({
           .eq('type', 'event')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', startStr)
+          .gte('start_date', todayStr)
           .lte('start_date', endStr);
 
         query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
@@ -333,7 +332,6 @@ export function ActionsTableView({
           .eq('type', 'task')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('due_date', startStr)
           .lte('due_date', endStr);
 
         let eventsQuery = supabase
@@ -343,7 +341,7 @@ export function ActionsTableView({
           .eq('type', 'event')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', startStr)
+          .gte('start_date', todayStr)
           .lte('start_date', endStr);
 
         tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
@@ -462,6 +460,9 @@ export function ActionsTableView({
 
           if (!displayDate) {
             displayDate = 'No Date';
+          } else if (action.isOverdue) {
+            // Move overdue items to today's date
+            displayDate = todayStr;
           }
 
           if (!groupedByDate.has(displayDate)) {
