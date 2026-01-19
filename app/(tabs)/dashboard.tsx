@@ -196,7 +196,6 @@ export default function Dashboard() {
     setSelectedPeriod('week');
     setActiveView('deposits');
     setReflectFilter('all');
-    setActFilter('all');
     setSortOption('due_date');
     setIsSortModalVisible(false);
     setIsFormModalVisible(false);
