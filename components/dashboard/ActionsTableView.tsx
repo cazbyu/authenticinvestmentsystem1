@@ -17,7 +17,14 @@ import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import { ActFilter } from './ActFilterButtons';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSequence,
+  withDelay,
+  runOnJS
+} from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 interface ActionItem {
@@ -167,6 +174,58 @@ function SwipeableRow({ action, onComplete, onDelegate, onDelete, onPress, child
   );
 }
 
+// Floating Points Animation Component
+interface FloatingPointsProps {
+  points: number;
+  trigger: boolean;
+  isCompleted: boolean;
+}
+
+function FloatingPoints({ points, trigger, isCompleted }: FloatingPointsProps) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    if (trigger && isCompleted) {
+      // Reset
+      opacity.value = 0;
+      translateY.value = 0;
+
+      // Animate: fade in, move up, fade out
+      opacity.value = withSequence(
+        withTiming(1, { duration: 200 }),
+        withDelay(800, withTiming(0, { duration: 400 }))
+      );
+
+      translateY.value = withSequence(
+        withTiming(-20, { duration: 1000 })
+      );
+    } else if (!isCompleted) {
+      // Hide immediately when unchecked
+      opacity.value = 0;
+      translateY.value = 0;
+    }
+  }, [trigger, isCompleted]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  // Only render if completed (for the brief animation moment)
+  if (!isCompleted) {
+    return null;
+  }
+
+  return (
+    <Animated.View style={[styles.floatingPointsContainer, animatedStyle]}>
+      <Text style={styles.floatingPointsText}>
+        +{Math.round(points)}
+      </Text>
+    </Animated.View>
+  );
+}
+
 export function ActionsTableView({
   filter,
   period,
@@ -181,6 +240,7 @@ export function ActionsTableView({
   const [sections, setSections] = useState<DateSection[]>([]);
   const [loading, setLoading] = useState(true);
   const isInitialLoad = useRef(true);
+  const [completionTriggers, setCompletionTriggers] = useState<Record<string, number>>({});
 
   useEffect(() => {
     isInitialLoad.current = true;
@@ -485,15 +545,28 @@ export function ActionsTableView({
   const handleComplete = async (action: ActionItem) => {
     if (!onComplete) return;
 
+    const wasCompleted = action.isCompleted;
+    const newCompletedState = !wasCompleted;
+
+    // Optimistic UI update
     setSections(prevSections =>
       prevSections.map(section => ({
         ...section,
         data: section.data.map(a =>
-          a.id === action.id ? { ...a, isCompleted: true } : a
+          a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
         )
       }))
     );
 
+    // Trigger animation only when completing (not uncompleting)
+    if (newCompletedState) {
+      setCompletionTriggers(prev => ({
+        ...prev,
+        [action.id]: Date.now()
+      }));
+    }
+
+    // Call the completion handler
     onComplete(action.id);
   };
 
@@ -579,22 +652,22 @@ export function ActionsTableView({
         onDelete={() => handleDelete(item)}
         onPress={() => onTaskPress && onTaskPress(item.id)}
       >
-        <TouchableOpacity
+        <View
           style={[
             styles.itemContainer,
-            { backgroundColor: colors.background },
+            {
+              backgroundColor: colors.background,
+              borderLeftColor: priorityColor,
+              borderLeftWidth: 4,
+            },
             isCompleted && styles.completedItem
           ]}
-          onPress={() => onTaskPress && onTaskPress(item.id)}
-          activeOpacity={0.7}
-          disabled={isCompleted}
         >
-          {/* Left: Checkbox */}
+          {/* Left: Checkbox - SEPARATE from body */}
           <TouchableOpacity
-            onPress={() => !isCompleted && handleComplete(item)}
+            onPress={() => handleComplete(item)}
             style={styles.checkboxContainer}
-            disabled={isCompleted}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             {isCompleted ? (
               <View style={[styles.checkbox, styles.checkboxCompleted]}>
@@ -607,8 +680,12 @@ export function ActionsTableView({
             )}
           </TouchableOpacity>
 
-          {/* Center: Content */}
-          <View style={styles.contentContainer}>
+          {/* Center: Content - Tappable to open modal */}
+          <TouchableOpacity
+            style={styles.contentContainer}
+            onPress={() => onTaskPress && onTaskPress(item.id)}
+            activeOpacity={0.7}
+          >
             {/* Title Row */}
             <View style={styles.titleRow}>
               {/* Type Icon */}
@@ -637,15 +714,25 @@ export function ActionsTableView({
                 {metadataParts.join(' • ')}
               </Text>
             )}
-          </View>
+          </TouchableOpacity>
 
-          {/* Right: Points */}
+          {/* Right: Points Area - Shows static points when completed, floating animation on completion */}
           <View style={styles.pointsContainer}>
-            <Text style={[styles.pointsText, isCompleted && { color: '#9ca3af' }]}>
-              +{Math.round(item.depositValue)}
-            </Text>
+            {/* Static points display for completed items */}
+            {isCompleted && (
+              <Text style={[styles.pointsText, { color: '#9ca3af' }]}>
+                +{Math.round(item.depositValue)}
+              </Text>
+            )}
+
+            {/* Floating animation trigger */}
+            <FloatingPoints
+              points={item.depositValue}
+              trigger={!!completionTriggers[item.id]}
+              isCompleted={!!isCompleted}
+            />
           </View>
-        </TouchableOpacity>
+        </View>
       </SwipeableRow>
     );
   };
@@ -734,7 +821,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
@@ -782,11 +869,22 @@ const styles = StyleSheet.create({
     paddingLeft: 24,
   },
   pointsContainer: {
-    minWidth: 45,
+    minWidth: 50,
     alignItems: 'flex-end',
+    position: 'relative',
   },
   pointsText: {
     fontSize: 15,
+    fontWeight: '700',
+    color: '#16a34a',
+  },
+  floatingPointsContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  floatingPointsText: {
+    fontSize: 20,
     fontWeight: '700',
     color: '#16a34a',
   },
