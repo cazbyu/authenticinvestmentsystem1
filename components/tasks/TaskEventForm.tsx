@@ -204,7 +204,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
   // Calendar state
   const [showCalendar, setShowCalendar] = useState(false);
-  const [calendarMode, setCalendarMode] = useState<'due' | 'start' | 'end' | 'withdrawal'>('due');
+  const [calendarMode, setCalendarMode] = useState<'due' | 'start' | 'end' | 'withdrawal' | 'followUp'>('due');
 
   // Recurrence state
   const [showCustomRecurrenceModal, setShowCustomRecurrenceModal] = useState(false);
@@ -840,7 +840,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     }
   };
 
-  const handleCalendarOpen = (mode: 'due' | 'start' | 'end' | 'withdrawal') => {
+  const handleCalendarOpen = (mode: 'due' | 'start' | 'end' | 'withdrawal' | 'followUp') => {
     setCalendarMode(mode);
     setShowCalendar(true);
   };
@@ -865,6 +865,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         break;
       case 'withdrawal':
         setFormData(prev => ({ ...prev, withdrawalDate: selectedDate }));
+        break;
+      case 'followUp':
+        setFormData(prev => ({ ...prev, followUpDate: selectedDate }));
         break;
     }
 
@@ -1683,28 +1686,44 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     items: Array<{ id: string; label?: string; name?: string }>,
     selectedIds: string[],
     onToggle: (id: string) => void
-  ) => (
-    <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.text }]}>{title}</Text>
-      <View style={styles.toggleSwitchContainer}>
-        {items.map(item => {
-          const isSelected = selectedIds.includes(item.id);
-          const displayName = item.label || item.name || '';
-          return (
-            <View key={item.id} style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
-              <Switch
-                value={isSelected}
-                onValueChange={() => onToggle(item.id)}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.surface}
-              />
-            </View>
-          );
-        })}
+  ) => {
+    // Check if any item has long text (more than 15 characters)
+    const hasLongText = items.some(item => {
+      const displayName = item.label || item.name || '';
+      return displayName.length > 15;
+    });
+    const useColumns = !hasLongText;
+
+    return (
+      <View style={styles.field}>
+        <Text style={[styles.label, { color: colors.text }]}>{title}</Text>
+        <View style={[styles.toggleSwitchContainer, useColumns && styles.toggleSwitchContainerColumns]}>
+          {items.map(item => {
+            const isSelected = selectedIds.includes(item.id);
+            const displayName = item.label || item.name || '';
+            return (
+              <View
+                key={item.id}
+                style={[
+                  styles.toggleSwitchItem,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                  useColumns && styles.toggleSwitchItemColumn
+                ]}
+              >
+                <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+                <Switch
+                  value={isSelected}
+                  onValueChange={() => onToggle(item.id)}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.surface}
+                />
+              </View>
+            );
+          })}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -1978,7 +1997,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
                 <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
                   {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
-                  {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
                 </View>
               </View>
             </>
@@ -1988,33 +2006,31 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
           {formData.isGoal && (
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
-              <View style={styles.goalPickerRow}>
-                {availableGoals.length === 0 ? (
-                  <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
-                ) : (
-                  availableGoals.map(g => {
+              {availableGoals.length === 0 ? (
+                <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
+              ) : (
+                <View style={styles.toggleSwitchContainer}>
+                  {availableGoals.map(g => {
                     const active = formData.selectedGoal?.id === g.id;
                     return (
-                      <TouchableOpacity
+                      <View
                         key={`${g.goal_type}-${g.id}`}
-                        style={[
-                          styles.goalChip,
-                          { borderColor: colors.border, backgroundColor: colors.surface },
-                          active && { backgroundColor: colors.primary, borderColor: colors.primary }
-                        ]}
-                        onPress={() => handleGoalPick(g.id)}
+                        style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
                       >
-                        <Text style={[
-                          styles.goalChipText,
-                          { color: active ? '#ffffff' : colors.text }
-                        ]}>
+                        <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
                           {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
                         </Text>
-                      </TouchableOpacity>
+                        <Switch
+                          value={active}
+                          onValueChange={() => handleGoalPick(g.id)}
+                          trackColor={{ false: colors.border, true: colors.primary }}
+                          thumbColor={colors.surface}
+                        />
+                      </View>
                     );
-                  })
-                )}
-              </View>
+                  })}
+                </View>
+              )}
             </View>
           )}
 
@@ -2175,27 +2191,22 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </View>
           )}
 
-          {/* Delegate to Checkbox (only for tasks and events) */}
+          {/* Delegate to & Follow Up (only for tasks and events) */}
           {(formData.type === 'task' || formData.type === 'event') && (
-            <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-              <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                <View style={styles.switchField}>
-                  <Text style={[styles.switchLabel, { color: colors.text }]} numberOfLines={1}>
-                    Delegate to
-                  </Text>
-                  <Switch
-                    value={formData.isDelegated}
-                    onValueChange={(value) => {
-                      setFormData(prev => ({ ...prev, isDelegated: value }));
-                      if (value) {
-                        setShowDelegateModal(true);
-                      }
-                    }}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                    thumbColor={colors.surface}
-                  />
+            <>
+              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                  {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
+                    setFormData(prev => ({ ...prev, isDelegated: value }));
+                    if (value) {
+                      setShowDelegateModal(true);
+                    }
+                  })}
+                  {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
                 </View>
               </View>
+
+              {/* Delegate Info */}
               {formData.isDelegated && formData.selectedDelegateId && (
                 <View style={styles.delegateInfoContainer}>
                   <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
@@ -2208,7 +2219,42 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                   </TouchableOpacity>
                 </View>
               )}
-            </View>
+
+              {/* Follow Up Date/Time (when enabled) */}
+              {formData.followUpEnabled && (
+                <View style={styles.field}>
+                  <Text style={[styles.label, { color: colors.text }]}>Follow Up Date & Time</Text>
+                  <View style={styles.dateTimeRow}>
+                    <View style={styles.dateFieldWrapper}>
+                      <TouchableOpacity
+                        style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                        onPress={() => handleCalendarOpen('followUp')}
+                      >
+                        <CalendarIcon size={16} color={colors.textSecondary} />
+                        <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                          {formatDateForDisplay(formData.followUpDate)}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <TimePickerDropdown
+                      value={formData.followUpTime}
+                      onChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
+                      placeholder="Select time"
+                      isDark={isDarkMode}
+                    />
+                    <View style={styles.anytimeToggleInline}>
+                      <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
+                      <Switch
+                        value={formData.isAnytimeFollowUp}
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytimeFollowUp: value }))}
+                        trackColor={{ false: colors.border, true: colors.primary }}
+                        thumbColor={colors.surface}
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
+            </>
           )}
 
           {/* Roles */}
@@ -2902,6 +2948,11 @@ const styles = StyleSheet.create({
   toggleSwitchContainer: {
     gap: 8,
   },
+  toggleSwitchContainerColumns: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   toggleSwitchItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2910,6 +2961,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
+  },
+  toggleSwitchItemColumn: {
+    width: '48.5%',
   },
   toggleSwitchLabel: {
     fontSize: 15,
