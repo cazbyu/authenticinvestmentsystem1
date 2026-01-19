@@ -1687,12 +1687,12 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
     selectedIds: string[],
     onToggle: (id: string) => void
   ) => {
-    // Check if any item has long text (more than 15 characters)
-    const hasLongText = items.some(item => {
+    // Check if any item has very long text (more than 25 characters)
+    const hasVeryLongText = items.some(item => {
       const displayName = item.label || item.name || '';
-      return displayName.length > 15;
+      return displayName.length > 25;
     });
-    const useColumns = !hasLongText;
+    const useColumns = !hasVeryLongText;
 
     return (
       <View style={styles.field}>
@@ -1984,56 +1984,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             </>
           )}
 
-          {/* Switches Row - Only for task and event types */}
-          {(formData.type === 'task' || formData.type === 'event') && (
-            <>
-              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
-                  {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
-                </View>
-              </View>
-
-              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
-                </View>
-              </View>
-            </>
-          )}
-
-          {/* Goal picker (shows when Goal toggle ON) */}
-          {formData.isGoal && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
-              {availableGoals.length === 0 ? (
-                <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
-              ) : (
-                <View style={styles.toggleSwitchContainer}>
-                  {availableGoals.map(g => {
-                    const active = formData.selectedGoal?.id === g.id;
-                    return (
-                      <View
-                        key={`${g.goal_type}-${g.id}`}
-                        style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                      >
-                        <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
-                          {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
-                        </Text>
-                        <Switch
-                          value={active}
-                          onValueChange={() => handleGoalPick(g.id)}
-                          trackColor={{ false: colors.border, true: colors.primary }}
-                          thumbColor={colors.surface}
-                        />
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          )}
-
           {/* Date Fields */}
           {formData.type === 'task' && (
             <View style={styles.field}>
@@ -2145,22 +2095,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
               </View>
             </View>
           )}
-          {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
-
-          {/* Amount field for withdrawals */}
-          {formData.type === 'withdrawal' && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Amount *</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                value={formData.amount}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, amount: text }))}
-                placeholder="0.0"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          )}
 
           {/* Google Calendar-style Recurrence Dropdown (always visible for tasks and events when Goal is OFF) */}
           {!formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
@@ -2187,6 +2121,73 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
                     ? (formData.startDate || formatLocalDate(new Date()))
                     : (formData.dueDate || formatLocalDate(new Date()))
                 }
+              />
+            </View>
+          )}
+
+          {/* Switches Row - Only for task and event types */}
+          {(formData.type === 'task' || formData.type === 'event') && (
+            <>
+              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                  {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
+                  {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+                </View>
+              </View>
+
+              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                  {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* Goal picker (shows when Goal toggle ON) */}
+          {formData.isGoal && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
+              {availableGoals.length === 0 ? (
+                <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
+              ) : (
+                <View style={styles.toggleSwitchContainer}>
+                  {availableGoals.map(g => {
+                    const active = formData.selectedGoal?.id === g.id;
+                    return (
+                      <View
+                        key={`${g.goal_type}-${g.id}`}
+                        style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                      >
+                        <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
+                          {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
+                        </Text>
+                        <Switch
+                          value={active}
+                          onValueChange={() => handleGoalPick(g.id)}
+                          trackColor={{ false: colors.border, true: colors.primary }}
+                          thumbColor={colors.surface}
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          )}
+
+          {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
+
+          {/* Amount field for withdrawals */}
+          {formData.type === 'withdrawal' && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Amount *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                value={formData.amount}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, amount: text }))}
+                placeholder="0.0"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="decimal-pad"
               />
             </View>
           )}
@@ -2280,21 +2281,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
             formData.selectedDomainIds,
             (id) => handleMultiSelect('selectedDomainIds', id)
           )}
-
-          {/* Follow Up Section - Only for reflection mode */}
-          {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn' || formData.reflectionMode === 'reflection' || formData.reflectionMode === 'depositIdea') && (
-            <FollowUpToggleSection
-              enabled={formData.followUpEnabled}
-              date={formData.followUpDate}
-              time={formData.followUpTime}
-              isAnytime={formData.isAnytimeFollowUp}
-              onToggle={(enabled) => setFormData(prev => ({ ...prev, followUpEnabled: enabled }))}
-              onDateChange={(date) => setFormData(prev => ({ ...prev, followUpDate: date }))}
-              onTimeChange={(time) => setFormData(prev => ({ ...prev, followUpTime: time }))}
-              onAnytimeChange={(isAnytime) => setFormData(prev => ({ ...prev, isAnytimeFollowUp: isAnytime }))}
-            />
-          )}
-
 
           {/* Notes - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
