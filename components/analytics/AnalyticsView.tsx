@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, Award, Flower, AlertTriangle, Lightbulb, BookOpen } from 'lucide-react-native';
+import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, Award, Flower, XOctagon, Lightbulb, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { eventBus } from '@/lib/eventBus';
 
@@ -747,7 +747,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
               {/* Thorns Count */}
               <View style={styles.metricCard}>
                 <View style={styles.metricHeader}>
-                  <AlertTriangle size={16} color="#f59e0b" />
+                  <XOctagon size={16} color="#f59e0b" />
                   <Text style={styles.metricTitle}>Thorns</Text>
                 </View>
                 <Text style={[styles.metricValue, { color: '#f59e0b' }]}>

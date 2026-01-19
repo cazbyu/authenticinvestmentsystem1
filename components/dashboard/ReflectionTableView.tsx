@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { Flower, AlertTriangle, FileText, BookOpen } from 'lucide-react-native';
+import { Flower, XOctagon, FileText, BookOpen } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
@@ -134,7 +134,7 @@ export function ReflectionTableView({
       case 'rose':
         return <Flower {...iconProps} color="#16a34a" />;
       case 'thorn':
-        return <AlertTriangle {...iconProps} color="#f59e0b" />;
+        return <XOctagon {...iconProps} color="#f59e0b" />;
       case 'note':
         return <FileText {...iconProps} color="#0078d4" />;
       case 'reflection':

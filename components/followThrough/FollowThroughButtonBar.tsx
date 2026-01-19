@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { CheckCircle, Calendar, BookOpen, Lightbulb, Flower2, AlertTriangle } from 'lucide-react-native';
+import { CheckCircle, Calendar, BookOpen, Lightbulb, Flower2, XOctagon } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface FollowThroughButtonBarProps {
@@ -26,7 +26,7 @@ export default function FollowThroughButtonBar({
     { icon: CheckCircle, onPress: onPressTask, color: colors.primary },
     { icon: Calendar, onPress: onPressEvent, color: colors.secondary },
     { icon: Flower2, onPress: onPressRose, color: '#10b981' },
-    { icon: AlertTriangle, onPress: onPressThorn, color: '#ef4444' },
+    { icon: XOctagon, onPress: onPressThorn, color: '#ef4444' },
     { icon: BookOpen, onPress: onPressReflection, color: '#8b5cf6' },
     { icon: Lightbulb, onPress: onPressDepositIdea, color: '#f59e0b' },
   ];

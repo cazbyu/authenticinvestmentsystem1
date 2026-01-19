@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Flower2, Lightbulb, Sparkles, SquareCheck, AlertTriangle } from 'lucide-react-native';
+import { Flower2, Lightbulb, Sparkles, SquareCheck, XOctagon } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
@@ -855,7 +855,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     // Thorn (Challenge)
     if (entry.source_data?.daily_thorn) {
       return {
-        icon: AlertTriangle,
+        icon: XOctagon,
         bgColor: '#f1f5f9',
         iconColor: '#475569',
       };

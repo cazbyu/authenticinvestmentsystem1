@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { ChevronRight, Calendar, CheckSquare, Flower2, AlertTriangle, Lightbulb, BookOpen } from 'lucide-react-native';
+import { ChevronRight, Calendar, CheckSquare, Flower2, XOctagon, Lightbulb, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 
 interface ParentItemInfoProps {
@@ -115,7 +115,7 @@ export default function ParentItemInfo({ parentId, parentType, onPress }: Parent
       case 'rose':
         return <Flower2 size={iconSize} color={iconColor} />;
       case 'thorn':
-        return <AlertTriangle size={iconSize} color={iconColor} />;
+        return <XOctagon size={iconSize} color={iconColor} />;
       case 'depositIdea':
         return <Lightbulb size={iconSize} color={iconColor} />;
       case 'reflection':
