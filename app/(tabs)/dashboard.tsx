@@ -24,7 +24,6 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
-import { ReflectFilterButtons } from '@/components/dashboard/ReflectFilterButtons';
 import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
@@ -1107,12 +1106,6 @@ export default function Dashboard() {
                 onPeriodChange={setSelectedPeriod}
                 score={activeTab === 'journal' ? journalPeriodScore : undefined}
               />
-              {activeTab === 'reflect' && (
-                <ReflectFilterButtons
-                  activeFilter={reflectFilter}
-                  onFilterChange={setReflectFilter}
-                />
-              )}
             </View>
           </View>
         )}
