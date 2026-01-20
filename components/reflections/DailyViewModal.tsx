@@ -31,7 +31,6 @@ export default function DailyViewModal({
     }
 
     return date.toLocaleDateString('en-US', {
-      weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -49,10 +48,10 @@ export default function DailyViewModal({
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <View style={styles.headerContent}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>
-              Daily Reflection
+              {formatDateHeader(selectedDate)}
             </Text>
             <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-              {formatDateHeader(selectedDate)}
+              Reflection Report
             </Text>
           </View>
           <TouchableOpacity
