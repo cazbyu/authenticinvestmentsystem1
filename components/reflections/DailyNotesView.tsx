@@ -643,9 +643,18 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
-                Reflections & Daily Items {timelineItems.length > 0 && `(${timelineItems.length})`}
-              </Text>
+              {(() => {
+  const visibleItems = timelineItems.filter(item => 
+    item.content || 
+    (item.attachments && item.attachments.length > 0) || 
+    (item.noteAttachments && item.noteAttachments.length > 0)
+  );
+  return (
+    <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
+      Reflections & Daily Items {visibleItems.length > 0 && `(${visibleItems.length})`}
+    </Text>
+  );
+})()}
               <View style={styles.notesActions}>
                 <TouchableOpacity
                   onPress={handleAddNote}
