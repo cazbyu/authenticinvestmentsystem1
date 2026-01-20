@@ -246,6 +246,55 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     }
   };
 
+  const fetchNotesForItems = async (parentIds: string[], userId: string): Promise<Map<string, string>> => {
+    if (parentIds.length === 0) return new Map();
+
+    const supabase = getSupabaseClient();
+
+    console.log('[DailyNotes] Fetching notes for parent items:', { parentIds, userId });
+
+    const { data: joinData, error: joinError } = await supabase
+      .from('0008-ap-universal-notes-join')
+      .select(`
+        parent_id,
+        note_id,
+        0008-ap-notes!inner (
+          content
+        )
+      `)
+      .in('parent_id', parentIds)
+      .eq('user_id', userId);
+
+    if (joinError) {
+      console.error('[DailyNotes] Error fetching notes:', joinError);
+      return new Map();
+    }
+
+    console.log('[DailyNotes] Notes fetched:', { count: joinData?.length || 0, data: joinData });
+
+    const notesMap = new Map<string, string>();
+
+    if (joinData) {
+      for (const join of joinData) {
+        const noteContent = (join['0008-ap-notes'] as any)?.content;
+        if (noteContent) {
+          notesMap.set(join.parent_id, noteContent);
+        }
+      }
+    }
+
+    console.log('[DailyNotes] Notes map created:', {
+      size: notesMap.size,
+      entries: Array.from(notesMap.entries()).map(([id, content]) => ({
+        id,
+        contentLength: content.length,
+        preview: content.substring(0, 50)
+      }))
+    });
+
+    return notesMap;
+  };
+
   const fetchTodayTimelineData = async (targetDateString: string, _range: DailyRange) => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -300,6 +349,16 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     const historyItems: DailyHistoryItemRow[] = (historyData || []) as DailyHistoryItemRow[];
     const noteBackedItems = historyItems.filter((item) => item.type !== 'reflection');
 
+    // Fetch notes for all note-backed items
+    const parentIds = noteBackedItems.map(item => item.id);
+    const notesMap = await fetchNotesForItems(parentIds, user.id);
+
+    console.log('[DailyNotes] Notes map for items:', {
+      itemCount: noteBackedItems.length,
+      notesCount: notesMap.size,
+      itemsWithNotes: noteBackedItems.filter(item => notesMap.has(item.id)).length,
+    });
+
     const reflectionItems: TimelineItem[] = reflections.map((r) => ({
       id: r.id,
       type: 'reflection' as TimelineItemType,
@@ -318,7 +377,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       return {
         id: item.id,
         type: resolvedType,
-        content: undefined,
+        content: notesMap.get(item.id) || undefined,
         created_at: item.created_at,
         parent_type: item.parent_type || undefined,
         title: item.title || getItemTypeLabel(resolvedType),
