@@ -683,33 +683,10 @@ export function ActionsTableView({
 
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dateToCheck = new Date(date);
-    dateToCheck.setHours(0, 0, 0, 0);
-
-    const formattedDate = date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-
-    if (dateToCheck.getTime() === today.getTime()) {
-      return `Today - ${formattedDate}`;
-    }
-
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (dateToCheck.getTime() === yesterday.getTime()) {
-      return `Yesterday - ${formattedDate}`;
-    }
-
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    const monthStr = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    const dayNum = date.getDate();
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+    return `${monthStr} ${dayNum} ${year} (${weekday})`;
   };
 
   const formatOverdueDate = (dateString: string) => {
