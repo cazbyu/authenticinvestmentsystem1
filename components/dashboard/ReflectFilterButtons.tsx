@@ -59,33 +59,6 @@ export function ReflectFilterButtons({
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
       {renderFilterButton(
-        'depositIdea',
-        '',
-        <Image
-          source={depositIdeaImage}
-          style={[styles.filterIcon, activeFilter === 'depositIdea' && styles.filterIconActive]}
-          resizeMode="contain"
-        />
-      )}
-      {renderFilterButton(
-        'rose',
-        '',
-        <Image
-          source={roseImage}
-          style={[styles.filterIcon, activeFilter === 'rose' && styles.filterIconActive]}
-          resizeMode="contain"
-        />
-      )}
-      {renderFilterButton(
-        'thorn',
-        '',
-        <Image
-          source={thornImage}
-          style={[styles.filterIcon, activeFilter === 'thorn' && styles.filterIconActive]}
-          resizeMode="contain"
-        />
-      )}
-      {renderFilterButton(
         'reflection',
         '',
         <Image

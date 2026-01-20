@@ -77,20 +77,24 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     return map;
   };
 
-  // Calculate start date for the range filter (YYYY-MM-DD)
+  // Calculate start date for the range filter (ISO timestamp)
   const getDateFilter = (): string | '' => {
     if (dateRange === 'all') return '';
     const now = new Date();
-    let days = 30;
     if (dateRange === 'today') {
       const todayStart = new Date(now);
       todayStart.setHours(0, 0, 0, 0);
-      return formatLocalDate(todayStart);
+      return todayStart.toISOString();
     } else if (dateRange === 'week') {
-      days = 7;
+      const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      weekStart.setHours(0, 0, 0, 0);
+      return weekStart.toISOString();
+    } else if (dateRange === 'month') {
+      const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      monthStart.setHours(0, 0, 0, 0);
+      return monthStart.toISOString();
     }
-    const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    return formatLocalDate(since);
+    return '';
   };
 
   const fetchJournalEntries = async (forceRefresh: boolean = false) => {
