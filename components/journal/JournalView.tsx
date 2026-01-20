@@ -183,7 +183,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         .not('completed_at', 'is', null);
 
       if (dateFilter) {
-        completedEventsQuery = completedEventsQuery.gte('start_date', dateFilter);
+        completedEventsQuery = completedEventsQuery.gte('completed_at', dateFilter);
       }
 
       const { data: completedEventsData, error: completedEventsError } = await completedEventsQuery;
@@ -303,7 +303,8 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
           const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
           const points = calculateTaskPoints(t, roles, domains, goals);
 
-          const displayDate = t.type === 'event' ? (t.start_date || t.completed_at) : t.completed_at;
+          // Always use completed_at for journal entries since we care when it was completed
+          const displayDate = t.completed_at;
 
           journalEntries.push({
             id: t.id,
