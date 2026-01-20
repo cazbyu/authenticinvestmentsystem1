@@ -111,6 +111,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [expandedSections, setExpandedSections] = useState({
+    reflectionsList: true,
     leadingIndicators: false,
     roleInvestment: false,
     domainBalance: false,
@@ -661,9 +662,20 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>
-                Today's Lessons, Reflections and Notes {timelineItems.length > 0 && `(${timelineItems.length})`}
-              </Text>
+              <TouchableOpacity
+                style={styles.notesHeaderTitle}
+                onPress={() => toggleSection('reflectionsList')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  Reflections & Daily Items {timelineItems.length > 0 && `(${timelineItems.length})`}
+                </Text>
+                {expandedSections.reflectionsList ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
               <View style={styles.notesActions}>
                 <TouchableOpacity
                   onPress={handleAddNote}
@@ -682,65 +694,67 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
               </View>
             </View>
 
-            {showNoteInput && (
-              <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <TextInput
-                  style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
-                  placeholder="Write a note..."
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  value={noteContent}
-                  onChangeText={setNoteContent}
-                  autoFocus
-                />
+            {expandedSections.reflectionsList && (
+              <>
+                {showNoteInput && (
+                  <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
+                      placeholder="Write a note..."
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      value={noteContent}
+                      onChangeText={setNoteContent}
+                      autoFocus
+                    />
 
-                {selectedFiles.length > 0 && (
-                  <View style={styles.selectedFilesContainer}>
-                    <Text style={[styles.selectedFilesLabel, { color: colors.textSecondary }]}>
-                      Attachments ({selectedFiles.length}):
-                    </Text>
-                    {selectedFiles.map((file, index) => (
-                      <View key={index} style={[styles.selectedFileItem, { backgroundColor: colors.surface }]}>
-                        <Text style={[styles.selectedFileName, { color: colors.text }]} numberOfLines={1}>
-                          {file.name}
+                    {selectedFiles.length > 0 && (
+                      <View style={styles.selectedFilesContainer}>
+                        <Text style={[styles.selectedFilesLabel, { color: colors.textSecondary }]}>
+                          Attachments ({selectedFiles.length}):
                         </Text>
-                        <TouchableOpacity onPress={() => handleRemoveFile(index)}>
-                          <X size={18} color={colors.textSecondary} />
-                        </TouchableOpacity>
+                        {selectedFiles.map((file, index) => (
+                          <View key={index} style={[styles.selectedFileItem, { backgroundColor: colors.surface }]}>
+                            <Text style={[styles.selectedFileName, { color: colors.text }]} numberOfLines={1}>
+                              {file.name}
+                            </Text>
+                            <TouchableOpacity onPress={() => handleRemoveFile(index)}>
+                              <X size={18} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
                       </View>
-                    ))}
+                    )}
+
+                    <View style={styles.noteInputActions}>
+                      <TouchableOpacity
+                        onPress={handleCancelNote}
+                        style={[styles.noteActionButton, { backgroundColor: colors.surface }]}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.noteActionButtonText, { color: colors.text }]}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={handleSubmitNote}
+                        style={[styles.noteActionButton, { backgroundColor: colors.primary }]}
+                        activeOpacity={0.7}
+                        disabled={isSubmittingNote}
+                      >
+                        {isSubmittingNote ? (
+                          <ActivityIndicator size="small" color="#ffffff" />
+                        ) : (
+                          <>
+                            <Send size={16} color="#ffffff" />
+                            <Text style={[styles.noteActionButtonText, { color: '#ffffff' }]}>Send</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
 
-                <View style={styles.noteInputActions}>
-                  <TouchableOpacity
-                    onPress={handleCancelNote}
-                    style={[styles.noteActionButton, { backgroundColor: colors.surface }]}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.noteActionButtonText, { color: colors.text }]}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleSubmitNote}
-                    style={[styles.noteActionButton, { backgroundColor: colors.primary }]}
-                    activeOpacity={0.7}
-                    disabled={isSubmittingNote}
-                  >
-                    {isSubmittingNote ? (
-                      <ActivityIndicator size="small" color="#ffffff" />
-                    ) : (
-                      <>
-                        <Send size={16} color="#ffffff" />
-                        <Text style={[styles.noteActionButtonText, { color: '#ffffff' }]}>Send</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            <View style={styles.notesList}>
-              {timelineItems.map((item) => {
+                <View style={styles.notesList}>
+                  {timelineItems.map((item) => {
                 const reflectionAttachments = item.attachments || [];
                 const noteAttachments = item.noteAttachments || [];
                 const allAttachments = [...reflectionAttachments, ...noteAttachments];
@@ -849,14 +863,27 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   </TouchableOpacity>
                 );
               })}
-            </View>
+                </View>
+              </>
+            )}
           </View>
         ) : (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>
-                Today's Lessons, Reflections and Notes
-              </Text>
+              <TouchableOpacity
+                style={styles.notesHeaderTitle}
+                onPress={() => toggleSection('reflectionsList')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  Reflections & Daily Items
+                </Text>
+                {expandedSections.reflectionsList ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
               <View style={styles.notesActions}>
                 <TouchableOpacity
                   onPress={handleAddNote}
@@ -874,12 +901,14 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                 </TouchableOpacity>
               </View>
             </View>
-            {!showNoteInput && (
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No reflections or notes recorded for this date.
-              </Text>
-            )}
-            {showNoteInput && (
+            {expandedSections.reflectionsList && (
+              <>
+                {!showNoteInput && (
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    No reflections or notes recorded for this date.
+                  </Text>
+                )}
+                {showNoteInput && (
               <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
                 <TextInput
                   style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
@@ -934,6 +963,8 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   </TouchableOpacity>
                 </View>
               </View>
+                )}
+              </>
             )}
           </View>
         )}
@@ -1441,6 +1472,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
+  },
+  notesHeaderTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
   },
   notesActions: {
     flexDirection: 'row',
