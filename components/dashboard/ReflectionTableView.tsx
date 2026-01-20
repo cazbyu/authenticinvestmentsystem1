@@ -17,10 +17,10 @@ import DailyViewModal from '@/components/reflections/DailyViewModal';
 import { fetchDatesByRange, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
 import { getWeekStart, getWeekEnd } from '@/lib/dateUtils';
 
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
-const reflectionImage = require('@/assets/images/reflections-72.png');
-const depositIdeaImage = require('@/assets/images/deposit-idea.png');
+const roseImage = require('@/assets/images/rose-81.svg');
+const thornImage = require('@/assets/images/thorn-81.svg');
+const reflectionImage = require('@/assets/images/reflections-72.svg');
+const depositIdeaImage = require('@/assets/images/deposit-idea.svg');
 
 interface ReflectionTableViewProps {
   filter: ReflectFilter;

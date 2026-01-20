@@ -20,10 +20,10 @@ import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
 import { DailyAggregationData } from '@/types/reflections';
 import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp, Plus, Paperclip, X, Send, CheckSquare, Calendar } from 'lucide-react-native';
 
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
-const reflectionImage = require('@/assets/images/reflections-72.png');
-const depositIdeaImage = require('@/assets/images/deposit-idea.png');
+const roseImage = require('@/assets/images/rose-81.svg');
+const thornImage = require('@/assets/images/thorn-81.svg');
+const reflectionImage = require('@/assets/images/reflections-72.svg');
+const depositIdeaImage = require('@/assets/images/deposit-idea.svg');
 import {
   fetchReflectionsByDateRange,
   ReflectionWithRelations,

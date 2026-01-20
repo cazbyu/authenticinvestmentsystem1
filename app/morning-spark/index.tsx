@@ -325,10 +325,10 @@ export default function MorningSparkFuelCheck() {
 
         <View style={styles.gaugeSection}>
           <View style={styles.gaugeContainer}>
-            {/* PNG Gauge Background */}
+            {/* SVG Gauge Background */}
             <View style={styles.gaugeSvgContainer}>
               <Image
-                source={require('@/assets/images/gauge-bg.png')}
+                source={require('@/assets/images/gauge-bg.svg')}
                 style={styles.gaugeBg}
                 resizeMode="contain"
               />

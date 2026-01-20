@@ -12,8 +12,8 @@ import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from '../tasks/TaskEventForm';
 import ParentItemInfo from '../followThrough/ParentItemInfo';
 
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
+const roseImage = require('@/assets/images/rose-81.svg');
+const thornImage = require('@/assets/images/thorn-81.svg');
 
 interface ReflectionDetailsModalProps {
   visible: boolean;
