@@ -840,22 +840,6 @@ export default function Dashboard() {
     setIsDepositIdeaDetailVisible(false);
     setIsFormModalVisible(true);
   };
-  const handleActivateDepositIdea = (depositIdea: any) => {
-    const editData = {
-      title: depositIdea.title,
-      content: depositIdea.title,
-      type: 'task',
-      roles: depositIdea.roles || [],
-      domains: depositIdea.domains || [],
-      goals: depositIdea.goals || [],
-      keyRelationships: depositIdea.keyRelationships || [],
-      sourceDepositIdeaId: depositIdea.id,
-    };
-    setEditingTask(editData);
-    setIsDepositIdeaDetailVisible(false);
-    setIsFormModalVisible(true);
-  };
-
   const handleCancelDepositIdea = async (depositIdea: any) => {
     try {
       const supabase = getSupabaseClient();
