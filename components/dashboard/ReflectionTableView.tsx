@@ -171,6 +171,18 @@ export function ReflectionTableView({
             <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
           </View>
         );
+      case 'task':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <FileText size={14} color="#0078d4" />
+          </View>
+        );
+      case 'event':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#d1fae5' }]}>
+            <FileText size={14} color="#10b981" />
+          </View>
+        );
       case 'note':
         return (
           <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>

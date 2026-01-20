@@ -70,6 +70,12 @@ export default function MonthlyIndexView({
         return <Flower {...iconProps} color="#16a34a" />;
       case 'thorn':
         return <XOctagon {...iconProps} color="#f59e0b" />;
+      case 'task':
+        return <FileText {...iconProps} color="#0078d4" />;
+      case 'event':
+        return <FileText {...iconProps} color="#10b981" />;
+      case 'depositIdea':
+        return <FileText {...iconProps} color="#8b5cf6" />;
       case 'note':
         return <FileText {...iconProps} color="#0078d4" />;
       case 'reflection':
