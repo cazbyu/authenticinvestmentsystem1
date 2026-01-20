@@ -791,6 +791,46 @@ export default function Dashboard() {
     setSelectedDepositIdea(depositIdea);
     setIsDepositIdeaDetailVisible(true);
   };
+
+  const handleTaskPressById = async (taskId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: task, error } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+
+      if (error) throw error;
+      if (task) {
+        setSelectedTask(task as Task);
+        setIsDetailModalVisible(true);
+      }
+    } catch (error) {
+      console.error('Error loading task:', error);
+      Alert.alert('Error', 'Failed to load task details');
+    }
+  };
+
+  const handleDepositIdeaPressById = async (ideaId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: idea, error } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .select('*')
+        .eq('id', ideaId)
+        .single();
+
+      if (error) throw error;
+      if (idea) {
+        setSelectedDepositIdea(idea);
+        setIsDepositIdeaDetailVisible(true);
+      }
+    } catch (error) {
+      console.error('Error loading deposit idea:', error);
+      Alert.alert('Error', 'Failed to load deposit idea details');
+    }
+  };
   const handleUpdateDepositIdea = async (depositIdea: any) => {
     const editData = {
       ...depositIdea,
@@ -1183,6 +1223,8 @@ export default function Dashboard() {
               setSelectedReflectionDetail(reflection);
               setIsReflectionDetailModalVisible(true);
             }}
+            onTaskPress={handleTaskPressById}
+            onDepositIdeaPress={handleDepositIdeaPressById}
           />
         ) : activeTab === 'act' ? (
           <ActionsTableView

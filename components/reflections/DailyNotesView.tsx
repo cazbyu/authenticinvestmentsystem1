@@ -18,7 +18,12 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
 import { DailyAggregationData } from '@/types/reflections';
-import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp, Plus, Paperclip, X, Send } from 'lucide-react-native';
+import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp, Plus, Paperclip, X, Send, CheckSquare, Calendar } from 'lucide-react-native';
+
+const roseImage = require('@/assets/images/rose-81.png');
+const thornImage = require('@/assets/images/thorn-81.png');
+const reflectionImage = require('@/assets/images/reflections-72.png');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 import {
   fetchReflectionsByDateRange,
   ReflectionWithRelations,
@@ -106,9 +111,9 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [expandedSections, setExpandedSections] = useState({
-    leadingIndicators: true,
-    roleInvestment: true,
-    domainBalance: true,
+    leadingIndicators: false,
+    roleInvestment: false,
+    domainBalance: false,
   });
 
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -398,6 +403,62 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         return colors.primary;
       default:
         return colors.primary;
+    }
+  };
+
+  const getItemTypeIcon = (type: TimelineItemType, item?: TimelineItem) => {
+    const iconSize = 24;
+    const imageSize = 20;
+
+    // Check if it's a reflection with rose/thorn metadata
+    if (type === 'reflection' && item) {
+      // Note: We'd need to check the reflection data for rose/thorn flags
+      // For now, using reflection image as default
+    }
+
+    switch (type) {
+      case 'task':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <CheckSquare size={16} color="#0078d4" />
+          </View>
+        );
+      case 'event':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#d1fae5' }]}>
+            <Calendar size={16} color="#10b981" />
+          </View>
+        );
+      case 'depositIdea':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
+            <Image source={depositIdeaImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      case 'reflection':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
+            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      case 'note':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
+            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      case 'withdrawal':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#f3f4f6' }]}>
+            <Image source={thornImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      default:
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
+            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
     }
   };
 
@@ -716,9 +777,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                         <Text style={[styles.noteTitle, { color: colors.text }]}>{displayTitle}</Text>
                         <Text style={[styles.noteTimestamp, { color: colors.textSecondary }]}>{timestamp}</Text>
                       </View>
-                      <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
-                        <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
-                      </View>
+                      {getItemTypeIcon(item.type, item)}
                     </View>
 
                     {item.content ? (
@@ -1228,6 +1287,13 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: '600',
+  },
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   noteContent: {
     fontSize: 14,
