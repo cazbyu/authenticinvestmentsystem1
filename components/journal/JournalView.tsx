@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
-import { SquareCheck, BookOpen } from 'lucide-react-native';
+import { SquareCheck, BookOpen, Calendar } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';
@@ -881,7 +881,16 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       };
     }
 
-    // Action (Task/Deposit)
+    // Event (Calendar icon)
+    if (entry.type === 'deposit' && entry.source_data?.type === 'event') {
+      return {
+        icon: Calendar,
+        bgColor: '#dbeafe',
+        iconColor: '#2563eb',
+      };
+    }
+
+    // Task (Checkmark icon)
     if (entry.type === 'deposit') {
       return {
         icon: SquareCheck,
