@@ -744,7 +744,13 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                 )}
 
                 <View style={styles.notesList}>
-                  {timelineItems.map((item) => {
+                  {timelineItems
+  .filter(item => 
+    item.content || 
+    (item.attachments && item.attachments.length > 0) || 
+    (item.noteAttachments && item.noteAttachments.length > 0)
+  )
+  .map((item) => {
                 const reflectionAttachments = item.attachments || [];
                 const noteAttachments = item.noteAttachments || [];
                 const allAttachments = [...reflectionAttachments, ...noteAttachments];
