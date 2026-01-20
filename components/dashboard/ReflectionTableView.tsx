@@ -100,7 +100,7 @@ export function ReflectionTableView({
 
         const filteredDetails = dateItem.itemDetails.filter((item) => {
           if (filter === 'depositIdea') {
-            return false;
+            return item.type === 'depositIdea';
           }
           if (filter === 'rose') {
             return item.type === 'rose';

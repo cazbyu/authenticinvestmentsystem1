@@ -422,6 +422,32 @@ export function DepositIdeaDetailModal({
         />
       )}
 
+      {/* Edit Form Modal */}
+      {isEditMode && depositIdea && (
+        <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
+          <TaskEventForm
+            mode="edit"
+            initialData={{
+              ...depositIdea,
+              type: 'depositIdea',
+              roles: depositIdea.roles || [],
+              domains: depositIdea.domains || [],
+              goals: depositIdea.goals || [],
+              keyRelationships: depositIdea.keyRelationships || [],
+            }}
+            onClose={() => {
+              setIsEditMode(false);
+            }}
+            onSubmitSuccess={async () => {
+              setIsEditMode(false);
+              await fetchNotes();
+              await loadAssociatedItems();
+              onRefreshAssociatedItems?.();
+            }}
+          />
+        </Modal>
+      )}
+
       {/* Image Viewer Modal */}
       <ImageViewerModal
         visible={imageViewerVisible}
