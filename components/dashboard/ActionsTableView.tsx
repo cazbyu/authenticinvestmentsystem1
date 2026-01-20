@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SectionList,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
   Platform,
 } from 'react-native';
-import { CheckSquare, Calendar, Check, UserCircle, Trash2, Circle } from 'lucide-react-native';
+import { CheckSquare, Calendar, Check, UserCircle, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
@@ -17,14 +17,6 @@ import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import { ActFilter } from './ActFilterButtons';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSequence,
-  runOnJS
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 interface ActionItem {
   id: string;
@@ -32,8 +24,8 @@ interface ActionItem {
   type: 'task' | 'event';
   due_date: string | null;
   start_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
+  start_time: string | null;  // ADD
+  end_time: string | null;    // ADD
   is_urgent: boolean;
   is_important: boolean;
   is_deposit_idea: boolean;
@@ -42,18 +34,13 @@ interface ActionItem {
   originalDate?: string;
   roles?: any[];
   domains?: any[];
-  delegateName?: string | null;
-  isCompleted?: boolean;
+  delegateName?: string | null;  // ADD - first name of delegate
+  isCompleted?: boolean;  // ADD
 }
 
-interface TypeGroup {
-  type: 'event' | 'task';
-  items: ActionItem[];
-}
-
-interface DateSection {
-  title: string;
-  data: TypeGroup[];
+interface DateWithActions {
+  date: string;
+  actions: ActionItem[];
 }
 
 interface ActionsTableViewProps {
@@ -85,7 +72,8 @@ function getDateRange(period: TimePeriod): { start: Date; end: Date } {
       return { start: past, end: weekEnd };
 
     case 'month':
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const monthEnd = new Date(now);
+      monthEnd.setDate(now.getDate() + 27);
       monthEnd.setHours(23, 59, 59, 999);
       return { start: past, end: monthEnd };
 
@@ -94,293 +82,6 @@ function getDateRange(period: TimePeriod): { start: Date; end: Date } {
       allEnd.setHours(23, 59, 59, 999);
       return { start: past, end: allEnd };
   }
-}
-
-// Swipeable Row Component
-interface SwipeableRowProps {
-  action: ActionItem;
-  onComplete: () => void;
-  onDelegate: () => void;
-  onDelete: () => void;
-  onPress: () => void;
-  children: React.ReactNode;
-  isDisabled?: boolean;
-  onOpen?: (id: string) => void;
-  shouldClose?: boolean;
-}
-
-function SwipeableRow({
-  action,
-  onComplete,
-  onDelegate,
-  onDelete,
-  onPress,
-  children,
-  isDisabled = false,
-  onOpen,
-  shouldClose = false,
-}: SwipeableRowProps) {
-  const translateX = useSharedValue(0);
-  const [isRevealed, setIsRevealed] = useState(false);
-  const [isSwiping, setIsSwiping] = useState(false);
-
-  const SWIPE_THRESHOLD = -80;
-  const ACTION_WIDTH = 70;
-  const SWIPE_DETECTION_THRESHOLD = 10; // Minimum movement to consider it a swipe
-
-  // Close swipe when shouldClose changes to true
-  useEffect(() => {
-    if (shouldClose && isRevealed) {
-      closeSwipe();
-    }
-  }, [shouldClose]);
-
-  const panGesture = Gesture.Pan()
-    .enabled(!isDisabled)
-    .onStart(() => {
-      runOnJS(setIsSwiping)(false);
-    })
-    .onUpdate((event) => {
-      if (event.translationX < 0) {
-        translateX.value = event.translationX;
-        // Mark as swiping if moved more than threshold
-        if (Math.abs(event.translationX) > SWIPE_DETECTION_THRESHOLD) {
-          runOnJS(setIsSwiping)(true);
-        }
-      }
-    })
-    .onEnd((event) => {
-      if (event.translationX < SWIPE_THRESHOLD) {
-        translateX.value = withTiming(-ACTION_WIDTH * 2);
-        runOnJS(setIsRevealed)(true);
-        if (onOpen) {
-          runOnJS(onOpen)(action.id);
-        }
-      } else {
-        translateX.value = withTiming(0);
-        runOnJS(setIsRevealed)(false);
-      }
-    })
-    .onFinalize(() => {
-      // Reset swiping state after gesture finishes
-      setTimeout(() => {
-        setIsSwiping(false);
-      }, 150);
-    });
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-
-  const closeSwipe = () => {
-    translateX.value = withTiming(0);
-    setIsRevealed(false);
-  };
-
-  // Clone children and inject isSwiping prop
-  const childrenWithProps = React.Children.map(children, child => {
-    if (React.isValidElement(child)) {
-      return React.cloneElement(child as React.ReactElement<any>, { isSwiping });
-    }
-    return child;
-  });
-
-  return (
-    <View style={styles.swipeContainer}>
-      {!isDisabled && (
-        <View style={styles.hiddenActionsContainer}>
-          <TouchableOpacity
-            style={[styles.hiddenActionButton, styles.delegateButton]}
-            onPress={() => {
-              closeSwipe();
-              onDelegate();
-            }}
-          >
-            <UserCircle size={20} color="#fff" strokeWidth={2} />
-            <Text style={styles.hiddenActionText}>Delegate</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.hiddenActionButton, styles.deleteButton]}
-            onPress={() => {
-              closeSwipe();
-              onDelete();
-            }}
-          >
-            <Trash2 size={20} color="#fff" strokeWidth={2} />
-            <Text style={styles.hiddenActionText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[animatedStyle]}>
-          {childrenWithProps}
-        </Animated.View>
-      </GestureDetector>
-    </View>
-  );
-}
-
-// Item Row Component
-interface ItemRowProps {
-  item: ActionItem;
-  priorityColor: string;
-  isCompleted: boolean;
-  metadataParts: string[];
-  delegateName?: string | null;
-  onComplete: () => void;
-  onTaskPress: () => void;
-  completionTrigger: number;
-  colors: any;
-  isSwiping?: boolean;
-}
-
-function ItemRow({
-  item,
-  priorityColor,
-  isCompleted,
-  metadataParts,
-  delegateName,
-  onComplete,
-  onTaskPress,
-  completionTrigger,
-  colors,
-  isSwiping = false,
-}: ItemRowProps) {
-  const handlePress = () => {
-    // Prevent opening modal if currently swiping
-    if (!isSwiping) {
-      onTaskPress();
-    }
-  };
-
-  return (
-    <View
-      style={[
-        styles.itemContainer,
-        {
-          backgroundColor: colors.background,
-          borderLeftColor: priorityColor,
-          borderLeftWidth: 4,
-        },
-        isCompleted && styles.completedItem
-      ]}
-    >
-      {/* Left: Checkbox */}
-      <TouchableOpacity
-        onPress={onComplete}
-        style={styles.checkboxContainer}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-      >
-        {isCompleted ? (
-          <View style={[styles.checkbox, styles.checkboxCompleted]}>
-            <Check size={16} color="#fff" strokeWidth={3} />
-          </View>
-        ) : (
-          <View style={[styles.checkbox, { borderColor: priorityColor }]}>
-            <Circle size={12} color={priorityColor} strokeWidth={0} fill={priorityColor} opacity={0.2} />
-          </View>
-        )}
-      </TouchableOpacity>
-
-      {/* Center: Content */}
-      <TouchableOpacity
-        style={styles.contentContainer}
-        onPress={handlePress}
-        activeOpacity={0.7}
-      >
-        <Text
-          style={[
-            styles.titleText,
-            { color: isCompleted ? '#9ca3af' : priorityColor },
-            isCompleted && styles.completedText
-          ]}
-          numberOfLines={2}
-        >
-          {item.title}
-        </Text>
-
-        {metadataParts.length > 0 && (
-          <Text style={[styles.metadataText, isCompleted && { color: '#9ca3af' }]}>
-            {metadataParts.join(' • ')}
-          </Text>
-        )}
-
-        {delegateName && (
-          <Text style={[styles.delegateText, isCompleted && { color: '#9ca3af' }]}>
-            (Delegated to {delegateName})
-          </Text>
-        )}
-      </TouchableOpacity>
-
-      {/* Right: Ghost Points */}
-      <View style={styles.pointsContainer}>
-        <GhostPoints
-          points={item.depositValue}
-          isCompleted={!!isCompleted}
-          triggerTimestamp={completionTrigger}
-        />
-      </View>
-    </View>
-  );
-}
-
-// Ghost Points Animation Component
-interface GhostPointsProps {
-  points: number;
-  isCompleted: boolean;
-  triggerTimestamp: number;
-}
-
-function GhostPoints({ points, isCompleted, triggerTimestamp }: GhostPointsProps) {
-  const opacity = useSharedValue(isCompleted ? 0.5 : 0);
-  const translateY = useSharedValue(0);
-  const scale = useSharedValue(1);
-
-  useEffect(() => {
-    if (isCompleted && triggerTimestamp > 0) {
-      // Reset for new animation
-      opacity.value = 0;
-      translateY.value = 0;
-      scale.value = 1;
-
-      // Animate: fade in, float up, scale slightly, then settle to faint
-      opacity.value = withSequence(
-        withTiming(1, { duration: 200 }),
-        withTiming(0.5, { duration: 300 })
-      );
-
-      translateY.value = withSequence(
-        withTiming(-25, { duration: 600 })
-      );
-
-      scale.value = withSequence(
-        withTiming(1.2, { duration: 300 }),
-        withTiming(1, { duration: 300 })
-      );
-    } else if (!isCompleted) {
-      // Hide when unchecked
-      opacity.value = withTiming(0, { duration: 200 });
-      translateY.value = 0;
-      scale.value = 1;
-    }
-  }, [isCompleted, triggerTimestamp]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [
-      { translateY: translateY.value },
-      { scale: scale.value }
-    ],
-  }));
-
-  return (
-    <Animated.View style={[styles.ghostPointsContainer, animatedStyle]}>
-      <Text style={styles.ghostPointsText}>
-        +{Math.round(points)}
-      </Text>
-    </Animated.View>
-  );
 }
 
 export function ActionsTableView({
@@ -394,20 +95,21 @@ export function ActionsTableView({
   onDelete,
 }: ActionsTableViewProps) {
   const { colors } = useTheme();
-  const [sections, setSections] = useState<DateSection[]>([]);
+  const [dateGroups, setDateGroups] = useState<DateWithActions[]>([]);
   const [loading, setLoading] = useState(true);
   const isInitialLoad = useRef(true);
-  const [completionTriggers, setCompletionTriggers] = useState<Record<string, number>>({});
-  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Reset initial load flag when filter/period/userId changes
     isInitialLoad.current = true;
     loadActions();
   }, [filter, period, userId]);
 
+  // Event bus listeners for real-time updates
   useEffect(() => {
     const handleRefresh = () => {
-      loadActions(true);
+      console.log('[ActionsTableView] Event received, refreshing...');
+      loadActions(true); // silent refresh - don't show loading state
     };
 
     eventBus.on(EVENTS.TASK_UPDATED, handleRefresh);
@@ -424,13 +126,17 @@ export function ActionsTableView({
   }, []);
 
   const loadActions = async (silent = false) => {
+    console.log('[ActionsTableView] loadActions called with:', { userId, filter, period, silent });
+
     if (!userId) {
+      console.log('[ActionsTableView] No userId provided, skipping load');
       setLoading(false);
       isInitialLoad.current = false;
       return;
     }
 
     try {
+      // Only show loading state on initial load or explicit user refresh
       if (!silent && isInitialLoad.current) {
         setLoading(true);
       }
@@ -439,8 +145,10 @@ export function ActionsTableView({
       const startStr = formatLocalDate(start);
       const endStr = formatLocalDate(end);
 
+      // Get today's date for filtering past events
       const todayStr = formatLocalDate(new Date());
 
+      // Get start of today in local timezone (for completed_at comparison)
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const todayStartISO = toLocalISOString(todayStart);
@@ -454,15 +162,23 @@ export function ActionsTableView({
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .lte('due_date', endStr);
+          .is('parent_task_id', null);
 
+        if (period === 'today') {
+          query = query.lte('due_date', endStr);
+        } else {
+          query = query.lte('due_date', endStr);
+        }
+
+        // Include pending/in_progress OR completed today
         query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
         const { data, error } = await query.order('due_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
       } else if (filter === 'event') {
+        // Events show from TODAY through end of selected period
+        // Never show past events (start_date < today)
         let query = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
@@ -470,24 +186,31 @@ export function ActionsTableView({
           .eq('type', 'event')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', todayStr)
-          .lte('start_date', endStr);
+          .gte('start_date', todayStr);  // Never before today
 
+        // Add upper bound based on period
+        if (period !== 'all') {
+          query = query.lte('start_date', endStr);
+        }
+
+        // Include pending/in_progress OR completed today
         query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
         const { data, error } = await query.order('start_date', { ascending: true });
         if (error) throw error;
         tasksData = data || [];
       } else {
+        // Combined view: tasks + events with different filtering rules
+        // Tasks: can be overdue, filtered by due_date
         let tasksQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .lte('due_date', endStr);
+          .is('parent_task_id', null);
 
+        // Events: from today forward only (never past)
         let eventsQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
@@ -495,9 +218,15 @@ export function ActionsTableView({
           .eq('type', 'event')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          .gte('start_date', todayStr)
-          .lte('start_date', endStr);
+          .gte('start_date', todayStr);  // Never before today
 
+        // Apply period upper bounds
+        if (period !== 'all') {
+          tasksQuery = tasksQuery.lte('due_date', endStr);
+          eventsQuery = eventsQuery.lte('start_date', endStr);
+        }
+
+        // Include pending/in_progress OR completed today for both queries
         tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
         eventsQuery = eventsQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
@@ -515,6 +244,15 @@ export function ActionsTableView({
         ];
       }
 
+ // TEMPORARY DEBUG - Remove after testing
+    console.log('[ActionsTableView DEBUG] Raw tasksData:', tasksData?.map(t => ({
+      id: t.id,
+      title: t.title,
+      type: t.type,
+      start_time: t.start_time,
+      end_time: t.end_time,
+    })));
+      
       if (tasksData && tasksData.length > 0) {
         const taskIds = tasksData.map((t) => t.id);
 
@@ -564,13 +302,18 @@ export function ActionsTableView({
           }
         });
 
+        // Map delegates by task
         const delegatesByTask = new Map<string, string>();
         (delegatesRes.data || []).forEach((d: any) => {
           if (d.delegate?.name) {
+            // Get first name only
             const firstName = d.delegate.name.split(' ')[0];
             delegatesByTask.set(d.parent_id, firstName);
           }
         });
+
+        // TEMPORARY DEBUG - Remove after testing
+console.log('[ActionsTableView DEBUG] Delegates map:', Object.fromEntries(delegatesByTask));
 
         const now = new Date();
         now.setHours(0, 0, 0, 0);
@@ -591,8 +334,8 @@ export function ActionsTableView({
             type: task.type,
             due_date: task.due_date,
             start_date: task.start_date,
-            start_time: task.start_time,
-            end_time: task.end_time,
+            start_time: task.start_time,      // ADD
+            end_time: task.end_time,          // ADD
             is_urgent: task.is_urgent,
             is_important: task.is_important,
             is_deposit_idea: task.is_deposit_idea || false,
@@ -601,13 +344,12 @@ export function ActionsTableView({
             originalDate: isOverdue ? displayDate : undefined,
             roles: roles,
             domains: domains,
-            delegateName: delegatesByTask.get(task.id) || null,
-            isCompleted: task.status === 'completed',
+            delegateName: delegatesByTask.get(task.id) || null,  // ADD
+            isCompleted: task.status === 'completed',  // ADD
           };
         });
 
-        // Group by date first
-        const groupedByDate = new Map<string, ActionItem[]>();
+        const grouped = new Map<string, ActionItem[]>();
 
         actionsWithScores.forEach((action) => {
           let displayDate = action.type === 'event' ? action.start_date : action.due_date;
@@ -615,61 +357,33 @@ export function ActionsTableView({
           if (!displayDate) {
             displayDate = 'No Date';
           } else if (action.isOverdue) {
-            // Move overdue items to today's date
             displayDate = todayStr;
           }
 
-          if (!groupedByDate.has(displayDate)) {
-            groupedByDate.set(displayDate, []);
+          if (!grouped.has(displayDate)) {
+            grouped.set(displayDate, []);
           }
-          groupedByDate.get(displayDate)!.push(action);
+          grouped.get(displayDate)!.push(action);
         });
 
-        const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => {
+        const sortedDates = Array.from(grouped.keys()).sort((a, b) => {
           if (a === 'No Date') return 1;
           if (b === 'No Date') return -1;
           return a.localeCompare(b);
         });
 
-        // Create hierarchical structure: Date > Type Groups > Items
-        const sectionsData: DateSection[] = sortedDates.map((date) => {
-          const items = groupedByDate.get(date) || [];
+        const dateGroupsData: DateWithActions[] = sortedDates.map((date) => ({
+          date,
+          actions: grouped.get(date) || [],
+        }));
 
-          // Separate events and tasks
-          const events = items.filter(item => item.type === 'event');
-          const tasks = items.filter(item => item.type === 'task');
-
-          // Sort tasks: incomplete first, then completed
-          const sortedTasks = tasks.sort((a, b) => {
-            if (a.isCompleted === b.isCompleted) return 0;
-            return a.isCompleted ? 1 : -1;
-          });
-
-          const typeGroups: TypeGroup[] = [];
-
-          // Events always come first
-          if (events.length > 0) {
-            typeGroups.push({ type: 'event', items: events });
-          }
-
-          // Then tasks (sorted)
-          if (sortedTasks.length > 0) {
-            typeGroups.push({ type: 'task', items: sortedTasks });
-          }
-
-          return {
-            title: date,
-            data: typeGroups,
-          };
-        });
-
-        setSections(sectionsData);
+        setDateGroups(dateGroupsData);
       } else {
-        setSections([]);
+        setDateGroups([]);
       }
     } catch (error) {
       console.error('[ActionsTableView] Error loading actions:', error);
-      setSections([]);
+      setDateGroups([]);
     } finally {
       if (!silent && isInitialLoad.current) {
         setLoading(false);
@@ -683,27 +397,20 @@ export function ActionsTableView({
 
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
-    const monthStr = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    const monthStr = date.toLocaleDateString('en-US', { month: 'short' });
     const dayNum = date.getDate();
-    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
-    return `${monthStr} ${dayNum} ${year} (${weekday})`;
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+    return `${monthStr} ${dayNum} (${weekday})`;
   };
 
   const formatOverdueDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', {
+      weekday: 'short',
       month: 'short',
       day: 'numeric',
     });
-  };
-
-  const formatTime = (timeStr: string | null) => {
-    if (!timeStr) return null;
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const period = hours >= 12 ? 'pm' : 'am';
-    const displayHour = hours % 12 || 12;
-    return `${displayHour}:${minutes.toString().padStart(2, '0')}${period}`;
   };
 
   const getPriorityColor = (action: ActionItem) => {
@@ -714,54 +421,24 @@ export function ActionsTableView({
     } else if (action.is_urgent && !action.is_important) {
       return '#eab308';
     } else {
-      return '#6b7280';
+      return '#9ca3af';
     }
   };
 
   const handleComplete = async (action: ActionItem) => {
     if (!onComplete) return;
 
-    const wasCompleted = action.isCompleted;
-    const newCompletedState = !wasCompleted;
-
-    // Close any open swipe row
-    setOpenRowId(null);
-
-    // Optimistic UI update with re-sorting
-    setSections(prevSections =>
-      prevSections.map(section => ({
-        ...section,
-        data: section.data.map(typeGroup => {
-          if (typeGroup.type === 'task') {
-            // Update completion status
-            const updatedItems = typeGroup.items.map(a =>
-              a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
-            );
-            // Re-sort: incomplete first, then completed
-            const sortedItems = updatedItems.sort((a, b) => {
-              if (a.isCompleted === b.isCompleted) return 0;
-              return a.isCompleted ? 1 : -1;
-            });
-            return { ...typeGroup, items: sortedItems };
-          }
-          return {
-            ...typeGroup,
-            items: typeGroup.items.map(a =>
-              a.id === action.id ? { ...a, isCompleted: newCompletedState } : a
-            )
-          };
-        })
+    // Optimistic UI update - mark as completed locally immediately
+    setDateGroups(prevGroups =>
+      prevGroups.map(group => ({
+        ...group,
+        actions: group.actions.map(a =>
+          a.id === action.id ? { ...a, isCompleted: true } : a
+        )
       }))
     );
 
-    // Trigger animation when completing
-    if (newCompletedState) {
-      setCompletionTriggers(prev => ({
-        ...prev,
-        [action.id]: Date.now()
-      }));
-    }
-
+    // Then trigger the actual completion
     onComplete(action.id);
   };
 
@@ -772,22 +449,28 @@ export function ActionsTableView({
   };
 
   const handleDelete = (action: ActionItem) => {
+    console.log('[ActionsTableView] handleDelete called for:', action.id, action.title);
+
     const performDelete = () => {
-      setSections(prevSections =>
-        prevSections.map(section => ({
-          ...section,
-          data: section.data.map(typeGroup => ({
-            ...typeGroup,
-            items: typeGroup.items.filter(a => a.id !== action.id)
-          })).filter(typeGroup => typeGroup.items.length > 0)
-        })).filter(section => section.data.length > 0)
+      console.log('[ActionsTableView] Performing delete for:', action.id);
+      // Optimistic UI update - remove from list immediately
+      setDateGroups(prevGroups =>
+        prevGroups.map(group => ({
+          ...group,
+          actions: group.actions.filter(a => a.id !== action.id)
+        })).filter(group => group.actions.length > 0)
       );
 
+      // Then trigger the actual deletion
       if (onDelete) {
+        console.log('[ActionsTableView] Calling onDelete callback');
         onDelete(action.id);
+      } else {
+        console.warn('[ActionsTableView] No onDelete callback provided');
       }
     };
 
+    // Use platform-specific confirmation dialog
     if (Platform.OS === 'web') {
       const confirmed = window.confirm(`Are you sure you want to delete "${action.title}"?`);
       if (confirmed) {
@@ -812,78 +495,132 @@ export function ActionsTableView({
     }
   };
 
-  const renderSectionHeader = ({ section }: { section: DateSection }) => (
-    <View style={[styles.sectionHeader, { backgroundColor: colors.surface }]}>
-      <Text style={[styles.sectionHeaderText, { color: colors.text }]}>
-        {formatDate(section.title)}
-      </Text>
-    </View>
-  );
+  const renderActionItem = (action: ActionItem) => {
+    const priorityColor = getPriorityColor(action);
+    const isCompleted = action.isCompleted;
 
-  const renderTypeHeader = (type: 'event' | 'task') => (
-    <View style={styles.typeHeaderCentered}>
-      {type === 'event' ? (
-        <>
-          <Calendar size={14} color="#6b7280" strokeWidth={2} />
-          <Text style={styles.typeHeaderText}>EVENTS</Text>
-        </>
-      ) : (
-        <>
-          <CheckSquare size={14} color="#6b7280" strokeWidth={2} />
-          <Text style={styles.typeHeaderText}>TASKS</Text>
-        </>
-      )}
-    </View>
-  );
+    // Format time display for events
+    const formatTime = (timeStr: string | null) => {
+      if (!timeStr) return null;
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const period = hours >= 12 ? 'pm' : 'am';
+      const displayHour = hours % 12 || 12;
+      return `${displayHour}:${minutes.toString().padStart(2, '0')} ${period}`;
+    };
 
-  const renderItem = ({ item: typeGroup }: { item: TypeGroup }) => {
+    const startTimeFormatted = formatTime(action.start_time);
+    const endTimeFormatted = formatTime(action.end_time);
+    const timeDisplay = startTimeFormatted && endTimeFormatted
+      ? `${startTimeFormatted} - ${endTimeFormatted}`
+      : startTimeFormatted || null;
+
     return (
-      <View>
-        {renderTypeHeader(typeGroup.type)}
-        {typeGroup.items.map((item) => {
-          const priorityColor = getPriorityColor(item);
-          const isCompleted = item.isCompleted;
-
-          const startTimeFormatted = formatTime(item.start_time);
-          const endTimeFormatted = formatTime(item.end_time);
-          const timeDisplay = startTimeFormatted && endTimeFormatted
-            ? `${startTimeFormatted} - ${endTimeFormatted}`
-            : startTimeFormatted || null;
-
-          const metadataParts: string[] = [];
-          if (item.isOverdue && item.originalDate && !isCompleted) {
-            metadataParts.push(`Overdue - ${formatOverdueDate(item.originalDate)}`);
-          }
-          if (item.type === 'event' && timeDisplay) {
-            metadataParts.push(timeDisplay);
-          }
-
-          return (
-            <SwipeableRow
-              key={item.id}
-              action={item}
-              onComplete={() => handleComplete(item)}
-              onDelegate={() => handleDelegate(item)}
-              onDelete={() => handleDelete(item)}
-              onPress={() => onTaskPress && onTaskPress(item.id)}
-              isDisabled={!!isCompleted}
-              onOpen={(id) => setOpenRowId(id)}
-              shouldClose={openRowId !== null && openRowId !== item.id}
+      <View key={action.id} style={[styles.actionRow, isCompleted && styles.completedRow]}>
+        <View style={styles.quickActionsContainer}>
+          {!isCompleted ? (
+            <TouchableOpacity
+              onPress={() => handleComplete(action)}
+              style={styles.quickActionButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <ItemRow
-                item={item}
-                priorityColor={priorityColor}
-                isCompleted={isCompleted}
-                metadataParts={metadataParts}
-                delegateName={item.delegateName}
-                onComplete={() => handleComplete(item)}
-                onTaskPress={() => onTaskPress && onTaskPress(item.id)}
-                completionTrigger={completionTriggers[item.id] || 0}
-                colors={colors}
-              />
-            </SwipeableRow>
-          );
-        })}
+              <Check size={18} color="#22c55e" strokeWidth={2.5} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.quickActionButton}>
+              <Check size={18} color="#9ca3af" strokeWidth={2.5} />
+            </View>
+          )}
+          <TouchableOpacity
+            onPress={() => handleDelegate(action)}
+            style={styles.quickActionButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            disabled={isCompleted}
+          >
+            <UserCircle size={18} color={isCompleted ? "#9ca3af" : "#3b82f6"} strokeWidth={2} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleDelete(action)}
+            style={styles.quickActionButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Trash2 size={18} color="#ef4444" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          style={styles.taskInfoContainer}
+          onPress={() => onTaskPress && onTaskPress(action.id)}
+          activeOpacity={0.7}
+          disabled={isCompleted}
+        >
+          <View style={styles.iconContainer}>
+            {action.type === 'task' ? (
+              <CheckSquare size={16} color={isCompleted ? "#9ca3af" : colors.primary} />
+            ) : (
+              <Calendar size={16} color={isCompleted ? "#9ca3af" : colors.primary} />
+            )}
+          </View>
+          <View style={styles.actionContent}>
+            <View style={styles.actionTitleRow}>
+              <Text
+                style={[
+                  styles.actionText,
+                  { color: isCompleted ? '#9ca3af' : priorityColor },
+                  isCompleted && styles.completedText
+                ]}
+                numberOfLines={1}
+              >
+                {action.title}
+              </Text>
+              {/* Time display for events */}
+              {action.type === 'event' && timeDisplay && (
+                <Text style={[styles.timeText, isCompleted && styles.completedText]}>
+                  ({timeDisplay})
+                </Text>
+              )}
+              {/* Delegate display */}
+              {action.delegateName && (
+                <Text style={[styles.delegateText, isCompleted && { color: '#9ca3af' }]}>
+                  (Delegated {action.delegateName})
+                </Text>
+              )}
+            </View>
+            {action.isOverdue && action.originalDate && !isCompleted && (
+              <Text style={styles.overdueText}>
+                (Overdue - {formatOverdueDate(action.originalDate)})
+              </Text>
+            )}
+          </View>
+          <View style={styles.valueContainer}>
+            <Text style={[styles.valueText, isCompleted && { color: '#9ca3af' }]}>
+              +{Math.round(action.depositValue)}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderDateRow = ({ item }: { item: DateWithActions }) => {
+    return (
+      <View
+        style={[
+          styles.dateRow,
+          {
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.dateColumn}>
+          <Text style={[styles.dateText, { color: colors.text }]}>
+            {formatDate(item.date)}
+          </Text>
+        </View>
+        <View style={styles.actionsColumn}>
+          <View style={styles.actionsContainer}>
+            {item.actions.map((action) => renderActionItem(action))}
+          </View>
+        </View>
       </View>
     );
   };
@@ -906,14 +643,20 @@ export function ActionsTableView({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <SectionList
-        sections={sections}
-        keyExtractor={(item, index) => `${item.type}-${index}`}
-        renderSectionHeader={renderSectionHeader}
-        renderItem={renderItem}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerDate, { color: colors.text }]}>Date</Text>
+        <Text style={[styles.headerActions, { color: colors.text }]}>Actions</Text>
+        <Text style={[styles.headerContent, { color: colors.text }]}>
+          Tasks & Events
+        </Text>
+      </View>
+
+      <FlatList
+        data={dateGroups}
+        renderItem={renderDateRow}
+        keyExtractor={(item) => item.date}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={sections.length === 0 ? styles.emptyList : undefined}
-        stickySectionHeadersEnabled={true}
+        contentContainerStyle={dateGroups.length === 0 ? styles.emptyList : undefined}
       />
     </View>
   );
@@ -923,144 +666,126 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 2,
+  },
+  headerDate: {
+    fontSize: 14,
+    fontWeight: '600',
+    width: 90,
+  },
+  headerActions: {
+    fontSize: 14,
+    fontWeight: '600',
+    width: 120,
+    textAlign: 'center',
+  },
+  headerContent: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    minHeight: 60,
+  },
+  dateColumn: {
+    width: 90,
+    justifyContent: 'center',
+  },
+  dateText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionsColumn: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingLeft: 16,
+  },
+  actionsContainer: {
+    gap: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginRight: 8,
+  },
+  quickActionButton: {
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  taskInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  iconContainer: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionContent: {
+    flex: 1,
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  overdueText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '400',
+  },
+  actionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '400',
+  },
+  delegateText: {
+    fontSize: 12,
+    color: '#3b82f6',
+    fontWeight: '500',
+  },
+  valueContainer: {
+    minWidth: 50,
+    alignItems: 'flex-end',
+  },
+  valueText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#16a34a',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sectionHeader: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  sectionHeaderText: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-  typeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f9fafb',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  typeHeaderCentered: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f9fafb',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  typeHeaderText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-    letterSpacing: 0.5,
-  },
-  swipeContainer: {
-    position: 'relative',
-  },
-  hiddenActionsContainer: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  hiddenActionButton: {
-    width: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 4,
-  },
-  delegateButton: {
-    backgroundColor: '#3b82f6',
-  },
-  deleteButton: {
-    backgroundColor: '#ef4444',
-  },
-  hiddenActionText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  itemContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  completedItem: {
-    opacity: 0.6,
-  },
-  checkboxContainer: {
-    padding: 4,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxCompleted: {
-    backgroundColor: '#22c55e',
-    borderColor: '#22c55e',
-  },
-  contentContainer: {
-    flex: 1,
-    gap: 4,
-  },
-  titleText: {
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
-  },
-  metadataText: {
-    fontSize: 12,
-    color: '#6b7280',
-    lineHeight: 16,
-  },
-  delegateText: {
-    fontSize: 12,
-    color: '#3b82f6',
-    lineHeight: 16,
-  },
-  pointsContainer: {
-    minWidth: 50,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  ghostPointsContainer: {
-    alignItems: 'flex-end',
-  },
-  ghostPointsText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#16a34a',
-  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
   },
   emptyText: {
     fontSize: 14,
@@ -1068,5 +793,36 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     flexGrow: 1,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  tag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  roleTag: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  domainTag: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#10B981',
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  completedRow: {
+    opacity: 0.7,
+  },
+  completedText: {
+    textDecorationLine: 'line-through',
   },
 });
