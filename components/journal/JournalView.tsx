@@ -849,23 +849,27 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     const entryDate = new Date(d);
     entryDate.setHours(0, 0, 0, 0);
 
-    const monthStr = d.toLocaleDateString('en-US', { month: 'short' });
-    const dayNum = d.getDate();
-    const yearNum = d.getFullYear();
-    const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
-    const standardFormat = `${monthStr} ${dayNum} ${yearNum} (${weekday})`;
+    const formattedDate = d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
 
     if (entryDate.getTime() === today.getTime()) {
-      return `Today - ${standardFormat}`;
+      return `Today - ${formattedDate}`;
     }
 
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     if (entryDate.getTime() === yesterday.getTime()) {
-      return `Yesterday - ${standardFormat}`;
+      return `Yesterday - ${formattedDate}`;
     }
 
-    return standardFormat;
+    return d.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
   const getEntryIcon = (entry: JournalEntry) => {
