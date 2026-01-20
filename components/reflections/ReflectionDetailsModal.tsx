@@ -412,35 +412,6 @@ export function ReflectionDetailsModal({
         />
       )}
 
-      {/* Edit Form Modal */}
-      {isEditMode && reflection && (
-        <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-          <TaskEventForm
-            mode="edit"
-            initialData={{
-              id: reflection.id,
-              title: reflection.reflection_title || '',
-              content: reflection.content || '',
-              type: reflection.daily_rose ? 'rose' : reflection.daily_thorn ? 'thorn' : 'reflection',
-              user_id: reflection.user_id,
-              created_at: reflection.created_at,
-              reflection_date: reflection.reflection_date,
-              daily_rose: reflection.daily_rose,
-              daily_thorn: reflection.daily_thorn,
-            }}
-            onClose={() => {
-              setIsEditMode(false);
-            }}
-            onSubmitSuccess={async () => {
-              setIsEditMode(false);
-              await fetchReflectionNotes();
-              await loadAssociatedItems();
-              onRefreshAssociatedItems?.();
-            }}
-          />
-        </Modal>
-      )}
-
       {/* Image Viewer Modal */}
       <ImageViewerModal
         visible={imageViewerVisible}
