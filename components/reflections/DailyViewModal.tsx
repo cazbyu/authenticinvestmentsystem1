@@ -49,10 +49,10 @@ export default function DailyViewModal({
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <View style={styles.headerContent}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>
-              Daily Reflection
+              {formatDateHeader(selectedDate)}
             </Text>
             <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-              {formatDateHeader(selectedDate)}
+              Daily View
             </Text>
           </View>
           <TouchableOpacity

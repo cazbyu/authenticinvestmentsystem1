@@ -446,31 +446,6 @@ export function ActionDetailsModal({
         />
       )}
 
-      {/* Edit Form Modal */}
-      {isEditMode && (
-        <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-          <TaskEventForm
-            mode="edit"
-            initialData={{
-              ...task,
-              type: task.type,
-              roles: roles,
-              domains: domains,
-            }}
-            onClose={() => {
-              setIsEditMode(false);
-            }}
-            onSubmitSuccess={async () => {
-              setIsEditMode(false);
-              await fetchTaskNotes();
-              await loadAssociatedItems();
-              await fetchTaskMetadata();
-              onRefreshAssociatedItems?.();
-            }}
-          />
-        </Modal>
-      )}
-
       {/* Image Viewer Modal */}
       <ImageViewerModal
         visible={imageViewerVisible}

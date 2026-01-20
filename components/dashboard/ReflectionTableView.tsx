@@ -27,8 +27,6 @@ interface ReflectionTableViewProps {
   period: TimePeriod;
   userId: string;
   onReflectionPress?: (reflection: any) => void;
-  onTaskPress?: (taskId: string) => void;
-  onDepositIdeaPress?: (ideaId: string) => void;
 }
 
 async function getDateRange(
@@ -75,8 +73,6 @@ export function ReflectionTableView({
   period,
   userId,
   onReflectionPress,
-  onTaskPress,
-  onDepositIdeaPress,
 }: ReflectionTableViewProps) {
   const { colors } = useTheme();
   const [dates, setDates] = useState<DateWithContent[]>([]);
@@ -100,7 +96,7 @@ export function ReflectionTableView({
 
         const filteredDetails = dateItem.itemDetails.filter((item) => {
           if (filter === 'depositIdea') {
-            return item.type === 'depositIdea';
+            return false;
           }
           if (filter === 'rose') {
             return item.type === 'rose';
@@ -206,19 +202,6 @@ export function ReflectionTableView({
     setSelectedDate(null);
   };
 
-  const handleNotePress = (item: any) => {
-    console.log('[ReflectionTableView] handleNotePress:', item);
-
-    // Route to the appropriate handler based on item type
-    if (item.type === 'reflection' || item.type === 'note') {
-      onReflectionPress?.(item);
-    } else if (item.type === 'task' || item.type === 'event') {
-      onTaskPress?.(item.parentItem?.id || item.id);
-    } else if (item.type === 'depositIdea') {
-      onDepositIdeaPress?.(item.parentItem?.id || item.id);
-    }
-  };
-
   const renderDateRow = ({ item }: { item: DateWithContent }) => {
     const hasItems = item.itemDetails && item.itemDetails.length > 0;
 
@@ -302,7 +285,7 @@ export function ReflectionTableView({
           selectedDate={selectedDate}
           onClose={handleCloseDailyView}
           onReflectionPress={onReflectionPress}
-          onNotePress={handleNotePress}
+          onNotePress={() => {}}
         />
       )}
     </View>

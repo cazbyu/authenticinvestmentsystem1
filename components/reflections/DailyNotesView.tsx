@@ -18,12 +18,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchDailyAggregationData } from '@/lib/weeklyReflectionData';
 import { DailyAggregationData } from '@/types/reflections';
-import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp, Plus, Paperclip, X, Send, CheckSquare, Calendar } from 'lucide-react-native';
-
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
-const reflectionImage = require('@/assets/images/reflections-72.png');
-const depositIdeaImage = require('@/assets/images/deposit-idea.png');
+import { Target, Users, Activity, CircleAlert as AlertCircle, ChevronDown, ChevronUp, Plus, Paperclip, X, Send } from 'lucide-react-native';
 import {
   fetchReflectionsByDateRange,
   ReflectionWithRelations,
@@ -111,10 +106,9 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [expandedSections, setExpandedSections] = useState({
-    reflectionsList: true,
-    leadingIndicators: false,
-    roleInvestment: false,
-    domainBalance: false,
+    leadingIndicators: true,
+    roleInvestment: true,
+    domainBalance: true,
   });
 
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -262,24 +256,18 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       reflections: reflections.map(r => ({ id: r.id, title: r.reflection_title, content: r.content?.substring(0, 50) })),
     });
 
-    console.log('[DailyNotes] Calling get_daily_history_items with:', {
-      p_target_date: normalizedDate,
-      p_user_id: user.id,
-    });
-
     const { data: historyData, error: historyError } = await supabase.rpc('get_daily_history_items', {
       p_target_date: normalizedDate,
       p_user_id: user.id,
     });
 
     if (historyError) {
-      console.error('[DailyNotes] ERROR fetching daily history items:', historyError);
+      console.error('Error fetching daily history items:', historyError);
       return;
     }
 
     console.log('[DailyNotes] History items fetched:', {
       count: historyData?.length || 0,
-      rawData: historyData,
       items: historyData?.map((item: any) => ({
         type: item.item_type,
         title: item.item_title,
@@ -410,62 +398,6 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         return colors.primary;
       default:
         return colors.primary;
-    }
-  };
-
-  const getItemTypeIcon = (type: TimelineItemType, item?: TimelineItem) => {
-    const iconSize = 24;
-    const imageSize = 20;
-
-    // Check if it's a reflection with rose/thorn metadata
-    if (type === 'reflection' && item) {
-      // Note: We'd need to check the reflection data for rose/thorn flags
-      // For now, using reflection image as default
-    }
-
-    switch (type) {
-      case 'task':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
-            <CheckSquare size={16} color="#0078d4" />
-          </View>
-        );
-      case 'event':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#d1fae5' }]}>
-            <Calendar size={16} color="#10b981" />
-          </View>
-        );
-      case 'depositIdea':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
-            <Image source={depositIdeaImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
-      case 'reflection':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
-            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
-      case 'note':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
-            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
-      case 'withdrawal':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#f3f4f6' }]}>
-            <Image source={thornImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
-      default:
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
-            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
     }
   };
 
@@ -665,11 +597,15 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         }
       >
         <View style={styles.content}>
+          <Text style={[styles.weekTitle, { color: colors.text }]}>
+            Daily Reflection - {formatCurrentDate()}
+          </Text>
+
         {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
-                Reflections & Daily Items {timelineItems.length > 0 && `(${timelineItems.length})`}
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                Today's Lessons, Reflections and Notes {timelineItems.length > 0 && `(${timelineItems.length})`}
               </Text>
               <View style={styles.notesActions}>
                 <TouchableOpacity
@@ -686,81 +622,68 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                 >
                   <Paperclip size={20} color="#ffffff" />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => toggleSection('reflectionsList')}
-                  style={[styles.iconButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
-                  activeOpacity={0.7}
-                >
-                  {expandedSections.reflectionsList ? (
-                    <ChevronUp size={20} color={colors.text} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.text} />
-                  )}
-                </TouchableOpacity>
               </View>
             </View>
 
-            {expandedSections.reflectionsList && (
-              <>
-                {showNoteInput && (
-                  <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    <TextInput
-                      style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
-                      placeholder="Write a note..."
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      value={noteContent}
-                      onChangeText={setNoteContent}
-                      autoFocus
-                    />
+            {showNoteInput && (
+              <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <TextInput
+                  style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
+                  placeholder="Write a note..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  value={noteContent}
+                  onChangeText={setNoteContent}
+                  autoFocus
+                />
 
-                    {selectedFiles.length > 0 && (
-                      <View style={styles.selectedFilesContainer}>
-                        <Text style={[styles.selectedFilesLabel, { color: colors.textSecondary }]}>
-                          Attachments ({selectedFiles.length}):
+                {selectedFiles.length > 0 && (
+                  <View style={styles.selectedFilesContainer}>
+                    <Text style={[styles.selectedFilesLabel, { color: colors.textSecondary }]}>
+                      Attachments ({selectedFiles.length}):
+                    </Text>
+                    {selectedFiles.map((file, index) => (
+                      <View key={index} style={[styles.selectedFileItem, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.selectedFileName, { color: colors.text }]} numberOfLines={1}>
+                          {file.name}
                         </Text>
-                        {selectedFiles.map((file, index) => (
-                          <View key={index} style={[styles.selectedFileItem, { backgroundColor: colors.surface }]}>
-                            <Text style={[styles.selectedFileName, { color: colors.text }]} numberOfLines={1}>
-                              {file.name}
-                            </Text>
-                            <TouchableOpacity onPress={() => handleRemoveFile(index)}>
-                              <X size={18} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                          </View>
-                        ))}
+                        <TouchableOpacity onPress={() => handleRemoveFile(index)}>
+                          <X size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
                       </View>
-                    )}
-
-                    <View style={styles.noteInputActions}>
-                      <TouchableOpacity
-                        onPress={handleCancelNote}
-                        style={[styles.noteActionButton, { backgroundColor: colors.surface }]}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.noteActionButtonText, { color: colors.text }]}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={handleSubmitNote}
-                        style={[styles.noteActionButton, { backgroundColor: colors.primary }]}
-                        activeOpacity={0.7}
-                        disabled={isSubmittingNote}
-                      >
-                        {isSubmittingNote ? (
-                          <ActivityIndicator size="small" color="#ffffff" />
-                        ) : (
-                          <>
-                            <Send size={16} color="#ffffff" />
-                            <Text style={[styles.noteActionButtonText, { color: '#ffffff' }]}>Send</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
+                    ))}
                   </View>
                 )}
 
-                <View style={styles.notesList}>
-                  {timelineItems.map((item) => {
+                <View style={styles.noteInputActions}>
+                  <TouchableOpacity
+                    onPress={handleCancelNote}
+                    style={[styles.noteActionButton, { backgroundColor: colors.surface }]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.noteActionButtonText, { color: colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSubmitNote}
+                    style={[styles.noteActionButton, { backgroundColor: colors.primary }]}
+                    activeOpacity={0.7}
+                    disabled={isSubmittingNote}
+                  >
+                    {isSubmittingNote ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <Send size={16} color="#ffffff" />
+                        <Text style={[styles.noteActionButtonText, { color: '#ffffff' }]}>Send</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.notesList}>
+              {timelineItems.map((item) => {
                 const reflectionAttachments = item.attachments || [];
                 const noteAttachments = item.noteAttachments || [];
                 const allAttachments = [...reflectionAttachments, ...noteAttachments];
@@ -793,7 +716,9 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                         <Text style={[styles.noteTitle, { color: colors.text }]}>{displayTitle}</Text>
                         <Text style={[styles.noteTimestamp, { color: colors.textSecondary }]}>{timestamp}</Text>
                       </View>
-                      {getItemTypeIcon(item.type, item)}
+                      <View style={[styles.tagBadge, { backgroundColor: getItemTypeBadgeColor(item.type) }]}>
+                        <Text style={styles.tagBadgeText}>{getItemTypeLabel(item.type)}</Text>
+                      </View>
                     </View>
 
                     {item.content ? (
@@ -869,15 +794,13 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   </TouchableOpacity>
                 );
               })}
-                </View>
-              </>
-            )}
+            </View>
           </View>
         ) : (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
-                Reflections & Daily Items
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                Today's Lessons, Reflections and Notes
               </Text>
               <View style={styles.notesActions}>
                 <TouchableOpacity
@@ -894,27 +817,14 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                 >
                   <Paperclip size={20} color="#ffffff" />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => toggleSection('reflectionsList')}
-                  style={[styles.iconButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
-                  activeOpacity={0.7}
-                >
-                  {expandedSections.reflectionsList ? (
-                    <ChevronUp size={20} color={colors.text} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.text} />
-                  )}
-                </TouchableOpacity>
               </View>
             </View>
-            {expandedSections.reflectionsList && (
-              <>
-                {!showNoteInput && (
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    No reflections or notes recorded for this date.
-                  </Text>
-                )}
-                {showNoteInput && (
+            {!showNoteInput && (
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                No reflections or notes recorded for this date.
+              </Text>
+            )}
+            {showNoteInput && (
               <View style={[styles.noteInputContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
                 <TextInput
                   style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
@@ -969,8 +879,6 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   </TouchableOpacity>
                 </View>
               </View>
-                )}
-              </>
             )}
           </View>
         )}
@@ -1321,13 +1229,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   noteContent: {
     fontSize: 14,
     lineHeight: 20,
@@ -1482,7 +1383,6 @@ const styles = StyleSheet.create({
   notesActions: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'center',
   },
   iconButton: {
     width: 36,
