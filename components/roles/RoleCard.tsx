@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { RoleStatistics } from '@/lib/roleStatistics';
 
 interface Role {
   id: string;
@@ -12,12 +11,11 @@ interface Role {
 
 interface RoleCardProps {
   role: Role;
-  statistics: RoleStatistics | null;
   onPress: (role: Role) => void;
   imageUrl?: string;
 }
 
-export function RoleCard({ role, statistics, onPress, imageUrl }: RoleCardProps) {
+export function RoleCard({ role, onPress, imageUrl }: RoleCardProps) {
   return (
     <View style={styles.cardWrapper}>
       <TouchableOpacity
@@ -36,18 +34,6 @@ export function RoleCard({ role, statistics, onPress, imageUrl }: RoleCardProps)
             </View>
           )}
           <Text style={styles.title}>{role.label}</Text>
-          {statistics && (
-            <View style={styles.statsContainer}>
-              <View style={styles.statBlock}>
-                <Text style={styles.statValue}>{statistics.completedDeposits}</Text>
-                <Text style={styles.statLabel}>Completed</Text>
-              </View>
-              <View style={styles.statBlock}>
-                <Text style={styles.statValue}>{statistics.totalScheduled}</Text>
-                <Text style={styles.statLabel}>Scheduled</Text>
-              </View>
-            </View>
-          )}
         </View>
       </TouchableOpacity>
     </View>
@@ -69,7 +55,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    minHeight: 180,
+    minHeight: 140,
   },
   content: {
     alignItems: 'center',
@@ -99,30 +85,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    gap: 20,
-    width: '100%',
-  },
-  statBlock: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1f2937',
-    textAlign: 'center',
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#6b7280',
-    marginTop: 2,
     textAlign: 'center',
   },
 });
