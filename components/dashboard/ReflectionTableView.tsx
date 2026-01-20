@@ -6,8 +6,9 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import { Flower, XOctagon, FileText, BookOpen } from 'lucide-react-native';
+import { FileText } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
@@ -15,6 +16,11 @@ import { ReflectFilter } from './ReflectFilterButtons';
 import DailyViewModal from '@/components/reflections/DailyViewModal';
 import { fetchDatesByRange, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
 import { getWeekStart, getWeekEnd } from '@/lib/dateUtils';
+
+const roseImage = require('@/assets/images/rose-81.png');
+const thornImage = require('@/assets/images/thorn-81.png');
+const reflectionImage = require('@/assets/images/reflections-72.png');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface ReflectionTableViewProps {
   filter: ReflectFilter;
@@ -128,31 +134,58 @@ export function ReflectionTableView({
     const date = new Date(year, month - 1, day);
     const monthStr = date.toLocaleDateString('en-US', { month: 'short' });
     const dayNum = date.getDate();
+    const yearNum = date.getFullYear();
     const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-    return `${monthStr} ${dayNum} (${weekday})`;
+    return `${monthStr} ${dayNum} ${yearNum} (${weekday})`;
   };
 
   const getIconForItemType = (type: ItemDetail['type']) => {
-    const iconProps = { size: 14 };
+    const imageSize = 20;
 
     switch (type) {
       case 'rose':
-        return <Flower {...iconProps} color="#16a34a" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#fce7f3' }]}>
+            <Image source={roseImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
       case 'thorn':
-        return <XOctagon {...iconProps} color="#f59e0b" />;
-      case 'note':
-        return <FileText {...iconProps} color="#0078d4" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#f3f4f6' }]}>
+            <Image source={thornImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      case 'depositIdea':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
+            <Image source={depositIdeaImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
       case 'reflection':
-        return <BookOpen {...iconProps} color="#8b5cf6" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
+            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      case 'note':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <FileText size={14} color="#0078d4" />
+          </View>
+        );
       default:
-        return <FileText {...iconProps} color="#0078d4" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <FileText size={14} color="#0078d4" />
+          </View>
+        );
     }
   };
 
   const renderItemDetails = (items: ItemDetail[]) => {
     return items.map((item, index) => (
       <View key={index} style={styles.itemRow}>
-        <View style={styles.iconContainer}>{getIconForItemType(item.type)}</View>
+        {getIconForItemType(item.type)}
         <Text style={[styles.itemText, { color: colors.textSecondary }]} numberOfLines={1}>
           {item.title}
         </Text>
@@ -310,6 +343,13 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 14,
     height: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },

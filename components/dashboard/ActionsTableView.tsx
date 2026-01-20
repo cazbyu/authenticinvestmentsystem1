@@ -689,27 +689,23 @@ export function ActionsTableView({
     const dateToCheck = new Date(date);
     dateToCheck.setHours(0, 0, 0, 0);
 
-    const formattedDate = date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    const monthStr = date.toLocaleDateString('en-US', { month: 'short' });
+    const dayNum = date.getDate();
+    const yearNum = date.getFullYear();
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+    const standardFormat = `${monthStr} ${dayNum} ${yearNum} (${weekday})`;
 
     if (dateToCheck.getTime() === today.getTime()) {
-      return `Today - ${formattedDate}`;
+      return `Today - ${standardFormat}`;
     }
 
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     if (dateToCheck.getTime() === yesterday.getTime()) {
-      return `Yesterday - ${formattedDate}`;
+      return `Yesterday - ${standardFormat}`;
     }
 
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    return standardFormat;
   };
 
   const formatOverdueDate = (dateString: string) => {
