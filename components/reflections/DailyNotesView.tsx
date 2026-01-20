@@ -262,24 +262,18 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       reflections: reflections.map(r => ({ id: r.id, title: r.reflection_title, content: r.content?.substring(0, 50) })),
     });
 
-    console.log('[DailyNotes] Calling get_daily_history_items with:', {
-      p_target_date: normalizedDate,
-      p_user_id: user.id,
-    });
-
     const { data: historyData, error: historyError } = await supabase.rpc('get_daily_history_items', {
       p_target_date: normalizedDate,
       p_user_id: user.id,
     });
 
     if (historyError) {
-      console.error('[DailyNotes] ERROR fetching daily history items:', historyError);
+      console.error('Error fetching daily history items:', historyError);
       return;
     }
 
     console.log('[DailyNotes] History items fetched:', {
       count: historyData?.length || 0,
-      rawData: historyData,
       items: historyData?.map((item: any) => ({
         type: item.item_type,
         title: item.item_title,
@@ -668,9 +662,20 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
-                Reflections & Daily Items {timelineItems.length > 0 && `(${timelineItems.length})`}
-              </Text>
+              <TouchableOpacity
+                style={styles.notesHeaderTitle}
+                onPress={() => toggleSection('reflectionsList')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  Reflections & Daily Items {timelineItems.length > 0 && `(${timelineItems.length})`}
+                </Text>
+                {expandedSections.reflectionsList ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
               <View style={styles.notesActions}>
                 <TouchableOpacity
                   onPress={handleAddNote}
@@ -685,17 +690,6 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   activeOpacity={0.7}
                 >
                   <Paperclip size={20} color="#ffffff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => toggleSection('reflectionsList')}
-                  style={[styles.iconButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
-                  activeOpacity={0.7}
-                >
-                  {expandedSections.reflectionsList ? (
-                    <ChevronUp size={20} color={colors.text} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.text} />
-                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -876,9 +870,20 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         ) : (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
-                Reflections & Daily Items
-              </Text>
+              <TouchableOpacity
+                style={styles.notesHeaderTitle}
+                onPress={() => toggleSection('reflectionsList')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  Reflections & Daily Items
+                </Text>
+                {expandedSections.reflectionsList ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
               <View style={styles.notesActions}>
                 <TouchableOpacity
                   onPress={handleAddNote}
@@ -893,17 +898,6 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   activeOpacity={0.7}
                 >
                   <Paperclip size={20} color="#ffffff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => toggleSection('reflectionsList')}
-                  style={[styles.iconButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
-                  activeOpacity={0.7}
-                >
-                  {expandedSections.reflectionsList ? (
-                    <ChevronUp size={20} color={colors.text} />
-                  ) : (
-                    <ChevronDown size={20} color={colors.text} />
-                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -1479,10 +1473,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
+  notesHeaderTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
   notesActions: {
     flexDirection: 'row',
     gap: 8,
-    alignItems: 'center',
   },
   iconButton: {
     width: 36,
