@@ -839,14 +839,20 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     const entryDate = new Date(d);
     entryDate.setHours(0, 0, 0, 0);
 
+    const formattedDate = d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
     if (entryDate.getTime() === today.getTime()) {
-      return 'Today';
+      return `Today - ${formattedDate}`;
     }
 
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     if (entryDate.getTime() === yesterday.getTime()) {
-      return 'Yesterday';
+      return `Yesterday - ${formattedDate}`;
     }
 
     return d.toLocaleDateString('en-US', {
