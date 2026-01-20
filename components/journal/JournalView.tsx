@@ -865,7 +865,6 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       weekday: 'short',
       month: 'short',
       day: 'numeric',
-      year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
     });
   };
 
