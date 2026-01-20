@@ -24,6 +24,7 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
+import { ReflectFilterButtons } from '@/components/dashboard/ReflectFilterButtons';
 import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
@@ -791,46 +792,6 @@ export default function Dashboard() {
     setSelectedDepositIdea(depositIdea);
     setIsDepositIdeaDetailVisible(true);
   };
-
-  const handleTaskPressById = async (taskId: string) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: task, error } = await supabase
-        .from('0008-ap-tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
-
-      if (error) throw error;
-      if (task) {
-        setSelectedTask(task as Task);
-        setIsDetailModalVisible(true);
-      }
-    } catch (error) {
-      console.error('Error loading task:', error);
-      Alert.alert('Error', 'Failed to load task details');
-    }
-  };
-
-  const handleDepositIdeaPressById = async (ideaId: string) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: idea, error } = await supabase
-        .from('0008-ap-deposit-ideas')
-        .select('*')
-        .eq('id', ideaId)
-        .single();
-
-      if (error) throw error;
-      if (idea) {
-        setSelectedDepositIdea(idea);
-        setIsDepositIdeaDetailVisible(true);
-      }
-    } catch (error) {
-      console.error('Error loading deposit idea:', error);
-      Alert.alert('Error', 'Failed to load deposit idea details');
-    }
-  };
   const handleUpdateDepositIdea = async (depositIdea: any) => {
     const editData = {
       ...depositIdea,
@@ -840,22 +801,6 @@ export default function Dashboard() {
     setIsDepositIdeaDetailVisible(false);
     setIsFormModalVisible(true);
   };
-  const handleActivateDepositIdea = (depositIdea: any) => {
-    const editData = {
-      title: depositIdea.title,
-      content: depositIdea.title,
-      type: 'task',
-      roles: depositIdea.roles || [],
-      domains: depositIdea.domains || [],
-      goals: depositIdea.goals || [],
-      keyRelationships: depositIdea.keyRelationships || [],
-      sourceDepositIdeaId: depositIdea.id,
-    };
-    setEditingTask(editData);
-    setIsDepositIdeaDetailVisible(false);
-    setIsFormModalVisible(true);
-  };
-
   const handleCancelDepositIdea = async (depositIdea: any) => {
     try {
       const supabase = getSupabaseClient();
@@ -890,6 +835,103 @@ export default function Dashboard() {
     }
   };
 
+  const handleActivateDepositIdea = async (depositIdea: any) => {
+    try {
+      setIsDepositIdeaDetailVisible(false); // Close modal immediately
+      
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not found');
+
+      // Create a new task based on the deposit idea
+      const { data: newTask, error: taskError } = await supabase
+        .from('0008-ap-tasks')
+        .insert({
+          user_id: user.id,
+          title: depositIdea.title,
+          type: 'task',
+          status: 'pending',
+          due_date: formatLocalDate(new Date()),
+          is_deposit_idea: true,
+        })
+        .select()
+        .single();
+
+      if (taskError) throw taskError;
+
+      const taskId = newTask.id;
+
+      // Copy all the joins from the deposit idea to the new task
+      const joinPromises = [];
+
+      // Copy role joins
+      if (depositIdea.roles && depositIdea.roles.length > 0) {
+        const roleJoins = depositIdea.roles.map((role: any) => ({
+          parent_id: taskId,
+          parent_type: 'task',
+          role_id: role.id,
+          user_id: user.id,
+        }));
+        joinPromises.push(
+          supabase.from('0008-ap-universal-roles-join').insert(roleJoins)
+        );
+      }
+
+      // Copy domain joins
+      if (depositIdea.domains && depositIdea.domains.length > 0) {
+        const domainJoins = depositIdea.domains.map((domain: any) => ({
+          parent_id: taskId,
+          parent_type: 'task',
+          domain_id: domain.id,
+          user_id: user.id,
+        }));
+        joinPromises.push(
+          supabase.from('0008-ap-universal-domains-join').insert(domainJoins)
+        );
+      }
+
+      // Copy key relationship joins
+      if (depositIdea.keyRelationships && depositIdea.keyRelationships.length > 0) {
+        const krJoins = depositIdea.keyRelationships.map((kr: any) => ({
+          parent_id: taskId,
+          parent_type: 'task',
+          key_relationship_id: kr.id,
+          user_id: user.id,
+        }));
+        joinPromises.push(
+          supabase.from('0008-ap-universal-key-relationships-join').insert(krJoins)
+        );
+      }
+
+      // Execute all join insertions
+      if (joinPromises.length > 0) {
+        const joinResults = await Promise.all(joinPromises);
+        for (const result of joinResults) {
+          if (result.error) throw result.error;
+        }
+      }
+
+      // Mark the deposit idea as activated
+      const { error: updateError } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .update({
+          is_active: false,
+          archived: true,
+          activated_at: toLocalISOString(new Date()),
+          activated_task_id: taskId,
+          updated_at: toLocalISOString(new Date())
+        })
+        .eq('id', depositIdea.id);
+
+      if (updateError) throw updateError;
+
+      Alert.alert('Success', 'Deposit idea has been activated as a task!');
+      fetchData(); // Refresh the task list
+    } catch (error) {
+      console.error('Error activating deposit idea:', error);
+      Alert.alert('Error', (error as Error).message || 'Failed to activate deposit idea.');
+    }
+  };
   const handleUpdateTask = (task: Task) => {
     console.log('[Dashboard] Opening task for edit:', {
       id: task.id,
@@ -1057,17 +1099,21 @@ export default function Dashboard() {
       />
 
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
-        {activeTab !== 'home' && (
-          <View style={styles.summarySection}>
-            <View style={styles.controlsRow}>
-              <PeriodSelector
-                selectedPeriod={selectedPeriod}
-                onPeriodChange={setSelectedPeriod}
-                score={activeTab === 'journal' ? journalPeriodScore : undefined}
+        <View style={styles.summarySection}>
+          <View style={styles.controlsRow}>
+            <PeriodSelector
+              selectedPeriod={selectedPeriod}
+              onPeriodChange={setSelectedPeriod}
+              score={activeTab === 'journal' ? journalPeriodScore : undefined}
+            />
+            {activeTab === 'reflect' && (
+              <ReflectFilterButtons
+                activeFilter={reflectFilter}
+                onFilterChange={setReflectFilter}
               />
-            </View>
+            )}
           </View>
-        )}
+        </View>
 
         <View style={styles.content} pointerEvents="box-none">
 
@@ -1142,8 +1188,6 @@ export default function Dashboard() {
               setSelectedReflectionDetail(reflection);
               setIsReflectionDetailModalVisible(true);
             }}
-            onTaskPress={handleTaskPressById}
-            onDepositIdeaPress={handleDepositIdeaPressById}
           />
         ) : activeTab === 'act' ? (
           <ActionsTableView
@@ -1473,7 +1517,7 @@ const styles = StyleSheet.create({
     controlsRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'flex-start',
+      justifyContent: 'space-between',
       gap: 12,
     },
     content: { flex: 1 },

@@ -6,9 +6,8 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Image,
 } from 'react-native';
-import { FileText } from 'lucide-react-native';
+import { Flower, AlertTriangle, FileText, BookOpen } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
@@ -17,18 +16,11 @@ import DailyViewModal from '@/components/reflections/DailyViewModal';
 import { fetchDatesByRange, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
 import { getWeekStart, getWeekEnd } from '@/lib/dateUtils';
 
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
-const reflectionImage = require('@/assets/images/reflections-72.png');
-const depositIdeaImage = require('@/assets/images/deposit-idea.png');
-
 interface ReflectionTableViewProps {
   filter: ReflectFilter;
   period: TimePeriod;
   userId: string;
   onReflectionPress?: (reflection: any) => void;
-  onTaskPress?: (taskId: string) => void;
-  onDepositIdeaPress?: (ideaId: string) => void;
 }
 
 async function getDateRange(
@@ -75,8 +67,6 @@ export function ReflectionTableView({
   period,
   userId,
   onReflectionPress,
-  onTaskPress,
-  onDepositIdeaPress,
 }: ReflectionTableViewProps) {
   const { colors } = useTheme();
   const [dates, setDates] = useState<DateWithContent[]>([]);
@@ -100,7 +90,7 @@ export function ReflectionTableView({
 
         const filteredDetails = dateItem.itemDetails.filter((item) => {
           if (filter === 'depositIdea') {
-            return item.type === 'depositIdea';
+            return false;
           }
           if (filter === 'rose') {
             return item.type === 'rose';
@@ -120,12 +110,7 @@ export function ReflectionTableView({
         };
       });
 
-      // Filter out dates with no items
-      const datesWithContent = filteredData.filter(
-        (dateItem) => dateItem.itemDetails && dateItem.itemDetails.length > 0
-      );
-
-      setDates(datesWithContent);
+      setDates(filteredData);
     } catch (error) {
       console.error('Error loading date range data:', error);
     } finally {
@@ -138,58 +123,54 @@ export function ReflectionTableView({
     const date = new Date(year, month - 1, day);
     const monthStr = date.toLocaleDateString('en-US', { month: 'short' });
     const dayNum = date.getDate();
-    const yearNum = date.getFullYear();
     const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-    return `${monthStr} ${dayNum} ${yearNum} (${weekday})`;
+    return `${monthStr} ${dayNum} (${weekday})`;
   };
 
   const getIconForItemType = (type: ItemDetail['type']) => {
-    const imageSize = 20;
+    const iconProps = { size: 14 };
 
     switch (type) {
       case 'rose':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#fce7f3' }]}>
-            <Image source={roseImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
+        return <Flower {...iconProps} color="#16a34a" />;
       case 'thorn':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#f3f4f6' }]}>
-            <Image source={thornImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
-      case 'depositIdea':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
-            <Image source={depositIdeaImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
-      case 'reflection':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
-            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
-          </View>
-        );
+        return <AlertTriangle {...iconProps} color="#f59e0b" />;
       case 'note':
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
-            <FileText size={14} color="#0078d4" />
-          </View>
-        );
+        return <FileText {...iconProps} color="#0078d4" />;
+      case 'reflection':
+        return <BookOpen {...iconProps} color="#8b5cf6" />;
       default:
-        return (
-          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
-            <FileText size={14} color="#0078d4" />
-          </View>
-        );
+        return <FileText {...iconProps} color="#0078d4" />;
+    }
+  };
+
+  const getEmptyMessage = (filter: ReflectFilter) => {
+    switch (filter) {
+      case 'rose':
+        return 'No Rose today';
+      case 'thorn':
+        return 'No Thorn today';
+      case 'reflection':
+        return 'No Reflection today';
+      case 'depositIdea':
+        return 'No Deposit Idea today';
+      default:
+        return 'No reflections today';
     }
   };
 
   const renderItemDetails = (items: ItemDetail[]) => {
+    if (!items || items.length === 0) {
+      return (
+        <Text style={[styles.emptyDateText, { color: colors.textSecondary }]}>
+          {getEmptyMessage(filter)}
+        </Text>
+      );
+    }
+
     return items.map((item, index) => (
       <View key={index} style={styles.itemRow}>
-        {getIconForItemType(item.type)}
+        <View style={styles.iconContainer}>{getIconForItemType(item.type)}</View>
         <Text style={[styles.itemText, { color: colors.textSecondary }]} numberOfLines={1}>
           {item.title}
         </Text>
@@ -204,19 +185,6 @@ export function ReflectionTableView({
 
   const handleCloseDailyView = () => {
     setSelectedDate(null);
-  };
-
-  const handleNotePress = (item: any) => {
-    console.log('[ReflectionTableView] handleNotePress:', item);
-
-    // Route to the appropriate handler based on item type
-    if (item.type === 'reflection' || item.type === 'note') {
-      onReflectionPress?.(item);
-    } else if (item.type === 'task' || item.type === 'event') {
-      onTaskPress?.(item.parentItem?.id || item.id);
-    } else if (item.type === 'depositIdea') {
-      onDepositIdeaPress?.(item.parentItem?.id || item.id);
-    }
   };
 
   const renderDateRow = ({ item }: { item: DateWithContent }) => {
@@ -246,30 +214,13 @@ export function ReflectionTableView({
     );
   };
 
-  const renderEmpty = () => {
-    const getEmptyMessage = () => {
-      switch (filter) {
-        case 'rose':
-          return 'No Rose reflections in this period';
-        case 'thorn':
-          return 'No Thorn reflections in this period';
-        case 'reflection':
-          return 'No reflections in this period';
-        case 'depositIdea':
-          return 'No Deposit Ideas in this period';
-        default:
-          return 'No items in selected period';
-      }
-    };
-
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          {getEmptyMessage()}
-        </Text>
-      </View>
-    );
-  };
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+        No dates in selected period
+      </Text>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -302,7 +253,7 @@ export function ReflectionTableView({
           selectedDate={selectedDate}
           onClose={handleCloseDailyView}
           onReflectionPress={onReflectionPress}
-          onNotePress={handleNotePress}
+          onNotePress={() => {}}
         />
       )}
     </View>
@@ -360,13 +311,6 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 14,
     height: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },

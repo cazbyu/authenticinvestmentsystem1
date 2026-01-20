@@ -965,6 +965,60 @@ export default function Wellness() {
       <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'domains' && (
           <ScrollView style={styles.domainsContent}>
+            {/* Time Period Selector */}
+            <View style={styles.timePeriodContainer}>
+              <View style={styles.timePeriodSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'today' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('today')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'today' && styles.timePeriodButtonTextActive
+                  ]}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'week' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('week')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'week' && styles.timePeriodButtonTextActive
+                  ]}>Week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'month' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('month')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'month' && styles.timePeriodButtonTextActive
+                  ]}>Month</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    domainStatsPeriod === 'all' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setDomainStatsPeriod('all')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    domainStatsPeriod === 'all' && styles.timePeriodButtonTextActive
+                  ]}>All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* Domain Cards */}
             {domains.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -973,10 +1027,12 @@ export default function Wellness() {
             ) : (
               <View style={styles.domainsGrid}>
                 {domains.map(domain => {
+                  const stats = domainStatistics[domain.id];
                   return (
                     <DomainCard
                       key={domain.id}
                       domain={domain}
+                      statistics={stats || null}
                       onPress={handleDomainPress}
                       color={getDomainColor(domain.name)}
                     />

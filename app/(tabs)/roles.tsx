@@ -1729,6 +1729,60 @@ export default function Roles() {
       <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'roles' && (
           <ScrollView style={styles.rolesList}>
+            {/* Time Period Selector */}
+            <View style={styles.timePeriodContainer}>
+              <View style={styles.timePeriodSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'today' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('today')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'today' && styles.timePeriodButtonTextActive
+                  ]}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'week' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('week')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'week' && styles.timePeriodButtonTextActive
+                  ]}>Week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'month' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('month')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'month' && styles.timePeriodButtonTextActive
+                  ]}>Month</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.timePeriodButton,
+                    roleStatsPeriod === 'all' && styles.timePeriodButtonActive
+                  ]}
+                  onPress={() => setRoleStatsPeriod('all')}
+                >
+                  <Text style={[
+                    styles.timePeriodButtonText,
+                    roleStatsPeriod === 'all' && styles.timePeriodButtonTextActive
+                  ]}>All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* Roles Grid */}
             {roles.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -1743,10 +1797,12 @@ export default function Roles() {
             ) : (
               <View style={styles.rolesGrid}>
                 {roles.map(role => {
+                  const stats = roleStatistics[role.id];
                   return (
                     <RoleCard
                       key={role.id}
                       role={role}
+                      statistics={stats || null}
                       onPress={handleRolePress}
                       imageUrl={roleImageUrls[role.id]}
                     />

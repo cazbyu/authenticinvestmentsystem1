@@ -1501,25 +1501,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         }
       }
 
-      // If this task was created from a deposit idea, mark the idea as activated
-      if (mode === 'create' && initialData?.sourceDepositIdeaId && mainRecordId) {
-        try {
-          await supabase
-            .from('0008-ap-deposit-ideas')
-            .update({
-              is_active: true,
-              activated_at: new Date().toISOString(),
-              activated_task_id: mainRecordId,
-            })
-            .eq('id', initialData.sourceDepositIdeaId);
-
-          console.log('[TaskEventForm] Deposit idea activated:', initialData.sourceDepositIdeaId);
-        } catch (activateError) {
-          console.error('[TaskEventForm] Error activating deposit idea:', activateError);
-          // Don't fail the whole operation if activation fails
-        }
-      }
-
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
 
       // Broadcast event to notify other components
