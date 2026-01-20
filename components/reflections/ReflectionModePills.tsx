@@ -40,7 +40,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     if (icon === 'rose') {
       return (
         <Image
-          source={require('@/assets/images/rose-81.svg')}
+          source={require('@/assets/images/rose-81.png')}
           style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
           resizeMode="contain"
         />
