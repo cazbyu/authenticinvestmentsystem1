@@ -11,7 +11,7 @@ import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from '../tasks/TaskEventForm';
 import ParentItemInfo from '../followThrough/ParentItemInfo';
 
-const depositIdeaImage = require('@/assets/images/deposit-idea.svg');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface DepositIdea {
   id: string;
