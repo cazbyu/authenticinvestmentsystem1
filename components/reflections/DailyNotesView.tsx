@@ -262,18 +262,24 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       reflections: reflections.map(r => ({ id: r.id, title: r.reflection_title, content: r.content?.substring(0, 50) })),
     });
 
+    console.log('[DailyNotes] Calling get_daily_history_items with:', {
+      p_target_date: normalizedDate,
+      p_user_id: user.id,
+    });
+
     const { data: historyData, error: historyError } = await supabase.rpc('get_daily_history_items', {
       p_target_date: normalizedDate,
       p_user_id: user.id,
     });
 
     if (historyError) {
-      console.error('Error fetching daily history items:', historyError);
+      console.error('[DailyNotes] ERROR fetching daily history items:', historyError);
       return;
     }
 
     console.log('[DailyNotes] History items fetched:', {
       count: historyData?.length || 0,
+      rawData: historyData,
       items: historyData?.map((item: any) => ({
         type: item.item_type,
         title: item.item_title,
