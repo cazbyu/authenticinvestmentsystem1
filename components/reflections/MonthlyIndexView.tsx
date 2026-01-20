@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { fetchMonthlyDates, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
-import { ChevronLeft, Flower, AlertTriangle, FileText, BookOpen } from 'lucide-react-native';
+import { ChevronLeft, Flower, XOctagon, FileText, BookOpen } from 'lucide-react-native';
 
 interface MonthlyIndexViewProps {
   year: number;
@@ -69,7 +69,7 @@ export default function MonthlyIndexView({
       case 'rose':
         return <Flower {...iconProps} color="#16a34a" />;
       case 'thorn':
-        return <AlertTriangle {...iconProps} color="#f59e0b" />;
+        return <XOctagon {...iconProps} color="#f59e0b" />;
       case 'note':
         return <FileText {...iconProps} color="#0078d4" />;
       case 'reflection':
