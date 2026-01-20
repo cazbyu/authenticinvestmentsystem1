@@ -48,7 +48,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     } else if (icon === 'thorn') {
       return (
         <Image
-          source={require('@/assets/images/thorn-81.svg')}
+          source={require('@/assets/images/thorn-81.png')}
           style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
           resizeMode="contain"
         />
@@ -56,7 +56,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     } else if (icon === 'idea') {
       return (
         <Image
-          source={require('@/assets/images/deposit-idea.svg')}
+          source={require('@/assets/images/deposit-idea.png')}
           style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
           resizeMode="contain"
         />
@@ -64,7 +64,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     } else {
       return (
         <Image
-          source={require('@/assets/images/reflections-72.svg')}
+          source={require('@/assets/images/reflections-72.png')}
           style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
           resizeMode="contain"
         />
