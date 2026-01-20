@@ -58,7 +58,6 @@ export function ReflectFilterButtons({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {renderFilterButton('all', 'All')}
       {renderFilterButton(
         'depositIdea',
         '',

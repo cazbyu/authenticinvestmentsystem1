@@ -39,7 +39,7 @@ export default function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [journalPeriodScore, setJournalPeriodScore] = useState<number>(0);
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
-  const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('all');
+  const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('rose');
   const [sortOption, setSortOption] = useState('due_date');
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -1099,21 +1099,23 @@ export default function Dashboard() {
       />
 
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
-        <View style={styles.summarySection}>
-          <View style={styles.controlsRow}>
-            <PeriodSelector
-              selectedPeriod={selectedPeriod}
-              onPeriodChange={setSelectedPeriod}
-              score={activeTab === 'journal' ? journalPeriodScore : undefined}
-            />
-            {activeTab === 'reflect' && (
-              <ReflectFilterButtons
-                activeFilter={reflectFilter}
-                onFilterChange={setReflectFilter}
+        {activeTab !== 'home' && (
+          <View style={styles.summarySection}>
+            <View style={styles.controlsRow}>
+              <PeriodSelector
+                selectedPeriod={selectedPeriod}
+                onPeriodChange={setSelectedPeriod}
+                score={activeTab === 'journal' ? journalPeriodScore : undefined}
               />
-            )}
+              {activeTab === 'reflect' && (
+                <ReflectFilterButtons
+                  activeFilter={reflectFilter}
+                  onFilterChange={setReflectFilter}
+                />
+              )}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.content} pointerEvents="box-none">
 

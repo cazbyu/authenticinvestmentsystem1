@@ -110,7 +110,12 @@ export function ReflectionTableView({
         };
       });
 
-      setDates(filteredData);
+      // Filter out dates with no items
+      const datesWithContent = filteredData.filter(
+        (dateItem) => dateItem.itemDetails && dateItem.itemDetails.length > 0
+      );
+
+      setDates(datesWithContent);
     } catch (error) {
       console.error('Error loading date range data:', error);
     } finally {
@@ -144,30 +149,7 @@ export function ReflectionTableView({
     }
   };
 
-  const getEmptyMessage = (filter: ReflectFilter) => {
-    switch (filter) {
-      case 'rose':
-        return 'No Rose today';
-      case 'thorn':
-        return 'No Thorn today';
-      case 'reflection':
-        return 'No Reflection today';
-      case 'depositIdea':
-        return 'No Deposit Idea today';
-      default:
-        return 'No reflections today';
-    }
-  };
-
   const renderItemDetails = (items: ItemDetail[]) => {
-    if (!items || items.length === 0) {
-      return (
-        <Text style={[styles.emptyDateText, { color: colors.textSecondary }]}>
-          {getEmptyMessage(filter)}
-        </Text>
-      );
-    }
-
     return items.map((item, index) => (
       <View key={index} style={styles.itemRow}>
         <View style={styles.iconContainer}>{getIconForItemType(item.type)}</View>
@@ -214,13 +196,30 @@ export function ReflectionTableView({
     );
   };
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-        No dates in selected period
-      </Text>
-    </View>
-  );
+  const renderEmpty = () => {
+    const getEmptyMessage = () => {
+      switch (filter) {
+        case 'rose':
+          return 'No Rose reflections in this period';
+        case 'thorn':
+          return 'No Thorn reflections in this period';
+        case 'reflection':
+          return 'No reflections in this period';
+        case 'depositIdea':
+          return 'No Deposit Ideas in this period';
+        default:
+          return 'No items in selected period';
+      }
+    };
+
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+          {getEmptyMessage()}
+        </Text>
+      </View>
+    );
+  };
 
   if (loading) {
     return (
