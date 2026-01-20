@@ -7,10 +7,10 @@ import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/foll
 import { fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { formatLocalDate } from '@/lib/dateUtils';
 
-const roseImage = require('@/assets/images/rose-81.svg');
-const thornImage = require('@/assets/images/thorn-81.svg');
-const reflectionImage = require('@/assets/images/reflections-72.svg');
-const depositIdeaImage = require('@/assets/images/deposit-idea.svg');
+const roseImage = require('@/assets/images/rose-81.png');
+const thornImage = require('@/assets/images/thorn-81.png');
+const reflectionImage = require('@/assets/images/reflections-72.png');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface JournalEntry {
   id: string;
