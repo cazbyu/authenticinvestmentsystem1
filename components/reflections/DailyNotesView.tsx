@@ -352,6 +352,27 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       })),
     });
 
+console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
+  totalCount: combined.length,
+  items: combined.map(item => ({
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    hasContent: !!item.content,
+    contentLength: item.content?.length || 0,
+    contentPreview: item.content?.substring(0, 50),
+    hasAttachments: !!(item.attachments && item.attachments.length > 0),
+    attachmentsCount: item.attachments?.length || 0,
+    hasNoteAttachments: !!(item.noteAttachments && item.noteAttachments.length > 0),
+    noteAttachmentsCount: item.noteAttachments?.length || 0,
+    passesFilter: !!(
+      item.content || 
+      (item.attachments && item.attachments.length > 0) || 
+      (item.noteAttachments && item.noteAttachments.length > 0)
+    ),
+  })),
+});
+    
     setTimelineItems(combined);
   };
 
