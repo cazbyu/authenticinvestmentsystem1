@@ -66,20 +66,18 @@ interface TimelineItem {
 }
 
 interface DailyHistoryItemRow {
-  item_type: TimelineItemType;
-  parent_id: string;
-  item_title: string | null;
-  item_content: string | null;
-  item_created_at: string;
-  note_id: string | null;
-  parent_task_type: string | null;
-  parent_completed_at: string | null;
-  parent_is_urgent: boolean | null;
-  parent_is_important: boolean | null;
-  parent_archived: boolean | null;
-  parent_is_active: boolean | null;
-  parent_withdrawn_at: string | null;
-  notes_count: number | null;
+  id: string;
+  title: string | null;
+  type: string;
+  status: string;
+  priority: string;
+  points: number;
+  completed_at: string | null;
+  created_at: string;
+  start_time: string | null;
+  is_all_day: boolean;
+  parent_id: string | null;
+  parent_type: string | null;
 }
 
 interface DailyNotesViewProps {
@@ -238,6 +236,16 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     };
   };
 
+  const getPriorityColor = (priority: string): string | undefined => {
+    switch (priority) {
+      case 'Do First': return '#ef4444';
+      case 'Schedule': return '#10b981';
+      case 'Delegate': return '#f59e0b';
+      case 'Eliminate': return '#6b7280';
+      default: return undefined;
+    }
+  };
+
   const fetchTodayTimelineData = async (targetDateString: string, _range: DailyRange) => {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -281,22 +289,16 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       count: historyData?.length || 0,
       rawData: historyData,
       items: historyData?.map((item: any) => ({
-        type: item.item_type,
-        title: item.item_title,
-        content: item.item_content?.substring(0, 30),
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
       })),
     });
 
     const historyItems: DailyHistoryItemRow[] = (historyData || []) as DailyHistoryItemRow[];
-    const noteBackedItems = historyItems.filter((item) => item.item_type !== 'reflection');
-
-    const noteIds = noteBackedItems
-      .map((item) => item.note_id)
-      .filter((noteId): noteId is string => Boolean(noteId));
-
-    const noteAttachmentsMap = noteIds.length > 0
-      ? await fetchAttachmentsForNotes(noteIds)
-      : new Map<string, NoteAttachment[]>();
+    const noteBackedItems = historyItems.filter((item) => item.type !== 'reflection');
 
     const reflectionItems: TimelineItem[] = reflections.map((r) => ({
       id: r.id,
@@ -309,55 +311,28 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     }));
 
     const noteItems: TimelineItem[] = noteBackedItems.map((item) => {
-      const resolvedType: TimelineItemType = item.item_type === 'event'
+      const resolvedType: TimelineItemType = item.type === 'event'
         ? 'event'
-        : (item.item_type as TimelineItemType);
-
-      const parentItem: ParentItemData = {
-        id: item.parent_id,
-        title: item.item_title ?? undefined,
-        completed_at: item.parent_completed_at ?? undefined,
-        archived: item.parent_archived ?? undefined,
-        is_urgent: item.parent_is_urgent ?? undefined,
-        is_important: item.parent_is_important ?? undefined,
-        type: item.parent_task_type ?? resolvedType,
-        is_active: item.parent_is_active ?? undefined,
-      };
-
-      let isActive = false;
-      let priorityColor: string | undefined;
-
-      if (resolvedType === 'task' || resolvedType === 'event') {
-        isActive = !item.parent_completed_at;
-        if (isActive) {
-          if (item.parent_is_urgent && item.parent_is_important) {
-            priorityColor = '#ef4444';
-          } else if (!item.parent_is_urgent && item.parent_is_important) {
-            priorityColor = '#10b981';
-          } else if (item.parent_is_urgent && !item.parent_is_important) {
-            priorityColor = '#f59e0b';
-          } else {
-            priorityColor = '#6b7280';
-          }
-        }
-      } else if (item.item_type === 'depositIdea') {
-        isActive = item.parent_is_active ?? false;
-        if (isActive) {
-          priorityColor = '#8b5cf6';
-        }
-      }
+        : (item.type as TimelineItemType);
 
       return {
-        id: item.note_id || `${item.item_type}-${item.parent_id}`,
+        id: item.id,
         type: resolvedType,
-        content: item.item_content || undefined,
-        created_at: item.item_created_at,
-        parent_type: resolvedType === 'event' ? 'task' : item.item_type,
-        title: item.item_title || getItemTypeLabel(resolvedType),
-        noteAttachments: item.note_id ? (noteAttachmentsMap.get(item.note_id) || []) : [],
-        parentItem,
-        isActive,
-        priorityColor,
+        content: undefined,
+        created_at: item.created_at,
+        parent_type: item.parent_type || undefined,
+        title: item.title || getItemTypeLabel(resolvedType),
+        noteAttachments: [],
+        parentItem: {
+          id: item.id,
+          title: item.title || undefined,
+          completed_at: item.completed_at || undefined,
+          is_urgent: item.priority === 'Do First' || item.priority === 'Delegate',
+          is_important: item.priority === 'Do First' || item.priority === 'Schedule',
+          type: item.type,
+        },
+        isActive: item.status !== 'completed' && item.status !== 'archived',
+        priorityColor: getPriorityColor(item.priority),
       };
     });
 
