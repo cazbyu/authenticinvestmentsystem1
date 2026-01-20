@@ -658,6 +658,10 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         }
       >
         <View style={styles.content}>
+          <Text style={[styles.weekTitle, { color: colors.text }]}>
+            Daily Reflection - {formatCurrentDate()}
+          </Text>
+
         {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
