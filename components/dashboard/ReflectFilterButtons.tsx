@@ -2,10 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
-const roseImage = require('@/assets/images/rose-81.svg');
-const thornImage = require('@/assets/images/thorn-81.svg');
-const reflectionImage = require('@/assets/images/reflections-72.svg');
-const depositIdeaImage = require('@/assets/images/deposit-idea.svg');
+const roseImage = require('@/assets/images/rose-81.png');
+const thornImage = require('@/assets/images/thorn-81.png');
+const reflectionImage = require('@/assets/images/reflections-72.png');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 export type ReflectFilter = 'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection';
 
