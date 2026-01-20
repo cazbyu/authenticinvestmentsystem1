@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
-import { ChevronRight, Calendar, SquareCheck as CheckSquare } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { ChevronRight, Calendar, CheckSquare, Flower2, AlertTriangle, Lightbulb, BookOpen } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
-const reflectionImage = require('@/assets/images/reflections-72.png');
-const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface ParentItemInfoProps {
   parentId: string;
@@ -111,7 +106,6 @@ export default function ParentItemInfo({ parentId, parentType, onPress }: Parent
   const getIcon = () => {
     const iconSize = 16;
     const iconColor = '#6b7280';
-    const imageSize = 18;
 
     switch (parentType) {
       case 'event':
@@ -119,13 +113,13 @@ export default function ParentItemInfo({ parentId, parentType, onPress }: Parent
       case 'task':
         return <CheckSquare size={iconSize} color={iconColor} />;
       case 'rose':
-        return <Image source={roseImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />;
+        return <Flower2 size={iconSize} color={iconColor} />;
       case 'thorn':
-        return <Image source={thornImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />;
+        return <AlertTriangle size={iconSize} color={iconColor} />;
       case 'depositIdea':
-        return <Image source={depositIdeaImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />;
+        return <Lightbulb size={iconSize} color={iconColor} />;
       case 'reflection':
-        return <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />;
+        return <BookOpen size={iconSize} color={iconColor} />;
       default:
         return <CheckSquare size={iconSize} color={iconColor} />;
     }

@@ -1,4 +1,4 @@
-import { Star, Users, Heart, Target, Calendar, FileText, Lightbulb, CheckSquare, CalendarClock, Flower2, XOctagon } from 'lucide-react-native';
+import { Star, Users, Heart, Target, Calendar, FileText, Lightbulb, CheckSquare, CalendarClock, Flower2, AlertTriangle } from 'lucide-react-native';
 
 export interface CompassWaypoint {
   id: string;
@@ -131,7 +131,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     id: 'thorns',
     angle: 300,
     label: 'Thorns',
-    icon: XOctagon,
+    icon: AlertTriangle,
     color: '#c49a6c',
     size: 'small',
     type: 'modal',

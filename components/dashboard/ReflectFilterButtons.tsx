@@ -1,11 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Lightbulb, BookOpen, Flower2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
-const reflectionImage = require('@/assets/images/reflections-72.png');
-const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 export type ReflectFilter = 'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection';
 
@@ -62,37 +58,33 @@ export function ReflectFilterButtons({
       {renderFilterButton(
         'depositIdea',
         '',
-        <Image
-          source={depositIdeaImage}
-          style={[styles.filterIcon, activeFilter === 'depositIdea' && styles.filterIconActive]}
-          resizeMode="contain"
+        <Lightbulb
+          size={18}
+          color={activeFilter === 'depositIdea' ? '#ffffff' : '#f59e0b'}
         />
       )}
       {renderFilterButton(
         'rose',
         '',
-        <Image
-          source={roseImage}
-          style={[styles.filterIcon, activeFilter === 'rose' && styles.filterIconActive]}
-          resizeMode="contain"
+        <Flower2
+          size={18}
+          color={activeFilter === 'rose' ? '#ffffff' : '#ec4899'}
         />
       )}
       {renderFilterButton(
         'thorn',
         '',
-        <Image
-          source={thornImage}
-          style={[styles.filterIcon, activeFilter === 'thorn' && styles.filterIconActive]}
-          resizeMode="contain"
+        <AlertTriangle
+          size={18}
+          color={activeFilter === 'thorn' ? '#ffffff' : '#ef4444'}
         />
       )}
       {renderFilterButton(
         'reflection',
         '',
-        <Image
-          source={reflectionImage}
-          style={[styles.filterIcon, activeFilter === 'reflection' && styles.filterIconActive]}
-          resizeMode="contain"
+        <BookOpen
+          size={18}
+          color={activeFilter === 'reflection' ? '#ffffff' : '#8b5cf6'}
         />
       )}
     </View>
@@ -121,14 +113,5 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 13,
     fontWeight: '600',
-  },
-  filterIcon: {
-    width: 20,
-    height: 20,
-    opacity: 0.8,
-  },
-  filterIconActive: {
-    opacity: 1,
-    tintColor: '#ffffff',
   },
 });

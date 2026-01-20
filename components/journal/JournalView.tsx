@@ -1,16 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
-import { SquareCheck, BookOpen, Calendar } from 'lucide-react-native';
+import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { Flower2, Lightbulb, Sparkles, SquareCheck, AlertTriangle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
-import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';
+import { fetchBulkLinkedItemsCounts } from '@/lib/followThroughUtils';
 import { fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { formatLocalDate } from '@/lib/dateUtils';
-
-const roseImage = require('@/assets/images/rose-81.png');
-const thornImage = require('@/assets/images/thorn-81.png');
-const reflectionImage = require('@/assets/images/reflections-72.png');
-const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface JournalEntry {
   id: string;
@@ -24,7 +19,6 @@ interface JournalEntry {
   source_type: 'task' | 'withdrawal' | 'reflection' | 'depositIdea';
   source_data?: any;
   linked_count?: number;
-  linkedCounts?: LinkedItemCounts;
   status?: 'completed';
 }
 
@@ -183,7 +177,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         .not('completed_at', 'is', null);
 
       if (dateFilter) {
-        completedEventsQuery = completedEventsQuery.gte('completed_at', dateFilter);
+        completedEventsQuery = completedEventsQuery.gte('start_date', dateFilter);
       }
 
       const { data: completedEventsData, error: completedEventsError } = await completedEventsQuery;
@@ -303,8 +297,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
           const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
           const points = calculateTaskPoints(t, roles, domains, goals);
 
-          // Always use completed_at for journal entries since we care when it was completed
-          const displayDate = t.completed_at;
+          const displayDate = t.type === 'event' ? (t.start_date || t.completed_at) : t.completed_at;
 
           journalEntries.push({
             id: t.id,
@@ -644,20 +637,12 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
                 entry.source_type === 'depositIdea' ? 'depositIdea' : 'reflection') as any
         }));
 
-      const linkedCountsMap = await fetchBulkLinkedItemsCountsDetailed(parentEntries, user.id);
+      const linkedCountsMap = await fetchBulkLinkedItemsCounts(parentEntries, user.id);
 
       journalEntries.forEach(entry => {
         if (entry.source_type !== 'withdrawal') {
-          const counts = linkedCountsMap.get(entry.source_id);
-          if (counts) {
-            entry.linkedCounts = counts;
-            entry.linked_count = counts.total;
-          } else {
-            entry.linkedCounts = { tasks: 0, reflections: 0, depositIdeas: 0, total: 0 };
-            entry.linked_count = 0;
-          }
+          entry.linked_count = linkedCountsMap.get(entry.source_id) || 0;
         } else {
-          entry.linkedCounts = { tasks: 0, reflections: 0, depositIdeas: 0, total: 0 };
           entry.linked_count = 0;
         }
       });
@@ -839,20 +824,14 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     const entryDate = new Date(d);
     entryDate.setHours(0, 0, 0, 0);
 
-    const formattedDate = d.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-
     if (entryDate.getTime() === today.getTime()) {
-      return `Today - ${formattedDate}`;
+      return 'Today';
     }
 
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     if (entryDate.getTime() === yesterday.getTime()) {
-      return `Yesterday - ${formattedDate}`;
+      return 'Yesterday';
     }
 
     return d.toLocaleDateString('en-US', {
@@ -867,37 +846,31 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     // Rose (Beauty)
     if (entry.source_data?.daily_rose) {
       return {
-        image: roseImage,
+        icon: Flower2,
         bgColor: '#ffe4e6',
+        iconColor: '#e11d48',
       };
     }
 
     // Thorn (Challenge)
     if (entry.source_data?.daily_thorn) {
       return {
-        image: thornImage,
+        icon: AlertTriangle,
         bgColor: '#f1f5f9',
+        iconColor: '#475569',
       };
     }
 
     // Deposit Idea (Future)
     if (entry.source_type === 'depositIdea') {
       return {
-        image: depositIdeaImage,
+        icon: Lightbulb,
         bgColor: '#fef3c7',
+        iconColor: '#d97706',
       };
     }
 
-    // Event (Calendar icon)
-    if (entry.type === 'deposit' && entry.source_data?.type === 'event') {
-      return {
-        icon: Calendar,
-        bgColor: '#dbeafe',
-        iconColor: '#2563eb',
-      };
-    }
-
-    // Task (Checkmark icon)
+    // Action (Task/Deposit)
     if (entry.type === 'deposit') {
       return {
         icon: SquareCheck,
@@ -908,20 +881,27 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
 
     // Reflection (Thought) - default
     return {
-      image: reflectionImage,
+      icon: Sparkles,
       bgColor: '#f3e8ff',
+      iconColor: '#9333ea',
     };
   };
 
   const getPreviewText = (entry: JournalEntry): string => {
+    const linkedText = entry.linked_count ? `Linked: ${entry.linked_count}` : '';
+
     if (entry.source_data?.roles?.length > 0) {
       const roleNames = entry.source_data.roles.map((r: any) => r.label).join(', ');
-      return roleNames;
+      return linkedText ? `${linkedText} • ${roleNames}` : roleNames;
     }
 
     if (entry.source_data?.keyRelationships?.length > 0) {
       const krName = entry.source_data.keyRelationships[0].name;
-      return krName;
+      return linkedText ? `${linkedText} • ${krName}` : `Linked: ${krName}`;
+    }
+
+    if (linkedText) {
+      return linkedText;
     }
 
     // Show content preview for reflections
@@ -932,47 +912,6 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
     return '';
   };
 
-  const renderLinkedBadges = (linkedCounts?: LinkedItemCounts) => {
-    if (!linkedCounts || linkedCounts.total === 0) {
-      return null;
-    }
-
-    const badges = [];
-
-    if (linkedCounts.tasks > 0) {
-      badges.push(
-        <View key="tasks" style={styles.linkedBadge}>
-          <SquareCheck size={12} color="#6b7280" strokeWidth={2} />
-          <Text style={styles.linkedBadgeText}>{linkedCounts.tasks}</Text>
-        </View>
-      );
-    }
-
-    if (linkedCounts.reflections > 0) {
-      badges.push(
-        <View key="reflections" style={styles.linkedBadge}>
-          <BookOpen size={12} color="#6b7280" strokeWidth={2} />
-          <Text style={styles.linkedBadgeText}>{linkedCounts.reflections}</Text>
-        </View>
-      );
-    }
-
-    if (linkedCounts.depositIdeas > 0) {
-      badges.push(
-        <View key="ideas" style={styles.linkedBadge}>
-          <Image source={depositIdeaImage} style={styles.linkedBadgeImage} resizeMode="contain" />
-          <Text style={styles.linkedBadgeText}>{linkedCounts.depositIdeas}</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.linkedBadgesContainer}>
-        {badges}
-      </View>
-    );
-  };
-
   const renderSectionHeader = ({ section }: { section: DateSection }) => (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionHeaderText}>{section.title}</Text>
@@ -980,7 +919,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
   );
 
   const renderItem = ({ item }: { item: JournalEntry }) => {
-    const iconData = getEntryIcon(item);
+    const { icon: Icon, bgColor, iconColor } = getEntryIcon(item);
     const previewText = getPreviewText(item);
     const impactText = item.type === 'deposit'
       ? `+${item.amount.toFixed(1)}`
@@ -994,30 +933,18 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         style={styles.entryRow}
         onPress={() => onEntryPress(item)}
       >
-        <View style={[styles.avatar, { backgroundColor: iconData.bgColor }]}>
-          {iconData.image ? (
-            <Image source={iconData.image} style={styles.avatarImage} resizeMode="contain" />
-          ) : iconData.icon ? (
-            React.createElement(iconData.icon, { size: 20, color: iconData.iconColor, strokeWidth: 2 })
-          ) : null}
+        <View style={[styles.avatar, { backgroundColor: bgColor }]}>
+          <Icon size={20} color={iconColor} strokeWidth={2} />
         </View>
 
         <View style={styles.content}>
           <Text style={styles.title} numberOfLines={1}>
             {item.description}
           </Text>
-          {(previewText || item.linkedCounts) ? (
-            <View style={styles.previewRow}>
-              {previewText ? (
-                <Text style={styles.preview} numberOfLines={1}>
-                  {previewText}
-                </Text>
-              ) : null}
-              {previewText && item.linkedCounts && item.linkedCounts.total > 0 ? (
-                <Text style={styles.previewSeparator}>•</Text>
-              ) : null}
-              {renderLinkedBadges(item.linkedCounts)}
-            </View>
+          {previewText ? (
+            <Text style={styles.preview} numberOfLines={1}>
+              {previewText}
+            </Text>
           ) : null}
         </View>
 
@@ -1221,10 +1148,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  avatarImage: {
-    width: 24,
-    height: 24,
-  },
   content: {
     flex: 1,
     gap: 4,
@@ -1235,46 +1158,10 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     lineHeight: 20,
   },
-  previewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
   preview: {
     fontSize: 13,
     color: '#6b7280',
     lineHeight: 18,
-    flexShrink: 1,
-  },
-  previewSeparator: {
-    fontSize: 13,
-    color: '#d1d5db',
-    marginHorizontal: 4,
-  },
-  linkedBadgesContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  linkedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  linkedBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  linkedBadgeImage: {
-    width: 12,
-    height: 12,
   },
   impact: {
     fontSize: 16,

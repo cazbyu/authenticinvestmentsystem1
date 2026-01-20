@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { FileText } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import Tooltip from '@/components/common/Tooltip';
 
@@ -40,7 +41,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     if (icon === 'rose') {
       return (
         <Image
-          source={require('@/assets/images/rose-81.png')}
+          source={require('@/assets/images/rose-192.png')}
           style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
           resizeMode="contain"
         />
@@ -48,7 +49,7 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
     } else if (icon === 'thorn') {
       return (
         <Image
-          source={require('@/assets/images/thorn-81.png')}
+          source={require('@/assets/images/thorn_b-01.jpg')}
           style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
           resizeMode="contain"
         />
@@ -63,10 +64,9 @@ export default function ReflectionModePills({ selectedMode, onModeChange }: Refl
       );
     } else {
       return (
-        <Image
-          source={require('@/assets/images/reflections-72.png')}
-          style={[styles.iconImage, { opacity: isSelected ? 1 : 0.7 }]}
-          resizeMode="contain"
+        <FileText
+          size={24}
+          color={isSelected ? '#ffffff' : colors.text}
         />
       );
     }
