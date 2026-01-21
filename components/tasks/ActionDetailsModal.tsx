@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, TextInput } from 'react-native';
-import { X, Calendar, CheckSquare, Edit, Trash2, Plus } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, TextInput, Platform } from 'react-native';
+import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
-import { fetchAttachmentsForNotes } from '@/lib/noteAttachmentUtils';
+import { fetchAttachmentsForNotes, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import ImageViewerModal from '../reflections/ImageViewerModal';
 import { Linking } from 'react-native';
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
@@ -12,6 +12,7 @@ import AssociatedItemsList, { AssociatedItem } from '../followThrough/Associated
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from './TaskEventForm';
 import ParentItemInfo from '../followThrough/ParentItemInfo';
+import * as DocumentPicker from 'expo-document-picker';
 
 interface ActionDetailsModalProps {
   visible: boolean;
@@ -56,6 +57,7 @@ export function ActionDetailsModal({
   const [addNoteModalVisible, setAddNoteModalVisible] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [noteAttachments, setNoteAttachments] = useState<any[]>([]);
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -79,6 +81,8 @@ export function ActionDetailsModal({
     setLoadingNotes(true);
     try {
       const supabase = getSupabaseClient();
+      const parentType = task.type === 'event' ? 'event' : 'task';
+
       const { data, error } = await supabase
         .from('0008-ap-universal-notes-join')
         .select(`
@@ -89,7 +93,7 @@ export function ActionDetailsModal({
           )
         `)
         .eq('parent_id', task.id)
-        .eq('parent_type', 'task')
+        .eq('parent_type', parentType)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -184,6 +188,75 @@ export function ActionDetailsModal({
     setFollowThroughFormVisible(true);
   };
 
+  const handlePickAttachment = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit
+        const validFiles: any[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.size || 0;
+          const fileName = asset.name;
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.mimeType || 'application/octet-stream',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setNoteAttachments([...noteAttachments, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking file:', error);
+      Alert.alert('Error', 'Failed to pick file');
+    }
+  };
+
+  const handleRemoveNoteAttachment = (index: number) => {
+    setNoteAttachments(noteAttachments.filter((_, i) => i !== index));
+  };
+
+  const uploadFileToStorage = async (file: any, userId: string): Promise<string | null> => {
+    try {
+      let fileData: any;
+      if (Platform.OS === 'web') {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      } else {
+        const response = await fetch(file.uri);
+        fileData = await response.blob();
+      }
+
+      const filePath = await uploadNoteAttachment(fileData, file.name, file.type, userId);
+      return filePath;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    }
+  };
+
   const handleSaveNote = async () => {
     if (!newNoteText.trim() || !task?.id) return;
 
@@ -205,17 +278,37 @@ export function ActionDetailsModal({
 
       if (noteError) throw noteError;
 
-      // Link note to task
+      // Link note to task/event
+      const parentType = task.type === 'event' ? 'event' : 'task';
       const { error: noteJoinError } = await supabase
         .from('0008-ap-universal-notes-join')
         .insert({
           parent_id: task.id,
-          parent_type: 'task',
+          parent_type: parentType,
           note_id: noteData.id,
           user_id: user.id,
         });
 
       if (noteJoinError) throw noteJoinError;
+
+      // Upload attachments if any
+      if (noteAttachments.length > 0) {
+        const uploadPromises = noteAttachments.map(async (file) => {
+          const filePath = await uploadFileToStorage(file, user.id);
+          if (filePath) {
+            await saveNoteAttachmentMetadata(
+              noteData.id,
+              user.id,
+              file.name,
+              filePath,
+              file.type,
+              file.size
+            );
+          }
+        });
+
+        await Promise.all(uploadPromises);
+      }
 
       // Refresh notes
       await fetchTaskNotes();
@@ -223,6 +316,7 @@ export function ActionDetailsModal({
       // Close modal and reset
       setAddNoteModalVisible(false);
       setNewNoteText('');
+      setNoteAttachments([]);
 
       Alert.alert('Success', 'Note added successfully!');
     } catch (error) {
@@ -262,6 +356,31 @@ export function ActionDetailsModal({
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${displayHour}:${minutes} ${ampm}`;
+  };
+
+  const renderNoteWithLinks = (content: string) => {
+    // Simple URL regex
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+
+    return (
+      <Text style={styles.noteText}>
+        {parts.map((part, index) => {
+          if (part.match(urlRegex)) {
+            return (
+              <Text
+                key={index}
+                style={styles.noteLink}
+                onPress={() => Linking.openURL(part)}
+              >
+                {part}
+              </Text>
+            );
+          }
+          return <Text key={index}>{part}</Text>;
+        })}
+      </Text>
+    );
   };
 
   if (!task) return null;
@@ -355,9 +474,9 @@ export function ActionDetailsModal({
               ) : taskNotes.length > 0 ? (
                 <View style={styles.notesContainer}>
                   {taskNotes.map(note => (
-                    <Text key={note.id} style={styles.noteText}>
-                      {note.content}
-                    </Text>
+                    <View key={note.id}>
+                      {renderNoteWithLinks(note.content)}
+                    </View>
                   ))}
                 </View>
               ) : (
@@ -564,21 +683,57 @@ export function ActionDetailsModal({
               <TouchableOpacity onPress={() => {
                 setAddNoteModalVisible(false);
                 setNewNoteText('');
+                setNoteAttachments([]);
               }}>
                 <X size={24} color="#1f2937" />
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={styles.noteInput}
-              value={newNoteText}
-              onChangeText={setNewNoteText}
-              placeholder="Enter your note..."
-              placeholderTextColor="#9ca3af"
-              multiline
-              numberOfLines={4}
-              autoFocus
-            />
+            <ScrollView style={styles.noteModalContent}>
+              <TextInput
+                style={styles.noteInput}
+                value={newNoteText}
+                onChangeText={setNewNoteText}
+                placeholder="Enter your note..."
+                placeholderTextColor="#9ca3af"
+                multiline
+                numberOfLines={4}
+                autoFocus
+              />
+
+              {/* Single Attachment Button */}
+              <View style={styles.attachmentButtonContainer}>
+                <TouchableOpacity
+                  style={styles.attachmentButton}
+                  onPress={handlePickAttachment}
+                >
+                  <Paperclip size={18} color="#3b82f6" />
+                  <Text style={styles.attachmentButtonText}>Add Attachment</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Attachments Preview */}
+              {noteAttachments.length > 0 && (
+                <View style={styles.attachmentsPreview}>
+                  <Text style={styles.attachmentsLabel}>
+                    Attachments ({noteAttachments.length})
+                  </Text>
+                  {noteAttachments.map((file, index) => (
+                    <View key={index} style={styles.attachmentPreviewItem}>
+                      <Text style={styles.attachmentFileName} numberOfLines={1}>
+                        {file.name}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveNoteAttachment(index)}
+                        style={styles.removeAttachmentButton}
+                      >
+                        <X size={16} color="#dc2626" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
 
             <View style={styles.noteModalFooter}>
               <TouchableOpacity
@@ -586,6 +741,7 @@ export function ActionDetailsModal({
                 onPress={() => {
                   setAddNoteModalVisible(false);
                   setNewNoteText('');
+                  setNoteAttachments([]);
                 }}
               >
                 <Text style={styles.noteCancelButtonText}>Cancel</Text>
@@ -893,5 +1049,64 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  noteLink: {
+    color: '#3b82f6',
+    textDecorationLine: 'underline',
+  },
+  noteModalContent: {
+    maxHeight: 400,
+  },
+  attachmentButtonContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  attachmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  attachmentButtonText: {
+    fontSize: 14,
+    color: '#3b82f6',
+    fontWeight: '500',
+  },
+  attachmentsPreview: {
+    padding: 20,
+    gap: 8,
+  },
+  attachmentsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  attachmentPreviewItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  attachmentFileName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1f2937',
+    marginRight: 8,
+  },
+  removeAttachmentButton: {
+    padding: 4,
   },
 });
