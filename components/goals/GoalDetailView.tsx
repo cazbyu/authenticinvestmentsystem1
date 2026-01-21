@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
-import { ArrowLeft, Target, Plus } from 'lucide-react-native';
+import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -26,6 +28,34 @@ interface GoalDetailViewProps {
 }
 
 type TabType = 'act' | 'ideas' | 'journal' | 'analytics';
+type TimeRange = '4W' | '12W' | 'All';
+
+interface DepositIdea {
+  id: string;
+  idea_text: string;
+  created_at: string;
+  status: string;
+  [key: string]: any;
+}
+
+interface JournalNote {
+  id: string;
+  note_text: string;
+  created_at: string;
+  attachment_count?: number;
+  [key: string]: any;
+}
+
+interface AnalyticsData {
+  goalScore: number;
+  weeklyAverage: number;
+  consistency: number;
+  totalActions: number;
+  weeklyData: Array<{
+    weekNumber: number;
+    completionPercent: number;
+  }>;
+}
 
 export function GoalDetailView({
   goal,
@@ -41,11 +71,34 @@ export function GoalDetailView({
   const [oneTimeActions, setOneTimeActions] = useState<OneTimeActionResult[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // Ideas tab state
+  const [ideas, setIdeas] = useState<DepositIdea[]>([]);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [showAddIdeaModal, setShowAddIdeaModal] = useState(false);
+  const [newIdeaText, setNewIdeaText] = useState('');
+
+  // Journal tab state
+  const [journalNotes, setJournalNotes] = useState<JournalNote[]>([]);
+  const [journalLoading, setJournalLoading] = useState(false);
+  const [showAddJournalModal, setShowAddJournalModal] = useState(false);
+  const [newJournalText, setNewJournalText] = useState('');
+
+  // Analytics tab state
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [timeRange, setTimeRange] = useState<TimeRange>('12W');
+
   useEffect(() => {
     if (activeTab === 'act') {
       fetchActions();
+    } else if (activeTab === 'ideas') {
+      fetchIdeas();
+    } else if (activeTab === 'journal') {
+      fetchJournalNotes();
+    } else if (activeTab === 'analytics') {
+      fetchAnalytics();
     }
-  }, [goal.id, activeTab, refreshTrigger]);
+  }, [goal.id, activeTab, refreshTrigger, timeRange]);
 
   const fetchActions = async () => {
     setLoading(true);
@@ -86,6 +139,314 @@ export function GoalDetailView({
       console.error('Error toggling completion:', error);
       Alert.alert('Error', 'Failed to update completion status');
     }
+  };
+
+  const fetchIdeas = async () => {
+    setIdeasLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const goalJoinColumn = goal.goal_type === '1y'
+        ? 'one_yr_goal_id'
+        : goal.goal_type === '12week'
+        ? 'twelve_wk_goal_id'
+        : 'custom_goal_id';
+
+      const { data: goalJoins, error: joinError } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .eq(goalJoinColumn, goal.id)
+        .eq('parent_type', 'deposit_idea');
+
+      if (joinError) throw joinError;
+
+      const ideaIds = goalJoins?.map(j => j.parent_id).filter(Boolean) || [];
+
+      if (ideaIds.length === 0) {
+        setIdeas([]);
+        return;
+      }
+
+      const { data: ideasData, error: ideasError } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .select('*')
+        .in('id', ideaIds)
+        .neq('status', 'activated')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (ideasError) throw ideasError;
+
+      setIdeas(ideasData || []);
+    } catch (error) {
+      console.error('[GoalDetailView] Error fetching ideas:', error);
+      Alert.alert('Error', 'Failed to load ideas for this goal');
+    } finally {
+      setIdeasLoading(false);
+    }
+  };
+
+  const fetchJournalNotes = async () => {
+    setJournalLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const parentType = goal.goal_type === '1y' ? 'goal_1y' :
+                        goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+
+      const { data: noteJoins, error: joinError } = await supabase
+        .from('0008-ap-universal-notes-join')
+        .select('note_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
+
+      if (joinError) throw joinError;
+
+      const noteIds = noteJoins?.map(j => j.note_id).filter(Boolean) || [];
+
+      if (noteIds.length === 0) {
+        setJournalNotes([]);
+        return;
+      }
+
+      const { data: notesData, error: notesError } = await supabase
+        .from('0008-ap-notes')
+        .select('*, note_attachments:0008-ap-note-attachments(count)')
+        .in('id', noteIds)
+        .order('created_at', { ascending: false });
+
+      if (notesError) throw notesError;
+
+      const notesWithAttachments = (notesData || []).map(note => ({
+        ...note,
+        attachment_count: note.note_attachments?.[0]?.count || 0,
+      }));
+
+      setJournalNotes(notesWithAttachments);
+    } catch (error) {
+      console.error('[GoalDetailView] Error fetching journal notes:', error);
+      Alert.alert('Error', 'Failed to load journal entries for this goal');
+    } finally {
+      setJournalLoading(false);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    setAnalyticsLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Calculate date range
+      const today = new Date();
+      let startDate: Date;
+
+      if (timeRange === '4W') {
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - (4 * 7));
+      } else if (timeRange === '12W') {
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - (12 * 7));
+      } else {
+        // 'All' - use goal start date or a reasonable default
+        startDate = new Date(goal.created_at || today);
+      }
+
+      // Fetch actions data using our existing function
+      const result = await fetchGoalActions(goal.id, goal.goal_type);
+
+      // Calculate goal score (sum of points from one-time actions)
+      const goalScore = result.oneTimeActions.reduce((sum, action) => sum + action.pointsEarned, 0);
+
+      // Calculate weekly data
+      const weeklyData: Array<{ weekNumber: number; completionPercent: number }> = [];
+      const weekCount = timeRange === '4W' ? 4 : timeRange === '12W' ? 12 : 24;
+
+      for (let i = 0; i < weekCount; i++) {
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - (i * 7));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+
+        // For simplicity, using recurring actions as a proxy for completion
+        const weekActions = result.recurringActions.filter(action => {
+          return action.weeklyTarget > 0;
+        });
+
+        const avgCompletion = weekActions.length > 0
+          ? weekActions.reduce((sum, a) => sum + (a.weeklyActual / a.weeklyTarget * 100), 0) / weekActions.length
+          : 0;
+
+        weeklyData.unshift({
+          weekNumber: i + 1,
+          completionPercent: Math.min(100, Math.round(avgCompletion)),
+        });
+      }
+
+      // Calculate weekly average
+      const weeklyAverage = weeklyData.length > 0
+        ? Math.round(weeklyData.reduce((sum, w) => sum + w.completionPercent, 0) / weeklyData.length)
+        : 0;
+
+      // Calculate consistency (% of weeks meeting 100% target)
+      const weeksAt100 = weeklyData.filter(w => w.completionPercent >= 100).length;
+      const consistency = weeklyData.length > 0
+        ? Math.round((weeksAt100 / weeklyData.length) * 100)
+        : 0;
+
+      // Total actions completed
+      const totalActions = result.recurringActions.reduce((sum, a) => sum + a.weeklyActual, 0) +
+                          result.oneTimeActions.length;
+
+      setAnalyticsData({
+        goalScore,
+        weeklyAverage,
+        consistency,
+        totalActions,
+        weeklyData: weeklyData.slice(0, 12), // Show max 12 weeks in chart
+      });
+    } catch (error) {
+      console.error('[GoalDetailView] Error fetching analytics:', error);
+      Alert.alert('Error', 'Failed to load analytics data');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const handleAddIdea = async () => {
+    if (!newIdeaText.trim()) {
+      Alert.alert('Error', 'Please enter an idea');
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Insert the deposit idea
+      const { data: ideaData, error: ideaError } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .insert({
+          user_id: user.id,
+          idea_text: newIdeaText.trim(),
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (ideaError) throw ideaError;
+
+      // Link to goal via universal-goals-join
+      const goalJoinColumn = goal.goal_type === '1y'
+        ? 'one_yr_goal_id'
+        : goal.goal_type === '12week'
+        ? 'twelve_wk_goal_id'
+        : 'custom_goal_id';
+
+      const { error: joinError } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .insert({
+          [goalJoinColumn]: goal.id,
+          parent_id: ideaData.id,
+          parent_type: 'deposit_idea',
+        });
+
+      if (joinError) throw joinError;
+
+      setNewIdeaText('');
+      setShowAddIdeaModal(false);
+      fetchIdeas();
+      Alert.alert('Success', 'Idea added to this goal');
+    } catch (error) {
+      console.error('[GoalDetailView] Error adding idea:', error);
+      Alert.alert('Error', 'Failed to add idea');
+    }
+  };
+
+  const handleAddJournalEntry = async () => {
+    if (!newJournalText.trim()) {
+      Alert.alert('Error', 'Please enter journal content');
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Insert the note
+      const { data: noteData, error: noteError } = await supabase
+        .from('0008-ap-notes')
+        .insert({
+          user_id: user.id,
+          note_text: newJournalText.trim(),
+          note_date: toLocalISOString(new Date()),
+        })
+        .select()
+        .single();
+
+      if (noteError) throw noteError;
+
+      // Link to goal via universal-notes-join
+      const parentType = goal.goal_type === '1y' ? 'goal_1y' :
+                        goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+
+      const { error: joinError } = await supabase
+        .from('0008-ap-universal-notes-join')
+        .insert({
+          note_id: noteData.id,
+          parent_id: goal.id,
+          parent_type: parentType,
+        });
+
+      if (joinError) throw joinError;
+
+      setNewJournalText('');
+      setShowAddJournalModal(false);
+      fetchJournalNotes();
+      Alert.alert('Success', 'Journal entry added');
+    } catch (error) {
+      console.error('[GoalDetailView] Error adding journal entry:', error);
+      Alert.alert('Error', 'Failed to add journal entry');
+    }
+  };
+
+  const handleActivateIdea = async (ideaId: string) => {
+    Alert.alert(
+      'Activate Idea',
+      'Convert this idea into an action?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Activate',
+          onPress: async () => {
+            try {
+              const supabase = getSupabaseClient();
+
+              // Update idea status
+              const { error: updateError } = await supabase
+                .from('0008-ap-deposit-ideas')
+                .update({ status: 'activated' })
+                .eq('id', ideaId);
+
+              if (updateError) throw updateError;
+
+              fetchIdeas();
+              Alert.alert('Success', 'Idea activated! You can now find it in your actions.');
+            } catch (error) {
+              console.error('[GoalDetailView] Error activating idea:', error);
+              Alert.alert('Error', 'Failed to activate idea');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getTimelineBadge = () => {
@@ -304,73 +665,285 @@ export function GoalDetailView({
     );
   };
 
-  const renderIdeasTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.placeholderContainer}>
-        <Text style={[styles.placeholderTitle, { color: colors.text }]}>
-          Ideas for {goal.title}
-        </Text>
-        <Text style={[styles.placeholderMessage, { color: colors.textSecondary }]}>
-          This section will show deposit ideas linked to this goal.
-        </Text>
-        <TouchableOpacity
-          style={[styles.placeholderButton, { backgroundColor: colors.primary }]}
-          onPress={() => Alert.alert('Coming Soon', 'Ideas feature will be implemented next')}
-        >
-          <Plus size={20} color="#ffffff" />
-          <Text style={styles.placeholderButtonText}>Add Idea</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderJournalTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.placeholderContainer}>
-        <Text style={[styles.placeholderTitle, { color: colors.text }]}>
-          Journal for {goal.title}
-        </Text>
-        <Text style={[styles.placeholderMessage, { color: colors.textSecondary }]}>
-          This section will show journal entries and reflections linked to this goal.
-        </Text>
-        <TouchableOpacity
-          style={[styles.placeholderButton, { backgroundColor: colors.primary }]}
-          onPress={() => Alert.alert('Coming Soon', 'Journal feature will be implemented next')}
-        >
-          <Plus size={20} color="#ffffff" />
-          <Text style={styles.placeholderButtonText}>Add Entry</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderAnalyticsTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.placeholderContainer}>
-        <Text style={[styles.placeholderTitle, { color: colors.text }]}>
-          Analytics - {goal.title}
-        </Text>
-        <Text style={[styles.placeholderMessage, { color: colors.textSecondary }]}>
-          This section will show analytics including:
-          {'\n'}• Goal Score
-          {'\n'}• Weekly completion chart
-          {'\n'}• Consistency metrics
-          {'\n'}• Progress over time
-        </Text>
-        <View style={styles.timeRangeSelector}>
-          <TouchableOpacity style={[styles.timeRangeButton, { borderColor: colors.border }]}>
-            <Text style={[styles.timeRangeText, { color: colors.text }]}>4W</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.timeRangeButton, { borderColor: colors.border }]}>
-            <Text style={[styles.timeRangeText, { color: colors.text }]}>12W</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.timeRangeButton, { borderColor: colors.border }]}>
-            <Text style={[styles.timeRangeText, { color: colors.text }]}>All</Text>
-          </TouchableOpacity>
+  const renderIdeasTab = () => {
+    if (ideasLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Loading ideas...
+          </Text>
         </View>
+      );
+    }
+
+    return (
+      <View style={styles.tabContent}>
+        {ideas.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>DEPOSIT IDEAS</Text>
+            {ideas.map(idea => (
+              <View key={idea.id} style={[styles.ideaCard, { backgroundColor: colors.surface }]}>
+                <View style={styles.ideaHeader}>
+                  <Lightbulb size={20} color={colors.primary} />
+                  <Text style={[styles.ideaDate, { color: colors.textSecondary }]}>
+                    {formatLocalDate(idea.created_at)}
+                  </Text>
+                </View>
+                <Text style={[styles.ideaText, { color: colors.text }]}>
+                  {idea.idea_text}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.activateButton, { backgroundColor: colors.primary }]}
+                  onPress={() => handleActivateIdea(idea.id)}
+                >
+                  <Text style={styles.activateButtonText}>Activate</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {ideas.length === 0 && (
+          <View style={styles.emptyState}>
+            <Lightbulb size={64} color={colors.textSecondary} style={styles.emptyIcon} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Ideas Yet</Text>
+            <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
+              Capture ideas that could help you achieve this goal
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.addButton, { backgroundColor: colors.primary }]}
+          onPress={() => setShowAddIdeaModal(true)}
+        >
+          <Plus size={20} color="#ffffff" />
+          <Text style={styles.addButtonText}>Add Idea</Text>
+        </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const renderJournalTab = () => {
+    if (journalLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Loading journal entries...
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.tabContent}>
+        {journalNotes.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>JOURNAL ENTRIES</Text>
+            {journalNotes.map(note => (
+              <View key={note.id} style={[styles.journalCard, { backgroundColor: colors.surface }]}>
+                <View style={styles.journalHeader}>
+                  <BookOpen size={20} color={colors.primary} />
+                  <Text style={[styles.journalDate, { color: colors.textSecondary }]}>
+                    {formatLocalDate(note.created_at)}
+                  </Text>
+                  {note.attachment_count > 0 && (
+                    <View style={styles.attachmentBadge}>
+                      <Paperclip size={14} color={colors.textSecondary} />
+                      <Text style={[styles.attachmentCount, { color: colors.textSecondary }]}>
+                        {note.attachment_count}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text
+                  style={[styles.journalText, { color: colors.text }]}
+                  numberOfLines={4}
+                >
+                  {note.note_text}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {journalNotes.length === 0 && (
+          <View style={styles.emptyState}>
+            <BookOpen size={64} color={colors.textSecondary} style={styles.emptyIcon} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Journal Entries</Text>
+            <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
+              Document your thoughts, progress, and reflections for this goal
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.addButton, { backgroundColor: colors.primary }]}
+          onPress={() => setShowAddJournalModal(true)}
+        >
+          <Plus size={20} color="#ffffff" />
+          <Text style={styles.addButtonText}>Add Entry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderAnalyticsTab = () => {
+    if (analyticsLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Calculating analytics...
+          </Text>
+        </View>
+      );
+    }
+
+    if (!analyticsData) {
+      return (
+        <View style={styles.emptyState}>
+          <TrendingUp size={64} color={colors.textSecondary} style={styles.emptyIcon} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Data Yet</Text>
+          <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
+            Complete some actions to see analytics
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.timeRangeSelector}>
+          {(['4W', '12W', 'All'] as TimeRange[]).map(range => (
+            <TouchableOpacity
+              key={range}
+              style={[
+                styles.timeRangeButton,
+                { borderColor: colors.border },
+                timeRange === range && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+              onPress={() => setTimeRange(range)}
+            >
+              <Text
+                style={[
+                  styles.timeRangeText,
+                  { color: timeRange === range ? '#ffffff' : colors.text },
+                ]}
+              >
+                {range}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={[styles.goalScoreCard, { backgroundColor: colors.surface }]}>
+          <TrendingUp size={32} color={colors.primary} />
+          <View style={styles.goalScoreContent}>
+            <Text style={[styles.goalScoreLabel, { color: colors.textSecondary }]}>
+              Goal Score
+            </Text>
+            <Text style={[styles.goalScoreValue, { color: colors.primary }]}>
+              {analyticsData.goalScore}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.metricsGrid}>
+          <View style={[styles.metricCard, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+              Weekly Average
+            </Text>
+            <Text style={[styles.metricValue, { color: colors.text }]}>
+              {analyticsData.weeklyAverage}%
+            </Text>
+          </View>
+          <View style={[styles.metricCard, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+              Consistency
+            </Text>
+            <Text style={[styles.metricValue, { color: colors.text }]}>
+              {analyticsData.consistency}%
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.metricCard, styles.fullWidthMetric, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+            Total Actions Completed
+          </Text>
+          <Text style={[styles.metricValue, { color: colors.text }]}>
+            {analyticsData.totalActions}
+          </Text>
+        </View>
+
+        {analyticsData.weeklyData.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              WEEKLY COMPLETION
+            </Text>
+            <View style={[styles.chartContainer, { backgroundColor: colors.surface }]}>
+              <View style={styles.chartBars}>
+                {analyticsData.weeklyData.map((week, index) => (
+                  <View key={index} style={styles.barWrapper}>
+                    <View style={styles.barContainer}>
+                      <View
+                        style={[
+                          styles.bar,
+                          {
+                            height: `${week.completionPercent}%`,
+                            backgroundColor:
+                              week.completionPercent >= 100
+                                ? '#10b981'
+                                : week.completionPercent >= 75
+                                ? colors.primary
+                                : week.completionPercent >= 50
+                                ? '#f59e0b'
+                                : '#ef4444',
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.barLabel, { color: colors.textSecondary }]}>
+                      W{week.weekNumber}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.chartLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
+                  <Text style={[styles.legendText, { color: colors.textSecondary }]}>
+                    100%
+                  </Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.legendText, { color: colors.textSecondary }]}>
+                    75-99%
+                  </Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
+                  <Text style={[styles.legendText, { color: colors.textSecondary }]}>
+                    50-74%
+                  </Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+                  <Text style={[styles.legendText, { color: colors.textSecondary }]}>
+                    &lt;50%
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -394,6 +967,98 @@ export function GoalDetailView({
         {renderGoalBanner()}
         {renderContent()}
       </ScrollView>
+
+      {/* Add Idea Modal */}
+      <Modal
+        visible={showAddIdeaModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddIdeaModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Idea</Text>
+              <TouchableOpacity onPress={() => setShowAddIdeaModal(false)}>
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.modalInput, { color: colors.text, borderColor: colors.border }]}
+              placeholder="Enter your idea..."
+              placeholderTextColor={colors.textSecondary}
+              value={newIdeaText}
+              onChangeText={setNewIdeaText}
+              multiline
+              numberOfLines={4}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton, { borderColor: colors.border }]}
+                onPress={() => {
+                  setNewIdeaText('');
+                  setShowAddIdeaModal(false);
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton, { backgroundColor: colors.primary }]}
+                onPress={handleAddIdea}
+              >
+                <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Journal Entry Modal */}
+      <Modal
+        visible={showAddJournalModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddJournalModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Journal Entry</Text>
+              <TouchableOpacity onPress={() => setShowAddJournalModal(false)}>
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.modalInput, styles.journalInput, { color: colors.text, borderColor: colors.border }]}
+              placeholder="Write your thoughts..."
+              placeholderTextColor={colors.textSecondary}
+              value={newJournalText}
+              onChangeText={setNewJournalText}
+              multiline
+              numberOfLines={8}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton, { borderColor: colors.border }]}
+                onPress={() => {
+                  setNewJournalText('');
+                  setShowAddJournalModal(false);
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton, { backgroundColor: colors.primary }]}
+                onPress={handleAddJournalEntry}
+              >
+                <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -693,7 +1358,7 @@ const styles = StyleSheet.create({
   timeRangeSelector: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 24,
+    marginBottom: 24,
   },
   timeRangeButton: {
     paddingHorizontal: 20,
@@ -703,6 +1368,215 @@ const styles = StyleSheet.create({
   },
   timeRangeText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  // Ideas Tab Styles
+  ideaCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  ideaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  ideaDate: {
+    fontSize: 13,
+    flex: 1,
+  },
+  ideaText: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  activateButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  activateButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Journal Tab Styles
+  journalCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  journalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  journalDate: {
+    fontSize: 13,
+    flex: 1,
+  },
+  attachmentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  attachmentCount: {
+    fontSize: 12,
+  },
+  journalText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  // Analytics Tab Styles
+  goalScoreCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    gap: 16,
+  },
+  goalScoreContent: {
+    flex: 1,
+  },
+  goalScoreLabel: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  goalScoreValue: {
+    fontSize: 36,
+    fontWeight: '700',
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  metricCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  fullWidthMetric: {
+    marginBottom: 16,
+  },
+  metricLabel: {
+    fontSize: 13,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  metricValue: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  chartContainer: {
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  chartBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 200,
+    gap: 8,
+    marginBottom: 16,
+  },
+  barWrapper: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  barContainer: {
+    width: '100%',
+    height: 180,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  bar: {
+    width: '100%',
+    borderRadius: 4,
+    minHeight: 4,
+  },
+  barLabel: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: 12,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 500,
+    borderRadius: 16,
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 20,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  journalInput: {
+    minHeight: 200,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    borderWidth: 1,
+  },
+  saveButton: {
+    // backgroundColor set dynamically
+  },
+  modalButtonText: {
+    fontSize: 16,
     fontWeight: '600',
   },
 });
