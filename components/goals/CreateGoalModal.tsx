@@ -9,8 +9,9 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
-import { X, Target, Calendar, ChevronDown } from 'lucide-react-native';
+import { X, Target, Calendar, ChevronDown, Paperclip } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 
@@ -526,49 +527,6 @@ export function CreateGoalModal({
       <Text style={styles.label}>What's your timeframe? *</Text>
 
       <TouchableOpacity
-        style={[styles.radioOption, selectedTimeframe === '1year' && styles.radioOptionSelected]}
-        onPress={() => {
-          setSelectedTimeframe('1year');
-          const today = new Date();
-          if (today.getMonth() >= 9) {
-            setShowYearPicker(true);
-          }
-        }}
-      >
-        <View style={styles.radio}>
-          {selectedTimeframe === '1year' && <View style={styles.radioInner} />}
-        </View>
-        <View style={styles.radioContent}>
-          <Text style={styles.radioLabel}>This Year</Text>
-          <Text style={styles.radioSubtext}>Dec 31, {selectedYear}</Text>
-        </View>
-      </TouchableOpacity>
-
-      {selectedTimeframe === '1year' && showYearPicker && (
-        <View style={styles.yearPickerContainer}>
-          <Text style={styles.yearPickerLabel}>Which year?</Text>
-          <View style={styles.yearButtons}>
-            <TouchableOpacity
-              style={[styles.yearButton, selectedYear === currentYear && styles.yearButtonActive]}
-              onPress={() => setSelectedYear(currentYear)}
-            >
-              <Text style={[styles.yearButtonText, selectedYear === currentYear && styles.yearButtonTextActive]}>
-                This Year ({currentYear})
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.yearButton, selectedYear === currentYear + 1 && styles.yearButtonActive]}
-              onPress={() => setSelectedYear(currentYear + 1)}
-            >
-              <Text style={[styles.yearButtonText, selectedYear === currentYear + 1 && styles.yearButtonTextActive]}>
-                Next Year ({currentYear + 1})
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      <TouchableOpacity
         style={[styles.radioOption, selectedTimeframe === '12week' && styles.radioOptionSelected]}
         onPress={() => setSelectedTimeframe('12week')}
       >
@@ -617,6 +575,49 @@ export function CreateGoalModal({
               ))}
             </View>
           )}
+        </View>
+      )}
+
+      <TouchableOpacity
+        style={[styles.radioOption, selectedTimeframe === '1year' && styles.radioOptionSelected]}
+        onPress={() => {
+          setSelectedTimeframe('1year');
+          const today = new Date();
+          if (today.getMonth() >= 9) {
+            setShowYearPicker(true);
+          }
+        }}
+      >
+        <View style={styles.radio}>
+          {selectedTimeframe === '1year' && <View style={styles.radioInner} />}
+        </View>
+        <View style={styles.radioContent}>
+          <Text style={styles.radioLabel}>Annual Timeframe</Text>
+          <Text style={styles.radioSubtext}>Dec 31, {selectedYear}</Text>
+        </View>
+      </TouchableOpacity>
+
+      {selectedTimeframe === '1year' && showYearPicker && (
+        <View style={styles.yearPickerContainer}>
+          <Text style={styles.yearPickerLabel}>Which year?</Text>
+          <View style={styles.yearButtons}>
+            <TouchableOpacity
+              style={[styles.yearButton, selectedYear === currentYear && styles.yearButtonActive]}
+              onPress={() => setSelectedYear(currentYear)}
+            >
+              <Text style={[styles.yearButtonText, selectedYear === currentYear && styles.yearButtonTextActive]}>
+                This Year ({currentYear})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.yearButton, selectedYear === currentYear + 1 && styles.yearButtonActive]}
+              onPress={() => setSelectedYear(currentYear + 1)}
+            >
+              <Text style={[styles.yearButtonText, selectedYear === currentYear + 1 && styles.yearButtonTextActive]}>
+                Next Year ({currentYear + 1})
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -858,21 +859,20 @@ export function CreateGoalModal({
               )}
 
               <View style={styles.field}>
-                <Text style={styles.label}>Wellness Domains</Text>
-                <View style={styles.checkboxContainer}>
+                <Text style={styles.label}>Wellness Zones</Text>
+                <View style={styles.toggleContainer}>
                   {allDomains.map(domain => {
                     const isSelected = formData.selectedDomainIds.includes(domain.id);
                     return (
-                      <TouchableOpacity
-                        key={domain.id}
-                        style={styles.checkboxRowGrid}
-                        onPress={() => handleMultiSelect('selectedDomainIds', domain.id)}
-                      >
-                        <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
-                          {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                        </View>
-                        <Text style={styles.checkboxLabelGrid}>{domain.name}</Text>
-                      </TouchableOpacity>
+                      <View key={domain.id} style={styles.toggleRow}>
+                        <Text style={styles.toggleLabel}>{domain.name}</Text>
+                        <Switch
+                          value={isSelected}
+                          onValueChange={() => handleMultiSelect('selectedDomainIds', domain.id)}
+                          trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                          thumbColor="#ffffff"
+                        />
+                      </View>
                     );
                   })}
                 </View>
@@ -880,20 +880,19 @@ export function CreateGoalModal({
 
               <View style={styles.field}>
                 <Text style={styles.label}>Active Roles</Text>
-                <View style={styles.checkboxContainer}>
+                <View style={styles.toggleContainer}>
                   {allRoles.map(role => {
                     const isSelected = formData.selectedRoleIds.includes(role.id);
                     return (
-                      <TouchableOpacity
-                        key={role.id}
-                        style={styles.checkboxRowGrid}
-                        onPress={() => handleMultiSelect('selectedRoleIds', role.id)}
-                      >
-                        <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
-                          {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                        </View>
-                        <Text style={styles.checkboxLabelGrid}>{role.label}</Text>
-                      </TouchableOpacity>
+                      <View key={role.id} style={styles.toggleRow}>
+                        <Text style={styles.toggleLabel}>{role.label}</Text>
+                        <Switch
+                          value={isSelected}
+                          onValueChange={() => handleMultiSelect('selectedRoleIds', role.id)}
+                          trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                          thumbColor="#ffffff"
+                        />
+                      </View>
                     );
                   })}
                 </View>
@@ -902,20 +901,19 @@ export function CreateGoalModal({
               {filteredKeyRelationships.length > 0 && (
                 <View style={styles.field}>
                   <Text style={styles.label}>Key Relationships</Text>
-                  <View style={styles.checkboxContainer}>
+                  <View style={styles.toggleContainer}>
                     {filteredKeyRelationships.map(kr => {
                       const isSelected = formData.selectedKeyRelationshipIds.includes(kr.id);
                       return (
-                        <TouchableOpacity
-                          key={kr.id}
-                          style={styles.checkboxRowGrid}
-                          onPress={() => handleMultiSelect('selectedKeyRelationshipIds', kr.id)}
-                        >
-                          <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
-                            {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                          </View>
-                          <Text style={styles.checkboxLabelGrid}>{kr.name}</Text>
-                        </TouchableOpacity>
+                        <View key={kr.id} style={styles.toggleRow}>
+                          <Text style={styles.toggleLabel}>{kr.name}</Text>
+                          <Switch
+                            value={isSelected}
+                            onValueChange={() => handleMultiSelect('selectedKeyRelationshipIds', kr.id)}
+                            trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                            thumbColor="#ffffff"
+                          />
+                        </View>
                       );
                     })}
                   </View>
@@ -923,7 +921,12 @@ export function CreateGoalModal({
               )}
 
               <View style={styles.field}>
-                <Text style={styles.label}>Notes</Text>
+                <View style={styles.labelWithIcon}>
+                  <Text style={styles.label}>Notes</Text>
+                  <TouchableOpacity style={styles.attachmentButton}>
+                    <Paperclip size={20} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={formData.notes}
@@ -1262,5 +1265,37 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     flex: 1,
     lineHeight: 14,
+  },
+  toggleContainer: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '50%',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    color: '#1f2937',
+    flex: 1,
+    marginRight: 8,
+  },
+  labelWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  attachmentButton: {
+    padding: 4,
   },
 });
