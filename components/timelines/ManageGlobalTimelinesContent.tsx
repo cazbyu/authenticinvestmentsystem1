@@ -9,10 +9,10 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { TriangleAlert as AlertTriangle, Calendar, TrendingUp, Archive, Trash2, X } from 'lucide-react-native';
+import { TriangleAlert as AlertTriangle, Calendar, TrendingUp, Archive, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { InfoTooltip } from '@/components/InfoTooltip';
 import { getSupabaseClient } from '@/lib/supabase';
-import { formatDateRange, parseLocalDate } from '@/lib/dateUtils';
+import { formatDateRange, parseLocalDate, toLocalISOString } from '@/lib/dateUtils';
 
 const formatDateDisplay = (dateString: string): string => {
   const date = parseLocalDate(dateString);
@@ -57,9 +57,11 @@ interface ManageGlobalTimelinesContentProps {
 export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelinesContentProps) {
   const [activeTimelines, setActiveTimelines] = useState<UserGlobalTimeline[]>([]);
   const [availableCycles, setAvailableCycles] = useState<ActiveTimelineWithCycle[]>([]);
+  const [pastTimelines, setPastTimelines] = useState<UserGlobalTimeline[]>([]);
   const [loading, setLoading] = useState(false);
   const [activating, setActivating] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
+  const [showPastCycles, setShowPastCycles] = useState(false);
 
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [archiveConfirmTimeline, setArchiveConfirmTimeline] = useState<UserGlobalTimeline | null>(null);
@@ -86,6 +88,7 @@ export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelines
     setLoading(true);
     try {
       await fetchActiveTimeline();
+      await fetchPastTimelines();
       await fetchAvailableCycles();
     } catch (error) {
       console.error('[ManageGlobalTimelinesContent] Error in fetchData:', error);
@@ -137,13 +140,67 @@ export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelines
         throw error;
       }
 
+      const now = new Date();
       const timelinesData = Array.isArray(data) ? data : [];
-      setActiveTimelines(timelinesData);
+
+      // Filter to only show timelines that haven't ended yet
+      const currentTimelines = timelinesData.filter(timeline => {
+        const endDate = timeline.global_cycle?.end_date ? new Date(timeline.global_cycle.end_date) : null;
+        return !endDate || endDate >= now;
+      });
+
+      setActiveTimelines(currentTimelines);
     } catch (error) {
       console.error('[ManageGlobalTimelinesContent] Error fetching active timelines:', error);
       if (retryCount === 0) {
         Alert.alert('Error Loading Timelines', 'Failed to load active timelines. Please try again.');
       }
+    }
+  };
+
+  const fetchPastTimelines = async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('0008-ap-user-global-timelines')
+        .select(`
+          id,
+          user_id,
+          global_cycle_id,
+          status,
+          week_start_day,
+          activated_at,
+          created_at,
+          updated_at,
+          global_cycle:0008-ap-global-cycles!inner(
+            id,
+            title,
+            start_date,
+            end_date,
+            reflection_start,
+            reflection_end,
+            status
+          ),
+          goals:0008-ap-goals-12wk(id, status)
+        `)
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const now = new Date();
+      const pastTimelinesData = (data || []).filter(timeline => {
+        const endDate = timeline.global_cycle?.end_date ? new Date(timeline.global_cycle.end_date) : null;
+        return endDate && endDate < now;
+      });
+
+      setPastTimelines(pastTimelinesData);
+    } catch (error) {
+      console.error('[ManageGlobalTimelinesContent] Error fetching past timelines:', error);
     }
   };
 
@@ -361,9 +418,9 @@ export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelines
       return (
         <View style={styles.emptySection}>
           <Calendar size={48} color="#6b7280" />
-          <Text style={styles.emptyTitle}>No Active Global Timelines</Text>
+          <Text style={styles.emptyTitle}>No Active Cycles</Text>
           <Text style={styles.emptyText}>
-            Activate global timelines below to start tracking your 12-week goals
+            Join upcoming cycles below to start tracking your 12-week goals
           </Text>
         </View>
       );
@@ -552,6 +609,67 @@ export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelines
     );
   };
 
+  const renderPastTimelines = () => {
+    if (pastTimelines.length === 0) {
+      return (
+        <View style={styles.emptySection}>
+          <Archive size={48} color="#6b7280" />
+          <Text style={styles.emptyTitle}>No Past Cycles</Text>
+          <Text style={styles.emptyText}>
+            Completed cycles will appear here
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.pastTimelinesList}>
+        {pastTimelines.map((timeline) => {
+          const displayTitle = timeline.global_cycle?.title || timeline.global_cycle?.cycle_label || 'Global Timeline';
+          const goalCount = timeline.goals?.filter(g => g.status === 'active').length || 0;
+
+          return (
+            <View key={timeline.id} style={styles.pastTimelineCard}>
+              <View style={styles.pastTimelineHeader}>
+                <View style={styles.pastTimelineInfo}>
+                  <Text style={styles.pastTimelineTitle}>{displayTitle}</Text>
+                  <Text style={styles.pastTimelineDates}>
+                    {timeline.global_cycle?.start_date && timeline.global_cycle?.end_date
+                      ? formatDateRange(timeline.global_cycle.start_date, timeline.global_cycle.end_date)
+                      : 'Invalid date'}
+                  </Text>
+                  <Text style={styles.pastTimelineStats}>
+                    {goalCount} goals • Completed
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.timelineButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.archiveButton}
+                  onPress={() => handleArchiveTimeline(timeline)}
+                  disabled={deactivating}
+                >
+                  <Archive size={16} color="#f59e0b" />
+                  <Text style={styles.archiveButtonText}>Archive</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteTimeline(timeline)}
+                  disabled={deactivating}
+                >
+                  <Trash2 size={16} color="#dc2626" />
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -572,32 +690,54 @@ export function ManageGlobalTimelinesContent({ onUpdate }: ManageGlobalTimelines
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#0078d4" />
-          <Text style={styles.loadingText}>Loading timelines...</Text>
+          <Text style={styles.loadingText}>Loading cycles...</Text>
         </View>
       ) : (
         <ScrollView style={styles.content}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Timelines</Text>
+            <Text style={styles.sectionTitle}>ACTIVE CYCLES</Text>
             <Text style={styles.sectionSubtitle}>
-              Your currently active global 12-week timelines
+              Your currently enrolled 12-week cycles
             </Text>
             {renderActiveTimelines()}
           </View>
 
           <View style={styles.section}>
             <View style={styles.sectionTitleContainer}>
-              <Text style={styles.sectionTitle}>Upcoming 12 Week Timelines</Text>
+              <Text style={styles.sectionTitle}>UPCOMING CYCLES</Text>
               <InfoTooltip
-                content="To activate a timeline, select your preferred week start day (Sunday or Monday) by tapping one of the buttons below each timeline. You can have multiple active timelines running simultaneously."
+                content="These 12-week timelines sync with a global community calendar. Join upcoming cycles to align your goal-setting with the standardized year structure. The current cycle and next cycle (during reflection week) can be joined."
                 iconSize={18}
                 iconColor="#6b7280"
                 maxWidth={320}
               />
             </View>
             <Text style={styles.sectionSubtitle}>
-              Current and upcoming standardized 12-week cycles. Only the current cycle and the next cycle (during reflection week) can be activated.
+              Join current and upcoming standardized 12-week cycles
             </Text>
             {renderAvailableCycles()}
+          </View>
+
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.pastCyclesHeader}
+              onPress={() => setShowPastCycles(!showPastCycles)}
+            >
+              <Text style={styles.sectionTitle}>PAST CYCLES</Text>
+              {showPastCycles ? (
+                <ChevronUp size={24} color="#1f2937" />
+              ) : (
+                <ChevronDown size={24} color="#1f2937" />
+              )}
+            </TouchableOpacity>
+            {showPastCycles && (
+              <>
+                <Text style={styles.sectionSubtitle}>
+                  Completed 12-week cycles
+                </Text>
+                {renderPastTimelines()}
+              </>
+            )}
           </View>
         </ScrollView>
       )}
@@ -1241,5 +1381,48 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 15,
     fontWeight: '600',
+  },
+  pastCyclesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  pastTimelinesList: {
+    gap: 12,
+  },
+  pastTimelineCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#9ca3af',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  pastTimelineHeader: {
+    marginBottom: 12,
+  },
+  pastTimelineInfo: {
+    flex: 1,
+  },
+  pastTimelineTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 6,
+  },
+  pastTimelineDates: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  pastTimelineStats: {
+    fontSize: 14,
+    color: '#9ca3af',
   },
 });

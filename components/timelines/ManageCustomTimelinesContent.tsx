@@ -305,20 +305,35 @@ export function ManageCustomTimelinesContent({ onUpdate }: ManageCustomTimelines
               progress = Math.min(100, Math.max(0, ((now.getTime() - startDate.getTime()) / (endDate.getTime() - startDate.getTime())) * 100));
             }
 
+            const isCompleted = daysRemaining === 0;
+            const isPast = endDate && endDate < new Date();
+
             return (
-              <View key={timeline.id} style={styles.timelineCard}>
+              <View key={timeline.id} style={[
+                styles.timelineCard,
+                isPast && styles.timelineCardCompleted
+              ]}>
                 <View style={styles.timelineHeader}>
                   <View style={styles.timelineInfo}>
-                    <Text style={styles.timelineTitle}>{timeline.title}</Text>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.timelineTitle}>{timeline.title}</Text>
+                      {isPast && (
+                        <View style={styles.completedBadge}>
+                          <Text style={styles.completedBadgeText}>Completed</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.timelineDates}>
                       {startDate && endDate
                         ? safeFormatDateRange(timeline.start_date, timeline.end_date, `timeline ${timeline.id}`)
                         : 'Invalid date'}
                     </Text>
                     <Text style={styles.timelineStats}>
-                      {startDate && endDate
-                        ? `${daysRemaining} days remaining • ${Math.ceil(totalDays / 7)} weeks total`
-                        : 'Invalid date range'}
+                      {startDate && endDate ? (
+                        isPast
+                          ? `${timeline.goals_count || 0} goals • ${Math.ceil(totalDays / 7)} weeks`
+                          : `${daysRemaining} days remaining • ${Math.ceil(totalDays / 7)} weeks total`
+                      ) : 'Invalid date range'}
                     </Text>
                   </View>
 
@@ -796,6 +811,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  timelineCardCompleted: {
+    borderLeftColor: '#9ca3af',
+    backgroundColor: '#fafafa',
+  },
   timelineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -806,11 +825,29 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
   timelineTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 4,
+  },
+  completedBadge: {
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  completedBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   timelineDates: {
     fontSize: 14,
