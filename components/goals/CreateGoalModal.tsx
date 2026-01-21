@@ -118,12 +118,32 @@ export function CreateGoalModal({
 
   useEffect(() => {
     if (visible) {
+      // Start fetching data immediately
       fetchData();
       setDefaultSelections();
     } else {
       resetForm();
     }
   }, [visible]);
+
+  // Pre-fetch domains on mount since they don't change per user
+  useEffect(() => {
+    const preFetchDomains = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: domainsData } = await supabase
+          .from('0008-ap-domains')
+          .select('id, name')
+          .order('name');
+        if (domainsData) {
+          setAllDomains(domainsData);
+        }
+      } catch (error) {
+        console.error('Error pre-fetching domains:', error);
+      }
+    };
+    preFetchDomains();
+  }, []);
 
   const setDefaultSelections = () => {
     // Check if after October 1st
@@ -147,16 +167,8 @@ export function CreateGoalModal({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [
-        { data: rolesData },
-        { data: domainsData },
-        { data: krData },
-        { data: oneYearGoalsData },
-        { data: globalTimelinesData },
-        { data: customTimelinesData }
-      ] = await Promise.all([
+      const queries = [
         supabase.from('0008-ap-roles').select('id, label, color').eq('user_id', user.id).eq('is_active', true).order('label'),
-        supabase.from('0008-ap-domains').select('id, name').order('name'),
         supabase.from('0008-ap-key-relationships').select('id, name, role_id').eq('user_id', user.id),
         supabase
           .from('0008-ap-goals-1y')
@@ -166,7 +178,16 @@ export function CreateGoalModal({
           .order('title'),
         supabase
           .from('0008-ap-user-global-timelines')
-          .select('id, global_cycle_id, status')
+          .select(`
+            id,
+            status,
+            0008-ap-global-cycles!inner(
+              id,
+              title,
+              start_date,
+              end_date
+            )
+          `)
           .eq('user_id', user.id)
           .eq('status', 'active'),
         supabase
@@ -175,34 +196,38 @@ export function CreateGoalModal({
           .eq('user_id', user.id)
           .eq('is_archived', false)
           .order('name')
-      ]);
+      ];
+
+      // Only fetch domains if not already loaded
+      if (allDomains.length === 0) {
+        queries.splice(1, 0, supabase.from('0008-ap-domains').select('id, name').order('name'));
+      }
+
+      const results = await Promise.all(queries);
+
+      let resultIndex = 0;
+      const rolesData = results[resultIndex++].data;
+      const domainsData = allDomains.length === 0 ? results[resultIndex++].data : null;
+      const krData = results[resultIndex++].data;
+      const oneYearGoalsData = results[resultIndex++].data;
+      const globalTimelinesData = results[resultIndex++].data;
+      const customTimelinesData = results[resultIndex++].data;
 
       setAllRoles(rolesData || []);
-      setAllDomains(domainsData || []);
+      if (domainsData) {
+        setAllDomains(domainsData);
+      }
       setAllKeyRelationships(krData || []);
       setOneYearGoals(oneYearGoalsData || []);
 
-      // Process global timelines
-      const globalTimelines: Timeline[] = [];
-      if (globalTimelinesData) {
-        for (const ugt of globalTimelinesData) {
-          const { data: cycleData } = await supabase
-            .from('0008-ap-global-cycles')
-            .select('title, start_date, end_date')
-            .eq('id', ugt.global_cycle_id)
-            .single();
-
-          if (cycleData) {
-            globalTimelines.push({
-              id: ugt.id,
-              source: 'global',
-              title: cycleData.title,
-              start_date: cycleData.start_date,
-              end_date: cycleData.end_date,
-            });
-          }
-        }
-      }
+      // Process global timelines - now with join data
+      const globalTimelines: Timeline[] = (globalTimelinesData || []).map((ugt: any) => ({
+        id: ugt.id,
+        source: 'global' as const,
+        title: ugt['0008-ap-global-cycles'].title,
+        start_date: ugt['0008-ap-global-cycles'].start_date,
+        end_date: ugt['0008-ap-global-cycles'].end_date,
+      }));
       setActiveGlobalTimelines(globalTimelines);
 
       // Auto-select first global timeline
