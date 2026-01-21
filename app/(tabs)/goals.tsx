@@ -1406,9 +1406,16 @@ export default function Goals() {
 
       {/* FAB for creating goals - show when on goals tab or viewing a timeline */}
       {(activeTab === 'goals' || selectedTimeline) && (
-        <DraggableFab onPress={() => setCreateGoalModalVisible(true)} size={44}>
-          <Plus size={28} color="#ffffff" />
-        </DraggableFab>
+        <View
+          accessible={true}
+          accessibilityLabel="Create new goal"
+          accessibilityHint="Opens a form to create a new goal"
+          accessibilityRole="button"
+        >
+          <DraggableFab onPress={() => setCreateGoalModalVisible(true)} size={44}>
+            <Plus size={28} color="#ffffff" />
+          </DraggableFab>
+        </View>
       )}
 
       {/* Modals */}

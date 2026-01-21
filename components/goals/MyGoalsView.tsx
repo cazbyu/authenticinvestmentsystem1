@@ -254,9 +254,29 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
     fetchAllGoals();
   };
 
+  const renderSkeletonCard = (key: string) => (
+    <View
+      key={key}
+      style={[
+        styles.goalCard,
+        styles.skeletonCard,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+      ]}
+    >
+      <View style={[styles.skeletonLine, styles.skeletonTitle, { backgroundColor: colors.border }]} />
+      <View style={[styles.skeletonLine, styles.skeletonDescription, { backgroundColor: colors.border }]} />
+      <View style={styles.skeletonMeta}>
+        <View style={[styles.skeletonLine, styles.skeletonMetaItem, { backgroundColor: colors.border }]} />
+        <View style={[styles.skeletonLine, styles.skeletonMetaItem, { backgroundColor: colors.border }]} />
+      </View>
+    </View>
+  );
+
   const renderGoalCard = (goal: UnifiedGoal) => {
+    const isAnnualGoal = goal.goal_type === '1y';
     const cardStyle = [
       styles.goalCard,
+      isAnnualGoal && styles.annualGoalCard,
       { backgroundColor: colors.surface, borderColor: colors.border },
     ];
 
@@ -266,9 +286,19 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
         style={cardStyle}
         onPress={() => onGoalPress(goal)}
         activeOpacity={0.7}
+        accessibilityLabel={`${goal.title} goal`}
+        accessibilityHint="Tap to view goal details"
+        accessibilityRole="button"
       >
         <View style={styles.goalCardHeader}>
-          <Text style={[styles.goalTitle, { color: colors.text }]} numberOfLines={2}>
+          <Text
+            style={[
+              styles.goalTitle,
+              isAnnualGoal && styles.annualGoalTitle,
+              { color: colors.text }
+            ]}
+            numberOfLines={2}
+          >
             {goal.title}
           </Text>
           {goal.goal_type === '12week' && goal.progress !== undefined && (
@@ -365,12 +395,21 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Loading your goals...
-        </Text>
-      </View>
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+        <View style={[styles.weekHeader, { backgroundColor: colors.surface }]}>
+          <View style={[styles.skeletonLine, styles.skeletonWeek, { backgroundColor: colors.border }]} />
+        </View>
+        <View style={styles.section}>
+          <View style={[styles.skeletonLine, styles.skeletonSectionTitle, { backgroundColor: colors.border }]} />
+          {renderSkeletonCard('skeleton-1')}
+          {renderSkeletonCard('skeleton-2')}
+        </View>
+        <View style={styles.section}>
+          <View style={[styles.skeletonLine, styles.skeletonSectionTitle, { backgroundColor: colors.border }]} />
+          {renderSkeletonCard('skeleton-3')}
+          {renderSkeletonCard('skeleton-4')}
+        </View>
+      </ScrollView>
     );
   }
 
@@ -395,9 +434,21 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
       {!hasAnyGoals && (
         <View style={styles.emptyState}>
           <Target size={64} color={colors.textSecondary} style={styles.emptyIcon} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Active Goals</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Start Your Journey</Text>
           <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
-            Tap the + button below to create your first goal
+            Create your first goal to begin tracking progress and achieving your ambitions
+          </Text>
+          <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
+            Tap the + button below to get started
+          </Text>
+        </View>
+      )}
+
+      {hasAnyGoals && cycleGoals.length === 0 && annualGoals.length > 0 && (
+        <View style={[styles.promptCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.promptTitle, { color: colors.text }]}>Join a 12-Week Cycle</Text>
+          <Text style={[styles.promptMessage, { color: colors.textSecondary }]}>
+            Join the current 12-week cycle to start breaking down your annual goals into actionable quarterly targets
           </Text>
         </View>
       )}
@@ -475,6 +526,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 12,
   },
+  annualGoalCard: {
+    borderWidth: 2,
+    borderLeftWidth: 6,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   goalCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -486,6 +547,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     marginRight: 8,
+  },
+  annualGoalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
   },
   progressBadge: {
     backgroundColor: '#10b981',
@@ -552,5 +617,63 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     paddingHorizontal: 32,
+    lineHeight: 22,
+  },
+  emptyHint: {
+    fontSize: 13,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  promptCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    marginBottom: 24,
+  },
+  promptTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  promptMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  skeletonCard: {
+    opacity: 0.6,
+  },
+  skeletonLine: {
+    height: 16,
+    borderRadius: 4,
+  },
+  skeletonTitle: {
+    width: '70%',
+    height: 20,
+    marginBottom: 8,
+  },
+  skeletonDescription: {
+    width: '90%',
+    marginBottom: 12,
+  },
+  skeletonMeta: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  skeletonMetaItem: {
+    width: 80,
+    height: 14,
+  },
+  skeletonWeek: {
+    width: 150,
+    height: 16,
+    alignSelf: 'center',
+  },
+  skeletonSectionTitle: {
+    width: 200,
+    height: 18,
+    marginBottom: 16,
   },
 });
