@@ -8,7 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
-export type GoalBankTab = 'timelines' | 'northstar' | 'manage';
+export type GoalBankTab = 'goals' | 'manage-timelines';
 
 interface GoalBankTabbedHeaderProps {
   activeTab: GoalBankTab;
@@ -53,7 +53,7 @@ export function GoalBankTabbedHeader({
             accessibilityRole="button"
           >
             <ChevronLeft size={24} color="#ffffff" />
-            <Text style={styles.backButtonText}>Timelines</Text>
+            <Text style={styles.backButtonText}>My Goals</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.titleRow}>
@@ -103,57 +103,37 @@ export function GoalBankTabbedHeader({
           <TouchableOpacity
             style={[
               styles.tab,
-              activeTab === 'timelines' && styles.activeTab,
+              activeTab === 'goals' && styles.activeTab,
             ]}
-            onPress={() => onTabChange('timelines')}
-            accessibilityLabel="Timelines tab"
+            onPress={() => onTabChange('goals')}
+            accessibilityLabel="My Goals tab"
             accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'timelines' }}
+            accessibilityState={{ selected: activeTab === 'goals' }}
           >
             <Text
               style={[
                 styles.tabText,
-                activeTab === 'timelines' && styles.activeTabText,
+                activeTab === 'goals' && styles.activeTabText,
               ]}
             >
-              Timelines
+              My Goals
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.tab,
-              activeTab === 'northstar' && styles.activeTab,
+              activeTab === 'manage-timelines' && styles.activeTab,
             ]}
-            onPress={() => onTabChange('northstar')}
-            accessibilityLabel="North Star tab"
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'northstar' }}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'northstar' && styles.activeTabText,
-              ]}
-            >
-              North Star
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              activeTab === 'manage' && styles.activeTab,
-            ]}
-            onPress={() => onTabChange('manage')}
+            onPress={() => onTabChange('manage-timelines')}
             accessibilityLabel="Manage Timelines tab"
             accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'manage' }}
+            accessibilityState={{ selected: activeTab === 'manage-timelines' }}
           >
             <Text
               style={[
                 styles.tabText,
-                activeTab === 'manage' && styles.activeTabText,
+                activeTab === 'manage-timelines' && styles.activeTabText,
               ]}
             >
               Manage Timelines

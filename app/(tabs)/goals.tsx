@@ -559,7 +559,7 @@ export default function Goals() {
 
   // Soft reset - clears selected timeline but preserves timeline list
   const softResetToTimelines = useCallback(() => {
-    setActiveTab('timelines');
+    setActiveTab('goals');
     setSelectedTimeline(null);
     setCurrentWeekIndex(0);
     setTimelineWeeks([]);
@@ -1424,16 +1424,12 @@ export default function Goals() {
       return renderSelectedTimeline();
     }
 
-    // Show other tabs
-    if (activeTab === 'northstar') {
-      return renderNorthStarTab();
-    }
-
-    if (activeTab === 'manage') {
+    // Show manage timelines tab
+    if (activeTab === 'manage-timelines') {
       return renderManageTab();
     }
 
-    // For timelines tab, if we have loaded timelines and auto-selected one,
+    // For goals tab, if we have loaded timelines and auto-selected one,
     // it will be shown above. Otherwise show the timeline list.
     return renderTimelinesTab();
   };
@@ -1454,8 +1450,8 @@ export default function Goals() {
 
       {renderMainContent()}
 
-      {/* FAB for creating goals - show when on timelines tab or viewing a timeline */}
-      {(activeTab === 'timelines' || selectedTimeline) && (
+      {/* FAB for creating goals - show when on goals tab or viewing a timeline */}
+      {(activeTab === 'goals' || selectedTimeline) && (
         <DraggableFab onPress={() => setCreateGoalModalVisible(true)} size={44}>
           <Plus size={28} color="#ffffff" />
         </DraggableFab>

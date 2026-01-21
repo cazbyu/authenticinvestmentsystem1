@@ -1,6 +1,6 @@
 // Goals State Reducer for improved performance and state management
 
-export type GoalBankTab = 'timelines' | 'goals';
+export type GoalBankTab = 'goals' | 'manage-timelines';
 
 export interface Timeline {
   id: string;
@@ -80,7 +80,7 @@ export type GoalsAction =
   | { type: 'SELECT_TIMELINE_AND_RESET'; payload: Timeline };
 
 export const initialGoalsState: GoalsState = {
-  activeTab: 'timelines',
+  activeTab: 'goals',
   selectedTimeline: null,
   currentWeekIndex: 0,
 
@@ -189,7 +189,7 @@ export function goalsReducer(state: GoalsState, action: GoalsAction): GoalsState
     case 'RESET_TO_TIMELINES':
       return {
         ...state,
-        activeTab: 'timelines',
+        activeTab: 'goals',
         selectedTimeline: null,
         currentWeekIndex: 0,
         timelineWeeks: [],
