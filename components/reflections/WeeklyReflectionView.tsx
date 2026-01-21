@@ -470,7 +470,7 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
                         const totalDeposits = role.task_count + role.deposit_idea_count;
                         return (
                           <Text key={role.role_id} style={[styles.roleText, { color: colors.text }]}>
-                            • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'deposit' : 'deposits'})
+                            • {role.role_label} ({totalDeposits} {totalDeposits === 1 ? 'act' : 'acts'})
                           </Text>
                         );
                       })}
@@ -509,7 +509,7 @@ export default function WeeklyReflectionView({ onNotePress }: WeeklyReflectionVi
                       </Text>
                       {aggregationData.domainBalance.map(domain => (
                         <Text key={domain.domain_id} style={[styles.domainText, { color: colors.text }]}>
-                          • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'deposit' : 'deposits'})
+                          • {domain.domain_name} ({domain.activity_count} {domain.activity_count === 1 ? 'act' : 'acts'})
                         </Text>
                       ))}
                     </View>

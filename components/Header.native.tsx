@@ -125,7 +125,7 @@ export function Header({
                   onPress={() => onViewChange && onViewChange('deposits')}
                 >
                   <Text style={[styles.toggleText, activeView === 'deposits' && { color: headerBackgroundColor }]}>
-                    Deposits
+                    Act
                   </Text>
                 </TouchableOpacity>
 

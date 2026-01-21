@@ -813,7 +813,7 @@ export function AnalyticsView({ scope }: AnalyticsViewProps) {
               {metrics.netBalance}%
             </Text>
             <Text style={styles.metricDescription}>
-              Deposits vs Withdrawals
+              Acts vs Withdrawals
             </Text>
           </View>
 
