@@ -70,11 +70,17 @@ export function DepositIdeaDetailModal({
   const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
   const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
   const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [roles, setRoles] = useState<any[]>([]);
+  const [domains, setDomains] = useState<any[]>([]);
+  const [keyRelationships, setKeyRelationships] = useState<any[]>([]);
+  const [loadingMetadata, setLoadingMetadata] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
 
   useEffect(() => {
     if (visible && depositIdea?.id) {
       fetchNotes();
       loadAssociatedItems();
+      fetchMetadata();
       setIsEditMode(false);
     }
   }, [visible, depositIdea?.id]);
@@ -141,6 +147,45 @@ export function DepositIdeaDetailModal({
     }
   };
 
+  const fetchMetadata = async () => {
+    if (!depositIdea?.id) return;
+    setLoadingMetadata(true);
+    try {
+      const supabase = getSupabaseClient();
+      const [rolesRes, domainsRes, krRes] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('role:0008-ap-roles(id, label, color)')
+          .eq('parent_id', depositIdea.id)
+          .eq('parent_type', 'depositIdea'),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('domain:0008-ap-domains(id, name)')
+          .eq('parent_id', depositIdea.id)
+          .eq('parent_type', 'depositIdea'),
+        supabase
+          .from('0008-ap-universal-key-relationships-join')
+          .select('key_relationship:0008-ap-key-relationships(id, name)')
+          .eq('parent_id', depositIdea.id)
+          .eq('parent_type', 'depositIdea')
+      ]);
+
+      if (rolesRes.data) {
+        setRoles(rolesRes.data.map((r: any) => r.role).filter(Boolean));
+      }
+      if (domainsRes.data) {
+        setDomains(domainsRes.data.map((d: any) => d.domain).filter(Boolean));
+      }
+      if (krRes.data) {
+        setKeyRelationships(krRes.data.map((kr: any) => kr.key_relationship).filter(Boolean));
+      }
+    } catch (error) {
+      console.error('Error fetching metadata:', error);
+    } finally {
+      setLoadingMetadata(false);
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert(
       'Delete Deposit Idea',
@@ -162,9 +207,12 @@ export function DepositIdeaDetailModal({
   };
 
   const handleActivate = () => {
-    if (depositIdea) {
-      onActivate(depositIdea);
-    }
+    if (!depositIdea) return;
+
+    // Open TaskEventForm pre-filled with deposit idea information
+    setIsActivating(true);
+    setFollowThroughPreSelectedType('task');
+    setFollowThroughFormVisible(true);
   };
 
   const handleFollowThroughPress = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
@@ -238,21 +286,19 @@ export function DepositIdeaDetailModal({
               )}
 
               {/* Alignment Chips - Roles, Domains, Key Relationships */}
-              {((depositIdea.roles && depositIdea.roles.length > 0) ||
-                (depositIdea.domains && depositIdea.domains.length > 0) ||
-                (depositIdea.keyRelationships && depositIdea.keyRelationships.length > 0)) && (
+              {(roles.length > 0 || domains.length > 0 || keyRelationships.length > 0) && (
                 <View style={styles.alignmentChips}>
-                  {depositIdea.roles?.map(role => (
+                  {roles.map(role => (
                     <View key={role.id} style={[styles.chip, { backgroundColor: role.color || '#e0e7ff' }]}>
                       <Text style={styles.chipText}>{role.label}</Text>
                     </View>
                   ))}
-                  {depositIdea.domains?.map(domain => (
-                    <View key={domain.id} style={[styles.chip, { backgroundColor: domain.color || '#dbeafe' }]}>
+                  {domains.map(domain => (
+                    <View key={domain.id} style={[styles.chip, { backgroundColor: '#dbeafe' }]}>
                       <Text style={styles.chipText}>{domain.name}</Text>
                     </View>
                   ))}
-                  {depositIdea.keyRelationships?.map(kr => (
+                  {keyRelationships.map(kr => (
                     <View key={kr.id} style={[styles.chip, { backgroundColor: '#fef3c7' }]}>
                       <Text style={styles.chipText}>{kr.name}</Text>
                     </View>
@@ -283,7 +329,15 @@ export function DepositIdeaDetailModal({
 
             {/* Body - Notes */}
             <View style={styles.bodySection}>
-              <Text style={styles.sectionLabel}>Notes</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionLabel}>Notes</Text>
+                <TouchableOpacity
+                  style={styles.addNoteButton}
+                  onPress={() => setIsEditMode(true)}
+                >
+                  <Text style={styles.addNoteButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
               {loadingNotes ? (
                 <ActivityIndicator size="small" color="#f59e0b" />
               ) : notes.length > 0 ? (
@@ -411,6 +465,7 @@ export function DepositIdeaDetailModal({
           visible={followThroughFormVisible}
           onClose={() => {
             setFollowThroughFormVisible(false);
+            setIsActivating(false);
             if (onRefreshAssociatedItems) {
               onRefreshAssociatedItems();
             }
@@ -419,6 +474,27 @@ export function DepositIdeaDetailModal({
           initialType={followThroughPreSelectedType}
           parentId={depositIdea.id}
           parentType="depositIdea"
+          initialData={isActivating ? {
+            title: depositIdea.title,
+            notes: notes.map(n => n.content).join('\n\n'),
+            selectedRoleIds: roles.map(r => r.id),
+            selectedDomainIds: domains.map(d => d.id),
+            selectedKeyRelationshipIds: keyRelationships.map(kr => kr.id),
+            sourceDepositIdeaId: depositIdea.id,
+          } : undefined}
+          onSubmitSuccess={() => {
+            setFollowThroughFormVisible(false);
+            if (isActivating) {
+              // Mark deposit idea as activated
+              Alert.alert('Success', 'Deposit idea activated as a task!');
+              onClose(); // Close the modal after activation
+            }
+            setIsActivating(false);
+            if (onRefreshAssociatedItems) {
+              onRefreshAssociatedItems();
+            }
+            loadAssociatedItems();
+          }}
         />
       )}
 
@@ -430,10 +506,10 @@ export function DepositIdeaDetailModal({
             initialData={{
               ...depositIdea,
               type: 'depositIdea',
-              roles: depositIdea.roles || [],
-              domains: depositIdea.domains || [],
+              roles: roles,
+              domains: domains,
               goals: depositIdea.goals || [],
-              keyRelationships: depositIdea.keyRelationships || [],
+              keyRelationships: keyRelationships,
             }}
             onClose={() => {
               setIsEditMode(false);
@@ -442,6 +518,7 @@ export function DepositIdeaDetailModal({
               setIsEditMode(false);
               await fetchNotes();
               await loadAssociatedItems();
+              await fetchMetadata();
               onRefreshAssociatedItems?.();
             }}
           />
@@ -670,5 +747,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#dc2626',
     fontWeight: '500',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  addNoteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f59e0b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  addNoteButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+    lineHeight: 20,
   },
 });
