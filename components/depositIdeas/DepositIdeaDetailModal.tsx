@@ -209,10 +209,40 @@ export function DepositIdeaDetailModal({
   const handleActivate = () => {
     if (!depositIdea) return;
 
-    // Open TaskEventForm pre-filled with deposit idea information
+    // Trigger activation workflow - open TaskEventForm to create the activating task
     setIsActivating(true);
     setFollowThroughPreSelectedType('task');
     setFollowThroughFormVisible(true);
+  };
+
+  const handleActivationComplete = async (createdTaskId: string, taskType: 'task' | 'event') => {
+    if (!depositIdea?.id) return;
+
+    try {
+      const supabase = getSupabaseClient();
+
+      // Update the deposit idea to mark it as activated
+      const { error: updateError } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .update({
+          activated_task_id: createdTaskId,
+          activated_at: new Date().toISOString(),
+          is_active: false,
+        })
+        .eq('id', depositIdea.id);
+
+      if (updateError) {
+        console.error('Error updating deposit idea:', updateError);
+        Alert.alert('Error', 'Failed to mark deposit idea as activated');
+        return;
+      }
+
+      Alert.alert('Success', `Deposit idea activated as a ${taskType}!`);
+      onClose(); // Close the modal after successful activation
+    } catch (error) {
+      console.error('Error in activation:', error);
+      Alert.alert('Error', 'Failed to complete activation');
+    }
   };
 
   const handleFollowThroughPress = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection') => {
@@ -244,7 +274,7 @@ export function DepositIdeaDetailModal({
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Deposit Idea</Text>
             <View style={styles.headerActions}>
-              {!isEditMode && !depositIdea.is_active && (
+              {!isEditMode && depositIdea.is_active && (
                 <TouchableOpacity
                   onPress={handleActivate}
                   style={styles.activateButton}
@@ -279,7 +309,7 @@ export function DepositIdeaDetailModal({
               </View>
 
               {/* Status Badge */}
-              {depositIdea.is_active && (
+              {!depositIdea.is_active && (
                 <View style={styles.statusBadge}>
                   <Text style={styles.statusBadgeText}>✓ Activated</Text>
                 </View>
@@ -472,28 +502,30 @@ export function DepositIdeaDetailModal({
             loadAssociatedItems();
           }}
           initialType={followThroughPreSelectedType}
-          parentId={depositIdea.id}
-          parentType="depositIdea"
+          parentId={isActivating ? undefined : depositIdea.id}
+          parentType={isActivating ? undefined : "depositIdea"}
           initialData={isActivating ? {
             title: depositIdea.title,
             notes: notes.map(n => n.content).join('\n\n'),
             selectedRoleIds: roles.map(r => r.id),
             selectedDomainIds: domains.map(d => d.id),
             selectedKeyRelationshipIds: keyRelationships.map(kr => kr.id),
-            sourceDepositIdeaId: depositIdea.id,
+            is_deposit_idea: true,
           } : undefined}
-          onSubmitSuccess={() => {
+          onSubmitSuccess={async (createdTask?: any) => {
             setFollowThroughFormVisible(false);
-            if (isActivating) {
-              // Mark deposit idea as activated
-              Alert.alert('Success', 'Deposit idea activated as a task!');
-              onClose(); // Close the modal after activation
+
+            if (isActivating && createdTask?.id) {
+              // Complete the activation workflow
+              await handleActivationComplete(createdTask.id, createdTask.type || 'task');
             }
+
             setIsActivating(false);
             if (onRefreshAssociatedItems) {
               onRefreshAssociatedItems();
             }
-            loadAssociatedItems();
+            await loadAssociatedItems();
+            await fetchMetadata();
           }}
         />
       )}
