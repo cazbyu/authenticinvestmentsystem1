@@ -15,6 +15,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
+import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
 
 interface GoalDetailViewProps {
   goal: UnifiedGoal;
@@ -26,11 +27,6 @@ interface GoalDetailViewProps {
 
 type TabType = 'act' | 'ideas' | 'journal' | 'analytics';
 
-interface RecurringAction extends Task {
-  weekly_completion_count?: number;
-  weekly_target?: number;
-}
-
 export function GoalDetailView({
   goal,
   onClose,
@@ -41,8 +37,8 @@ export function GoalDetailView({
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('act');
   const [loading, setLoading] = useState(true);
-  const [recurringActions, setRecurringActions] = useState<RecurringAction[]>([]);
-  const [oneTimeActions, setOneTimeActions] = useState<Task[]>([]);
+  const [recurringActions, setRecurringActions] = useState<RecurringActionResult[]>([]);
+  const [oneTimeActions, setOneTimeActions] = useState<OneTimeActionResult[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -54,84 +50,23 @@ export function GoalDetailView({
   const fetchActions = async () => {
     setLoading(true);
     try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log('[GoalDetailView] Fetching actions for goal:', goal.id, 'type:', goal.goal_type);
 
-      const goalJoinColumn = goal.goal_type === '1y'
-        ? 'one_yr_goal_id'
-        : goal.goal_type === '12week'
-        ? 'twelve_wk_goal_id'
-        : 'custom_goal_id';
+      const result = await fetchGoalActions(goal.id, goal.goal_type);
 
-      const { data: goalJoins, error: joinError } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('task_id')
-        .eq(goalJoinColumn, goal.id)
-        .not('task_id', 'is', null);
+      console.log('[GoalDetailView] Fetch result:', {
+        recurringCount: result.recurringActions.length,
+        oneTimeCount: result.oneTimeActions.length,
+      });
 
-      if (joinError) throw joinError;
-
-      const taskIds = goalJoins?.map(j => j.task_id).filter(Boolean) || [];
-
-      if (taskIds.length === 0) {
-        setRecurringActions([]);
-        setOneTimeActions([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data: tasks, error: tasksError } = await supabase
-        .from('0008-ap-tasks')
-        .select('*')
-        .in('id', taskIds)
-        .eq('user_id', user.id)
-        .neq('is_deleted', true)
-        .order('title');
-
-      if (tasksError) throw tasksError;
-
-      const recurring: RecurringAction[] = [];
-      const oneTime: Task[] = [];
-
-      for (const task of tasks || []) {
-        if (task.recurrence_rule) {
-          const { data: weekCompletion } = await supabase.rpc(
-            'get_weekly_completion_count_with_target',
-            {
-              p_task_id: task.id,
-              p_week_start: getWeekStart(),
-            }
-          );
-
-          recurring.push({
-            ...task,
-            weekly_completion_count: weekCompletion?.[0]?.completion_count || 0,
-            weekly_target: weekCompletion?.[0]?.weekly_target || 0,
-          });
-        } else if (task.status === 'completed') {
-          oneTime.push(task);
-        }
-      }
-
-      setRecurringActions(recurring);
-      setOneTimeActions(oneTime);
+      setRecurringActions(result.recurringActions);
+      setOneTimeActions(result.oneTimeActions);
     } catch (error) {
-      console.error('Error fetching goal actions:', error);
+      console.error('[GoalDetailView] Error fetching goal actions:', error);
       Alert.alert('Error', 'Failed to load actions for this goal');
     } finally {
       setLoading(false);
     }
-  };
-
-  const getWeekStart = () => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + diff);
-    monday.setHours(0, 0, 0, 0);
-    return toLocalISOString(monday);
   };
 
   const handleToggleCompletion = async (
@@ -284,16 +219,27 @@ export function GoalDetailView({
             {recurringActions.map(action => (
               <View key={action.id} style={styles.actionCard}>
                 <TaskCard
-                  task={action}
+                  task={action as any}
                   onToggleDay={handleToggleCompletion}
                   onPress={() => {}}
                   showWeekBubbles={true}
                 />
-                {action.weekly_completion_count !== undefined && (
+                <View style={styles.actionMetrics}>
                   <Text style={[styles.weeklyProgress, { color: colors.textSecondary }]}>
-                    {action.weekly_completion_count}/{action.weekly_target || 0} this week
+                    {action.weeklyActual}/{action.weeklyTarget} this week
                   </Text>
-                )}
+                  {action.completedDates.length > 0 && (
+                    <View style={styles.completedDatesContainer}>
+                      {action.completedDates.slice(0, 7).map((date, idx) => (
+                        <View key={idx} style={[styles.dateBubble, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.dateBubbleText}>
+                            {new Date(date).toLocaleDateString('en-US', { weekday: 'short' })[0]}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
               </View>
             ))}
           </View>
@@ -319,11 +265,18 @@ export function GoalDetailView({
                   <Text style={[styles.oneTimeTitle, { color: colors.text }]}>
                     {action.title}
                   </Text>
-                  {action.completed_at && (
-                    <Text style={[styles.oneTimeDate, { color: colors.textSecondary }]}>
-                      Completed: {formatLocalDate(action.completed_at)}
-                    </Text>
-                  )}
+                  <View style={styles.oneTimeMetadata}>
+                    {action.completedAt && (
+                      <Text style={[styles.oneTimeDate, { color: colors.textSecondary }]}>
+                        {formatLocalDate(action.completedAt)}
+                      </Text>
+                    )}
+                    <View style={[styles.pointsBadge, { backgroundColor: colors.primary + '20' }]}>
+                      <Text style={[styles.pointsText, { color: colors.primary }]}>
+                        +{action.pointsEarned} pts
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             ))}
@@ -603,10 +556,30 @@ const styles = StyleSheet.create({
   actionCard: {
     marginBottom: 16,
   },
-  weeklyProgress: {
-    fontSize: 13,
+  actionMetrics: {
     marginTop: 8,
     marginLeft: 16,
+  },
+  weeklyProgress: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  completedDatesContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  dateBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateBubbleText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   oneTimeCard: {
     flexDirection: 'row',
@@ -635,10 +608,26 @@ const styles = StyleSheet.create({
   oneTimeTitle: {
     fontSize: 15,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  oneTimeMetadata: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   oneTimeDate: {
     fontSize: 13,
+    flex: 1,
+  },
+  pointsBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  pointsText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   emptyState: {
     alignItems: 'center',
