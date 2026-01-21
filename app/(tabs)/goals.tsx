@@ -11,6 +11,7 @@ const ManageGlobalTimelinesModal = lazy(() => import('@/components/timelines/Man
 const ManageTimelinesView = lazy(() => import('@/components/timelines/ManageTimelinesView').then(m => ({ default: m.ManageTimelinesView })));
 const WithdrawalForm = lazy(() => import('@/components/journal/WithdrawalForm').then(m => ({ default: m.WithdrawalForm })));
 import { GoalBankTabbedHeader, GoalBankTab } from '@/components/goals/GoalBankTabbedHeader';
+import { MyGoalsView, UnifiedGoal } from '@/components/goals/MyGoalsView';
 import { NorthStarQuickView } from '@/components/northStar/NorthStarQuickView';
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -86,6 +87,7 @@ export default function Goals() {
   const [loadingNorthStar, setLoadingNorthStar] = useState(false);
   const [northStarEditorVisible, setNorthStarEditorVisible] = useState(false);
   const [northStarInitialSection, setNorthStarInitialSection] = useState<'mission' | 'vision' | 'goals'>('mission');
+  const [myGoalsRefreshTrigger, setMyGoalsRefreshTrigger] = useState(0);
 
   // Import functions from useGoalProgress hook (but NOT fetchGoalActionsForWeek or completion functions - we handle those locally)
   const {
@@ -1180,81 +1182,17 @@ export default function Goals() {
     fetchNorthStarData();
   };
 
+  const handleGoalPress = useCallback((goal: UnifiedGoal) => {
+    console.log('Goal pressed:', goal.id, goal.title);
+    Alert.alert('Goal Details', `Opening details for: ${goal.title}\n\n(Detail view coming in next update)`);
+  }, []);
+
   const renderTimelinesTab = () => (
     <View style={styles.content} pointerEvents="box-none">
-      <View style={styles.sectionHeaderContainer}>
-        <Text style={styles.sectionHeaderTitle}>Active Timelines</Text>
-        <Text style={styles.sectionHeaderSubtitle}>
-          Select a timeline to view and manage its goals
-        </Text>
-      </View>
-
-      <ScrollView style={styles.timelinesList}>
-        {loadingTimelines ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0078d4" />
-            <Text style={styles.loadingText}>Loading timelines...</Text>
-          </View>
-        ) : timelinesWithGoals.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Target size={64} color="#6b7280" />
-            <Text style={styles.emptyTitle}>No Active Timelines</Text>
-            <Text style={styles.emptyText}>
-              Create a timeline to start tracking your goals
-            </Text>
-            <View style={styles.timelineButtons}>
-              <TouchableOpacity
-                style={styles.createTimelineButton}
-                onPress={() => setManageCustomTimelinesModalVisible(true)}
-              >
-                <Plus size={20} color="#ffffff" />
-                <Text style={styles.createTimelineButtonText}>Custom Timeline</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.createGlobalTimelineButton}
-                onPress={() => setManageGlobalTimelinesModalVisible(true)}
-              >
-                <Users size={20} color="#ffffff" />
-                <Text style={styles.createGlobalTimelineButtonText}>12-Week Goals</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.timelinesGrid}>
-            {timelinesWithGoals.map(timeline => (
-              <TouchableOpacity
-                key={timeline.id}
-                style={[
-                  styles.timelineCard,
-                  { borderLeftColor: colors.primary }
-                ]}
-                onPress={() => handleTimelineSelect(timeline)}
-              >
-                <View style={styles.timelineHeader}>
-                  <Text style={styles.timelineTitle} numberOfLines={2}>
-                    {timeline.title || 'Untitled Timeline'}
-                  </Text>
-                  <View style={styles.timelineType}>
-                    <Text style={styles.timelineTypeText}>
-                      {timeline.source === 'global' ? 'Global' : 'Custom'}
-                    </Text>
-                  </View>
-                </View>
-                
-                <Text style={styles.timelineStats}>
-                  {timeline.goalCount || 0} goals • {timeline.daysRemaining || 0} days left
-                </Text>
-
-                {timeline.start_date && timeline.end_date && (
-                  <Text style={styles.timelineDates}>
-                    {formatDateDisplay(timeline.start_date)} - {formatDateDisplay(timeline.end_date)}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+      <MyGoalsView
+        onGoalPress={handleGoalPress}
+        refreshTrigger={myGoalsRefreshTrigger}
+      />
     </View>
   );
 
@@ -1273,6 +1211,7 @@ export default function Goals() {
   const renderManageTab = () => (
     <ManageTimelinesView
       onUpdate={() => {
+        setMyGoalsRefreshTrigger(prev => prev + 1);
         fetchAllTimelines();
         if (selectedTimeline) {
           fetchTimelineGoals(selectedTimeline);
@@ -1464,7 +1403,10 @@ export default function Goals() {
           onClose={() => setCreateGoalModalVisible(false)}
           onSubmitSuccess={() => {
             setCreateGoalModalVisible(false);
-            fetchTimelineGoals(selectedTimeline!);
+            setMyGoalsRefreshTrigger(prev => prev + 1);
+            if (selectedTimeline) {
+              fetchTimelineGoals(selectedTimeline);
+            }
             fetchAllTimelines();
           }}
           createTwelveWeekGoal={createTwelveWeekGoal}
@@ -1478,7 +1420,10 @@ export default function Goals() {
           onClose={() => setEditGoalModalVisible(false)}
           onUpdate={() => {
             setEditGoalModalVisible(false);
-            fetchTimelineGoals(selectedTimeline!);
+            setMyGoalsRefreshTrigger(prev => prev + 1);
+            if (selectedTimeline) {
+              fetchTimelineGoals(selectedTimeline);
+            }
             fetchAllTimelines();
           }}
           goal={selectedGoal}
@@ -1517,6 +1462,7 @@ export default function Goals() {
           onClose={() => setManageCustomTimelinesModalVisible(false)}
           onUpdate={async () => {
             console.log('[Goals] ManageCustomTimelinesModal onUpdate called');
+            setMyGoalsRefreshTrigger(prev => prev + 1);
             await fetchAllTimelines();
             if (selectedTimeline) {
               console.log('[Goals] Refreshing selected timeline goals');
@@ -1531,6 +1477,7 @@ export default function Goals() {
           onClose={() => setManageGlobalTimelinesModalVisible(false)}
           onUpdate={async () => {
             console.log('[Goals] ManageGlobalTimelinesModal onUpdate called');
+            setMyGoalsRefreshTrigger(prev => prev + 1);
             await fetchAllTimelines();
             if (selectedTimeline) {
               console.log('[Goals] Refreshing selected timeline goals');
