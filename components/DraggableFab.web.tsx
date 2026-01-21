@@ -99,9 +99,7 @@ export function DraggableFab({
 
 const styles = StyleSheet.create({
   fab: {
-    position: 'absolute',
-    bottom: 100,
-    right: 20,
+    position: 'fixed',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
