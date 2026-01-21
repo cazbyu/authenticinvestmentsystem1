@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, TextInput } from 'react-native';
 import { X, Calendar, CheckSquare, Edit, Trash2, Plus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
@@ -53,6 +53,9 @@ export function ActionDetailsModal({
   const [roles, setRoles] = useState<any[]>([]);
   const [domains, setDomains] = useState<any[]>([]);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
+  const [addNoteModalVisible, setAddNoteModalVisible] = useState(false);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -181,6 +184,55 @@ export function ActionDetailsModal({
     setFollowThroughFormVisible(true);
   };
 
+  const handleSaveNote = async () => {
+    if (!newNoteText.trim() || !task?.id) return;
+
+    setSavingNote(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not found');
+
+      // Create the note
+      const { data: noteData, error: noteError } = await supabase
+        .from('0008-ap-notes')
+        .insert({
+          user_id: user.id,
+          content: newNoteText.trim(),
+        })
+        .select()
+        .single();
+
+      if (noteError) throw noteError;
+
+      // Link note to task
+      const { error: noteJoinError } = await supabase
+        .from('0008-ap-universal-notes-join')
+        .insert({
+          parent_id: task.id,
+          parent_type: 'task',
+          note_id: noteData.id,
+          user_id: user.id,
+        });
+
+      if (noteJoinError) throw noteJoinError;
+
+      // Refresh notes
+      await fetchTaskNotes();
+
+      // Close modal and reset
+      setAddNoteModalVisible(false);
+      setNewNoteText('');
+
+      Alert.alert('Success', 'Note added successfully!');
+    } catch (error) {
+      console.error('Error saving note:', error);
+      Alert.alert('Error', 'Failed to save note');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   const formatDateTime = (dateString: string | null, dateOnly = false): string => {
     if (!dateString) return '—';
     const date = new Date(dateString);
@@ -293,7 +345,7 @@ export function ActionDetailsModal({
                 <Text style={styles.sectionLabel}>Notes</Text>
                 <TouchableOpacity
                   style={styles.addNoteButton}
-                  onPress={() => setIsEditMode(true)}
+                  onPress={() => setAddNoteModalVisible(true)}
                 >
                   <Text style={styles.addNoteButtonText}>+</Text>
                 </TouchableOpacity>
@@ -387,18 +439,26 @@ export function ActionDetailsModal({
             {/* Footer - Metadata */}
             <View style={styles.footerSection}>
               <View style={styles.metadataGrid}>
-                {task.due_date && (
+                {task.type === 'task' && task.due_date && (
+                  <View style={styles.metadataItemWide}>
+                    <View style={styles.metadataRow}>
+                      <View style={styles.metadataHalf}>
+                        <Text style={styles.metadataLabel}>Due Date</Text>
+                        <Text style={styles.metadataValue}>{formatDateTime(task.due_date, true)}</Text>
+                      </View>
+                      <View style={styles.metadataHalf}>
+                        <Text style={styles.metadataLabel}>Time Due</Text>
+                        <Text style={styles.metadataValue}>
+                          {task.is_all_day ? 'Anytime' : formatTime(task.start_time)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+                {task.type === 'event' && task.due_date && (
                   <View style={styles.metadataItem}>
                     <Text style={styles.metadataLabel}>Due Date</Text>
                     <Text style={styles.metadataValue}>{formatDateTime(task.due_date, true)}</Text>
-                  </View>
-                )}
-                {task.type === 'task' && task.due_date && (
-                  <View style={styles.metadataItem}>
-                    <Text style={styles.metadataLabel}>Time Due</Text>
-                    <Text style={styles.metadataValue}>
-                      {task.is_all_day ? 'Anytime' : formatTime(task.start_time)}
-                    </Text>
                   </View>
                 )}
                 {task.type === 'event' && task.start_time && (
@@ -494,6 +554,62 @@ export function ActionDetailsModal({
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
+
+      {/* Add Note Modal */}
+      <Modal visible={addNoteModalVisible} transparent animationType="fade">
+        <View style={styles.noteModalOverlay}>
+          <View style={styles.noteModalContainer}>
+            <View style={styles.noteModalHeader}>
+              <Text style={styles.noteModalTitle}>Add Note</Text>
+              <TouchableOpacity onPress={() => {
+                setAddNoteModalVisible(false);
+                setNewNoteText('');
+              }}>
+                <X size={24} color="#1f2937" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.noteInput}
+              value={newNoteText}
+              onChangeText={setNewNoteText}
+              placeholder="Enter your note..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={4}
+              autoFocus
+            />
+
+            <View style={styles.noteModalFooter}>
+              <TouchableOpacity
+                style={[styles.noteModalButton, styles.noteCancelButton]}
+                onPress={() => {
+                  setAddNoteModalVisible(false);
+                  setNewNoteText('');
+                }}
+              >
+                <Text style={styles.noteCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.noteModalButton,
+                  styles.noteSaveButton,
+                  (!newNoteText.trim() || savingNote) && styles.noteSaveButtonDisabled
+                ]}
+                onPress={handleSaveNote}
+                disabled={!newNoteText.trim() || savingNote}
+              >
+                {savingNote ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.noteSaveButtonText}>Save Note</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -672,6 +788,16 @@ const styles = StyleSheet.create({
   metadataItem: {
     width: '48%',
   },
+  metadataItemWide: {
+    width: '100%',
+  },
+  metadataRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  metadataHalf: {
+    flex: 1,
+  },
   metadataLabel: {
     fontSize: 12,
     color: '#9ca3af',
@@ -695,5 +821,77 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#dc2626',
     fontWeight: '500',
+  },
+  noteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  noteModalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  noteModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  noteModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  noteInput: {
+    padding: 20,
+    fontSize: 16,
+    color: '#1f2937',
+    minHeight: 120,
+    textAlignVertical: 'top',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  noteModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    padding: 20,
+  },
+  noteModalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  noteCancelButton: {
+    backgroundColor: '#f3f4f6',
+  },
+  noteCancelButtonText: {
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noteSaveButton: {
+    backgroundColor: '#3b82f6',
+  },
+  noteSaveButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  noteSaveButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
