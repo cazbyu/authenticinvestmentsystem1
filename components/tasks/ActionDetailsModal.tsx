@@ -138,7 +138,7 @@ export function ActionDetailsModal({
           .eq('parent_type', 'task'),
         supabase
           .from('0008-ap-universal-domains-join')
-          .select('domain:0008-ap-domains(id, name, color)')
+          .select('domain:0008-ap-domains(id, name)')
           .eq('parent_id', task.id)
           .eq('parent_type', 'task')
       ]);
@@ -259,7 +259,7 @@ export function ActionDetailsModal({
                     </View>
                   ))}
                   {domains.map(domain => (
-                    <View key={domain.id} style={[styles.chip, { backgroundColor: domain.color || '#dbeafe' }]}>
+                    <View key={domain.id} style={[styles.chip, { backgroundColor: '#dbeafe' }]}>
                       <Text style={styles.chipText}>{domain.name}</Text>
                     </View>
                   ))}
