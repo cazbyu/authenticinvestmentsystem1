@@ -12,6 +12,7 @@ const ManageTimelinesView = lazy(() => import('@/components/timelines/ManageTime
 const WithdrawalForm = lazy(() => import('@/components/journal/WithdrawalForm').then(m => ({ default: m.WithdrawalForm })));
 import { GoalBankTabbedHeader, GoalBankTab } from '@/components/goals/GoalBankTabbedHeader';
 import { MyGoalsView, UnifiedGoal } from '@/components/goals/MyGoalsView';
+import { GoalDetailView } from '@/components/goals/GoalDetailView';
 import { NorthStarQuickView } from '@/components/northStar/NorthStarQuickView';
 import { NorthStarEditor } from '@/components/northStar/NorthStarEditor';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -88,6 +89,7 @@ export default function Goals() {
   const [northStarEditorVisible, setNorthStarEditorVisible] = useState(false);
   const [northStarInitialSection, setNorthStarInitialSection] = useState<'mission' | 'vision' | 'goals'>('mission');
   const [myGoalsRefreshTrigger, setMyGoalsRefreshTrigger] = useState(0);
+  const [selectedGoalForDetail, setSelectedGoalForDetail] = useState<UnifiedGoal | null>(null);
 
   // Import functions from useGoalProgress hook (but NOT fetchGoalActionsForWeek or completion functions - we handle those locally)
   const {
@@ -1184,7 +1186,20 @@ export default function Goals() {
 
   const handleGoalPress = useCallback((goal: UnifiedGoal) => {
     console.log('Goal pressed:', goal.id, goal.title);
-    Alert.alert('Goal Details', `Opening details for: ${goal.title}\n\n(Detail view coming in next update)`);
+    setSelectedGoalForDetail(goal);
+  }, []);
+
+  const handleCloseGoalDetail = useCallback(() => {
+    setSelectedGoalForDetail(null);
+  }, []);
+
+  const handleGoalDetailUpdated = useCallback(() => {
+    setMyGoalsRefreshTrigger(prev => prev + 1);
+    refreshScore(true);
+  }, [refreshScore]);
+
+  const handleAddActionFromGoalDetail = useCallback(() => {
+    setCreateGoalModalVisible(true);
   }, []);
 
   const renderTimelinesTab = () => (
@@ -1602,6 +1617,19 @@ export default function Goals() {
           />
         </SafeAreaView>
       </Modal>
+
+      {/* Goal Detail View Modal */}
+      {selectedGoalForDetail && (
+        <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
+          <GoalDetailView
+            goal={selectedGoalForDetail}
+            onClose={handleCloseGoalDetail}
+            onGoalUpdated={handleGoalDetailUpdated}
+            onAddAction={handleAddActionFromGoalDetail}
+            authenticScore={authenticScore}
+          />
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
