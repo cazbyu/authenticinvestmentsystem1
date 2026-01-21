@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image } from 'react-native';
-import { X, Calendar, CheckSquare, Edit, Trash2 } from 'lucide-react-native';
+import { X, Calendar, CheckSquare, Edit, Trash2, Plus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -289,7 +289,15 @@ export function ActionDetailsModal({
 
             {/* Body - Notes */}
             <View style={styles.bodySection}>
-              <Text style={styles.sectionLabel}>Notes</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionLabel}>Notes</Text>
+                <TouchableOpacity
+                  style={styles.addNoteButton}
+                  onPress={() => setIsEditMode(true)}
+                >
+                  <Text style={styles.addNoteButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
               {loadingNotes ? (
                 <ActivityIndicator size="small" color="#3b82f6" />
               ) : taskNotes.length > 0 ? (
@@ -385,13 +393,21 @@ export function ActionDetailsModal({
                     <Text style={styles.metadataValue}>{formatDateTime(task.due_date, true)}</Text>
                   </View>
                 )}
-                {task.start_time && (
+                {task.type === 'task' && task.due_date && (
+                  <View style={styles.metadataItem}>
+                    <Text style={styles.metadataLabel}>Time Due</Text>
+                    <Text style={styles.metadataValue}>
+                      {task.is_all_day ? 'Anytime' : formatTime(task.start_time)}
+                    </Text>
+                  </View>
+                )}
+                {task.type === 'event' && task.start_time && (
                   <View style={styles.metadataItem}>
                     <Text style={styles.metadataLabel}>Start Time</Text>
                     <Text style={styles.metadataValue}>{formatTime(task.start_time)}</Text>
                   </View>
                 )}
-                {task.end_time && (
+                {task.type === 'event' && task.end_time && (
                   <View style={styles.metadataItem}>
                     <Text style={styles.metadataLabel}>End Time</Text>
                     <Text style={styles.metadataValue}>{formatTime(task.end_time)}</Text>
@@ -561,6 +577,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  addNoteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  addNoteButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+    lineHeight: 20,
   },
   notesContainer: {
     gap: 12,
