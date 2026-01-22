@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Switch,
 } from 'react-native';
-import { X, Target, Calendar, ChevronDown, Paperclip } from 'lucide-react-native';
+import { X, Target, Calendar, ChevronDown } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 
@@ -68,6 +68,7 @@ interface CreateGoalModalProps {
   cachedRoles?: Role[];
   cachedDomains?: Domain[];
   cachedKeyRelationships?: KeyRelationship[];
+  cachedOneYearGoals?: OneYearGoal[];
 }
 
 export function CreateGoalModal({
@@ -80,7 +81,8 @@ export function CreateGoalModal({
   allTimelines,
   cachedRoles = [],
   cachedDomains = [],
-  cachedKeyRelationships = []
+  cachedKeyRelationships = [],
+  cachedOneYearGoals = []
 }: CreateGoalModalProps) {
   // Timeframe state
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeType>('12week');
@@ -127,6 +129,7 @@ export function CreateGoalModal({
       setAllRoles(cachedRoles);
       setAllDomains(cachedDomains);
       setAllKeyRelationships(cachedKeyRelationships);
+      setOneYearGoals(cachedOneYearGoals);
 
       // Fetch remaining data that isn't cached
       fetchRemainingData();
@@ -150,74 +153,37 @@ export function CreateGoalModal({
         resetForm();
       }
     }
-  }, [visible, selectedTimeline, allTimelines, cachedRoles, cachedDomains, cachedKeyRelationships]);
+  }, [visible, selectedTimeline, allTimelines, cachedRoles, cachedDomains, cachedKeyRelationships, cachedOneYearGoals]);
 
   const fetchRemainingData = async () => {
     try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // Only fetch 1-year goals if not already cached
+      if (cachedOneYearGoals.length === 0) {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: oneYearGoalsData } = await supabase
+            .from('0008-ap-goals-1y')
+            .select('id, title, year_target_date')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .order('title');
 
-      const [
-        { data: oneYearGoalsData },
-        { data: globalTimelinesData },
-        { data: customTimelinesData }
-      ] = await Promise.all([
-        supabase
-          .from('0008-ap-goals-1y')
-          .select('id, title, year_target_date')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .order('title'),
-        supabase
-          .from('0008-ap-user-global-timelines')
-          .select(`
-            id,
-            status,
-            0008-ap-global-cycles!inner(
-              id,
-              title,
-              start_date,
-              end_date
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('status', 'active'),
-        supabase
-          .from('0008-ap-custom-timelines')
-          .select('id, name, start_date, end_date, timeline_type')
-          .eq('user_id', user.id)
-          .eq('is_archived', false)
-          .order('name')
-      ]);
+          setOneYearGoals(oneYearGoalsData || []);
+        }
+      }
 
-      setOneYearGoals(oneYearGoalsData || []);
+      // Extract timelines from the already-loaded allTimelines prop
+      const globalTimelines = allTimelines.filter(t => t.source === 'global');
+      const customTls = allTimelines.filter(t => t.source === 'custom');
 
-      // Process global timelines
-      const globalTimelines: Timeline[] = (globalTimelinesData || []).map((ugt: any) => ({
-        id: ugt.id,
-        source: 'global' as const,
-        title: ugt['0008-ap-global-cycles'].title,
-        start_date: ugt['0008-ap-global-cycles'].start_date,
-        end_date: ugt['0008-ap-global-cycles'].end_date,
-      }));
       setActiveGlobalTimelines(globalTimelines);
+      setCustomTimelines(customTls);
 
-      // Auto-select first global timeline
+      // Auto-select first global timeline if none selected
       if (globalTimelines.length > 0 && !selectedGlobalTimelineId) {
         setSelectedGlobalTimelineId(globalTimelines[0].id);
       }
-
-      // Process custom timelines
-      const customTls: Timeline[] = (customTimelinesData || []).map(ct => ({
-        id: ct.id,
-        source: 'custom' as const,
-        title: ct.name,
-        start_date: ct.start_date,
-        end_date: ct.end_date,
-        timeline_type: ct.timeline_type,
-      }));
-      setCustomTimelines(customTls);
 
     } catch (error) {
       console.error('Error fetching remaining data:', error);
@@ -860,12 +826,7 @@ export function CreateGoalModal({
               )}
 
               <View style={styles.field}>
-                <View style={styles.labelWithIcon}>
-                  <Text style={styles.label}>Notes</Text>
-                  <TouchableOpacity style={styles.attachmentButton}>
-                    <Paperclip size={20} color="#6b7280" />
-                  </TouchableOpacity>
-                </View>
+                <Text style={styles.label}>Notes</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={formData.notes}
@@ -1226,14 +1187,5 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     flex: 1,
     marginRight: 8,
-  },
-  labelWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  attachmentButton: {
-    padding: 4,
   },
 });

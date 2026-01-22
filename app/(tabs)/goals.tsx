@@ -96,11 +96,13 @@ export default function Goals() {
     roles: any[];
     domains: any[];
     keyRelationships: any[];
+    oneYearGoals: any[];
     loaded: boolean;
   }>({
     roles: [],
     domains: [],
     keyRelationships: [],
+    oneYearGoals: [],
     loaded: false
   });
 
@@ -870,7 +872,8 @@ export default function Goals() {
       const [
         { data: rolesData },
         { data: domainsData },
-        { data: krData }
+        { data: krData },
+        { data: oneYearGoalsData }
       ] = await Promise.all([
         supabase.from('0008-ap-roles')
           .select('id, label, color')
@@ -882,13 +885,19 @@ export default function Goals() {
           .order('name'),
         supabase.from('0008-ap-key-relationships')
           .select('id, name, role_id')
+          .eq('user_id', user.id),
+        supabase.from('0008-ap-goals-1y')
+          .select('id, title, year_target_date')
           .eq('user_id', user.id)
+          .eq('status', 'active')
+          .order('title')
       ]);
 
       setFormDataCache({
         roles: rolesData || [],
         domains: domainsData || [],
         keyRelationships: krData || [],
+        oneYearGoals: oneYearGoalsData || [],
         loaded: true
       });
     } catch (error) {
@@ -1482,6 +1491,7 @@ export default function Goals() {
           cachedRoles={formDataCache.roles}
           cachedDomains={formDataCache.domains}
           cachedKeyRelationships={formDataCache.keyRelationships}
+          cachedOneYearGoals={formDataCache.oneYearGoals}
         />
 
         <EditGoalModal
