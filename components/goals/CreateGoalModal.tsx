@@ -97,9 +97,6 @@ export function CreateGoalModal({
     selectedDomainIds: [] as string[],
     selectedKeyRelationshipIds: [] as string[],
     parentGoalId: null as string | null,
-    weeklyTarget: '',
-    totalTarget: '',
-    completionReward: '',
   });
 
   // Data states
@@ -237,9 +234,6 @@ export function CreateGoalModal({
       selectedDomainIds: [],
       selectedKeyRelationshipIds: [],
       parentGoalId: null,
-      weeklyTarget: '',
-      totalTarget: '',
-      completionReward: '',
     });
     setSelectedTimeframe('12week');
     setSelectedGlobalTimelineId(null);
@@ -384,9 +378,6 @@ export function CreateGoalModal({
             title: formData.title.trim(),
             description: formData.description.trim() || null,
             status: 'active',
-            weekly_target: formData.weeklyTarget ? parseInt(formData.weeklyTarget) : null,
-            total_target: formData.totalTarget ? parseInt(formData.totalTarget) : null,
-            completion_reward: formData.completionReward.trim() || null,
             parent_goal_id: formData.parentGoalId,
             parent_goal_type: formData.parentGoalId ? '1y' : null,
           })
@@ -416,9 +407,6 @@ export function CreateGoalModal({
             title: formData.title.trim(),
             description: formData.description.trim() || null,
             status: 'active',
-            weekly_target: formData.weeklyTarget ? parseInt(formData.weeklyTarget) : null,
-            total_target: formData.totalTarget ? parseInt(formData.totalTarget) : null,
-            completion_reward: formData.completionReward.trim() || null,
             parent_goal_id: formData.parentGoalId,
             parent_goal_type: formData.parentGoalId ? '1y' : null,
           })
@@ -756,8 +744,6 @@ export function CreateGoalModal({
     );
   };
 
-  const shouldShowTargets = selectedTimeframe === '12week' || selectedTimeframe === 'custom';
-
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
@@ -810,46 +796,6 @@ export function CreateGoalModal({
               </View>
 
               {renderParentGoalSelector()}
-
-              {shouldShowTargets && (
-                <>
-                  <View style={styles.field}>
-                    <Text style={styles.label}>Weekly Target (optional)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={formData.weeklyTarget}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, weeklyTarget: text }))}
-                      placeholder="e.g., 5"
-                      placeholderTextColor="#9ca3af"
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.field}>
-                    <Text style={styles.label}>Total Target (optional)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={formData.totalTarget}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, totalTarget: text }))}
-                      placeholder="e.g., 60"
-                      placeholderTextColor="#9ca3af"
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.field}>
-                    <Text style={styles.label}>Completion Reward (optional)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={formData.completionReward}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, completionReward: text }))}
-                      placeholder="What will you celebrate with?"
-                      placeholderTextColor="#9ca3af"
-                      maxLength={200}
-                    />
-                  </View>
-                </>
-              )}
 
               <View style={styles.field}>
                 <Text style={styles.label}>Wellness Zones</Text>
