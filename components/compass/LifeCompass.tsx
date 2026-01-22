@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, Dimensions, Platform, TouchableOpacity } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -6,6 +6,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import Svg, {
   G,
@@ -135,31 +136,44 @@ export function LifeCompass({
   });
 
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
-  const screenWidth = Dimensions.get('window').width;
-  const responsiveSize = Math.min(size, screenWidth * 0.8);
+  const lastUpdateTime = useSharedValue(0);
+
+  const responsiveSize = useMemo(() => {
+    const screenWidth = Dimensions.get('window').width;
+    return Math.min(size, screenWidth * 0.8);
+  }, [size]);
 
   useEffect(() => {
     const showColor = compassState.bigSpindleAngle === 90;
-    setCompassState(prev => ({ ...prev, showColorRing: showColor }));
+    if (compassState.showColorRing !== showColor) {
+      setCompassState(prev => ({ ...prev, showColorRing: showColor }));
+    }
 
     colorRingOpacity.value = withTiming(showColor ? 1 : 0, {
       duration: 400,
     });
-  }, [compassState.bigSpindleAngle]);
+  }, [compassState.bigSpindleAngle, compassState.showColorRing, colorRingOpacity]);
 
   useEffect(() => {
     if (onZoneChange) {
       onZoneChange(compassState.activeZone);
     }
-  }, [compassState.activeZone, onZoneChange]);
+  }, [compassState.activeZone]);
 
   useEffect(() => {
     if (onSlotSelect) {
       onSlotSelect(compassState.focusedSlot);
     }
-  }, [compassState.focusedSlot, onSlotSelect]);
+  }, [compassState.focusedSlot]);
 
-  const handleGoldSpindleSnap = (direction: 0 | 90 | 180 | 270) => {
+  useEffect(() => {
+    return () => {
+      cancelAnimation(colorRingOpacity);
+      cancelAnimation(rotation);
+    };
+  }, [colorRingOpacity, rotation]);
+
+  const handleGoldSpindleSnap = useCallback((direction: 0 | 90 | 180 | 270) => {
     const zone = ANGLE_TO_ZONE[direction];
     setCompassState(prev => ({
       ...prev,
@@ -170,9 +184,9 @@ export function LifeCompass({
     if (Platform.OS !== 'web' && Haptics) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-  };
+  }, []);
 
-  const handleSilverSpindleChange = (angle: number) => {
+  const handleSilverSpindleChange = useCallback((angle: number) => {
     const waypoint = findNearestWaypoint(angle);
     const nearestDot = findNearestDot(angle);
 
@@ -183,9 +197,9 @@ export function LifeCompass({
     }));
 
     setFocusedDot(nearestDot);
-  };
+  }, []);
 
-  const handleHubTap = () => {
+  const handleHubTap = useCallback(() => {
     if (compassState.isSpinning) return;
 
     setCompassState(prev => ({ ...prev, isSpinning: true }));
@@ -219,9 +233,9 @@ export function LifeCompass({
         }
       }
     }, 1000);
-  };
+  }, [compassState.isSpinning, onSpinComplete]);
 
-  const handleWaypointAction = (waypoint: CompassWaypoint) => {
+  const handleWaypointAction = useCallback((waypoint: CompassWaypoint) => {
     if (Platform.OS !== 'web' && Haptics) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -233,9 +247,9 @@ export function LifeCompass({
     } else if (waypoint.action === 'journal-form' && waypoint.formType && onJournalFormOpen) {
       onJournalFormOpen(waypoint.formType as 'rose' | 'thorn' | 'reflection');
     }
-  };
+  }, [router, onTaskFormOpen, onJournalFormOpen]);
 
-  const handleDotPress = (dotAngle: number) => {
+  const handleDotPress = useCallback((dotAngle: number) => {
     if (Platform.OS !== 'web' && Haptics) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -254,16 +268,16 @@ export function LifeCompass({
         handleWaypointAction(waypoint);
       }, 300);
     }
-  };
+  }, [handleWaypointAction]);
 
-  const calculateDotPosition = (angle: number) => {
+  const calculateDotPosition = useCallback((angle: number) => {
     const angleRad = (angle - 90) * (Math.PI / 180);
     const x = COMPASS_CENTER.x + DOT_RADIUS * Math.cos(angleRad);
     const y = COMPASS_CENTER.y + DOT_RADIUS * Math.sin(angleRad);
     return { x, y };
-  };
+  }, []);
 
-  const calculateAngle = (x: number, y: number): number => {
+  const calculateAngle = useCallback((x: number, y: number): number => {
     const scale = 288 / responsiveSize;
     const svgX = x * scale;
     const svgY = y * scale;
@@ -275,14 +289,32 @@ export function LifeCompass({
     angle = angle + 90;
 
     return normalizeAngle(angle);
-  };
+  }, [responsiveSize]);
 
-  const panGesture = Gesture.Pan()
-    .onUpdate((event) => {
-      const angle = calculateAngle(event.x, event.y);
-      rotation.value = angle;
-      runOnJS(handleSilverSpindleChange)(angle);
+  const dotPositions = useMemo(() => {
+    return DOT_ANGLES.map(angle => {
+      const angleRad = (angle - 90) * (Math.PI / 180);
+      const x = COMPASS_CENTER.x + DOT_RADIUS * Math.cos(angleRad);
+      const y = COMPASS_CENTER.y + DOT_RADIUS * Math.sin(angleRad);
+      return { angle, x, y };
     });
+  }, []);
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan().onUpdate((event) => {
+        const now = Date.now();
+        if (now - lastUpdateTime.value < 16) {
+          return;
+        }
+        lastUpdateTime.value = now;
+
+        const angle = calculateAngle(event.x, event.y);
+        rotation.value = angle;
+        runOnJS(handleSilverSpindleChange)(angle);
+      }),
+    [calculateAngle, handleSilverSpindleChange, rotation, lastUpdateTime]
+  );
 
   const colorRingStyle = useAnimatedStyle(() => ({
     opacity: colorRingOpacity.value,
@@ -398,8 +430,7 @@ export function LifeCompass({
           </G>
 
           <G id="BlackDots">
-            {DOT_ANGLES.map((angle, index) => {
-              const { x, y } = calculateDotPosition(angle);
+            {dotPositions.map(({ angle, x, y }, index) => {
               const isFocused = focusedDot === angle;
 
               return (
@@ -417,8 +448,7 @@ export function LifeCompass({
           </G>
         </Svg>
 
-        {DOT_ANGLES.map((angle, index) => {
-          const { x, y } = calculateDotPosition(angle);
+        {dotPositions.map(({ angle, x, y }, index) => {
           const scale = responsiveSize / 288;
           const touchSize = 44;
 
