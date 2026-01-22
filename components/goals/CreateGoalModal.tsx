@@ -10,10 +10,13 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Image,
 } from 'react-native';
-import { X, Target, Calendar, ChevronDown } from 'lucide-react-native';
+import { X, Target, Calendar, ChevronDown, Paperclip, Image as ImageIcon } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
+import * as DocumentPicker from 'expo-document-picker';
+import { uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 
 type TimeframeType = '1year' | '12week' | 'custom';
 
@@ -100,6 +103,9 @@ export function CreateGoalModal({
     selectedKeyRelationshipIds: [] as string[],
     parentGoalId: null as string | null,
   });
+
+  // Attachment state
+  const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
 
   // Data states
   const [allRoles, setAllRoles] = useState<Role[]>([]);
@@ -201,6 +207,7 @@ export function CreateGoalModal({
       selectedKeyRelationshipIds: [],
       parentGoalId: null,
     });
+    setSelectedFiles([]);
     setSelectedTimeframe('12week');
     setSelectedGlobalTimelineId(null);
     setSelectedCustomTimelineId(null);
@@ -210,6 +217,50 @@ export function CreateGoalModal({
     setNewTimelineEndDate('');
     setShowYearPicker(false);
     setSelectedYear(currentYear);
+  };
+
+  const handlePickFiles = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const MAX_FILE_SIZE = 10 * 1024 * 1024;
+      const validFiles: any[] = [];
+      const oversizedFiles: string[] = [];
+
+      for (const asset of result.assets) {
+        if (asset.size && asset.size > MAX_FILE_SIZE) {
+          oversizedFiles.push(asset.name);
+        } else {
+          validFiles.push(asset);
+        }
+      }
+
+      if (oversizedFiles.length > 0) {
+        Alert.alert(
+          'Files Too Large',
+          `The following files exceed the 10MB limit:\n${oversizedFiles.join(', ')}`
+        );
+      }
+
+      if (validFiles.length > 0) {
+        setSelectedFiles(prev => [...prev, ...validFiles]);
+      }
+    } catch (error) {
+      console.error('Error picking files:', error);
+      Alert.alert('Error', 'Failed to pick files');
+    }
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleMultiSelect = (field: 'selectedRoleIds' | 'selectedDomainIds' | 'selectedKeyRelationshipIds', id: string) => {
@@ -426,13 +477,13 @@ export function CreateGoalModal({
         if (krError) throw krError;
       }
 
-      // Insert note if provided
-      if (formData.notes.trim()) {
+      // Insert note if provided (or if there are attachments)
+      if (formData.notes.trim() || selectedFiles.length > 0) {
         const { data: newNote, error: noteError } = await supabase
           .from('0008-ap-notes')
           .insert({
             user_id: user.id,
-            content: formData.notes.trim(),
+            content: formData.notes.trim() || '',
           })
           .select()
           .single();
@@ -447,6 +498,41 @@ export function CreateGoalModal({
             user_id: user.id,
           });
         if (noteJoinError) throw noteJoinError;
+
+        // Upload attachments if any
+        if (selectedFiles.length > 0) {
+          console.log(`[CreateGoalModal] Uploading ${selectedFiles.length} attachments for note ${newNote.id}`);
+
+          for (const file of selectedFiles) {
+            try {
+              const response = await fetch(file.uri);
+              const blob = await response.blob();
+
+              const filePath = await uploadNoteAttachment(
+                blob,
+                file.name,
+                file.mimeType || 'application/octet-stream',
+                user.id
+              );
+
+              if (filePath) {
+                await saveNoteAttachmentMetadata(
+                  newNote.id,
+                  user.id,
+                  file.name,
+                  filePath,
+                  file.mimeType || 'application/octet-stream',
+                  file.size || 0
+                );
+                console.log(`[CreateGoalModal] Uploaded attachment: ${file.name}`);
+              } else {
+                console.error(`[CreateGoalModal] Failed to upload attachment: ${file.name}`);
+              }
+            } catch (attachmentError) {
+              console.error(`[CreateGoalModal] Error uploading attachment ${file.name}:`, attachmentError);
+            }
+          }
+        }
       }
 
       Alert.alert('Success', 'Goal created successfully!');
@@ -826,7 +912,15 @@ export function CreateGoalModal({
               )}
 
               <View style={styles.field}>
-                <Text style={styles.label}>Notes</Text>
+                <View style={styles.labelWithIcon}>
+                  <Text style={styles.label}>Notes</Text>
+                  <TouchableOpacity
+                    style={styles.attachmentButton}
+                    onPress={handlePickFiles}
+                  >
+                    <Paperclip size={20} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={formData.notes}
@@ -837,6 +931,36 @@ export function CreateGoalModal({
                   numberOfLines={3}
                   maxLength={500}
                 />
+
+                {selectedFiles.length > 0 && (
+                  <View style={styles.attachmentsContainer}>
+                    {selectedFiles.map((file, index) => (
+                      <View key={index} style={styles.attachmentItem}>
+                        <View style={styles.attachmentContent}>
+                          {file.mimeType?.startsWith('image/') ? (
+                            <Image
+                              source={{ uri: file.uri }}
+                              style={styles.attachmentThumbnail}
+                            />
+                          ) : (
+                            <View style={styles.filePlaceholder}>
+                              <Paperclip size={24} color="#6b7280" />
+                            </View>
+                          )}
+                          <Text style={styles.attachmentName} numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => removeSelectedFile(index)}
+                          style={styles.removeButton}
+                        >
+                          <X size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
           </View>
         </ScrollView>
@@ -1187,5 +1311,56 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     flex: 1,
     marginRight: 8,
+  },
+  labelWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  attachmentButton: {
+    padding: 4,
+  },
+  attachmentsContainer: {
+    marginTop: 12,
+    gap: 8,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  attachmentContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 8,
+  },
+  attachmentThumbnail: {
+    width: 40,
+    height: 40,
+    borderRadius: 4,
+    backgroundColor: '#e5e7eb',
+  },
+  filePlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 4,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  removeButton: {
+    padding: 4,
   },
 });
