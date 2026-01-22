@@ -20,7 +20,7 @@ interface SpindleSilverProps {
 
 const SILVER_COLOR = '#A8A9AD';
 const ANIMATION_DURATION = 300;
-const DEFAULT_ANGLE = 180;
+const DEFAULT_ANGLE = 0;
 
 const normalizeAngle = (angle: number): number => {
   return ((angle % 360) + 360) % 360;
