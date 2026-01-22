@@ -91,6 +91,19 @@ export default function Goals() {
   const [myGoalsRefreshTrigger, setMyGoalsRefreshTrigger] = useState(0);
   const [selectedGoalForDetail, setSelectedGoalForDetail] = useState<UnifiedGoal | null>(null);
 
+  // Form data cache - fetched once and passed to modals
+  const [formDataCache, setFormDataCache] = useState<{
+    roles: any[];
+    domains: any[];
+    keyRelationships: any[];
+    loaded: boolean;
+  }>({
+    roles: [],
+    domains: [],
+    keyRelationships: [],
+    loaded: false
+  });
+
   // Import functions from useGoalProgress hook (but NOT fetchGoalActionsForWeek or completion functions - we handle those locally)
   const {
     toggleTaskDay,
@@ -622,6 +635,7 @@ export default function Goals() {
     const initializeGoals = async () => {
       try {
         await fetchAllTimelines();
+        fetchFormDataCache();
         refreshScore();
         fetchNorthStarData();
       } catch (error) {
@@ -844,6 +858,43 @@ export default function Goals() {
       Alert.alert('Error', (error as Error).message);
     }
   }, []); // Memoized with empty deps - only fetches from server
+
+  const fetchFormDataCache = async () => {
+    if (formDataCache.loaded) return; // Already loaded, skip
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [
+        { data: rolesData },
+        { data: domainsData },
+        { data: krData }
+      ] = await Promise.all([
+        supabase.from('0008-ap-roles')
+          .select('id, label, color')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .order('label'),
+        supabase.from('0008-ap-domains')
+          .select('id, name')
+          .order('name'),
+        supabase.from('0008-ap-key-relationships')
+          .select('id, name, role_id')
+          .eq('user_id', user.id)
+      ]);
+
+      setFormDataCache({
+        roles: rolesData || [],
+        domains: domainsData || [],
+        keyRelationships: krData || [],
+        loaded: true
+      });
+    } catch (error) {
+      console.error('Error fetching form data cache:', error);
+    }
+  };
 
   const fetchTimelinesWithGoalCounts = async (timelines: Timeline[]) => {
     try {
@@ -1428,6 +1479,9 @@ export default function Goals() {
           createCustomGoal={createCustomGoal}
           selectedTimeline={selectedTimeline}
           allTimelines={allTimelines}
+          cachedRoles={formDataCache.roles}
+          cachedDomains={formDataCache.domains}
+          cachedKeyRelationships={formDataCache.keyRelationships}
         />
 
         <EditGoalModal
