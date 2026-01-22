@@ -190,7 +190,7 @@ export function LifeCompass({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }
 
-    const zones: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270];
+    const zones: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270, 0]; // Added 0 at end to return to North
     let currentIndex = 0;
 
     const interval = setInterval(() => {
@@ -209,6 +209,8 @@ export function LifeCompass({
           ...prev,
           isSpinning: false,
           sequenceStep: null,
+          bigSpindleAngle: 0,  // Ensure we're at North
+          activeZone: 'mission',
         }));
         if (onSpinComplete) {
           onSpinComplete();
@@ -311,7 +313,7 @@ export function LifeCompass({
           height={responsiveSize}
           viewBox="0 0 288 288"
         >
-          <ColorRing visible={compassState.bigSpindleAngle === 90} size={288} />
+          <ColorRing visible={true} size={288} />
 
           <G id="Circle">
             <G id="Lines">
