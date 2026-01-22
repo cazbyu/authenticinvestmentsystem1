@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Dimensions, Platform, TouchableOpacity } from 'react-native';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  runOnJS,
 } from 'react-native-reanimated';
 import Svg, {
   G,
@@ -13,11 +15,11 @@ import Svg, {
   Polygon,
   Defs,
   LinearGradient,
+  RadialGradient,
   Stop,
-  Text as SvgText,
 } from 'react-native-svg';
 import { useRouter } from 'expo-router';
-import { COMPASS_WAYPOINTS, DECORATIVE_WAYPOINTS, ALL_WAYPOINTS, WAYPOINT_TOLERANCE, COMPASS_CENTER, CompassWaypoint } from './compassConfig';
+import { COMPASS_WAYPOINTS, WAYPOINT_TOLERANCE, COMPASS_CENTER, CompassWaypoint } from './compassConfig';
 import * as Haptics from 'expo-haptics';
 import SpindleGold from './SpindleGold';
 import SpindleSilver from './SpindleSilver';
@@ -57,6 +59,16 @@ const ANGLE_TO_ZONE = {
   270: 'roles',
 } as const;
 
+const DOT_ANGLES = [
+  15, 30, 45, 60, 75,       // Between N (0°) and E (90°)
+  105, 120, 135, 150, 165,  // Between E (90°) and S (180°)
+  195, 210, 225, 240, 255,  // Between S (180°) and W (270°)
+  285, 300, 315, 330, 345   // Between W (270°) and N (0°)
+];
+
+const DOT_RADIUS = 126;  // Outside the compass ring
+const DOT_SIZE = 8;      // Radius of each dot
+
 function normalizeAngle(angle: number): number {
   let normalized = angle % 360;
   if (normalized < 0) normalized += 360;
@@ -81,6 +93,24 @@ function findNearestWaypoint(angle: number): CompassWaypoint | null {
   return null;
 }
 
+function findNearestDot(angle: number): number | null {
+  const normalized = normalizeAngle(angle);
+  const TOLERANCE = 10;
+
+  for (const dotAngle of DOT_ANGLES) {
+    const diff = Math.abs(normalized - dotAngle);
+    const diff2 = Math.abs(normalized - (dotAngle + 360));
+    const diff3 = Math.abs(normalized - (dotAngle - 360));
+    const minDiff = Math.min(diff, diff2, diff3);
+
+    if (minDiff <= TOLERANCE) {
+      return dotAngle;
+    }
+  }
+
+  return null;
+}
+
 export function LifeCompass({
   size = 320,
   contextMode = 'navigation',
@@ -92,6 +122,7 @@ export function LifeCompass({
 }: LifeCompassProps) {
   const router = useRouter();
   const colorRingOpacity = useSharedValue(0);
+  const rotation = useSharedValue(0);
 
   const [compassState, setCompassState] = useState<CompassState>({
     bigSpindleAngle: 0,
@@ -103,7 +134,7 @@ export function LifeCompass({
     showColorRing: false,
   });
 
-  const [focusedWaypoint, setFocusedWaypoint] = useState<string | null>(null);
+  const [focusedDot, setFocusedDot] = useState<number | null>(null);
   const screenWidth = Dimensions.get('window').width;
   const responsiveSize = Math.min(size, screenWidth * 0.8);
 
@@ -143,11 +174,15 @@ export function LifeCompass({
 
   const handleSilverSpindleChange = (angle: number) => {
     const waypoint = findNearestWaypoint(angle);
+    const nearestDot = findNearestDot(angle);
+
     setCompassState(prev => ({
       ...prev,
       smallSpindleAngle: angle,
-      focusedSlot: waypoint?.id || null,
+      focusedSlot: waypoint?.id || (nearestDot ? `DOT_${nearestDot}` : null),
     }));
+
+    setFocusedDot(nearestDot);
   };
 
   const handleHubTap = () => {
@@ -200,84 +235,60 @@ export function LifeCompass({
     }
   };
 
-  const handleWaypointPress = (waypoint: CompassWaypoint) => {
-    if (waypoint.type === 'decorative') return;
+  const handleDotPress = (dotAngle: number) => {
+    if (Platform.OS !== 'web' && Haptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
 
     setCompassState(prev => ({
       ...prev,
-      smallSpindleAngle: waypoint.angle,
-      focusedSlot: waypoint.id,
+      smallSpindleAngle: dotAngle,
+      focusedSlot: `DOT_${dotAngle}`,
     }));
 
-    setTimeout(() => {
-      handleWaypointAction(waypoint);
-    }, 300);
+    setFocusedDot(dotAngle);
+
+    const waypoint = findNearestWaypoint(dotAngle);
+    if (waypoint) {
+      setTimeout(() => {
+        handleWaypointAction(waypoint);
+      }, 300);
+    }
   };
 
-  const calculateWaypointPosition = (waypoint: CompassWaypoint) => {
-    const angleRad = (waypoint.angle - 90) * (Math.PI / 180);
-    const radius = waypoint.radius || 108;
-    const x = COMPASS_CENTER.x + radius * Math.cos(angleRad);
-    const y = COMPASS_CENTER.y + radius * Math.sin(angleRad);
+  const calculateDotPosition = (angle: number) => {
+    const angleRad = (angle - 90) * (Math.PI / 180);
+    const x = COMPASS_CENTER.x + DOT_RADIUS * Math.cos(angleRad);
+    const y = COMPASS_CENTER.y + DOT_RADIUS * Math.sin(angleRad);
     return { x, y };
   };
 
-  const getWaypointSize = (waypoint: CompassWaypoint, isFocused: boolean) => {
-    const baseSize = waypoint.size === 'large' ? 12 : 4;
-    return isFocused ? baseSize * 1.4 : baseSize;
+  const calculateAngle = (x: number, y: number): number => {
+    const scale = 288 / responsiveSize;
+    const svgX = x * scale;
+    const svgY = y * scale;
+
+    const dx = svgX - COMPASS_CENTER.x;
+    const dy = svgY - COMPASS_CENTER.y;
+
+    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    angle = angle + 90;
+
+    return normalizeAngle(angle);
   };
 
-  const renderWaypointLabel = (waypoint: CompassWaypoint) => {
-    if (!waypoint.label || waypoint.size !== 'large') return null;
+  const panGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      const angle = calculateAngle(event.x, event.y);
+      rotation.value = angle;
+      runOnJS(handleSilverSpindleChange)(angle);
+    });
 
-    const { x, y } = calculateWaypointPosition(waypoint);
-    let labelX = x;
-    let labelY = y;
-    let textAnchor: 'start' | 'middle' | 'end' = 'middle';
-    const lines = waypoint.label.split('\n');
-
-    switch (waypoint.labelPosition) {
-      case 'top':
-        labelY = y - 20;
-        break;
-      case 'bottom':
-        labelY = y + 20;
-        break;
-      case 'left':
-        labelX = x - 20;
-        textAnchor = 'end';
-        break;
-      case 'right':
-        labelX = x + 20;
-        textAnchor = 'start';
-        break;
-    }
-
-    return (
-      <G key={`label-${waypoint.id}`}>
-        {lines.map((line, index) => (
-          <G key={`${waypoint.id}-line-${index}`}>
-            <SvgText
-              x={labelX}
-              y={labelY + (index * 14)}
-              fontSize="13"
-              fill="#333"
-              fontWeight="500"
-              textAnchor={textAnchor}
-            >
-              {line}
-            </SvgText>
-          </G>
-        ))}
-      </G>
-    );
-  };
-
-  const colorRingAnimatedStyle = useAnimatedStyle(() => ({
+  const colorRingStyle = useAnimatedStyle(() => ({
     opacity: colorRingOpacity.value,
   }));
 
-  const grayscaleRingAnimatedStyle = useAnimatedStyle(() => ({
+  const grayscaleRingStyle = useAnimatedStyle(() => ({
     opacity: 1 - colorRingOpacity.value,
   }));
 
@@ -295,14 +306,16 @@ export function LifeCompass({
           viewBox="0 0 288 288"
         >
           <Defs>
-            <LinearGradient id="wellness-gradient-1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor="#39b54a" stopOpacity="1" />
-              <Stop offset="100%" stopColor="#8dc63f" stopOpacity="1" />
-            </LinearGradient>
-            <LinearGradient id="wellness-gradient-2" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor="#8dc63f" stopOpacity="1" />
-              <Stop offset="100%" stopColor="#00a651" stopOpacity="1" />
-            </LinearGradient>
+            <RadialGradient id="rainbow-gradient" cx="50%" cy="50%" r="50%">
+              <Stop offset="20%" stopColor="#ffffff" stopOpacity="0" />
+              <Stop offset="40%" stopColor="#ff0000" stopOpacity="0.3" />
+              <Stop offset="50%" stopColor="#ff7f00" stopOpacity="0.5" />
+              <Stop offset="60%" stopColor="#ffff00" stopOpacity="0.7" />
+              <Stop offset="70%" stopColor="#00ff00" stopOpacity="0.7" />
+              <Stop offset="80%" stopColor="#0000ff" stopOpacity="0.7" />
+              <Stop offset="90%" stopColor="#8b00ff" stopOpacity="0.6" />
+              <Stop offset="100%" stopColor="#ff00ff" stopOpacity="0.4" />
+            </RadialGradient>
           </Defs>
 
           <G id="Circle">
@@ -384,40 +397,36 @@ export function LifeCompass({
             </G>
           </G>
 
-          <G id="Waypoints">
-            {ALL_WAYPOINTS.map((waypoint) => {
-              if (waypoint.showDot === false) return null;
-
-              const { x, y } = calculateWaypointPosition(waypoint);
-              const isFocused = focusedWaypoint === waypoint.id || compassState.focusedSlot === waypoint.id;
-              const waypointSize = getWaypointSize(waypoint, isFocused);
+          <G id="BlackDots">
+            {DOT_ANGLES.map((angle, index) => {
+              const { x, y } = calculateDotPosition(angle);
+              const isFocused = focusedDot === angle;
 
               return (
-                <G key={waypoint.id}>
+                <G key={`dot-${index}`}>
                   <Circle
                     cx={x}
                     cy={y}
-                    r={waypointSize}
-                    fill={waypoint.color}
-                    opacity={waypoint.type === 'decorative' ? 0.3 : isFocused ? 1 : 0.8}
+                    r={isFocused ? DOT_SIZE * 1.3 : DOT_SIZE}
+                    fill={isFocused ? '#000' : '#333'}
+                    opacity={isFocused ? 1 : 0.85}
                   />
                 </G>
               );
             })}
-            {COMPASS_WAYPOINTS.filter(w => w.size === 'large').map(renderWaypointLabel)}
           </G>
         </Svg>
 
-        {ALL_WAYPOINTS.filter(w => w.type !== 'decorative').map((waypoint) => {
-          const { x, y } = calculateWaypointPosition(waypoint);
+        {DOT_ANGLES.map((angle, index) => {
+          const { x, y } = calculateDotPosition(angle);
           const scale = responsiveSize / 288;
           const touchSize = 44;
 
           return (
             <TouchableOpacity
-              key={`touch-${waypoint.id}`}
+              key={`touch-dot-${index}`}
               style={[
-                styles.waypointTouch,
+                styles.dotTouch,
                 {
                   left: (x * scale) - (touchSize / 2),
                   top: (y * scale) - (touchSize / 2),
@@ -425,11 +434,51 @@ export function LifeCompass({
                   height: touchSize,
                 },
               ]}
-              onPress={() => handleWaypointPress(waypoint)}
+              onPress={() => handleDotPress(angle)}
               activeOpacity={0.6}
             />
           );
         })}
+
+        <GestureDetector gesture={panGesture}>
+          <View style={[styles.gestureArea, StyleSheet.absoluteFill]} />
+        </GestureDetector>
+
+        <View style={[styles.colorRingContainer, StyleSheet.absoluteFill]}>
+          <Animated.View style={[StyleSheet.absoluteFill, colorRingStyle]}>
+            <Svg
+              width={responsiveSize}
+              height={responsiveSize}
+              viewBox="0 0 288 288"
+              style={StyleSheet.absoluteFill}
+            >
+              <Circle
+                cx="144"
+                cy="144"
+                r="88"
+                fill="url(#rainbow-gradient)"
+                opacity="0.6"
+              />
+            </Svg>
+          </Animated.View>
+
+          <Animated.View style={[StyleSheet.absoluteFill, grayscaleRingStyle]}>
+            <Svg
+              width={responsiveSize}
+              height={responsiveSize}
+              viewBox="0 0 288 288"
+              style={StyleSheet.absoluteFill}
+            >
+              <Circle
+                cx="144"
+                cy="144"
+                r="88"
+                fill="none"
+                opacity="0"
+              />
+            </Svg>
+          </Animated.View>
+        </View>
 
         <View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }]}>
           <SpindleGold
@@ -455,40 +504,6 @@ export function LifeCompass({
             onTap={handleHubTap}
             activeZone={compassState.activeZone}
           />
-        </View>
-
-        <View style={[styles.colorRingContainer, StyleSheet.absoluteFill]}>
-          <Animated.View style={[StyleSheet.absoluteFill, colorRingAnimatedStyle]}>
-            <Svg
-              width={responsiveSize}
-              height={responsiveSize}
-              viewBox="0 0 288 288"
-              style={StyleSheet.absoluteFill}
-            >
-              <Path
-                d="M144,30.24c62.83,0,113.76,50.93,113.76,113.76"
-                fill="none"
-                stroke="url(#wellness-gradient-1)"
-                strokeWidth="3.5"
-              />
-            </Svg>
-          </Animated.View>
-
-          <Animated.View style={[StyleSheet.absoluteFill, grayscaleRingAnimatedStyle]}>
-            <Svg
-              width={responsiveSize}
-              height={responsiveSize}
-              viewBox="0 0 288 288"
-              style={StyleSheet.absoluteFill}
-            >
-              <Path
-                d="M144,30.24c62.83,0,113.76,50.93,113.76,113.76"
-                fill="none"
-                stroke="#999"
-                strokeWidth="3.5"
-              />
-            </Svg>
-          </Animated.View>
         </View>
       </View>
     </View>
@@ -519,9 +534,12 @@ const styles = StyleSheet.create({
   colorRingContainer: {
     pointerEvents: 'none',
   },
-  waypointTouch: {
+  dotTouch: {
     position: 'absolute',
     borderRadius: 22,
+    backgroundColor: 'transparent',
+  },
+  gestureArea: {
     backgroundColor: 'transparent',
   },
 });
