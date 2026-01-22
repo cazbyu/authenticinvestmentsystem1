@@ -1,5 +1,5 @@
 import React from 'react';
-import { G, Path } from 'react-native-svg';
+import { G, Path, Circle } from 'react-native-svg';
 
 interface ColorRingProps {
   visible: boolean;
