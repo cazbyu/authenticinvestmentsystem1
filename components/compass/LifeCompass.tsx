@@ -14,10 +14,6 @@ import Svg, {
   Circle,
   Path,
   Polygon,
-  Defs,
-  LinearGradient,
-  RadialGradient,
-  Stop,
 } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { COMPASS_WAYPOINTS, WAYPOINT_TOLERANCE, COMPASS_CENTER, CompassWaypoint } from './compassConfig';
@@ -25,6 +21,7 @@ import * as Haptics from 'expo-haptics';
 import SpindleGold from './SpindleGold';
 import SpindleSilver from './SpindleSilver';
 import CompassHub from './CompassHub';
+import { ColorRing } from './ColorRing';
 
 interface LifeCompassProps {
   size?: number;
@@ -122,7 +119,6 @@ export function LifeCompass({
   onJournalFormOpen,
 }: LifeCompassProps) {
   const router = useRouter();
-  const colorRingOpacity = useSharedValue(0);
   const rotation = useSharedValue(0);
 
   const [compassState, setCompassState] = useState<CompassState>({
@@ -148,11 +144,7 @@ export function LifeCompass({
     if (compassState.showColorRing !== showColor) {
       setCompassState(prev => ({ ...prev, showColorRing: showColor }));
     }
-
-    colorRingOpacity.value = withTiming(showColor ? 1 : 0, {
-      duration: 400,
-    });
-  }, [compassState.bigSpindleAngle, compassState.showColorRing, colorRingOpacity]);
+  }, [compassState.bigSpindleAngle, compassState.showColorRing]);
 
   useEffect(() => {
     if (onZoneChange) {
@@ -168,10 +160,9 @@ export function LifeCompass({
 
   useEffect(() => {
     return () => {
-      cancelAnimation(colorRingOpacity);
       cancelAnimation(rotation);
     };
-  }, [colorRingOpacity, rotation]);
+  }, [rotation]);
 
   const handleGoldSpindleSnap = useCallback((direction: 0 | 90 | 180 | 270) => {
     const zone = ANGLE_TO_ZONE[direction];
@@ -316,14 +307,6 @@ export function LifeCompass({
     [calculateAngle, handleSilverSpindleChange, rotation, lastUpdateTime]
   );
 
-  const colorRingStyle = useAnimatedStyle(() => ({
-    opacity: colorRingOpacity.value,
-  }));
-
-  const grayscaleRingStyle = useAnimatedStyle(() => ({
-    opacity: 1 - colorRingOpacity.value,
-  }));
-
   return (
     <View style={styles.container}>
       <View
@@ -337,18 +320,7 @@ export function LifeCompass({
           height={responsiveSize}
           viewBox="0 0 288 288"
         >
-          <Defs>
-            <RadialGradient id="rainbow-gradient" cx="50%" cy="50%" r="50%">
-              <Stop offset="20%" stopColor="#ffffff" stopOpacity="0" />
-              <Stop offset="40%" stopColor="#ff0000" stopOpacity="0.3" />
-              <Stop offset="50%" stopColor="#ff7f00" stopOpacity="0.5" />
-              <Stop offset="60%" stopColor="#ffff00" stopOpacity="0.7" />
-              <Stop offset="70%" stopColor="#00ff00" stopOpacity="0.7" />
-              <Stop offset="80%" stopColor="#0000ff" stopOpacity="0.7" />
-              <Stop offset="90%" stopColor="#8b00ff" stopOpacity="0.6" />
-              <Stop offset="100%" stopColor="#ff00ff" stopOpacity="0.4" />
-            </RadialGradient>
-          </Defs>
+          <ColorRing visible={compassState.showColorRing} size={288} />
 
           <G id="Circle">
             <G id="Lines">
@@ -474,41 +446,6 @@ export function LifeCompass({
           <View style={[styles.gestureArea, StyleSheet.absoluteFill]} />
         </GestureDetector>
 
-        <View style={[styles.colorRingContainer, StyleSheet.absoluteFill]}>
-          <Animated.View style={[StyleSheet.absoluteFill, colorRingStyle]}>
-            <Svg
-              width={responsiveSize}
-              height={responsiveSize}
-              viewBox="0 0 288 288"
-              style={StyleSheet.absoluteFill}
-            >
-              <Circle
-                cx="144"
-                cy="144"
-                r="88"
-                fill="url(#rainbow-gradient)"
-                opacity="0.6"
-              />
-            </Svg>
-          </Animated.View>
-
-          <Animated.View style={[StyleSheet.absoluteFill, grayscaleRingStyle]}>
-            <Svg
-              width={responsiveSize}
-              height={responsiveSize}
-              viewBox="0 0 288 288"
-              style={StyleSheet.absoluteFill}
-            >
-              <Circle
-                cx="144"
-                cy="144"
-                r="88"
-                fill="none"
-                opacity="0"
-              />
-            </Svg>
-          </Animated.View>
-        </View>
 
         <View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }]}>
           <SpindleGold
@@ -560,9 +497,6 @@ const styles = StyleSheet.create({
   hubLayer: {
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  colorRingContainer: {
-    pointerEvents: 'none',
   },
   dotTouch: {
     position: 'absolute',
