@@ -71,8 +71,10 @@ export default function SpindleSilver({
   }, [angle, animated, onAngleChange]);
 
   const animatedProps = useAnimatedProps(() => {
+    // Add 180 offset because the SVG path is drawn pointing South
+    const visualAngle = rotation.value + 180;
     return {
-      transform: `rotate(${rotation.value}, 144, 144)`,
+      transform: `rotate(${visualAngle}, 144, 144)`,
     };
   });
 

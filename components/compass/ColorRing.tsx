@@ -1,5 +1,5 @@
 import React from 'react';
-import { Defs, LinearGradient, Stop, Path, G } from 'react-native-svg';
+import { G, Path } from 'react-native-svg';
 
 interface ColorRingProps {
   visible: boolean;
@@ -9,67 +9,47 @@ interface ColorRingProps {
 export const ColorRing: React.FC<ColorRingProps> = ({ visible, size = 288 }) => {
   if (!visible) return null;
 
-  const center = size / 2; // 144
-  const outerRadius = 102; // Match the middle circle in SVG
-  const innerRadius = 45;  // Inside the star points
+  const center = size / 2;
+  const outerRadius = 95;
+  const innerRadius = 50;
 
-  // Function to create a wedge/segment path
-  const createWedgePath = (startAngle: number, endAngle: number): string => {
-    const startRad = (startAngle - 90) * Math.PI / 180;
-    const endRad = (endAngle - 90) * Math.PI / 180;
-
-    const x1 = center + outerRadius * Math.cos(startRad);
-    const y1 = center + outerRadius * Math.sin(startRad);
-    const x2 = center + outerRadius * Math.cos(endRad);
-    const y2 = center + outerRadius * Math.sin(endRad);
-    const x3 = center + innerRadius * Math.cos(endRad);
-    const y3 = center + innerRadius * Math.sin(endRad);
-    const x4 = center + innerRadius * Math.cos(startRad);
-    const y4 = center + innerRadius * Math.sin(startRad);
-
-    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-
-    return `M ${x1} ${y1}
-            A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2} ${y2}
-            L ${x3} ${y3}
-            A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4} ${y4}
-            Z`;
+  const polarToCartesian = (angle: number, radius: number) => {
+    const rad = (angle - 90) * Math.PI / 180;
+    return {
+      x: center + radius * Math.cos(rad),
+      y: center + radius * Math.sin(rad),
+    };
   };
 
-  // Define the 8 segments with their colors matching the original SVG
+  const createWedgePath = (startAngle: number, endAngle: number): string => {
+    const outerStart = polarToCartesian(startAngle, outerRadius);
+    const outerEnd = polarToCartesian(endAngle, outerRadius);
+    const innerStart = polarToCartesian(startAngle, innerRadius);
+    const innerEnd = polarToCartesian(endAngle, innerRadius);
+    const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+
+    return `M ${outerStart.x} ${outerStart.y} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerEnd.x} ${innerEnd.y} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y} Z`;
+  };
+
   const segments = [
-    { start: 0, end: 45, colors: ['#e7731f', '#ffd400'], id: 'seg1' },      // N to NE: Orange to Yellow
-    { start: 45, end: 90, colors: ['#ffd400', '#39b54a'], id: 'seg2' },     // NE to E: Yellow to Green
-    { start: 90, end: 135, colors: ['#39b54a', '#00abc5'], id: 'seg3' },    // E to SE: Green to Cyan
-    { start: 135, end: 180, colors: ['#00abc5', '#0066b3'], id: 'seg4' },   // SE to S: Cyan to Blue
-    { start: 180, end: 225, colors: ['#0066b3', '#752e87'], id: 'seg5' },   // S to SW: Blue to Purple
-    { start: 225, end: 270, colors: ['#752e87', '#ed1c24'], id: 'seg6' },   // SW to W: Purple to Red
-    { start: 270, end: 315, colors: ['#ed1c24', '#e7731f'], id: 'seg7' },   // W to NW: Red to Orange
-    { start: 315, end: 360, colors: ['#e7731f', '#e7731f'], id: 'seg8' },   // NW to N: Orange to Orange
+    { start: 0, end: 45, color: '#e7731f' },
+    { start: 45, end: 90, color: '#ffd400' },
+    { start: 90, end: 135, color: '#39b54a' },
+    { start: 135, end: 180, color: '#00abc5' },
+    { start: 180, end: 225, color: '#0066b3' },
+    { start: 225, end: 270, color: '#752e87' },
+    { start: 270, end: 315, color: '#ed1c24' },
+    { start: 315, end: 360, color: '#e7731f' },
   ];
 
   return (
-    <G opacity={0.7}>
-      <Defs>
-        {segments.map((seg) => (
-          <LinearGradient
-            key={seg.id}
-            id={seg.id}
-            x1="0%"
-            y1="0%"
-            x2="100%"
-            y2="100%"
-          >
-            <Stop offset="0%" stopColor={seg.colors[0]} />
-            <Stop offset="100%" stopColor={seg.colors[1]} />
-          </LinearGradient>
-        ))}
-      </Defs>
-      {segments.map((seg) => (
+    <G>
+      {segments.map((seg, i) => (
         <Path
-          key={seg.id}
+          key={i}
           d={createWedgePath(seg.start, seg.end)}
-          fill={`url(#${seg.id})`}
+          fill={seg.color}
+          opacity={0.75}
         />
       ))}
     </G>
