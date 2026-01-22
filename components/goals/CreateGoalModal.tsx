@@ -65,6 +65,9 @@ interface CreateGoalModalProps {
   }, selectedTimeline?: { id: string; start_date?: string | null; end_date?: string | null }) => Promise<any>;
   selectedTimeline: Timeline | null;
   allTimelines: Timeline[];
+  cachedRoles?: Role[];
+  cachedDomains?: Domain[];
+  cachedKeyRelationships?: KeyRelationship[];
 }
 
 export function CreateGoalModal({
@@ -74,7 +77,10 @@ export function CreateGoalModal({
   createTwelveWeekGoal,
   createCustomGoal,
   selectedTimeline,
-  allTimelines
+  allTimelines,
+  cachedRoles = [],
+  cachedDomains = [],
+  cachedKeyRelationships = []
 }: CreateGoalModalProps) {
   // Timeframe state
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeType>('12week');
@@ -103,7 +109,6 @@ export function CreateGoalModal({
   const [oneYearGoals, setOneYearGoals] = useState<OneYearGoal[]>([]);
   const [activeGlobalTimelines, setActiveGlobalTimelines] = useState<Timeline[]>([]);
   const [customTimelines, setCustomTimelines] = useState<Timeline[]>([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Timeline selection state
@@ -118,58 +123,49 @@ export function CreateGoalModal({
 
   useEffect(() => {
     if (visible) {
-      // Start fetching data immediately
-      fetchData();
-      setDefaultSelections();
-    } else {
-      resetForm();
-    }
-  }, [visible]);
+      console.log('[CreateGoalModal] Modal opened');
+      console.log('[CreateGoalModal] Available timelines:', allTimelines?.length || 0);
 
-  // Pre-fetch domains on mount since they don't change per user
-  useEffect(() => {
-    const preFetchDomains = async () => {
-      try {
-        const supabase = getSupabaseClient();
-        const { data: domainsData } = await supabase
-          .from('0008-ap-domains')
-          .select('id, name')
-          .order('name');
-        if (domainsData) {
-          setAllDomains(domainsData);
-        }
-      } catch (error) {
-        console.error('Error pre-fetching domains:', error);
+      // Use cached data from props
+      setAllRoles(cachedRoles);
+      setAllDomains(cachedDomains);
+      setAllKeyRelationships(cachedKeyRelationships);
+
+      // Fetch remaining data that isn't cached
+      fetchRemainingData();
+
+      // Set default selections
+      const today = new Date();
+      const isAfterOct1 = today.getMonth() >= 9;
+      if (isAfterOct1) {
+        setShowYearPicker(true);
       }
-    };
-    preFetchDomains();
-  }, []);
 
-  const setDefaultSelections = () => {
-    // Check if after October 1st
-    const today = new Date();
-    const isAfterOct1 = today.getMonth() >= 9;
+      // Auto-select active global timeline if only one exists
+      if (allTimelines.length === 1 && allTimelines[0].source === 'global') {
+        setSelectedGlobalTimelineId(allTimelines[0].id);
+      }
 
-    if (isAfterOct1) {
-      setShowYearPicker(true);
+      // Reset form
+      if (!allTimelines || allTimelines.length === 0) {
+        console.warn('[CreateGoalModal] No timelines available.');
+      } else {
+        resetForm();
+      }
     }
+  }, [visible, selectedTimeline, allTimelines, cachedRoles, cachedDomains, cachedKeyRelationships]);
 
-    // Auto-select active global timeline if only one exists
-    if (allTimelines.length === 1 && allTimelines[0].source === 'global') {
-      setSelectedGlobalTimelineId(allTimelines[0].id);
-    }
-  };
-
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchRemainingData = async () => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const queries = [
-        supabase.from('0008-ap-roles').select('id, label, color').eq('user_id', user.id).eq('is_active', true).order('label'),
-        supabase.from('0008-ap-key-relationships').select('id, name, role_id').eq('user_id', user.id),
+      const [
+        { data: oneYearGoalsData },
+        { data: globalTimelinesData },
+        { data: customTimelinesData }
+      ] = await Promise.all([
         supabase
           .from('0008-ap-goals-1y')
           .select('id, title, year_target_date')
@@ -196,31 +192,11 @@ export function CreateGoalModal({
           .eq('user_id', user.id)
           .eq('is_archived', false)
           .order('name')
-      ];
+      ]);
 
-      // Only fetch domains if not already loaded
-      if (allDomains.length === 0) {
-        queries.splice(1, 0, supabase.from('0008-ap-domains').select('id, name').order('name'));
-      }
-
-      const results = await Promise.all(queries);
-
-      let resultIndex = 0;
-      const rolesData = results[resultIndex++].data;
-      const domainsData = allDomains.length === 0 ? results[resultIndex++].data : null;
-      const krData = results[resultIndex++].data;
-      const oneYearGoalsData = results[resultIndex++].data;
-      const globalTimelinesData = results[resultIndex++].data;
-      const customTimelinesData = results[resultIndex++].data;
-
-      setAllRoles(rolesData || []);
-      if (domainsData) {
-        setAllDomains(domainsData);
-      }
-      setAllKeyRelationships(krData || []);
       setOneYearGoals(oneYearGoalsData || []);
 
-      // Process global timelines - now with join data
+      // Process global timelines
       const globalTimelines: Timeline[] = (globalTimelinesData || []).map((ugt: any) => ({
         id: ugt.id,
         source: 'global' as const,
@@ -247,10 +223,8 @@ export function CreateGoalModal({
       setCustomTimelines(customTls);
 
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching remaining data:', error);
       Alert.alert('Error', 'Failed to load form data');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -806,13 +780,7 @@ export function CreateGoalModal({
         </View>
 
         <ScrollView style={styles.content}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#0078d4" />
-              <Text style={styles.loadingText}>Loading form data...</Text>
-            </View>
-          ) : (
-            <View style={styles.form}>
+          <View style={styles.form}>
               {renderTimeframeSelector()}
 
               <View style={styles.field}>
@@ -963,8 +931,7 @@ export function CreateGoalModal({
                   maxLength={500}
                 />
               </View>
-            </View>
-          )}
+          </View>
         </ScrollView>
       </View>
     </Modal>
