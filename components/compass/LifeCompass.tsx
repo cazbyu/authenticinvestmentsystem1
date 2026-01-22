@@ -40,7 +40,6 @@ interface CompassState {
   focusedSlot: string | null;
   isSpinning: boolean;
   sequenceStep: number | null;
-  showColorRing: boolean;
 }
 
 const ZONE_ANGLES = {
@@ -128,7 +127,6 @@ export function LifeCompass({
     focusedSlot: null,
     isSpinning: false,
     sequenceStep: null,
-    showColorRing: false,
   });
 
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
@@ -138,13 +136,6 @@ export function LifeCompass({
     const screenWidth = Dimensions.get('window').width;
     return Math.min(size, screenWidth * 0.8);
   }, [size]);
-
-  useEffect(() => {
-    const showColor = compassState.bigSpindleAngle === 90;
-    if (compassState.showColorRing !== showColor) {
-      setCompassState(prev => ({ ...prev, showColorRing: showColor }));
-    }
-  }, [compassState.bigSpindleAngle, compassState.showColorRing]);
 
   useEffect(() => {
     if (onZoneChange) {
@@ -320,7 +311,7 @@ export function LifeCompass({
           height={responsiveSize}
           viewBox="0 0 288 288"
         >
-          <ColorRing visible={compassState.showColorRing} size={288} />
+          <ColorRing visible={compassState.bigSpindleAngle === 90} size={288} />
 
           <G id="Circle">
             <G id="Lines">
