@@ -260,10 +260,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   webContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.8  5)',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
+  backgroundColor: 'rgba(255, 255, 255, 0.85)',
+  borderRadius: 16,
+  overflow: 'hidden',
+  ...Platform.select({
+    web: {
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
+    },
+  }),
+},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
