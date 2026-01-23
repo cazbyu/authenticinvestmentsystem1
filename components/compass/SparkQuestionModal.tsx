@@ -7,7 +7,9 @@ import {
   TouchableOpacity,
   Pressable,
   Image,
+  Platform,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Star, Leaf, Flag, Users, X, SquareCheck as CheckSquare, Calendar, Check, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -96,71 +98,143 @@ export default function SparkQuestionModal({
     >
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}>
-          <View style={[styles.header, { backgroundColor: theme.color }]}>
-            <HeaderIcon size={24} color="#fff" />
-            <Text style={styles.headerTitle}>{theme.title}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
+          {Platform.OS !== 'web' ? (
+            <BlurView intensity={90} tint="light" style={styles.blurContainer}>
+              <View style={[styles.header, { backgroundColor: theme.color }]}>
+                <HeaderIcon size={24} color="#fff" />
+                <Text style={styles.headerTitle}>{theme.title}</Text>
+                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                  <X size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
 
-          <View style={styles.questionContainer}>
-            <Text style={styles.questionText}>{question}</Text>
-          </View>
+              <View style={styles.questionContainer}>
+                <Text style={styles.questionText}>{question}</Text>
+              </View>
 
-          <TouchableOpacity
-            style={[styles.bankButton, { borderColor: theme.color }]}
-            onPress={handleBankPress}
-            activeOpacity={0.7}
-          >
-            <HeaderIcon size={18} color={theme.color} />
-            <Text style={[styles.bankButtonText, { color: theme.color }]}>
-              {theme.bankLabel}
-            </Text>
-            <ChevronRight size={16} color={theme.color} />
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.bankButton, { borderColor: theme.color }]}
+                onPress={handleBankPress}
+                activeOpacity={0.7}
+              >
+                <HeaderIcon size={18} color={theme.color} />
+                <Text style={[styles.bankButtonText, { color: theme.color }]}>
+                  {theme.bankLabel}
+                </Text>
+                <ChevronRight size={16} color={theme.color} />
+              </TouchableOpacity>
 
-          <View style={styles.actionsContainer}>
-            <Text style={styles.actionsLabel}>Take Action:</Text>
-            <View style={styles.actionsRow}>
-              {ACTION_ICONS.map((action) => {
-                return (
-                  <TouchableOpacity
-                    key={action.id}
-                    style={styles.actionButton}
-                    onPress={() => handleActionPress(action.id)}
-                  >
-                    <View style={[styles.actionIconCircle, { borderColor: theme.color }]}>
-                      {action.type === 'image' ? (
-                        <Image
-                          source={action.image}
-                          style={styles.actionIconImage}
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <action.Icon size={20} color={theme.color} />
-                      )}
-                    </View>
-                    <Text style={styles.actionLabel}>{action.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+              <View style={styles.actionsContainer}>
+                <Text style={styles.actionsLabel}>Take Action:</Text>
+                <View style={styles.actionsRow}>
+                  {ACTION_ICONS.map((action) => {
+                    return (
+                      <TouchableOpacity
+                        key={action.id}
+                        style={styles.actionButton}
+                        onPress={() => handleActionPress(action.id)}
+                      >
+                        <View style={[styles.actionIconCircle, { borderColor: theme.color }]}>
+                          {action.type === 'image' ? (
+                            <Image
+                              source={action.image}
+                              style={styles.actionIconImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <action.Icon size={20} color={theme.color} />
+                          )}
+                        </View>
+                        <Text style={styles.actionLabel}>{action.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.nextButton, { backgroundColor: theme.color }]}
+                onPress={onNext}
+              >
+                <Text style={styles.nextButtonText}>
+                  {isLastCardinal ? 'Complete' : 'Next'}
+                </Text>
+                {isLastCardinal ? (
+                  <Check size={24} color="#fff" />
+                ) : (
+                  <ChevronRight size={24} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </BlurView>
+          ) : (
+            <View style={styles.webContainer}>
+              <View style={[styles.header, { backgroundColor: theme.color }]}>
+                <HeaderIcon size={24} color="#fff" />
+                <Text style={styles.headerTitle}>{theme.title}</Text>
+                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                  <X size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.questionContainer}>
+                <Text style={styles.questionText}>{question}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.bankButton, { borderColor: theme.color }]}
+                onPress={handleBankPress}
+                activeOpacity={0.7}
+              >
+                <HeaderIcon size={18} color={theme.color} />
+                <Text style={[styles.bankButtonText, { color: theme.color }]}>
+                  {theme.bankLabel}
+                </Text>
+                <ChevronRight size={16} color={theme.color} />
+              </TouchableOpacity>
+
+              <View style={styles.actionsContainer}>
+                <Text style={styles.actionsLabel}>Take Action:</Text>
+                <View style={styles.actionsRow}>
+                  {ACTION_ICONS.map((action) => {
+                    return (
+                      <TouchableOpacity
+                        key={action.id}
+                        style={styles.actionButton}
+                        onPress={() => handleActionPress(action.id)}
+                      >
+                        <View style={[styles.actionIconCircle, { borderColor: theme.color }]}>
+                          {action.type === 'image' ? (
+                            <Image
+                              source={action.image}
+                              style={styles.actionIconImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <action.Icon size={20} color={theme.color} />
+                          )}
+                        </View>
+                        <Text style={styles.actionLabel}>{action.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.nextButton, { backgroundColor: theme.color }]}
+                onPress={onNext}
+              >
+                <Text style={styles.nextButtonText}>
+                  {isLastCardinal ? 'Complete' : 'Next'}
+                </Text>
+                {isLastCardinal ? (
+                  <Check size={24} color="#fff" />
+                ) : (
+                  <ChevronRight size={24} color="#fff" />
+                )}
+              </TouchableOpacity>
             </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.nextButton, { backgroundColor: theme.color }]}
-            onPress={onNext}
-          >
-            <Text style={styles.nextButtonText}>
-              {isLastCardinal ? 'Complete' : 'Next'}
-            </Text>
-            {isLastCardinal ? (
-              <Check size={24} color="#fff" />
-            ) : (
-              <ChevronRight size={24} color="#fff" />
-            )}
-          </TouchableOpacity>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -176,10 +250,18 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContainer: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     width: '100%',
     maxWidth: 400,
+    overflow: 'hidden',
+  },
+  blurContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  webContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 16,
     overflow: 'hidden',
   },
   header: {
@@ -216,7 +298,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1.5,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     gap: 8,
   },
   bankButtonText: {
@@ -250,7 +332,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
   actionIconImage: {
     width: 28,
