@@ -23,6 +23,7 @@ import {
   Check,
   ChevronRight,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 interface SparkQuestionModalProps {
   visible: boolean;
@@ -35,10 +36,34 @@ interface SparkQuestionModalProps {
 }
 
 const CARDINAL_THEMES = {
-  north: { title: 'Mission & Vision', color: '#ed1c24', Icon: Star },
-  east: { title: 'Wellness', color: '#39b54a', Icon: Leaf },
-  south: { title: 'Goals', color: '#00abc5', Icon: Flag },
-  west: { title: 'Roles', color: '#ffd400', Icon: Users },
+  north: {
+    title: 'Mission & Vision',
+    color: '#ed1c24',
+    Icon: Star,
+    bankLabel: 'View North Star',
+    bankRoute: '/settings'
+  },
+  east: {
+    title: 'Wellness',
+    color: '#39b54a',
+    Icon: Leaf,
+    bankLabel: 'Wellness Bank',
+    bankRoute: '/(tabs)/wellness'
+  },
+  south: {
+    title: 'Goals',
+    color: '#00abc5',
+    Icon: Flag,
+    bankLabel: 'Goal Bank',
+    bankRoute: '/(tabs)/goals'
+  },
+  west: {
+    title: 'Roles',
+    color: '#ffd400',
+    Icon: Users,
+    bankLabel: 'Role Bank',
+    bankRoute: '/(tabs)/roles'
+  },
 };
 
 const ACTION_ICONS = [
@@ -60,10 +85,17 @@ export default function SparkQuestionModal({
   onClose,
   isLastCardinal = false,
 }: SparkQuestionModalProps) {
+  const router = useRouter();
+
   if (!cardinal) return null;
 
   const theme = CARDINAL_THEMES[cardinal];
   const HeaderIcon = theme.Icon;
+
+  const handleBankPress = () => {
+    onClose();
+    router.push(theme.bankRoute as any);
+  };
 
   return (
     <Modal
@@ -85,6 +117,18 @@ export default function SparkQuestionModal({
           <View style={styles.questionContainer}>
             <Text style={styles.questionText}>{question}</Text>
           </View>
+
+          <TouchableOpacity
+            style={[styles.bankButton, { borderColor: theme.color }]}
+            onPress={handleBankPress}
+            activeOpacity={0.7}
+          >
+            <HeaderIcon size={18} color={theme.color} />
+            <Text style={[styles.bankButtonText, { color: theme.color }]}>
+              {theme.bankLabel}
+            </Text>
+            <ChevronRight size={16} color={theme.color} />
+          </TouchableOpacity>
 
           <View style={styles.actionsContainer}>
             <Text style={styles.actionsLabel}>Take Action:</Text>
@@ -164,6 +208,23 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: '#333',
     textAlign: 'center',
+  },
+  bankButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 24,
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    backgroundColor: '#fff',
+    gap: 8,
+  },
+  bankButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   actionsContainer: {
     padding: 16,
