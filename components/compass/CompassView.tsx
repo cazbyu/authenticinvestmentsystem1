@@ -54,13 +54,7 @@ export function CompassView() {
       >
         <TaskEventForm
           mode="create"
-          initialData={{
-            type: taskEventFormType,
-            notes: '',
-            selectedRoleIds: [],
-            selectedDomainIds: [],
-            selectedKeyRelationshipIds: [],
-          }}
+          preSelectedType={taskEventFormType}
           onSubmitSuccess={handleTaskEventFormSuccess}
           onClose={handleTaskEventFormClose}
         />
@@ -69,6 +63,7 @@ export function CompassView() {
       <JournalForm
         visible={isJournalFormVisible}
         mode="create"
+        reflectionType={journalFormType}
         onClose={handleJournalFormClose}
         onSaveSuccess={handleJournalFormClose}
       />

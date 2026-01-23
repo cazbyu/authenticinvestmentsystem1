@@ -475,7 +475,9 @@ export async function saveReflection(
   reflectionType: 'daily' | 'weekly' = 'daily',
   followUp: boolean = false,
   followUpDate?: string,
-  imagePaths?: string[]
+  imagePaths?: string[],
+  dailyRose?: boolean,
+  dailyThorn?: boolean
 ): Promise<string | null> {
   try {
     const currentDate = formatLocalDate(new Date());
@@ -492,6 +494,8 @@ export async function saveReflection(
         follow_up_date: followUpDate || null,
         reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
         archived: false,
+        daily_rose: dailyRose || false,
+        daily_thorn: dailyThorn || false,
       })
       .select()
       .single();
@@ -594,19 +598,31 @@ export async function updateReflection(
   selectedKeyRelationshipIds: string[],
   followUp: boolean = false,
   followUpDate?: string,
-  imagePaths?: string[]
+  imagePaths?: string[],
+  dailyRose?: boolean,
+  dailyThorn?: boolean
 ): Promise<boolean> {
   try {
     // Update reflection
+    const updateData: any = {
+      content,
+      follow_up: followUp,
+      follow_up_date: followUpDate || null,
+      reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
+      updated_at: toLocalISOString(new Date()),
+    };
+
+    // Only include rose/thorn flags if explicitly provided
+    if (dailyRose !== undefined) {
+      updateData.daily_rose = dailyRose;
+    }
+    if (dailyThorn !== undefined) {
+      updateData.daily_thorn = dailyThorn;
+    }
+
     const { error: reflectionError } = await supabase
       .from('0008-ap-reflections')
-      .update({
-        content,
-        follow_up: followUp,
-        follow_up_date: followUpDate || null,
-        reflection_image: imagePaths ? JSON.stringify(imagePaths) : null,
-        updated_at: toLocalISOString(new Date()),
-      })
+      .update(updateData)
       .eq('id', reflectionId)
       .eq('user_id', userId);
 

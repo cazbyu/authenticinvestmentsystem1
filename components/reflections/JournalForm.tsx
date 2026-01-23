@@ -65,6 +65,7 @@ interface JournalFormProps {
   onSaveSuccess?: () => void;
   onActionSelected?: (action: ActionType, data: ActionData) => void;
   openedFromJournal?: boolean;
+  reflectionType?: 'rose' | 'thorn' | 'reflection';
 }
 
 type ActionType = 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'followUp';
@@ -84,6 +85,7 @@ export default function JournalForm({
   onSaveSuccess,
   onActionSelected,
   openedFromJournal = false,
+  reflectionType = 'reflection',
 }: JournalFormProps) {
   const { colors, isDarkMode } = useTheme();
 
@@ -439,7 +441,10 @@ export default function JournalForm({
           selectedDomainIds,
           selectedKeyRelationshipIds,
           !!followUpDate,
-          followUpDate || undefined
+          followUpDate || undefined,
+          undefined, // imagePaths
+          reflectionType === 'rose',
+          reflectionType === 'thorn'
         );
 
         if (!success) {
@@ -455,7 +460,10 @@ export default function JournalForm({
           selectedKeyRelationshipIds,
           'daily',
           !!followUpDate,
-          followUpDate || undefined
+          followUpDate || undefined,
+          undefined, // imagePaths
+          reflectionType === 'rose',
+          reflectionType === 'thorn'
         );
 
         if (!newReflectionId) {
@@ -586,7 +594,10 @@ export default function JournalForm({
         selectedKeyRelationshipIds,
         'daily',
         true,
-        dateString
+        dateString,
+        undefined, // imagePaths
+        reflectionType === 'rose',
+        reflectionType === 'thorn'
       );
 
       if (reflectionId) {
@@ -640,7 +651,11 @@ export default function JournalForm({
                 : initialData?.daily_thorn
                   ? 'Edit Thorn'
                   : 'Edit Deposit Idea'
-              : 'New Reflection'}
+              : reflectionType === 'rose'
+                ? 'New Rose'
+                : reflectionType === 'thorn'
+                  ? 'New Thorn'
+                  : 'New Reflection'}
           </Text>
           <View style={styles.headerRight}>
             {mode === 'edit' && (
