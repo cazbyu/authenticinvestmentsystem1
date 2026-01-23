@@ -12,6 +12,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { Star, Leaf, Flag, Users, X, SquareCheck as CheckSquare, Calendar, Check, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useCoachNotifications } from '@/hooks/useCoachNotifications';
 
 interface SparkQuestionModalProps {
   visible: boolean;
@@ -29,7 +30,7 @@ const CARDINAL_THEMES = {
     color: '#ed1c24',
     Icon: Star,
     bankLabel: 'View North Star',
-    bankRoute: '/settings'
+    bankRoute: '/(sidebar)/north-star'
   },
   east: {
     title: 'Wellness',
@@ -73,6 +74,7 @@ export default function SparkQuestionModal({
   isLastCardinal = false,
 }: SparkQuestionModalProps) {
   const router = useRouter();
+  const { notifications } = useCoachNotifications();
 
   if (!cardinal) return null;
 
@@ -121,6 +123,11 @@ export default function SparkQuestionModal({
                 <Text style={[styles.bankButtonText, { color: theme.color }]}>
                   {theme.bankLabel}
                 </Text>
+                {cardinal === 'north' && notifications.total > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>{notifications.total}</Text>
+                  </View>
+                )}
                 <ChevronRight size={16} color={theme.color} />
               </TouchableOpacity>
 
@@ -189,6 +196,11 @@ export default function SparkQuestionModal({
                 <Text style={[styles.bankButtonText, { color: theme.color }]}>
                   {theme.bankLabel}
                 </Text>
+                {cardinal === 'north' && notifications.total > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>{notifications.total}</Text>
+                  </View>
+                )}
                 <ChevronRight size={16} color={theme.color} />
               </TouchableOpacity>
 
@@ -360,5 +372,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  notificationBadge: {
+    backgroundColor: '#ed1c24',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

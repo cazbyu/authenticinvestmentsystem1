@@ -6,10 +6,15 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
+  Image,
 } from 'react-native';
-import { ChevronLeft, ChevronRight, Star, BookOpen } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Star, BookOpen, SquareCheck as CheckSquare, Calendar } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
+import JournalForm from '@/components/reflections/JournalForm';
+import { useCoachNotifications } from '@/hooks/useCoachNotifications';
 
 interface PowerContent {
   id: string;
@@ -20,6 +25,15 @@ interface PowerContent {
   coach_id?: string;
 }
 
+const ACTION_ICONS = [
+  { id: 'task', Icon: CheckSquare, label: 'Task', type: 'icon' },
+  { id: 'event', Icon: Calendar, label: 'Event', type: 'icon' },
+  { id: 'idea', image: require('@/assets/images/deposit-idea.png'), label: 'Idea', type: 'image' },
+  { id: 'reflect', image: require('@/assets/images/reflections-72.png'), label: 'Reflect', type: 'image' },
+  { id: 'rose', image: require('@/assets/images/rose-81.png'), label: 'Rose', type: 'image' },
+  { id: 'thorn', image: require('@/assets/images/thorn-81.png'), label: 'Thorn', type: 'image' },
+];
+
 export default function NorthStarPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -27,9 +41,18 @@ export default function NorthStarPage() {
   const [sparkType, setSparkType] = useState<'quote' | 'question'>('quote');
   const [missionText, setMissionText] = useState('');
   const [visionText, setVisionText] = useState('');
+  const [isTaskEventFormVisible, setIsTaskEventFormVisible] = useState(false);
+  const [taskEventFormType, setTaskEventFormType] = useState<'task' | 'event' | 'depositIdea'>('task');
+  const [isJournalFormVisible, setIsJournalFormVisible] = useState(false);
+  const [journalFormType, setJournalFormType] = useState<'rose' | 'thorn' | 'reflection'>('reflection');
+  const { notifications, markAsRead } = useCoachNotifications();
 
   useEffect(() => {
     loadNorthStarData();
+  }, []);
+
+  useEffect(() => {
+    markAsRead();
   }, []);
 
   const loadNorthStarData = async () => {
@@ -110,6 +133,35 @@ export default function NorthStarPage() {
     }
   };
 
+  const handleActionPress = (actionType: string) => {
+    switch (actionType) {
+      case 'task':
+        setTaskEventFormType('task');
+        setIsTaskEventFormVisible(true);
+        break;
+      case 'event':
+        setTaskEventFormType('event');
+        setIsTaskEventFormVisible(true);
+        break;
+      case 'idea':
+        setTaskEventFormType('depositIdea');
+        setIsTaskEventFormVisible(true);
+        break;
+      case 'reflect':
+        setJournalFormType('reflection');
+        setIsJournalFormVisible(true);
+        break;
+      case 'rose':
+        setJournalFormType('rose');
+        setIsJournalFormVisible(true);
+        break;
+      case 'thorn':
+        setJournalFormType('thorn');
+        setIsJournalFormVisible(true);
+        break;
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -125,6 +177,11 @@ export default function NorthStarPage() {
         <View style={styles.sectionHeader}>
           <Star size={24} color="#ed1c24" />
           <Text style={styles.sectionTitle}>Today's Spark</Text>
+          {notifications.total > 0 && (
+            <View style={styles.newContentBadge}>
+              <Text style={styles.newContentBadgeText}>{notifications.total} New</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.sparkCard}>
@@ -170,7 +227,28 @@ export default function NorthStarPage() {
           {/* Action Buttons - Same 6 icons from Spark Modal */}
           <View style={styles.actionButtonsContainer}>
             <Text style={styles.actionLabel}>Take Action:</Text>
-            {/* TODO: Add the 6 action buttons here */}
+            <View style={styles.actionsRow}>
+              {ACTION_ICONS.map((action) => (
+                <TouchableOpacity
+                  key={action.id}
+                  style={styles.actionButton}
+                  onPress={() => handleActionPress(action.id)}
+                >
+                  <View style={styles.actionIconCircle}>
+                    {action.type === 'image' ? (
+                      <Image
+                        source={action.image}
+                        style={styles.actionIconImage}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <action.Icon size={20} color="#ed1c24" />
+                    )}
+                  </View>
+                  <Text style={styles.actionButtonLabel}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
       </View>
@@ -228,6 +306,29 @@ export default function NorthStarPage() {
           <ChevronRight size={20} color="#666" />
         </TouchableOpacity>
       </View>
+
+      {/* Modals */}
+      <Modal
+        visible={isTaskEventFormVisible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setIsTaskEventFormVisible(false)}
+      >
+        <TaskEventForm
+          mode="create"
+          preSelectedType={taskEventFormType}
+          onSubmitSuccess={() => setIsTaskEventFormVisible(false)}
+          onClose={() => setIsTaskEventFormVisible(false)}
+        />
+      </Modal>
+
+      <JournalForm
+        visible={isJournalFormVisible}
+        mode="create"
+        reflectionType={journalFormType}
+        onClose={() => setIsJournalFormVisible(false)}
+        onSaveSuccess={() => setIsJournalFormVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -335,6 +436,35 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginBottom: 12,
   },
+  actionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  actionButton: {
+    alignItems: 'center',
+    width: 60,
+  },
+  actionIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#ed1c24',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  actionIconImage: {
+    width: 28,
+    height: 28,
+  },
+  actionButtonLabel: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+  },
   foundationCard: {
     marginBottom: 16,
   },
@@ -365,5 +495,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#1f2937',
+  },
+  newContentBadge: {
+    backgroundColor: '#ed1c24',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  newContentBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
