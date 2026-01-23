@@ -8,17 +8,7 @@ import {
   Pressable,
   Image,
 } from 'react-native';
-import {
-  Star,
-  Leaf,
-  Flag,
-  Users,
-  X,
-  CheckSquare,
-  Calendar,
-  Check,
-  ChevronRight,
-} from 'lucide-react-native';
+import { Star, Leaf, Flag, Users, X, SquareCheck as CheckSquare, Calendar, Check, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 interface SparkQuestionModalProps {
