@@ -72,7 +72,7 @@ const DOT_ANGLES = [
 ];
 
 const DOT_RADIUS = 126;  // Outside the compass ring
-const DOT_SIZE = 8;      // Radius of each dot
+const DOT_SIZE = 6;      // Radius of each dot
 
 const CARDINALS_SEQUENCE: Array<'north' | 'east' | 'south' | 'west'> = ['north', 'east', 'south', 'west'];
 const CARDINAL_TO_ANGLE = {
