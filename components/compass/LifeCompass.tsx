@@ -150,11 +150,12 @@ export function LifeCompass({
 
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
   const [sparkSequenceIndex, setSparkSequenceIndex] = useState(0);
-  const [sparkQuestions, setSparkQuestions] = useState<Record<string, string>>({
-    north: "What's your guiding purpose today?",
-    east: "How will you nurture your wellbeing today?",
-    south: "What's one goal you can advance today?",
-    west: "Which role needs your attention today?",
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
+  const [sparkQuestions, setSparkQuestions] = useState<Record<string, { id: string; text: string }>>({
+    north: { id: '', text: "What's your guiding purpose today?" },
+    east: { id: '', text: "How will you nurture your wellbeing today?" },
+    south: { id: '', text: "What's one goal you can advance today?" },
+    west: { id: '', text: "Which role needs your attention today?" },
   });
   const lastUpdateTime = useSharedValue(0);
 
@@ -183,59 +184,152 @@ export function LifeCompass({
 
   const fetchSparkQuestions = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Step 1: Fetch all active morning_spark questions
+      const { data: allQuestions, error: questionsError } = await supabase
         .from('0008-ap-coaching-prompts')
-        .select('domain, prompt_template')
+        .select('id, domain, prompt_template')
         .contains('context_mode', ['morning_spark'])
         .eq('prompt_type', 'question')
         .eq('is_active', true);
 
-      if (error) {
-        console.error('Error fetching spark questions:', error);
+      if (questionsError) {
+        console.error('Error fetching questions:', questionsError);
         return;
       }
 
-      if (data && data.length > 0) {
-        const domainToCardinal: Record<string, string> = {
-          mission: 'north',
-          wellness: 'east',
-          goals: 'south',
-          roles: 'west',
-        };
+      // Step 2: Get questions shown in last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const questionsByDomain: Record<string, string[]> = {};
+      const { data: recentHistory, error: historyError } = await supabase
+        .from('0008-ap-prompt-history')
+        .select('prompt_id')
+        .eq('user_id', user.id)
+        .eq('context_mode', 'morning_spark')
+        .gte('shown_date', sevenDaysAgo.toISOString().split('T')[0]);
 
-        data.forEach((prompt: any) => {
-          const cardinal = domainToCardinal[prompt.domain];
-          if (cardinal) {
-            if (!questionsByDomain[cardinal]) {
-              questionsByDomain[cardinal] = [];
-            }
-            questionsByDomain[cardinal].push(prompt.prompt_template);
-          }
-        });
-
-        const selectedQuestions: Record<string, string> = { ...sparkQuestions };
-
-        Object.entries(questionsByDomain).forEach(([cardinal, questions]) => {
-          if (questions.length > 0) {
-            const randomIndex = Math.floor(Math.random() * questions.length);
-            selectedQuestions[cardinal] = questions[randomIndex];
-          }
-        });
-
-        setSparkQuestions(selectedQuestions);
+      if (historyError) {
+        console.error('Error fetching history:', historyError);
       }
+
+      const recentlyShownIds = new Set(recentHistory?.map(h => h.prompt_id) || []);
+
+      // Step 3: Map domain to cardinal
+      const domainToCardinal: Record<string, string> = {
+        mission: 'north',
+        wellness: 'east',
+        goals: 'south',
+        roles: 'west',
+      };
+
+      // Step 4: Group by cardinal, excluding recently shown
+      const questionsByCardinal: Record<string, Array<{ id: string; text: string }>> = {
+        north: [],
+        east: [],
+        south: [],
+        west: [],
+      };
+
+      allQuestions?.forEach((prompt: any) => {
+        const cardinal = domainToCardinal[prompt.domain];
+        if (cardinal && !recentlyShownIds.has(prompt.id)) {
+          questionsByCardinal[cardinal].push({
+            id: prompt.id,
+            text: prompt.prompt_template,
+          });
+        }
+      });
+
+      // Step 5: If no unshown questions for a cardinal, use all questions for that domain
+      allQuestions?.forEach((prompt: any) => {
+        const cardinal = domainToCardinal[prompt.domain];
+        if (cardinal && questionsByCardinal[cardinal].length === 0) {
+          questionsByCardinal[cardinal].push({
+            id: prompt.id,
+            text: prompt.prompt_template,
+          });
+        }
+      });
+
+      // Step 6: Pick one random question per cardinal
+      const selectedQuestions: Record<string, { id: string; text: string }> = {};
+
+      Object.entries(questionsByCardinal).forEach(([cardinal, questions]) => {
+        if (questions.length > 0) {
+          const randomIndex = Math.floor(Math.random() * questions.length);
+          selectedQuestions[cardinal] = questions[randomIndex];
+        }
+      });
+
+      setSparkQuestions(prev => ({ ...prev, ...selectedQuestions }));
+
     } catch (err) {
       console.error('Error in fetchSparkQuestions:', err);
     }
-  }, [sparkQuestions]);
+  }, []);
 
   useEffect(() => {
     if (compassState.mode === 'spark') {
       fetchSparkQuestions();
     }
   }, [compassState.mode, fetchSparkQuestions]);
+
+  const recordQuestionShown = useCallback(async (promptId: string, cardinal: string) => {
+    if (!promptId) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const cardinalToDomain: Record<string, string> = {
+        north: 'mission',
+        east: 'wellness',
+        south: 'goals',
+        west: 'roles',
+      };
+
+      const { data, error } = await supabase
+        .from('0008-ap-prompt-history')
+        .insert({
+          user_id: user.id,
+          prompt_id: promptId,
+          context_mode: 'morning_spark',
+          slot_code: cardinalToDomain[cardinal],
+          shown_at: new Date().toISOString(),
+          shown_date: new Date().toISOString().split('T')[0],
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.log('History insert:', error.message);
+      } else if (data) {
+        setCurrentHistoryId(data.id);
+      }
+    } catch (err) {
+      console.error('Error recording question:', err);
+    }
+  }, []);
+
+  const recordQuestionResponse = useCallback(async (actionType: string) => {
+    if (!currentHistoryId) return;
+
+    try {
+      await supabase
+        .from('0008-ap-prompt-history')
+        .update({
+          response_action: actionType,
+          responded_at: new Date().toISOString(),
+        })
+        .eq('id', currentHistoryId);
+
+    } catch (err) {
+      console.error('Error recording response:', err);
+    }
+  }, [currentHistoryId]);
 
   const handleGoldSpindleSnap = useCallback((direction: 0 | 90 | 180 | 270) => {
     const zone = ANGLE_TO_ZONE[direction];
@@ -264,10 +358,16 @@ export function LifeCompass({
   }, []);
 
   const handleHubTap = useCallback(() => {
-    if (compassState.isSpinning) return;
+    if (compassState.isSpinning || compassState.showQuestionModal) return;
 
     if (compassState.mode === 'spark') {
       const firstCardinal = CARDINALS_SEQUENCE[0];
+      const question = sparkQuestions[firstCardinal];
+
+      // Record that we're showing this question
+      if (question?.id) {
+        recordQuestionShown(question.id, firstCardinal);
+      }
 
       setCompassState(prev => ({
         ...prev,
@@ -317,54 +417,83 @@ export function LifeCompass({
         }
       }, 1000);
     }
-  }, [compassState.mode, compassState.isSpinning, onSpinComplete]);
+  }, [compassState.mode, compassState.isSpinning, compassState.showQuestionModal, sparkQuestions, recordQuestionShown, onSpinComplete]);
 
   const handleSparkNext = useCallback(() => {
     const nextIndex = sparkSequenceIndex + 1;
 
-    if (nextIndex >= CARDINALS_SEQUENCE.length) {
-      setCompassState(prev => ({
-        ...prev,
-        showQuestionModal: false,
-        currentCardinal: null,
-        sequenceStep: null,
-        smallSpindleAngle: 0,
-      }));
-      setSparkSequenceIndex(0);
+    // Step 1: Hide modal first
+    setCompassState(prev => ({
+      ...prev,
+      showQuestionModal: false,
+    }));
 
-      if (onSpinComplete) {
-        onSpinComplete();
-      }
-    } else {
-      const nextCardinal = CARDINALS_SEQUENCE[nextIndex];
-
-      setCompassState(prev => ({
-        ...prev,
-        smallSpindleAngle: CARDINAL_TO_ANGLE[nextCardinal],
-        currentCardinal: nextCardinal,
-        sequenceStep: nextIndex,
-      }));
-
-      setSparkSequenceIndex(nextIndex);
-
-      if (Platform.OS !== 'web' && Haptics) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    }
-  }, [sparkSequenceIndex, onSpinComplete]);
-
-  const handleSparkAction = useCallback((actionType: string) => {
     if (Platform.OS !== 'web' && Haptics) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
+    // Step 2: After modal fades out, move spindle
+    setTimeout(() => {
+      if (nextIndex >= CARDINALS_SEQUENCE.length) {
+        // Sequence complete - return to North
+        setCompassState(prev => ({
+          ...prev,
+          currentCardinal: null,
+          sequenceStep: null,
+          smallSpindleAngle: 0,
+        }));
+        setSparkSequenceIndex(0);
+        setCurrentHistoryId(null);
+
+        if (onSpinComplete) {
+          onSpinComplete();
+        }
+      } else {
+        // Move to next cardinal
+        const nextCardinal = CARDINALS_SEQUENCE[nextIndex];
+        const question = sparkQuestions[nextCardinal];
+
+        // Record that we're showing this question
+        if (question?.id) {
+          recordQuestionShown(question.id, nextCardinal);
+        }
+
+        setCompassState(prev => ({
+          ...prev,
+          smallSpindleAngle: CARDINAL_TO_ANGLE[nextCardinal],
+          currentCardinal: nextCardinal,
+          sequenceStep: nextIndex,
+        }));
+
+        setSparkSequenceIndex(nextIndex);
+
+        // Step 3: After spindle moves, show modal again
+        setTimeout(() => {
+          setCompassState(prev => ({
+            ...prev,
+            showQuestionModal: true,
+          }));
+        }, 400);
+      }
+    }, 300);
+  }, [sparkSequenceIndex, sparkQuestions, recordQuestionShown, onSpinComplete]);
+
+  const handleSparkAction = useCallback((actionType: string) => {
+    // Record the response
+    recordQuestionResponse(actionType);
+
+    if (Platform.OS !== 'web' && Haptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    // Open appropriate form
     if (onTaskFormOpen && ['task', 'event', 'idea'].includes(actionType)) {
       onTaskFormOpen(actionType as 'task' | 'event' | 'depositIdea');
     }
     if (onJournalFormOpen && ['reflect', 'rose', 'thorn', 'note'].includes(actionType)) {
       onJournalFormOpen(actionType as 'rose' | 'thorn' | 'reflection');
     }
-  }, [compassState.currentCardinal, onTaskFormOpen, onJournalFormOpen]);
+  }, [recordQuestionResponse, onTaskFormOpen, onJournalFormOpen]);
 
   const handleSparkClose = useCallback(() => {
     setCompassState(prev => ({
@@ -624,14 +753,14 @@ export function LifeCompass({
         </View>
 
         <CardinalIcons
-          activeCardinal={compassState.currentCardinal}
+          activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
           size={responsiveSize}
         />
 
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
           cardinal={compassState.currentCardinal}
-          question={compassState.currentCardinal ? sparkQuestions[compassState.currentCardinal] : ''}
+          question={compassState.currentCardinal ? sparkQuestions[compassState.currentCardinal]?.text : ''}
           onAction={handleSparkAction}
           onNext={handleSparkNext}
           onClose={handleSparkClose}
