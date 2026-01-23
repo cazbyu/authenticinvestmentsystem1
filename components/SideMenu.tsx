@@ -11,6 +11,7 @@ import {
   Bell,
   Lightbulb,
   User,
+  Star,
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchPendingFollowUps } from '@/lib/followUpUtils';
@@ -19,6 +20,7 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { getAppVersionDisplay } from '@/lib/appVersion';
 
 const menuItems = [
+  { id: 'northstar', title: 'North Star', icon: Star, route: '/(sidebar)/north-star' },
   { id: 'calendar', title: 'Calendar View', icon: Calendar, route: '/calendar' },
   { id: 'reflections', title: 'Reflections', icon: BookOpen, route: '/reflections' },
   { id: 'followup', title: 'Follow Up', icon: Bell, route: '/followup' },
