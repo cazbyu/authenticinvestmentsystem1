@@ -348,7 +348,7 @@ export function LifeCompass({
 </G>
 
 {/* Color Ring - rendered after white background, before star */}
-<ColorRing visible={true} size={288} />
+<ColorRing visible={compassState.bigSpindleAngle === 90} size={288} />
 
 <G id="Outer_Circle">
               <Path d="M144,30.24c62.83,0,113.76,50.93,113.76,113.76s-50.93,113.76-113.76,113.76S30.24,206.83,30.24,144,81.17,30.24,144,30.24M144,27.84c-64.05,0-116.16,52.11-116.16,116.16s52.11,116.16,116.16,116.16,116.16-52.11,116.16-116.16S208.05,27.84,144,27.84h0Z" fill="#333"/>

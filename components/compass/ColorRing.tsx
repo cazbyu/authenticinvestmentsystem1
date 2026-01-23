@@ -1,5 +1,5 @@
 import React from 'react';
-import { G, Path, Circle } from 'react-native-svg';
+import { G, Path } from 'react-native-svg';
 
 interface ColorRingProps {
   visible: boolean;
@@ -43,11 +43,8 @@ export const ColorRing: React.FC<ColorRingProps> = ({ visible, size = 288 }) => 
   ];
 
   return (
-  <G>
-    {/* DEBUG: Remove after testing */}
-    <Circle cx={144} cy={144} r={70} fill="red" opacity={0.6} />
-    
-    {segments.map((seg, i) => (
+    <G>
+      {segments.map((seg, i) => (
         <Path
           key={i}
           d={createWedgePath(seg.start, seg.end)}
