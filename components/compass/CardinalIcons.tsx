@@ -5,35 +5,38 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import Svg, { G, Circle, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Circle, Path } from 'react-native-svg';
 
 interface CardinalIconsProps {
-  visible: boolean;
   activeCardinal: 'north' | 'east' | 'south' | 'west' | null;
   size?: number;
+  theme?: 'light' | 'dark';
 }
 
-const CARDINAL_CONFIG = {
-  north: { angle: 0, label: 'MVV', icon: '⭐', color: '#ed1c24' },
-  east: { angle: 90, label: 'Wellness', icon: '🌿', color: '#39b54a' },
-  south: { angle: 180, label: 'Goals', icon: '🎯', color: '#00abc5' },
-  west: { angle: 270, label: 'Roles', icon: '👥', color: '#ffd400' },
+const CENTER = 144;
+const ICON_RADIUS = 115;
+
+const ICON_PATHS = {
+  north: 'M0,-8 L2,-2 L8,0 L2,2 L0,8 L-2,2 L-8,0 L-2,-2 Z',
+  east: 'M0,-7 C4,-7 7,-4 7,0 C7,4 4,7 0,7 C0,3 -3,0 -3,-4 C-3,-6 -1,-7 0,-7 Z M0,-4 L0,4',
+  south: 'M0,-7 A7,7 0 1,1 0,7 A7,7 0 1,1 0,-7 M0,-4 A4,4 0 1,1 0,4 A4,4 0 1,1 0,-4 M0,-1.5 A1.5,1.5 0 1,1 0,1.5 A1.5,1.5 0 1,1 0,-1.5',
+  west: 'M-3,-6 A2,2 0 1,1 -3,-2 A2,2 0 1,1 -3,-6 M-3,0 L-3,5 M-6,2 L0,2 M3,-6 A2,2 0 1,1 3,-2 A2,2 0 1,1 3,-6 M3,0 L3,5 M0,2 L6,2',
 };
 
-const ICON_RADIUS = 115;
-const CENTER = 144;
+const CARDINAL_CONFIG = {
+  north: { angle: 0, color: '#ed1c24' },
+  east: { angle: 90, color: '#39b54a' },
+  south: { angle: 180, color: '#00abc5' },
+  west: { angle: 270, color: '#ffd400' },
+};
 
 export default function CardinalIcons({
-  visible,
   activeCardinal,
   size = 288,
+  theme = 'light',
 }: CardinalIconsProps) {
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(visible ? 1 : 0, {
-      duration: 400,
-      easing: Easing.inOut(Easing.ease),
-    }),
-  }));
+  const bgColor = theme === 'light' ? '#ffffff' : '#1a1a1a';
+  const scale = size / 288;
 
   const calculatePosition = (angle: number) => {
     const angleRad = (angle - 90) * (Math.PI / 180);
@@ -44,37 +47,38 @@ export default function CardinalIcons({
   };
 
   return (
-    <Animated.View style={[styles.container, { width: size, height: size }, animatedStyle]}>
+    <View style={[styles.container, { width: size, height: size }]}>
       <Svg width={size} height={size} viewBox="0 0 288 288">
         {Object.entries(CARDINAL_CONFIG).map(([key, config]) => {
-          const { x, y } = calculatePosition(config.angle);
           const isActive = activeCardinal === key;
-          const circleRadius = isActive ? 18 : 14;
-          const bgOpacity = isActive ? 1 : 0.7;
+
+          if (!isActive) return null;
+
+          const { x, y } = calculatePosition(config.angle);
 
           return (
-            <G key={key}>
+            <G key={key} transform={`translate(${x}, ${y})`}>
               <Circle
-                cx={x}
-                cy={y}
-                r={circleRadius}
-                fill={config.color}
-                opacity={bgOpacity}
+                cx={0}
+                cy={0}
+                r={16}
+                fill={bgColor}
+                stroke={config.color}
+                strokeWidth={2}
               />
-              <SvgText
-                x={x}
-                y={y + 5}
-                fontSize={isActive ? 16 : 12}
-                textAnchor="middle"
-                fill="#fff"
-              >
-                {config.icon}
-              </SvgText>
+              <Path
+                d={ICON_PATHS[key as keyof typeof ICON_PATHS]}
+                fill="none"
+                stroke={config.color}
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </G>
           );
         })}
       </Svg>
-    </Animated.View>
+    </View>
   );
 }
 

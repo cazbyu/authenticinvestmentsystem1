@@ -624,7 +624,6 @@ export function LifeCompass({
         </View>
 
         <CardinalIcons
-          visible={compassState.mode === 'spark'}
           activeCardinal={compassState.currentCardinal}
           size={responsiveSize}
         />
