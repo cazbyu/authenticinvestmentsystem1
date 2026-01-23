@@ -10,7 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { ChevronLeft, ChevronRight, Star, BookOpen, SquareCheck as CheckSquare, Calendar } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import JournalForm from '@/components/reflections/JournalForm';
@@ -35,8 +35,32 @@ const ACTION_ICONS = [
   { id: 'thorn', image: require('@/assets/images/thorn-81.png'), label: 'Thorn', type: 'image' },
 ];
 
+const getDomainDisplayName = (domain: string): string => {
+  const names: { [key: string]: string } = {
+    mission: 'Mission',
+    wellness: 'Wellness',
+    goals: 'Goals',
+    roles: 'Roles',
+  };
+  return names[domain] || domain;
+};
+
+const getDomainIcon = (domain: string): string => {
+  const icons: { [key: string]: string } = {
+    mission: '⭐',
+    wellness: '🌿',
+    goals: '🎯',
+    roles: '👥',
+  };
+  return icons[domain] || '📌';
+};
+
 export default function NorthStarPage() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const highlightDomain = params.domain as string | undefined;
+  const shouldHighlight = params.highlight === 'true';
+
   const [loading, setLoading] = useState(true);
   const [currentSpark, setCurrentSpark] = useState<PowerContent | null>(null);
   const [sparkType, setSparkType] = useState<'quote' | 'question'>('quote');
@@ -47,6 +71,8 @@ export default function NorthStarPage() {
   const [isJournalFormVisible, setIsJournalFormVisible] = useState(false);
   const [journalFormType, setJournalFormType] = useState<'rose' | 'thorn' | 'reflection'>('reflection');
   const { notifications, markAsRead } = useCoachNotifications();
+  const [activeDomain, setActiveDomain] = useState<string | null>(highlightDomain || null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     loadNorthStarData();
@@ -63,6 +89,7 @@ export default function NorthStarPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      setUserId(user.id);
       archiveOldSparkContent(user.id).catch(console.error);
 
       const { data: userData } = await supabase
@@ -76,7 +103,7 @@ export default function NorthStarPage() {
         setVisionText(userData.vision_text || '');
       }
 
-      await loadTodaysSpark(user.id, sparkType);
+      await loadTodaysSpark(user.id, sparkType, activeDomain || undefined);
     } catch (error) {
       console.error('Error loading North Star data:', error);
     } finally {
@@ -84,18 +111,28 @@ export default function NorthStarPage() {
     }
   };
 
-  const loadTodaysSpark = async (userId: string, type: 'quote' | 'question') => {
+  const loadTodaysSpark = async (
+    userId: string,
+    type: 'quote' | 'question',
+    priorityDomain?: string
+  ) => {
     const supabase = getSupabaseClient();
     const tableName = type === 'quote'
       ? '0008-ap-user-power-quotes'
       : '0008-ap-user-power-questions';
 
-    const { data } = await supabase
+    let query = supabase
       .from(tableName)
       .select('*')
       .eq('user_id', userId)
       .eq('is_active', true)
-      .eq('show_in_spark', true)
+      .eq('show_in_spark', true);
+
+    if (priorityDomain) {
+      query = query.eq('domain', priorityDomain);
+    }
+
+    const { data } = await query
       .order('last_shown_at', { ascending: true, nullsFirst: true })
       .limit(1)
       .single();
@@ -130,7 +167,7 @@ export default function NorthStarPage() {
     const supabase = getSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      await loadTodaysSpark(user.id, newType);
+      await loadTodaysSpark(user.id, newType, activeDomain || undefined);
     }
   };
 
@@ -225,6 +262,26 @@ export default function NorthStarPage() {
             </TouchableOpacity>
           </View>
 
+          {/* Domain Filter Display */}
+          {activeDomain && (
+            <View style={styles.domainFilterContainer}>
+              <Text style={styles.domainFilterLabel}>
+                Showing: {getDomainDisplayName(activeDomain)}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setActiveDomain(null);
+                  if (userId) {
+                    loadTodaysSpark(userId, sparkType, undefined);
+                  }
+                }}
+                style={styles.clearFilterButton}
+              >
+                <Text style={styles.clearFilterText}>Show All</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Action Buttons - Same 6 icons from Spark Modal */}
           <View style={styles.actionButtonsContainer}>
             <Text style={styles.actionLabel}>Take Action:</Text>
@@ -247,6 +304,38 @@ export default function NorthStarPage() {
                     )}
                   </View>
                   <Text style={styles.actionButtonLabel}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Domain Filter Chips */}
+          <View style={styles.domainChipsContainer}>
+            <Text style={styles.domainChipsLabel}>Filter by domain:</Text>
+            <View style={styles.domainChips}>
+              {['mission', 'wellness', 'goals', 'roles'].map((domain) => (
+                <TouchableOpacity
+                  key={domain}
+                  onPress={() => {
+                    const newDomain = activeDomain === domain ? null : domain;
+                    setActiveDomain(newDomain);
+                    if (userId) {
+                      loadTodaysSpark(userId, sparkType, newDomain || undefined);
+                    }
+                  }}
+                  style={[
+                    styles.domainChip,
+                    activeDomain === domain && styles.domainChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.domainChipText,
+                      activeDomain === domain && styles.domainChipTextActive,
+                    ]}
+                  >
+                    {getDomainIcon(domain)} {getDomainDisplayName(domain)}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -472,6 +561,66 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#666',
     marginTop: 4,
+  },
+  domainFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fef3c7',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  domainFilterLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#92400e',
+  },
+  clearFilterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#fff',
+  },
+  clearFilterText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
+  },
+  domainChipsContainer: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  domainChipsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  domainChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  domainChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+  },
+  domainChipActive: {
+    backgroundColor: '#ed1c24',
+    borderColor: '#ed1c24',
+  },
+  domainChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  domainChipTextActive: {
+    color: '#fff',
   },
   foundationCard: {
     marginBottom: 16,

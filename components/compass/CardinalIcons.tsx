@@ -1,11 +1,18 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Pressable, Text } from 'react-native';
 import Svg, { G, Circle, Path, Defs, Filter, FeGaussianBlur, FeOffset, FeComponentTransfer, FeFuncA, FeMerge, FeMergeNode } from 'react-native-svg';
 
 interface CardinalIconsProps {
   activeCardinal: 'north' | 'east' | 'south' | 'west' | null;
   size?: number;
   theme?: 'light' | 'dark';
+  onCardinalPress?: (cardinal: 'north' | 'east' | 'south' | 'west') => void;
+  contentCounts?: {
+    mission?: number;
+    wellness?: number;
+    goals?: number;
+    roles?: number;
+  };
 }
 
 const CENTER = 144;
@@ -26,17 +33,36 @@ const CARDINAL_CONFIG = {
   west: { angle: 270, color: '#ffd400' },
 };
 
+const DOMAIN_MAP = {
+  north: 'mission',
+  east: 'wellness',
+  south: 'goals',
+  west: 'roles',
+} as const;
+
+const CARDINAL_POSITIONS = {
+  north: { x: 144, y: 30 },
+  east: { x: 258, y: 144 },
+  south: { x: 144, y: 258 },
+  west: { x: 30, y: 144 },
+};
+
 export default function CardinalIcons({
   activeCardinal,
   size = 288,
   theme = 'light',
+  onCardinalPress,
+  contentCounts = {},
 }: CardinalIconsProps) {
+  const [pressedCardinal, setPressedCardinal] = useState<string | null>(null);
   const bgColor = theme === 'light' ? '#ffffff' : '#1a1a1a';
   const scale = size / 288;
 
+  const cardinals: Array<'north' | 'east' | 'south' | 'west'> = ['north', 'east', 'south', 'west'];
+
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size} viewBox="0 0 288 288">
+      <Svg width={size} height={size} viewBox="0 0 288 288" style={{ position: 'absolute' }}>
         <Defs>
           <Filter id="cardinalShadow" x="-50%" y="-50%" width="200%" height="200%">
             <FeGaussianBlur in="SourceAlpha" stdDeviation="2" />
@@ -50,27 +76,32 @@ export default function CardinalIcons({
             </FeMerge>
           </Filter>
         </Defs>
-        {Object.entries(CARDINAL_CONFIG).map(([key, config]) => {
+        {cardinals.map((key) => {
+          const config = CARDINAL_CONFIG[key];
           const isActive = activeCardinal === key;
-
-          if (!isActive) return null;
+          const isPressed = pressedCardinal === key;
 
           return (
-            <G key={key} transform={`translate(${CENTER}, ${CENTER})`} filter="url(#cardinalShadow)">
+            <G
+              key={key}
+              transform={`translate(${CENTER}, ${CENTER})`}
+              filter={isActive ? "url(#cardinalShadow)" : undefined}
+              opacity={isPressed ? 0.7 : 1}
+            >
               <Circle
                 cx={0}
                 cy={0}
                 r={22}
-                fill={bgColor}
+                fill={isActive ? bgColor : 'transparent'}
                 stroke={config.color}
-                strokeWidth={2.5}
+                strokeWidth={isActive ? 2.5 : 1.5}
               />
               <G transform={`scale(${ICON_SCALE})`}>
                 <Path
-                  d={ICON_PATHS[key as keyof typeof ICON_PATHS]}
+                  d={ICON_PATHS[key]}
                   fill="none"
                   stroke={config.color}
-                  strokeWidth={1.5}
+                  strokeWidth={isActive ? 1.5 : 1}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -79,6 +110,36 @@ export default function CardinalIcons({
           );
         })}
       </Svg>
+
+      {cardinals.map((cardinal) => {
+        const pos = CARDINAL_POSITIONS[cardinal];
+        const domain = DOMAIN_MAP[cardinal];
+        const count = contentCounts[domain] || 0;
+
+        return (
+          <Pressable
+            key={cardinal}
+            onPressIn={() => setPressedCardinal(cardinal)}
+            onPressOut={() => setPressedCardinal(null)}
+            onPress={() => onCardinalPress?.(cardinal)}
+            style={[
+              styles.cardinalTouchArea,
+              {
+                left: pos.x * scale - 22 * scale,
+                top: pos.y * scale - 22 * scale,
+                width: 44 * scale,
+                height: 44 * scale,
+              }
+            ]}
+          >
+            {count > 0 && (
+              <View style={styles.contentIndicator}>
+                <Text style={styles.contentIndicatorText}>{count}</Text>
+              </View>
+            )}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -88,6 +149,30 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    pointerEvents: 'none',
+  },
+  cardinalTouchArea: {
+    position: 'absolute',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contentIndicator: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ed1c24',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  contentIndicatorText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

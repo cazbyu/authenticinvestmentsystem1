@@ -148,6 +148,13 @@ export function LifeCompass({
     currentCardinal: null,
   });
 
+  const [domainContentCounts, setDomainContentCounts] = useState<{
+    mission?: number;
+    wellness?: number;
+    goals?: number;
+    roles?: number;
+  }>({});
+
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
   const [sparkSequenceIndex, setSparkSequenceIndex] = useState(0);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
@@ -276,6 +283,58 @@ export function LifeCompass({
       fetchSparkQuestions();
     }
   }, [compassState.mode, fetchSparkQuestions]);
+
+  const checkDomainContent = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const domains = ['mission', 'wellness', 'goals', 'roles'];
+      const counts: { [key: string]: number } = {};
+
+      for (const domain of domains) {
+        const { count: quoteCount } = await supabase
+          .from('0008-ap-user-power-quotes')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('domain', domain)
+          .eq('is_active', true);
+
+        const { count: questionCount } = await supabase
+          .from('0008-ap-user-power-questions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('domain', domain)
+          .eq('is_active', true);
+
+        counts[domain] = (quoteCount || 0) + (questionCount || 0);
+      }
+
+      setDomainContentCounts(counts);
+    } catch (error) {
+      console.error('Error checking domain content:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkDomainContent();
+  }, [checkDomainContent]);
+
+  const handleCardinalPress = useCallback((cardinal: 'north' | 'east' | 'south' | 'west') => {
+    const domainMap: { [key: string]: string } = {
+      north: 'mission',
+      east: 'wellness',
+      south: 'goals',
+      west: 'roles',
+    };
+
+    const domain = domainMap[cardinal];
+
+    router.push({
+      pathname: '/(sidebar)/north-star',
+      params: { domain, highlight: 'true' },
+    });
+  }, [router]);
 
   const recordQuestionShown = useCallback(async (promptId: string, cardinal: string) => {
     if (!promptId) return;
@@ -768,6 +827,8 @@ export function LifeCompass({
         <CardinalIcons
           activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
           size={responsiveSize}
+          onCardinalPress={handleCardinalPress}
+          contentCounts={domainContentCounts}
         />
 
         <SparkQuestionModal
