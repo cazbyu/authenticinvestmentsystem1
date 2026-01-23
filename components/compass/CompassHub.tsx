@@ -20,13 +20,21 @@ interface CompassHubProps {
   isSpinning?: boolean;
   onTap?: () => void;
   activeZone?: 'mission' | 'wellness' | 'goals' | 'roles' | null;
+  activeCardinal?: 'north' | 'east' | 'south' | 'west' | null;
 }
 
 const ZONE_COLORS = {
   mission: '#ed1c24',
   wellness: '#39b54a',
-  goals: '#00abc5',
-  roles: '#ffd400',
+  goals: '#4169E1',
+  roles: '#9370DB',
+};
+
+const CARDINAL_TO_ANGLE = {
+  north: 0,
+  east: 90,
+  south: 180,
+  west: 270,
 };
 
 const DEFAULT_CENTER_COLOR = '#ed1c24';
@@ -40,9 +48,12 @@ export default function CompassHub({
   isSpinning = false,
   onTap,
   activeZone = null,
+  activeCardinal = null,
 }: CompassHubProps) {
   const pulseScale = useSharedValue(1);
   const spinRotation = useSharedValue(0);
+  const spindleRotation = useSharedValue(0);
+  const hubIconOpacity = useSharedValue(0);
   const scale = size / 288;
 
   const centerColor = activeZone ? ZONE_COLORS[activeZone] : DEFAULT_CENTER_COLOR;
@@ -81,6 +92,23 @@ export default function CompassHub({
     };
   }, [isSpinning]);
 
+  useEffect(() => {
+    if (activeCardinal) {
+      const targetAngle = CARDINAL_TO_ANGLE[activeCardinal];
+      spindleRotation.value = withTiming(targetAngle, {
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+      });
+      hubIconOpacity.value = withSequence(
+        withTiming(0, { duration: 200 }),
+        withTiming(1, { duration: 400 })
+      );
+    } else {
+      spindleRotation.value = withTiming(0, { duration: 400 });
+      hubIconOpacity.value = withTiming(0, { duration: 300 });
+    }
+  }, [activeCardinal]);
+
   const pulseAnimatedStyle = useAnimatedStyle(() => {
     return {
       transform: [{ scale: pulseScale.value }],
@@ -90,6 +118,24 @@ export default function CompassHub({
   const spinAnimatedProps = useAnimatedProps(() => {
     return {
       transform: `rotate(${spinRotation.value}, 144, 144)`,
+    };
+  });
+
+  const spindleAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: size / 2 },
+        { translateY: size / 2 },
+        { rotate: `${spindleRotation.value}deg` },
+        { translateX: -size / 2 },
+        { translateY: -size / 2 },
+      ],
+    };
+  });
+
+  const hubIconAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: hubIconOpacity.value,
     };
   });
 
@@ -112,6 +158,26 @@ export default function CompassHub({
     >
       {({ pressed }) => (
         <View style={[styles.container, { width: size, height: size }]}>
+          <Animated.View style={[StyleSheet.absoluteFill, spindleAnimatedStyle]}>
+            <Svg
+              width={size}
+              height={size}
+              viewBox="0 0 288 288"
+              style={StyleSheet.absoluteFill}
+            >
+              <G>
+                <Path
+                  d="M144,130 L144,50 M140,55 L144,50 L148,55"
+                  stroke="#c0c0c0"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </G>
+            </Svg>
+          </Animated.View>
+
           <Svg
             width={size}
             height={size}
@@ -162,6 +228,19 @@ export default function CompassHub({
               </Animated.View>
             </G>
           </Svg>
+
+          {activeCardinal && (
+            <Animated.View style={[styles.hub, hubIconAnimatedStyle]}>
+              <Svg width={20} height={20} viewBox="0 0 20 20">
+                <Path
+                  d="M10,2 L12,8 L18,10 L12,12 L10,18 L8,12 L2,10 L8,8 Z"
+                  fill={centerColor}
+                  stroke={HUB_WHITE}
+                  strokeWidth="1"
+                />
+              </Svg>
+            </Animated.View>
+          )}
         </View>
       )}
     </Pressable>
@@ -179,6 +258,17 @@ const styles = StyleSheet.create({
     }),
   },
   container: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hub: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 20,
+    height: 20,
+    marginLeft: -10,
+    marginTop: -10,
     justifyContent: 'center',
     alignItems: 'center',
   },

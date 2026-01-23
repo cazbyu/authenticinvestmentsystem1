@@ -821,6 +821,7 @@ export function LifeCompass({
             isSpinning={compassState.isSpinning}
             onTap={handleHubTap}
             activeZone={compassState.activeZone}
+            activeCardinal={compassState.currentCardinal}
           />
         </View>
 

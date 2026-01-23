@@ -41,14 +41,14 @@ const CARDINAL_THEMES = {
   },
   south: {
     title: 'Goals',
-    color: '#00abc5',
+    color: '#4169E1',
     Icon: Flag,
     bankLabel: 'Goal Bank',
     bankRoute: '/(tabs)/goals'
   },
   west: {
     title: 'Roles',
-    color: '#ffd400',
+    color: '#9370DB',
     Icon: Users,
     bankLabel: 'Role Bank',
     bankRoute: '/(tabs)/roles'

@@ -29,8 +29,8 @@ const ICON_PATHS = {
 const CARDINAL_CONFIG = {
   north: { angle: 0, color: '#ed1c24' },
   east: { angle: 90, color: '#39b54a' },
-  south: { angle: 180, color: '#00abc5' },
-  west: { angle: 270, color: '#ffd400' },
+  south: { angle: 180, color: '#4169E1' },
+  west: { angle: 270, color: '#9370DB' },
 };
 
 const DOMAIN_MAP = {
@@ -78,13 +78,14 @@ export default function CardinalIcons({
         </Defs>
         {cardinals.map((key) => {
           const config = CARDINAL_CONFIG[key];
+          const pos = CARDINAL_POSITIONS[key];
           const isActive = activeCardinal === key;
           const isPressed = pressedCardinal === key;
 
           return (
             <G
               key={key}
-              transform={`translate(${CENTER}, ${CENTER})`}
+              transform={`translate(${pos.x}, ${pos.y})`}
               filter={isActive ? "url(#cardinalShadow)" : undefined}
               opacity={isPressed ? 0.7 : 1}
             >
