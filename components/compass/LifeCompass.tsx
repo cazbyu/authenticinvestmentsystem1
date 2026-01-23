@@ -479,21 +479,34 @@ export function LifeCompass({
   }, [sparkSequenceIndex, sparkQuestions, recordQuestionShown, onSpinComplete]);
 
   const handleSparkAction = useCallback((actionType: string) => {
-    // Record the response
-    recordQuestionResponse(actionType);
+  // Record the response
+  recordQuestionResponse(actionType);
 
-    if (Platform.OS !== 'web' && Haptics) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+  if (Platform.OS !== 'web' && Haptics) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
 
-    // Open appropriate form
-    if (onTaskFormOpen && ['task', 'event', 'idea'].includes(actionType)) {
-      onTaskFormOpen(actionType as 'task' | 'event' | 'depositIdea');
-    }
-    if (onJournalFormOpen && ['reflect', 'rose', 'thorn', 'note'].includes(actionType)) {
-      onJournalFormOpen(actionType as 'rose' | 'thorn' | 'reflection');
-    }
-  }, [recordQuestionResponse, onTaskFormOpen, onJournalFormOpen]);
+  // Map action IDs to form types
+  const taskFormTypes: Record<string, 'task' | 'event' | 'depositIdea'> = {
+    'task': 'task',
+    'event': 'event',
+    'idea': 'depositIdea',  // ✅ Map 'idea' → 'depositIdea'
+  };
+
+  const journalFormTypes: Record<string, 'rose' | 'thorn' | 'reflection'> = {
+    'rose': 'rose',
+    'thorn': 'thorn',
+    'reflect': 'reflection',  // ✅ Map 'reflect' → 'reflection'
+  };
+
+  // Open appropriate form with correct type
+  if (onTaskFormOpen && taskFormTypes[actionType]) {
+    onTaskFormOpen(taskFormTypes[actionType]);
+  }
+  if (onJournalFormOpen && journalFormTypes[actionType]) {
+    onJournalFormOpen(journalFormTypes[actionType]);
+  }
+}, [recordQuestionResponse, onTaskFormOpen, onJournalFormOpen]);
 
   const handleSparkClose = useCallback(() => {
     setCompassState(prev => ({
