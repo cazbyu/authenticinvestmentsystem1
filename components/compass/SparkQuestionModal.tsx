@@ -16,7 +16,6 @@ import {
   X,
   CheckSquare,
   Calendar,
-  Edit,
   Check,
   ChevronRight,
 } from 'lucide-react-native';
@@ -70,7 +69,6 @@ const ACTION_ICONS = [
   { id: 'reflect', image: require('@/assets/images/reflections-72.png'), label: 'Reflect', type: 'image' },
   { id: 'rose', image: require('@/assets/images/rose-81.png'), label: 'Rose', type: 'image' },
   { id: 'thorn', image: require('@/assets/images/thorn-81.png'), label: 'Thorn', type: 'image' },
-  { id: 'note', Icon: Edit, label: 'Note', type: 'icon' },
 ];
 
 export default function SparkQuestionModal({
