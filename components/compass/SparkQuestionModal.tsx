@@ -98,14 +98,20 @@ export default function SparkQuestionModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable style={styles.overlay} onPress={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}>
         <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}>
           {Platform.OS !== 'web' ? (
             <BlurView intensity={90} tint="light" style={styles.blurContainer}>
               <View style={[styles.header, { backgroundColor: theme.color }]}>
                 <HeaderIcon size={24} color="#fff" />
                 <Text style={styles.headerTitle}>{theme.title}</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <TouchableOpacity onPress={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }} style={styles.closeButton}>
                   <X size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
@@ -178,7 +184,10 @@ export default function SparkQuestionModal({
               <View style={[styles.header, { backgroundColor: theme.color }]}>
                 <HeaderIcon size={24} color="#fff" />
                 <Text style={styles.headerTitle}>{theme.title}</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <TouchableOpacity onPress={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }} style={styles.closeButton}>
                   <X size={24} color="#fff" />
                 </TouchableOpacity>
               </View>

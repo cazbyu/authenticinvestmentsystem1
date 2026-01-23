@@ -168,8 +168,8 @@ export default function CompassHub({
               <G>
                 <Path
                   d="M144,130 L144,50 M140,55 L144,50 L148,55"
-                  stroke="#c0c0c0"
-                  strokeWidth="2"
+                  stroke="#999999"
+                  strokeWidth="3"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   fill="none"
