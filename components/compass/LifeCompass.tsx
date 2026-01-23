@@ -18,6 +18,7 @@ import Svg, {
 import { useRouter } from 'expo-router';
 import { COMPASS_WAYPOINTS, WAYPOINT_TOLERANCE, COMPASS_CENTER, CompassWaypoint } from './compassConfig';
 import * as Haptics from 'expo-haptics';
+import { supabase } from '@/lib/supabase';
 import SpindleGold from './SpindleGold';
 import SpindleSilver from './SpindleSilver';
 import CompassHub from './CompassHub';
@@ -79,13 +80,6 @@ const CARDINAL_TO_ANGLE = {
   east: 90,
   south: 180,
   west: 270,
-};
-
-const SPARK_QUESTIONS = {
-  north: "What's your guiding purpose today?",
-  east: "How will you nurture your wellbeing today?",
-  south: "What's one goal you can advance today?",
-  west: "Which role needs your attention today?",
 };
 
 function normalizeAngle(angle: number): number {
@@ -156,6 +150,12 @@ export function LifeCompass({
 
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
   const [sparkSequenceIndex, setSparkSequenceIndex] = useState(0);
+  const [sparkQuestions, setSparkQuestions] = useState<Record<string, string>>({
+    north: "What's your guiding purpose today?",
+    east: "How will you nurture your wellbeing today?",
+    south: "What's one goal you can advance today?",
+    west: "Which role needs your attention today?",
+  });
   const lastUpdateTime = useSharedValue(0);
 
   const responsiveSize = useMemo(() => {
@@ -180,6 +180,62 @@ export function LifeCompass({
       cancelAnimation(rotation);
     };
   }, [rotation]);
+
+  const fetchSparkQuestions = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('0008-ap-coaching-prompts')
+        .select('domain, prompt_template')
+        .contains('context_mode', ['morning_spark'])
+        .eq('prompt_type', 'question')
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('Error fetching spark questions:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const domainToCardinal: Record<string, string> = {
+          mission: 'north',
+          wellness: 'east',
+          goals: 'south',
+          roles: 'west',
+        };
+
+        const questionsByDomain: Record<string, string[]> = {};
+
+        data.forEach((prompt: any) => {
+          const cardinal = domainToCardinal[prompt.domain];
+          if (cardinal) {
+            if (!questionsByDomain[cardinal]) {
+              questionsByDomain[cardinal] = [];
+            }
+            questionsByDomain[cardinal].push(prompt.prompt_template);
+          }
+        });
+
+        const selectedQuestions: Record<string, string> = { ...sparkQuestions };
+
+        Object.entries(questionsByDomain).forEach(([cardinal, questions]) => {
+          if (questions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * questions.length);
+            selectedQuestions[cardinal] = questions[randomIndex];
+          }
+        });
+
+        setSparkQuestions(selectedQuestions);
+      }
+    } catch (err) {
+      console.error('Error in fetchSparkQuestions:', err);
+    }
+  }, [sparkQuestions]);
+
+  useEffect(() => {
+    if (compassState.mode === 'spark') {
+      fetchSparkQuestions();
+    }
+  }, [compassState.mode, fetchSparkQuestions]);
 
   const handleGoldSpindleSnap = useCallback((direction: 0 | 90 | 180 | 270) => {
     const zone = ANGLE_TO_ZONE[direction];
@@ -576,7 +632,7 @@ export function LifeCompass({
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
           cardinal={compassState.currentCardinal}
-          question={compassState.currentCardinal ? SPARK_QUESTIONS[compassState.currentCardinal] : ''}
+          question={compassState.currentCardinal ? sparkQuestions[compassState.currentCardinal] : ''}
           onAction={handleSparkAction}
           onNext={handleSparkNext}
           onClose={handleSparkClose}
