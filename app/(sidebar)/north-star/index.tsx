@@ -15,6 +15,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import JournalForm from '@/components/reflections/JournalForm';
 import { useCoachNotifications } from '@/hooks/useCoachNotifications';
+import { archiveOldSparkContent } from '@/lib/archiveSparkContent';
 
 interface PowerContent {
   id: string;
@@ -62,7 +63,8 @@ export default function NorthStarPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load Mission & Vision from existing table
+      archiveOldSparkContent(user.id).catch(console.error);
+
       const { data: userData } = await supabase
         .from('0008-ap-users')
         .select('mission_text, vision_text')
@@ -74,7 +76,6 @@ export default function NorthStarPage() {
         setVisionText(userData.vision_text || '');
       }
 
-      // Load Today's Spark
       await loadTodaysSpark(user.id, sparkType);
     } catch (error) {
       console.error('Error loading North Star data:', error);
@@ -297,12 +298,19 @@ export default function NorthStarPage() {
 
       {/* Section 4: Libraries */}
       <View style={styles.section}>
+        <Text style={styles.sectionHeader}>Libraries</Text>
+
         <TouchableOpacity
           onPress={() => router.push('/(sidebar)/north-star/spark-library')}
           style={styles.libraryButton}
         >
           <BookOpen size={20} color="#ed1c24" />
-          <Text style={styles.libraryButtonText}>Spark Library</Text>
+          <View style={styles.libraryButtonContent}>
+            <Text style={styles.libraryButtonText}>Spark Library</Text>
+            <Text style={styles.libraryButtonSubtext}>
+              Your archived quotes & questions by month
+            </Text>
+          </View>
           <ChevronRight size={20} color="#666" />
         </TouchableOpacity>
       </View>
@@ -490,11 +498,18 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
   },
-  libraryButtonText: {
+  libraryButtonContent: {
     flex: 1,
+  },
+  libraryButtonText: {
     fontSize: 16,
     fontWeight: '500',
     color: '#1f2937',
+  },
+  libraryButtonSubtext: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 2,
   },
   newContentBadge: {
     backgroundColor: '#ed1c24',
