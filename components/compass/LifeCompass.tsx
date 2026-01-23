@@ -313,8 +313,7 @@ export function LifeCompass({
           height={responsiveSize}
           viewBox="0 0 288 288"
         >
-          <ColorRing visible={true} size={288} />
-
+         
           <G id="Circle">
             <G id="Lines">
               <Rect x="142.8" y="30.45" width="2.4" height="227.52" transform="translate(-22.85 27.2) rotate(-10)" fill="#333"/>
