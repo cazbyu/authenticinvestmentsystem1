@@ -94,6 +94,11 @@ export default function SparkQuestionModal({
     router.push(theme.bankRoute as any);
   };
 
+  const handleActionPress = (actionType: string) => {
+    onClose(); // Close the Spark modal first
+    onAction(actionType); // Then trigger the action (opens TaskEventForm)
+  };
+
   return (
     <Modal
       visible={visible}
@@ -135,7 +140,7 @@ export default function SparkQuestionModal({
                   <TouchableOpacity
                     key={action.id}
                     style={styles.actionButton}
-                    onPress={() => onAction(action.id)}
+                    onPress={() => handleActionPress(action.id)}
                   >
                     <View style={[styles.actionIconCircle, { borderColor: theme.color }]}>
                       {action.type === 'image' ? (
