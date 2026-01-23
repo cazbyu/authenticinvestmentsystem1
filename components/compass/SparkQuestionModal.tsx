@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   webContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.8  5)',
     borderRadius: 16,
     overflow: 'hidden',
   },
