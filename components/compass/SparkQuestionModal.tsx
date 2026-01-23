@@ -6,6 +6,7 @@ import {
   Modal,
   TouchableOpacity,
   Pressable,
+  Image,
 } from 'react-native';
 import {
   Star,
@@ -15,10 +16,6 @@ import {
   X,
   CheckSquare,
   Calendar,
-  Lightbulb,
-  BookOpen,
-  Flower2,
-  AlertCircle,
   Edit,
   Check,
   ChevronRight,
@@ -67,13 +64,13 @@ const CARDINAL_THEMES = {
 };
 
 const ACTION_ICONS = [
-  { id: 'task', Icon: CheckSquare, label: 'Task' },
-  { id: 'event', Icon: Calendar, label: 'Event' },
-  { id: 'idea', Icon: Lightbulb, label: 'Idea' },
-  { id: 'reflect', Icon: BookOpen, label: 'Reflect' },
-  { id: 'rose', Icon: Flower2, label: 'Rose' },
-  { id: 'thorn', Icon: AlertCircle, label: 'Thorn' },
-  { id: 'note', Icon: Edit, label: 'Note' },
+  { id: 'task', Icon: CheckSquare, label: 'Task', type: 'icon' },
+  { id: 'event', Icon: Calendar, label: 'Event', type: 'icon' },
+  { id: 'idea', image: require('@/assets/images/deposit-idea.png'), label: 'Idea', type: 'image' },
+  { id: 'reflect', image: require('@/assets/images/reflections-72.png'), label: 'Reflect', type: 'image' },
+  { id: 'rose', image: require('@/assets/images/rose-81.png'), label: 'Rose', type: 'image' },
+  { id: 'thorn', image: require('@/assets/images/thorn-81.png'), label: 'Thorn', type: 'image' },
+  { id: 'note', Icon: Edit, label: 'Note', type: 'icon' },
 ];
 
 export default function SparkQuestionModal({
@@ -134,7 +131,6 @@ export default function SparkQuestionModal({
             <Text style={styles.actionsLabel}>Take Action:</Text>
             <View style={styles.actionsRow}>
               {ACTION_ICONS.map((action) => {
-                const ActionIcon = action.Icon;
                 return (
                   <TouchableOpacity
                     key={action.id}
@@ -142,7 +138,15 @@ export default function SparkQuestionModal({
                     onPress={() => onAction(action.id)}
                   >
                     <View style={[styles.actionIconCircle, { borderColor: theme.color }]}>
-                      <ActionIcon size={20} color={theme.color} />
+                      {action.type === 'image' ? (
+                        <Image
+                          source={action.image}
+                          style={styles.actionIconImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <action.Icon size={20} color={theme.color} />
+                      )}
                     </View>
                     <Text style={styles.actionLabel}>{action.label}</Text>
                   </TouchableOpacity>
@@ -254,6 +258,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  actionIconImage: {
+    width: 28,
+    height: 28,
   },
   actionLabel: {
     fontSize: 10,
