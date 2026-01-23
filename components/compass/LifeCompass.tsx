@@ -22,6 +22,8 @@ import SpindleGold from './SpindleGold';
 import SpindleSilver from './SpindleSilver';
 import CompassHub from './CompassHub';
 import { ColorRing } from './ColorRing';
+import CardinalIcons from './CardinalIcons';
+import SparkQuestionModal from './SparkQuestionModal';
 
 interface LifeCompassProps {
   size?: number;
@@ -33,13 +35,18 @@ interface LifeCompassProps {
   onJournalFormOpen?: (formType: 'rose' | 'thorn' | 'reflection') => void;
 }
 
+type CompassMode = 'spark' | 'exploration';
+
 interface CompassState {
+  mode: CompassMode;
   bigSpindleAngle: 0 | 90 | 180 | 270;
   smallSpindleAngle: number;
   activeZone: 'mission' | 'wellness' | 'goals' | 'roles';
   focusedSlot: string | null;
   isSpinning: boolean;
   sequenceStep: number | null;
+  showQuestionModal: boolean;
+  currentCardinal: 'north' | 'east' | 'south' | 'west' | null;
 }
 
 const ZONE_ANGLES = {
@@ -65,6 +72,21 @@ const DOT_ANGLES = [
 
 const DOT_RADIUS = 126;  // Outside the compass ring
 const DOT_SIZE = 8;      // Radius of each dot
+
+const CARDINALS_SEQUENCE: Array<'north' | 'east' | 'south' | 'west'> = ['north', 'east', 'south', 'west'];
+const CARDINAL_TO_ANGLE = {
+  north: 0,
+  east: 90,
+  south: 180,
+  west: 270,
+};
+
+const SPARK_QUESTIONS = {
+  north: "What's your guiding purpose today?",
+  east: "How will you nurture your wellbeing today?",
+  south: "What's one goal you can advance today?",
+  west: "Which role needs your attention today?",
+};
 
 function normalizeAngle(angle: number): number {
   let normalized = angle % 360;
@@ -121,15 +143,19 @@ export function LifeCompass({
   const rotation = useSharedValue(0);
 
   const [compassState, setCompassState] = useState<CompassState>({
+    mode: 'spark',
     bigSpindleAngle: 0,
     smallSpindleAngle: 0,
     activeZone: 'mission',
     focusedSlot: null,
     isSpinning: false,
     sequenceStep: null,
+    showQuestionModal: false,
+    currentCardinal: null,
   });
 
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
+  const [sparkSequenceIndex, setSparkSequenceIndex] = useState(0);
   const lastUpdateTime = useSharedValue(0);
 
   const responsiveSize = useMemo(() => {
@@ -184,40 +210,112 @@ export function LifeCompass({
   const handleHubTap = useCallback(() => {
     if (compassState.isSpinning) return;
 
-    setCompassState(prev => ({ ...prev, isSpinning: true }));
+    if (compassState.mode === 'spark') {
+      const firstCardinal = CARDINALS_SEQUENCE[0];
 
+      setCompassState(prev => ({
+        ...prev,
+        smallSpindleAngle: CARDINAL_TO_ANGLE[firstCardinal],
+        currentCardinal: firstCardinal,
+        showQuestionModal: true,
+        sequenceStep: 0,
+      }));
+
+      setSparkSequenceIndex(0);
+
+      if (Platform.OS !== 'web' && Haptics) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } else {
+      setCompassState(prev => ({ ...prev, isSpinning: true }));
+
+      if (Platform.OS !== 'web' && Haptics) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+
+      const zones: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270, 0];
+      let currentIndex = 0;
+
+      const interval = setInterval(() => {
+        if (currentIndex < zones.length) {
+          const angle = zones[currentIndex];
+          setCompassState(prev => ({
+            ...prev,
+            bigSpindleAngle: angle,
+            activeZone: ANGLE_TO_ZONE[angle],
+            sequenceStep: currentIndex,
+          }));
+          currentIndex++;
+        } else {
+          clearInterval(interval);
+          setCompassState(prev => ({
+            ...prev,
+            isSpinning: false,
+            sequenceStep: null,
+            bigSpindleAngle: 0,
+            activeZone: 'mission',
+          }));
+          if (onSpinComplete) {
+            onSpinComplete();
+          }
+        }
+      }, 1000);
+    }
+  }, [compassState.mode, compassState.isSpinning, onSpinComplete]);
+
+  const handleSparkNext = useCallback(() => {
+    const nextIndex = sparkSequenceIndex + 1;
+
+    if (nextIndex >= CARDINALS_SEQUENCE.length) {
+      setCompassState(prev => ({
+        ...prev,
+        showQuestionModal: false,
+        currentCardinal: null,
+        sequenceStep: null,
+        smallSpindleAngle: 0,
+      }));
+      setSparkSequenceIndex(0);
+
+      if (onSpinComplete) {
+        onSpinComplete();
+      }
+    } else {
+      const nextCardinal = CARDINALS_SEQUENCE[nextIndex];
+
+      setCompassState(prev => ({
+        ...prev,
+        smallSpindleAngle: CARDINAL_TO_ANGLE[nextCardinal],
+        currentCardinal: nextCardinal,
+        sequenceStep: nextIndex,
+      }));
+
+      setSparkSequenceIndex(nextIndex);
+
+      if (Platform.OS !== 'web' && Haptics) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+  }, [sparkSequenceIndex, onSpinComplete]);
+
+  const handleSparkAction = useCallback((actionType: string) => {
     if (Platform.OS !== 'web' && Haptics) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
-    const zones: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270, 0]; // Added 0 at end to return to North
-    let currentIndex = 0;
+    if (onTaskFormOpen && ['task', 'event', 'idea'].includes(actionType)) {
+      onTaskFormOpen(actionType as 'task' | 'event' | 'depositIdea');
+    }
+    if (onJournalFormOpen && ['reflect', 'rose', 'thorn', 'note'].includes(actionType)) {
+      onJournalFormOpen(actionType as 'rose' | 'thorn' | 'reflection');
+    }
+  }, [compassState.currentCardinal, onTaskFormOpen, onJournalFormOpen]);
 
-    const interval = setInterval(() => {
-      if (currentIndex < zones.length) {
-        const angle = zones[currentIndex];
-        setCompassState(prev => ({
-          ...prev,
-          bigSpindleAngle: angle,
-          activeZone: ANGLE_TO_ZONE[angle],
-          sequenceStep: currentIndex,
-        }));
-        currentIndex++;
-      } else {
-        clearInterval(interval);
-        setCompassState(prev => ({
-          ...prev,
-          isSpinning: false,
-          sequenceStep: null,
-          bigSpindleAngle: 0,  // Ensure we're at North
-          activeZone: 'mission',
-        }));
-        if (onSpinComplete) {
-          onSpinComplete();
-        }
-      }
-    }, 1000);
-  }, [compassState.isSpinning, onSpinComplete]);
+  const handleSparkClose = useCallback(() => {
+    setCompassState(prev => ({
+      ...prev,
+      showQuestionModal: false,
+    }));
+  }, []);
 
   const handleWaypointAction = useCallback((waypoint: CompassWaypoint) => {
     if (Platform.OS !== 'web' && Haptics) {
@@ -468,6 +566,22 @@ export function LifeCompass({
             activeZone={compassState.activeZone}
           />
         </View>
+
+        <CardinalIcons
+          visible={compassState.mode === 'spark'}
+          activeCardinal={compassState.currentCardinal}
+          size={responsiveSize}
+        />
+
+        <SparkQuestionModal
+          visible={compassState.showQuestionModal}
+          cardinal={compassState.currentCardinal}
+          question={compassState.currentCardinal ? SPARK_QUESTIONS[compassState.currentCardinal] : ''}
+          onAction={handleSparkAction}
+          onNext={handleSparkNext}
+          onClose={handleSparkClose}
+          isLastCardinal={sparkSequenceIndex === CARDINALS_SEQUENCE.length - 1}
+        />
       </View>
     </View>
   );
