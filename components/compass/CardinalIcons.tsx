@@ -146,10 +146,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     pointerEvents: 'none',
   },
-  cardinalTouchArea: {
-    position: 'absolute',
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  
 });
