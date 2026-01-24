@@ -159,11 +159,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+    pointerEvents: 'box-none',
   },
   iconWrapper: {
     position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
+    pointerEvents: 'none',
   },
   cardinalTouchArea: {
     position: 'absolute',
