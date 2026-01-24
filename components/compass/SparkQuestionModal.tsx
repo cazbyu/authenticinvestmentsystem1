@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   webContainer: {
-  backgroundColor: 'rgba(255, 255, 255, 0.85)',
+  backgroundColor: 'rgba(255, 255, 255, 0.70)',
   borderRadius: 16,
   overflow: 'hidden',
   ...Platform.select({
