@@ -93,7 +93,7 @@ export default function CardinalIcons({
                 cx={0}
                 cy={0}
                 r={24}
-                fill={isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.2)'}
+                fill={isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.5)'}
                 stroke={config.color}
                 strokeWidth={isActive ? 2.5 : 1.5}
               />
