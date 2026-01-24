@@ -227,6 +227,7 @@ export default function CompassHub({
       <Pressable
   onPress={onTap}
   style={[styles.touchArea, { backgroundColor: 'rgba(255,0,0,0.3)' }]}
+  pointerEvents="auto"
   disabled={!onTap}
   accessibilityRole="button"
   accessibilityLabel={isSpinning ? 'Compass spinning' : 'Tap to spin compass'}
@@ -238,9 +239,10 @@ export default function CompassHub({
 
 const styles = StyleSheet.create({
   container: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  justifyContent: 'center',
+  alignItems: 'center',
+  pointerEvents: 'box-none',
+},
   touchArea: {
     position: 'absolute',
     width: 50,
