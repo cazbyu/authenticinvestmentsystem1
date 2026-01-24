@@ -883,7 +883,7 @@ export function LifeCompass({
       width: 50,
       height: 50,
       borderRadius: 25,
-      backgroundColor: 'rgba(255,0,0,0.3)',
+      backgroundColor: 'rgba(255,0,0,0.9 )',
     }}
   />
 </View>
