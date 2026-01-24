@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    pointerEvents: 'box-none',
+    pointerEvents: 'none',
   },
   iconWrapper: {
     position: 'absolute',
