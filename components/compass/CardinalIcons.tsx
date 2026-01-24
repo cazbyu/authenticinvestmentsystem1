@@ -63,7 +63,7 @@ export default function CardinalIcons({
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size} viewBox="0 0 288 288" style={{ position: 'absolute' }}>
+      <Svg width={size} height={size} viewBox="0 0 288 288" style={{ position: 'absolute', overflow: 'visible' }}>
         <Defs>
           <Filter id="cardinalShadow" x="-50%" y="-50%" width="200%" height="200%">
             <FeGaussianBlur in="SourceAlpha" stdDeviation="2" />
