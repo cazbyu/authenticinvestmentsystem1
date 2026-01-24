@@ -224,15 +224,6 @@ export default function CompassHub({
         </Animated.View>
       )}
 
-      <Pressable
-  onPress={onTap}
-  style={[styles.touchArea, { backgroundColor: 'rgba(255,0,0,0.3)' }]}
-  pointerEvents="auto"
-  disabled={!onTap}
-  accessibilityRole="button"
-  accessibilityLabel={isSpinning ? 'Compass spinning' : 'Tap to spin compass'}
-  accessibilityHint="Activates the compass spin sequence"
-/>
     </View>
   );
 }
