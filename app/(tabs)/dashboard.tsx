@@ -82,10 +82,7 @@ export default function Dashboard() {
   }, [slotLoading, getSlotLabel, roleMappings, wellnessMappings, slotError]);
   // === END TEST CODE ===
 
-  // Ritual state
-  const [showMorningSpark, setShowMorningSpark] = useState(false);
-
-  
+ 
 
   // Ritual state
   const [showMorningSpark, setShowMorningSpark] = useState(false);
