@@ -129,27 +129,6 @@ export default function CardinalIcons({
         );
       })}
 
-      {cardinals.map((cardinal) => {
-        const pos = CARDINAL_POSITIONS[cardinal];
-
-        return (
-          <Pressable
-            key={cardinal}
-            onPressIn={() => setPressedCardinal(cardinal)}
-            onPressOut={() => setPressedCardinal(null)}
-            onPress={() => onCardinalPress?.(cardinal)}
-            style={[
-              styles.cardinalTouchArea,
-              {
-                left: pos.x * scale - 24 * scale,
-                top: pos.y * scale - 24 * scale,
-                width: 48 * scale,
-                height: 48 * scale,
-              }
-            ]}
-          />
-        );
-      })}
     </View>
   );
 }
