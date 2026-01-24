@@ -320,34 +320,6 @@ export function LifeCompass({
     checkDomainContent();
   }, [checkDomainContent]);
 
-  const handleCardinalPress = useCallback((cardinal: 'north' | 'east' | 'south' | 'west') => {
-  if (compassState.isSpinning || compassState.showQuestionModal) return;
-
-  const question = sparkQuestions[cardinal];
-
-  // Record that we're showing this question
-  if (question?.id) {
-    recordQuestionShown(question.id, cardinal);
-  }
-
-  // Find the index of this cardinal in the sequence
-  const cardinalIndex = CARDINALS_SEQUENCE.indexOf(cardinal);
-
-  setCompassState(prev => ({
-    ...prev,
-    smallSpindleAngle: CARDINAL_TO_ANGLE[cardinal],
-    currentCardinal: cardinal,
-    showQuestionModal: true,
-    sequenceStep: cardinalIndex,
-  }));
-
-  setSparkSequenceIndex(cardinalIndex);
-
-  if (Platform.OS !== 'web' && Haptics) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }
-}, [compassState.isSpinning, compassState.showQuestionModal, sparkQuestions, recordQuestionShown]);
-
   const recordQuestionShown = useCallback(async (promptId: string, cardinal: string) => {
     if (!promptId) return;
 
@@ -401,6 +373,34 @@ export function LifeCompass({
       console.error('Error recording response:', err);
     }
   }, [currentHistoryId]);
+
+  const handleCardinalPress = useCallback((cardinal: 'north' | 'east' | 'south' | 'west') => {
+    if (compassState.isSpinning || compassState.showQuestionModal) return;
+
+    const question = sparkQuestions[cardinal];
+
+    // Record that we're showing this question
+    if (question?.id) {
+      recordQuestionShown(question.id, cardinal);
+    }
+
+    // Find the index of this cardinal in the sequence
+    const cardinalIndex = CARDINALS_SEQUENCE.indexOf(cardinal);
+
+    setCompassState(prev => ({
+      ...prev,
+      smallSpindleAngle: CARDINAL_TO_ANGLE[cardinal],
+      currentCardinal: cardinal,
+      showQuestionModal: true,
+      sequenceStep: cardinalIndex,
+    }));
+
+    setSparkSequenceIndex(cardinalIndex);
+
+    if (Platform.OS !== 'web' && Haptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  }, [compassState.isSpinning, compassState.showQuestionModal, sparkQuestions, recordQuestionShown]);
 
   const handleGoldSpindleSnap = useCallback((direction: 0 | 90 | 180 | 270) => {
     const zone = ANGLE_TO_ZONE[direction];
