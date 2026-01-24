@@ -62,7 +62,7 @@ export default function CardinalIcons({
   const cardinals: Array<'north' | 'east' | 'south' | 'west'> = ['north', 'east', 'south', 'west'];
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
+    <View style={[styles.container, { width: size, height: size, backgroundColor: 'transparent' }]}>
       <Svg width={size} height={size} viewBox="0 0 288 288" style={{ position: 'absolute', overflow: 'visible' }}>
         <Defs>
           <Filter id="cardinalShadow" x="-50%" y="-50%" width="200%" height="200%">
