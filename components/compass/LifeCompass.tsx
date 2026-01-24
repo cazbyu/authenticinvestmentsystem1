@@ -321,20 +321,32 @@ export function LifeCompass({
   }, [checkDomainContent]);
 
   const handleCardinalPress = useCallback((cardinal: 'north' | 'east' | 'south' | 'west') => {
-    const domainMap: { [key: string]: string } = {
-      north: 'mission',
-      east: 'wellness',
-      south: 'goals',
-      west: 'roles',
-    };
+  if (compassState.isSpinning || compassState.showQuestionModal) return;
 
-    const domain = domainMap[cardinal];
+  const question = sparkQuestions[cardinal];
 
-    router.push({
-      pathname: '/(sidebar)/north-star',
-      params: { domain, highlight: 'true' },
-    });
-  }, [router]);
+  // Record that we're showing this question
+  if (question?.id) {
+    recordQuestionShown(question.id, cardinal);
+  }
+
+  // Find the index of this cardinal in the sequence
+  const cardinalIndex = CARDINALS_SEQUENCE.indexOf(cardinal);
+
+  setCompassState(prev => ({
+    ...prev,
+    smallSpindleAngle: CARDINAL_TO_ANGLE[cardinal],
+    currentCardinal: cardinal,
+    showQuestionModal: true,
+    sequenceStep: cardinalIndex,
+  }));
+
+  setSparkSequenceIndex(cardinalIndex);
+
+  if (Platform.OS !== 'web' && Haptics) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }
+}, [compassState.isSpinning, compassState.showQuestionModal, sparkQuestions, recordQuestionShown]);
 
   const recordQuestionShown = useCallback(async (promptId: string, cardinal: string) => {
     if (!promptId) return;
