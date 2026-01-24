@@ -93,14 +93,14 @@ export default function NorthStarPage() {
       archiveOldSparkContent(user.id).catch(console.error);
 
       const { data: userData } = await supabase
-        .from('0008-ap-users')
-        .select('mission_text, vision_text')
-        .eq('id', user.id)
-        .single();
+  .from('0008-ap-north-star')
+  .select('mission_statement, "5yr_vision"')
+  .eq('user_id', user.id)
+  .single();
 
       if (userData) {
-        setMissionText(userData.mission_text || '');
-        setVisionText(userData.vision_text || '');
+        setMissionText(userData?.mission_statement || '');
+setVisionText(userData?.['5yr_vision'] || '');
       }
 
       await loadTodaysSpark(user.id, sparkType, activeDomain || undefined);
