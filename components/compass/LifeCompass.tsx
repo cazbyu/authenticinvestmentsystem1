@@ -827,22 +827,22 @@ export function LifeCompass({
           />
         </View>
 
-        <View style={[styles.hubLayer, StyleSheet.absoluteFill]} pointerEvents="box-none">
-          <CompassHub
-            size={responsiveSize}
-            isSpinning={compassState.isSpinning}
-            onTap={handleHubTap}
-            activeZone={compassState.activeZone}
-            activeCardinal={compassState.currentCardinal}
-          />
-        </View>
-
         <CardinalIcons
   activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
   size={responsiveSize}
   onCardinalPress={handleCardinalPress}
   contentCounts={domainContentCounts}
 />
+
+<View style={[styles.hubLayer, StyleSheet.absoluteFill]} pointerEvents="box-none">
+  <CompassHub
+    size={responsiveSize}
+    isSpinning={compassState.isSpinning}
+    onTap={handleHubTap}
+    activeZone={compassState.activeZone}
+    activeCardinal={compassState.currentCardinal}
+  />
+</View>
 
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
