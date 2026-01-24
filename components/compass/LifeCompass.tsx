@@ -876,9 +876,10 @@ const styles = StyleSheet.create({
     left: 0,
   },
   hubLayer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 20,
+},
   dotTouch: {
     position: 'absolute',
     borderRadius: 22,
