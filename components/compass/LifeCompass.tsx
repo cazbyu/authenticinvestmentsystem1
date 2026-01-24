@@ -827,7 +827,7 @@ export function LifeCompass({
           />
         </View>
 
-        <View style={[styles.hubLayer, StyleSheet.absoluteFill]}>
+        <View style={[styles.hubLayer, StyleSheet.absoluteFill]} pointerEvents="box-none">
           <CompassHub
             size={responsiveSize}
             isSpinning={compassState.isSpinning}
@@ -878,8 +878,6 @@ const styles = StyleSheet.create({
   hubLayer: {
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 15,
-    pointerEvents: 'box-none',
   },
   dotTouch: {
     position: 'absolute',

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Pressable, Platform, Text } from 'react-native';
+import { View, StyleSheet, Pressable, Platform } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -35,13 +35,6 @@ const CARDINAL_TO_ANGLE = {
   east: 90,
   south: 180,
   west: 270,
-};
-
-const CARDINAL_LABELS = {
-  north: 'Mission',
-  east: 'Wellness',
-  south: 'Goals',
-  west: 'Roles',
 };
 
 const DEFAULT_CENTER_COLOR = '#ed1c24';
@@ -219,23 +212,16 @@ export default function CompassHub({
       </Svg>
 
       {activeCardinal && (
-        <>
-          <Animated.View style={[styles.hub, hubIconAnimatedStyle]}>
-            <Svg width={20} height={20} viewBox="0 0 20 20">
-              <Path
-                d="M10,2 L12,8 L18,10 L12,12 L10,18 L8,12 L2,10 L8,8 Z"
-                fill={centerColor}
-                stroke={HUB_WHITE}
-                strokeWidth="1"
-              />
-            </Svg>
-          </Animated.View>
-          <Animated.View style={[styles.hubLabel, hubIconAnimatedStyle]}>
-            <Text style={styles.hubLabelText}>
-              {CARDINAL_LABELS[activeCardinal]}
-            </Text>
-          </Animated.View>
-        </>
+        <Animated.View style={[styles.hub, hubIconAnimatedStyle]}>
+          <Svg width={20} height={20} viewBox="0 0 20 20">
+            <Path
+              d="M10,2 L12,8 L18,10 L12,12 L10,18 L8,12 L2,10 L8,8 Z"
+              fill={centerColor}
+              stroke={HUB_WHITE}
+              strokeWidth="1"
+            />
+          </Svg>
+        </Animated.View>
       )}
 
       <Pressable
@@ -272,7 +258,6 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
-    pointerEvents: 'box-none',
   },
   hub: {
     position: 'absolute',
@@ -284,20 +269,5 @@ const styles = StyleSheet.create({
     marginTop: -10,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  hubLabel: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginLeft: -30,
-    marginTop: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  hubLabelText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
   },
 });
