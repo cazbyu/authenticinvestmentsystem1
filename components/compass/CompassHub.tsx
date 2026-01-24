@@ -258,6 +258,7 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',
     alignItems: 'center',
+    pointerEvents: 'box-none',
   },
   hub: {
     position: 'absolute',
