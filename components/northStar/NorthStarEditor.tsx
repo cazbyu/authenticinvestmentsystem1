@@ -72,10 +72,10 @@ export function NorthStarEditor({ onUpdate, initialSection = 'mission' }: NorthS
       if (!user) return;
 
       const { data, error } = await supabase
-        .from('0008-ap-users')
-        .select('mission_statement, vision_text, updated_at')
-        .eq('id', user.id)
-        .maybeSingle();
+  .from('0008-ap-north-star')
+  .select('mission_statement, "5yr_vision", updated_at')
+  .eq('user_id', user.id)
+  .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
 
