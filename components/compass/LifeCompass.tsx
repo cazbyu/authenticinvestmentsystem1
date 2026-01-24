@@ -806,8 +806,8 @@ export function LifeCompass({
         })}
 
         <GestureDetector gesture={panGesture}>
-          <View style={[styles.gestureArea, StyleSheet.absoluteFill]} />
-        </GestureDetector>
+  <View style={[styles.gestureArea, StyleSheet.absoluteFill]} pointerEvents="box-none" />
+</GestureDetector>
 
 
         <View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }]}>
