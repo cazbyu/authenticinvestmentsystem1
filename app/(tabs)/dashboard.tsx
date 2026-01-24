@@ -29,6 +29,7 @@ import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
 import { router, useFocusEffect } from 'expo-router';
 import { shouldShowRitual } from '@/lib/ritualUtils';
+import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
@@ -62,6 +63,29 @@ export default function Dashboard() {
   const [editingReflection, setEditingReflection] = useState<any>(null);
   const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
+
+
+  
+  // === SLOT MAPPING TEST - DELETE AFTER TESTING ===
+  const { getSlotLabel, roleMappings, wellnessMappings, loading: slotLoading, error: slotError } = useSlotMapping();
+
+  useEffect(() => {
+    if (!slotLoading) {
+      console.log('=== SLOT MAPPING TEST ===');
+      console.log('R4 Label:', getSlotLabel('R4'));
+      console.log('WZ3 Label:', getSlotLabel('WZ3'));
+      console.log('Total Roles:', roleMappings.length);
+      console.log('Total Wellness:', wellnessMappings.length);
+      if (slotError) console.log('Error:', slotError);
+      console.log('=========================');
+    }
+  }, [slotLoading, getSlotLabel, roleMappings, wellnessMappings, slotError]);
+  // === END TEST CODE ===
+
+  // Ritual state
+  const [showMorningSpark, setShowMorningSpark] = useState(false);
+
+  
 
   // Ritual state
   const [showMorningSpark, setShowMorningSpark] = useState(false);
