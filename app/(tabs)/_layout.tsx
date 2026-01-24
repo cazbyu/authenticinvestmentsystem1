@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
-import { Compass, Heart, Target, User } from 'lucide-react-native';
+import { Compass } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
+import { NorthStarIcon, WellnessIcon, GoalIcon, RoleIcon } from '@/components/icons/CustomIcons';
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -54,7 +55,7 @@ export default function TabLayout() {
         options={{
           title: 'Role Bank',
           tabBarIcon: ({ size, color }) => (
-            <User size={size} color={color} />
+            <RoleIcon size={size} color={color} />
           ),
         }}
       />
@@ -63,7 +64,7 @@ export default function TabLayout() {
         options={{
           title: 'Wellness Bank',
           tabBarIcon: ({ size, color }) => (
-            <Heart size={size} color={color} />
+            <WellnessIcon size={size} color={color} />
           ),
         }}
       />
@@ -72,7 +73,7 @@ export default function TabLayout() {
         options={{
           title: 'Goal Bank',
           tabBarIcon: ({ size, color }) => (
-            <Target size={size} color={color} />
+            <GoalIcon size={size} color={color} />
           ),
         }}
       />
