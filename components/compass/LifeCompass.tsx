@@ -848,14 +848,14 @@ export function LifeCompass({
           onPress={handleHubTap}
           style={{
             position: 'absolute',
-            width: 60,
-            height: 60,
-            borderRadius: 30,
+            width: 44,
+            height: 44,
+            borderRadius: 20,
             top: '50%',
             left: '50%',
-            marginLeft: -30,
-            marginTop: -30,
-            zIndex: 100,
+            marginLeft: -20,
+            marginTop: -20,
+            zIndex: 15,
             backgroundColor: 'transparent',
             cursor: 'pointer',
           }}
