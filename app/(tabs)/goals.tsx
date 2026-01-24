@@ -1177,10 +1177,10 @@ export default function Goals() {
       }
 
       const { data: userData, error: userError } = await supabase
-        .from('0008-ap-users')
-        .select('mission_text, vision_text')
-        .eq('id', user.id)
-        .maybeSingle();
+  .from('0008-ap-north-star')
+  .select('mission_statement, "5yr_vision"')
+  .eq('user_id', user.id)
+  .maybeSingle();
 
       console.log('[fetchNorthStarData] User data query result:', { userData, userError });
 
