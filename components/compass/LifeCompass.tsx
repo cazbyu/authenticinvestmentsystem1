@@ -836,13 +836,15 @@ export function LifeCompass({
   />
 </View>
 
-<CompassHub
-  size={responsiveSize}
-  isSpinning={compassState.isSpinning}
-  onTap={handleHubTap}
-  activeZone={compassState.activeZone}
-  activeCardinal={compassState.currentCardinal}
-/>
+<View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 11 }} pointerEvents="none">
+  <CompassHub
+    size={responsiveSize}
+    isSpinning={compassState.isSpinning}
+    onTap={handleHubTap}
+    activeZone={compassState.activeZone}
+    activeCardinal={compassState.currentCardinal}
+  />
+</View>
 
 {/* All touch targets - rendered last so they're on top */}
 <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
