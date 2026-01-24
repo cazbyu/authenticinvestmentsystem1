@@ -72,16 +72,16 @@ export function NorthStarEditor({ onUpdate, initialSection = 'mission' }: NorthS
       if (!user) return;
 
       const { data, error } = await supabase
-  .from('0008-ap-north-star')
-  .select('mission_statement, "5yr_vision", updated_at')
-  .eq('user_id', user.id)
-  .maybeSingle();
+       .from('0008-ap-north-star')
+       .select('mission_statement, "5yr_vision", updated_at')
+       .eq('user_id', user.id)
+       .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        setMissionText(data.mission_text || '');
-        setVisionText(data.vision_text || '');
+        setMissionText(data.mission_statement || '');
+        setVisionText(data['5yr_vision'] || '');
         if (data.updated_at) {
           setLastSaved(new Date(data.updated_at));
         }
