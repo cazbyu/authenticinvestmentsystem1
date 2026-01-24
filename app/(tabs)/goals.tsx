@@ -1204,8 +1204,8 @@ export default function Goals() {
       }
 
       const northStarResult = {
-        mission_text: userData?.mission_text || '',
-        vision_text: userData?.vision_text || '',
+  mission_text: userData?.mission_statement || '',
+  vision_text: userData?.['5yr_vision'] || '',
         vision_timeframe: '5_year',
         oneYearGoals: oneYearGoals || [],
       };
