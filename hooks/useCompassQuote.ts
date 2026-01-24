@@ -51,7 +51,7 @@ export function useCompassQuote() {
 
       const { data: northStarData, error: fetchError } = await supabase
         .from('0008-ap-north-star')
-        .select('mission_text, vision_text')
+        .select('mission_statement, vision_text')
         .eq('user_id', user.id)
         .maybeSingle();
 
