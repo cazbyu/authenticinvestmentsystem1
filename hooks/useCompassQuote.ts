@@ -66,13 +66,13 @@ export function useCompassQuote() {
       let quoteText = '';
       let source: 'mission' | 'vision' | null = null;
 
-      if (northStarData?.mission_text && northStarData.mission_text.trim().length > 0) {
-        quoteText = extractFirstSentence(northStarData.mission_text);
-        source = 'mission';
-      } else if (northStarData?.vision_text && northStarData.vision_text.trim().length > 0) {
-        quoteText = extractFirstSentence(northStarData.vision_text);
-        source = 'vision';
-      }
+      if (northStarData?.mission_statement && northStarData.mission_statement.trim().length > 0) {
+  quoteText = extractFirstSentence(northStarData.mission_statement);
+  source = 'mission';
+} else if (northStarData?.['5yr_vision'] && northStarData['5yr_vision'].trim().length > 0) {
+  quoteText = extractFirstSentence(northStarData['5yr_vision']);
+  source = 'vision';
+}
 
       const newQuote = { text: quoteText, source };
       setQuote(newQuote);
