@@ -237,15 +237,15 @@ export default function CompassHub({
 }
 
 const styles = StyleSheet.create({
+  container: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   touchArea: {
     position: 'absolute',
     width: 50,
     height: 50,
     borderRadius: 25,
-    top: '50%',
-    left: '50%',
-    marginLeft: -25,
-    marginTop: -25,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
@@ -254,11 +254,6 @@ const styles = StyleSheet.create({
         cursor: 'pointer',
       },
     }),
-  },
-  container: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    pointerEvents: 'box-none',
   },
   hub: {
     position: 'absolute',
