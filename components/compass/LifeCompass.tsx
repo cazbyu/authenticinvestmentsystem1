@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Dimensions, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform, TouchableOpacity, Pressable } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -842,6 +842,24 @@ export function LifeCompass({
           size={responsiveSize}
           onCardinalPress={handleCardinalPress}
           contentCounts={domainContentCounts}
+        />
+
+        <Pressable
+          onPress={handleHubTap}
+          style={{
+            position: 'absolute',
+            width: 60,
+            height: 60,
+            borderRadius: 30,
+            top: '50%',
+            left: '50%',
+            marginLeft: -30,
+            marginTop: -30,
+            zIndex: 100,
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+          }}
+          disabled={compassState.isSpinning}
         />
 
         <SparkQuestionModal
