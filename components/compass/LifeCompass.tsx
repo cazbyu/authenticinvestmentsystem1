@@ -842,6 +842,57 @@ export function LifeCompass({
   activeCardinal={compassState.currentCardinal}
 />
 
+{/* All touch targets - rendered last so they're on top */}
+<View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+  {/* Cardinal touch targets */}
+  {(['north', 'east', 'south', 'west'] as const).map((cardinal) => {
+    const positions = {
+      north: { x: 144, y: 28 },
+      east: { x: 260, y: 144 },
+      south: { x: 144, y: 260 },
+      west: { x: 28, y: 144 },
+    };
+    const pos = positions[cardinal];
+    const scale = responsiveSize / 288;
+    
+    return (
+      <Pressable
+        key={cardinal}
+        onPress={() => handleCardinalPress(cardinal)}
+        style={{
+          position: 'absolute',
+          left: pos.x * scale - 24,
+          top: pos.y * scale - 24,
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+        }}
+      />
+    );
+  })}
+  
+  {/* Hub touch target */}
+  <Pressable
+    onPress={handleHubTap}
+    disabled={compassState.isSpinning}
+    style={{
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      marginLeft: -25,
+      marginTop: -25,
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      backgroundColor: 'rgba(255,0,0,0.3)',
+    }}
+  />
+</View>
+
+<SparkQuestionModal
+  ...
+/>
+        
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
           cardinal={compassState.currentCardinal}
