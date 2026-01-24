@@ -40,36 +40,9 @@ export default function CompassHub({
   activeZone = null,
   activeCardinal = null,
 }: CompassHubProps) {
-  const spindleRotation = useSharedValue(0);
-  const hubIconOpacity = useSharedValue(0);
+   const hubIconOpacity = useSharedValue(0);
 
   const centerColor = activeZone ? ZONE_COLORS[activeZone] : DEFAULT_CENTER_COLOR;
-
-  useEffect(() => {
-    if (activeCardinal) {
-      const targetAngle = CARDINAL_TO_ANGLE[activeCardinal];
-      spindleRotation.value = withTiming(targetAngle, {
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-      });
-      hubIconOpacity.value = withTiming(1, { duration: 400 });
-    } else {
-      spindleRotation.value = withTiming(0, { duration: 400 });
-      hubIconOpacity.value = withTiming(0, { duration: 300 });
-    }
-  }, [activeCardinal]);
-
-  const spindleAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        { translateX: size / 2 },
-        { translateY: size / 2 },
-        { rotate: `${spindleRotation.value}deg` },
-        { translateX: -size / 2 },
-        { translateY: -size / 2 },
-      ],
-    };
-  });
 
   const hubIconAnimatedStyle = useAnimatedStyle(() => {
     return {
@@ -79,26 +52,7 @@ export default function CompassHub({
 
   return (
     <View style={[styles.container, { width: size, height: size }]} pointerEvents="none">
-      {/* Silver spindle that rotates to active cardinal */}
-      <Animated.View style={[StyleSheet.absoluteFill, spindleAnimatedStyle]}>
-        <Svg
-          width={size}
-          height={size}
-          viewBox="0 0 288 288"
-        >
-          <G>
-            <Path
-              d="M144,130 L144,50 M140,55 L144,50 L148,55"
-              stroke="#999999"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          </G>
-        </Svg>
-      </Animated.View>
-
+      
       {/* Small icon in center when cardinal is active */}
       {activeCardinal && (
         <Animated.View style={[styles.hub, hubIconAnimatedStyle]}>
