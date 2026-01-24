@@ -843,7 +843,7 @@ export function LifeCompass({
 />
 
 {/* All touch targets - rendered last so they're on top */}
-<View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+<View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
   {/* Cardinal touch targets */}
   {(['north', 'east', 'south', 'west'] as const).map((cardinal) => {
     const positions = {
@@ -866,6 +866,7 @@ export function LifeCompass({
           width: 48,
           height: 48,
           borderRadius: 24,
+          backgroundColor: 'rgba(0,255,0,0.3)',
         }}
       />
     );
@@ -877,10 +878,8 @@ export function LifeCompass({
     disabled={compassState.isSpinning}
     style={{
       position: 'absolute',
-      left: '50%',
-      top: '50%',
-      marginLeft: -25,
-      marginTop: -25,
+      left: responsiveSize / 2 - 25,
+      top: responsiveSize / 2 - 25,
       width: 50,
       height: 50,
       borderRadius: 25,
