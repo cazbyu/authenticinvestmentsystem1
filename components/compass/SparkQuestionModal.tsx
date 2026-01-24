@@ -277,9 +277,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   blurContainer: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
+  borderRadius: 16,
+  overflow: 'hidden',
+  backgroundColor: 'rgba(255, 255, 255, 0.70)',
+},
   webContainer: {
   backgroundColor: 'rgba(255, 255, 255, 0.70)',
   borderRadius: 16,
