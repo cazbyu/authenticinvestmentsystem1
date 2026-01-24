@@ -16,7 +16,7 @@ interface CardinalIconsProps {
 }
 
 const CENTER = 144;
-const ICON_SIZE = 44;
+const ICON_SIZE = 48;
 const ICON_SCALE = 1.5;
 
 const ICON_PATHS = {
@@ -41,10 +41,10 @@ const DOMAIN_MAP = {
 } as const;
 
 const CARDINAL_POSITIONS = {
-  north: { x: 144, y: 30 },
-  east: { x: 258, y: 144 },
-  south: { x: 144, y: 258 },
-  west: { x: 30, y: 144 },
+  north: { x: 144, y: 28 },
+  east: { x: 260, y: 144 },
+  south: { x: 144, y: 260 },
+  west: { x: 28, y: 144 },
 };
 
 export default function CardinalIcons({
@@ -92,8 +92,8 @@ export default function CardinalIcons({
               <Circle
                 cx={0}
                 cy={0}
-                r={22}
-                fill={isActive ? bgColor : 'transparent'}
+                r={24}
+                fill={isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.2)'}
                 stroke={config.color}
                 strokeWidth={isActive ? 2.5 : 1.5}
               />
@@ -126,10 +126,10 @@ export default function CardinalIcons({
             style={[
               styles.cardinalTouchArea,
               {
-                left: pos.x * scale - 22 * scale,
-                top: pos.y * scale - 22 * scale,
-                width: 44 * scale,
-                height: 44 * scale,
+                left: pos.x * scale - 24 * scale,
+                top: pos.y * scale - 24 * scale,
+                width: 48 * scale,
+                height: 48 * scale,
               }
             ]}
           >
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   },
   cardinalTouchArea: {
     position: 'absolute',
-    borderRadius: 22,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },

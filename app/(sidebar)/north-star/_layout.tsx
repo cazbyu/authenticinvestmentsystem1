@@ -1,6 +1,12 @@
 import { Stack } from 'expo-router';
+import { TouchableOpacity, Platform } from 'react-native';
+import { Menu } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { DrawerNavigationProp } from '@react-navigation/drawer';
 
 export default function NorthStarLayout() {
+  const navigation = useNavigation<DrawerNavigationProp<any>>();
+
   return (
     <Stack
       screenOptions={{
@@ -14,7 +20,21 @@ export default function NorthStarLayout() {
         name="index"
         options={{
           title: 'North Star',
-          headerLeft: () => null,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => {
+                if (typeof navigation.openDrawer === 'function') {
+                  navigation.openDrawer();
+                }
+              }}
+              style={{
+                marginLeft: Platform.OS === 'web' ? 16 : 8,
+                padding: 8,
+              }}
+            >
+              <Menu size={24} color="#fff" />
+            </TouchableOpacity>
+          ),
         }}
       />
       <Stack.Screen
