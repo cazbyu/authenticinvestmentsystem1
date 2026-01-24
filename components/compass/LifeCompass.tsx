@@ -878,6 +878,8 @@ const styles = StyleSheet.create({
   hubLayer: {
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 15,
+    pointerEvents: 'box-none',
   },
   dotTouch: {
     position: 'absolute',

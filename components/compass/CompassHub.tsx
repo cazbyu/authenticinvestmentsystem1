@@ -146,18 +146,10 @@ export default function CompassHub({
     };
   });
 
-  const touchAreaSize = Math.max(MIN_TOUCH_TARGET, HUB_DIAMETER * scale);
-
   return (
     <Pressable
       onPress={onTap}
-      style={[
-        styles.touchArea,
-        {
-          width: touchAreaSize,
-          height: touchAreaSize,
-        },
-      ]}
+      style={styles.touchArea}
       disabled={!onTap}
       accessibilityRole="button"
       accessibilityLabel={isSpinning ? 'Compass spinning' : 'Tap to spin compass'}
@@ -263,8 +255,16 @@ export default function CompassHub({
 
 const styles = StyleSheet.create({
   touchArea: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -30 }, { translateY: -30 }],
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 20,
     ...Platform.select({
       web: {
         cursor: 'pointer',
