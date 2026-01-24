@@ -73,7 +73,7 @@ export function NorthStarEditor({ onUpdate, initialSection = 'mission' }: NorthS
 
       const { data, error } = await supabase
         .from('0008-ap-users')
-        .select('mission_text, vision_text, updated_at')
+        .select('mission_statement, vision_text, updated_at')
         .eq('id', user.id)
         .maybeSingle();
 
