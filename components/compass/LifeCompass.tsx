@@ -834,15 +834,13 @@ export function LifeCompass({
   contentCounts={domainContentCounts}
 />
 
-<View style={[styles.hubLayer, StyleSheet.absoluteFill]} pointerEvents="box-none">
-  <CompassHub
-    size={responsiveSize}
-    isSpinning={compassState.isSpinning}
-    onTap={handleHubTap}
-    activeZone={compassState.activeZone}
-    activeCardinal={compassState.currentCardinal}
-  />
-</View>
+<CompassHub
+  size={responsiveSize}
+  isSpinning={compassState.isSpinning}
+  onTap={handleHubTap}
+  activeZone={compassState.activeZone}
+  activeCardinal={compassState.currentCardinal}
+/>
 
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
