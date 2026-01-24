@@ -25,6 +25,8 @@ import CompassHub from './CompassHub';
 import { ColorRing } from './ColorRing';
 import CardinalIcons from './CardinalIcons';
 import SparkQuestionModal from './SparkQuestionModal';
+import { injectPromptVariables } from '@/lib/promptInjection';
+import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
 
 interface LifeCompassProps {
   size?: number;
@@ -164,6 +166,17 @@ export function LifeCompass({
     south: { id: '', text: "What's one goal you can advance today?" },
     west: { id: '', text: "Which role needs your attention today?" },
   });
+
+  // Fetch slot mappings for variable injection
+  const { mappings: slotMappings } = useSlotMapping();
+
+  // Key relationships for variable injection
+  const [keyRelationships, setKeyRelationships] = useState<Array<{
+    id: string;
+    name: string;
+    role_id: string | null;
+  }>>([]);
+
   const lastUpdateTime = useSharedValue(0);
 
   const responsiveSize = useMemo(() => {
@@ -319,6 +332,62 @@ export function LifeCompass({
   useEffect(() => {
     checkDomainContent();
   }, [checkDomainContent]);
+
+  const fetchKeyRelationships = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('0008-ap-key-relationships')
+        .select('id, name, role_id')
+        .eq('user_id', user.id);
+
+      if (!error && data) {
+        setKeyRelationships(data);
+      }
+    } catch (err) {
+      console.error('Error fetching key relationships:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchKeyRelationships();
+  }, [fetchKeyRelationships]);
+
+  const getInjectedQuestion = useCallback((cardinal: 'north' | 'east' | 'south' | 'west' | null): string => {
+    if (!cardinal) return '';
+
+    const rawQuestion = sparkQuestions[cardinal]?.text || '';
+
+    // Determine current slot based on cardinal
+    const cardinalToSlotPrefix: Record<string, string> = {
+      north: 'MVV',
+      east: 'WZ',
+      south: 'G',
+      west: 'R',
+    };
+
+    // For roles/goals/wellness, pick a random slot if we have mappings
+    let currentSlot: string | null = null;
+    const prefix = cardinalToSlotPrefix[cardinal];
+
+    if (prefix && slotMappings && slotMappings.length > 0) {
+      const relevantMappings = slotMappings.filter(
+        m => m.slot_code.startsWith(prefix) && m.mapped_entity_label
+      );
+      if (relevantMappings.length > 0) {
+        const randomIndex = Math.floor(Math.random() * relevantMappings.length);
+        currentSlot = relevantMappings[randomIndex].slot_code;
+      }
+    }
+
+    return injectPromptVariables(rawQuestion, {
+      currentSlot,
+      slotMappings: slotMappings || [],
+      keyRelationships,
+    });
+  }, [sparkQuestions, slotMappings, keyRelationships]);
 
   const recordQuestionShown = useCallback(async (promptId: string, cardinal: string) => {
     if (!promptId) return;
@@ -893,7 +962,7 @@ export function LifeCompass({
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
           cardinal={compassState.currentCardinal}
-          question={compassState.currentCardinal ? sparkQuestions[compassState.currentCardinal]?.text : ''}
+          question={getInjectedQuestion(compassState.currentCardinal)}
           onAction={handleSparkAction}
           onNext={handleSparkNext}
           onClose={handleSparkClose}
