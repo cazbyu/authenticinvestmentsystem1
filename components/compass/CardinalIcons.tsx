@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, Text } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import Svg, { G, Circle, Path, Defs, Filter, FeGaussianBlur, FeOffset, FeComponentTransfer, FeFuncA, FeMerge, FeMergeNode } from 'react-native-svg';
 
 interface CardinalIconsProps {
@@ -21,9 +21,9 @@ const ICON_SCALE = 1.5;
 
 const ICON_PATHS = {
   north: 'M0,-8 L2,-2 L8,0 L2,2 L0,8 L-2,2 L-8,0 L-2,-2 Z',
-  east: 'M0,-7 C4,-7 7,-4 7,0 C7,4 4,7 0,7 C0,3 -3,0 -3,-4 C-3,-6 -1,-7 0,-7 Z M0,-4 L0,4',
-  south: 'M0,-7 A7,7 0 1,1 0,7 A7,7 0 1,1 0,-7 M0,-4 A4,4 0 1,1 0,4 A4,4 0 1,1 0,-4 M0,-1.5 A1.5,1.5 0 1,1 0,1.5 A1.5,1.5 0 1,1 0,-1.5',
-  west: 'M-3,-6 A2,2 0 1,1 -3,-2 A2,2 0 1,1 -3,-6 M-3,0 L-3,5 M-6,2 L0,2 M3,-6 A2,2 0 1,1 3,-2 A2,2 0 1,1 3,-6 M3,0 L3,5 M0,2 L6,2',
+  east: 'M0,-6 C3,-6 6,-3 6,0 C6,4 3,6 0,6 C-3,6 -6,4 -6,0 C-6,-3 -3,-6 0,-6 M0,-3 C-2,-1 -2,2 0,3 C2,2 2,-1 0,-3',
+  south: 'M0,-7 L0,7 M-7,0 L7,0 M0,-4 A4,4 0 1,1 0,4 A4,4 0 1,1 0,-4',
+  west: 'M-4,-6 A3,3 0 1,1 -4,0 M-4,0 L-4,6 M4,-6 A3,3 0 1,1 4,0 M4,0 L4,6 M-4,3 L4,3',
 };
 
 const CARDINAL_CONFIG = {
@@ -114,8 +114,6 @@ export default function CardinalIcons({
 
       {cardinals.map((cardinal) => {
         const pos = CARDINAL_POSITIONS[cardinal];
-        const domain = DOMAIN_MAP[cardinal];
-        const count = contentCounts[domain] || 0;
 
         return (
           <Pressable
@@ -132,13 +130,7 @@ export default function CardinalIcons({
                 height: 48 * scale,
               }
             ]}
-          >
-            {count > 0 && (
-              <View style={styles.contentIndicator}>
-                <Text style={styles.contentIndicatorText}>{count}</Text>
-              </View>
-            )}
-          </Pressable>
+          />
         );
       })}
     </View>
@@ -156,24 +148,5 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  contentIndicator: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#ed1c24',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  contentIndicatorText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
   },
 });
