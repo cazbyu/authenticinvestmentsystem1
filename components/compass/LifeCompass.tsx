@@ -844,24 +844,6 @@ export function LifeCompass({
           contentCounts={domainContentCounts}
         />
 
-        <Pressable
-          onPress={handleHubTap}
-          style={{
-            position: 'absolute',
-            width: 44,
-            height: 44,
-            borderRadius: 20,
-            top: '50%',
-            left: '50%',
-            marginLeft: -20,
-            marginTop: -20,
-            zIndex: 15,
-            backgroundColor: 'transparent',
-            cursor: 'pointer',
-          }}
-          disabled={compassState.isSpinning}
-        />
-
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
           cardinal={compassState.currentCardinal}
