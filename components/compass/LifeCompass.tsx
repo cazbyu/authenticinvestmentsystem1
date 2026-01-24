@@ -888,11 +888,7 @@ export function LifeCompass({
     }}
   />
 </View>
-
-<SparkQuestionModal
-  ...
-/>
-        
+    
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
           cardinal={compassState.currentCardinal}
