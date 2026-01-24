@@ -827,12 +827,14 @@ export function LifeCompass({
           />
         </View>
 
-<CardinalIcons
-  activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
-  size={responsiveSize}
-  onCardinalPress={handleCardinalPress}
-  contentCounts={domainContentCounts}
-/>
+<View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 10 }} pointerEvents="none">
+  <CardinalIcons
+    activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
+    size={responsiveSize}
+    onCardinalPress={handleCardinalPress}
+    contentCounts={domainContentCounts}
+  />
+</View>
 
 <CompassHub
   size={responsiveSize}
