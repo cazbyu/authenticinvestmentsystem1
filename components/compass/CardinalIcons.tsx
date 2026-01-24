@@ -90,13 +90,13 @@ export default function CardinalIcons({
               opacity={isPressed ? 0.7 : 1}
             >
               <Circle
-                cx={0}
-                cy={0}
-                r={24}
-                fill={isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.1)'}
-                stroke={config.color}
-                strokeWidth={isActive ? 2.5 : 1.5}
-              />
+  cx={0}
+  cy={0}
+  r={24}
+  fill={isActive ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.6)'}
+  stroke={config.color}
+  strokeWidth={isActive ? 2.5 : 1.5}
+/>
             </G>
           );
         })}
