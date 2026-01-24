@@ -232,7 +232,6 @@ const styles = StyleSheet.create({
   container: {
   justifyContent: 'center',
   alignItems: 'center',
-  pointerEvents: 'box-none',
 },
   touchArea: {
     position: 'absolute',
