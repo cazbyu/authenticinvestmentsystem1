@@ -102,13 +102,13 @@ export function NorthStarEditor({ onUpdate, initialSection = 'mission' }: NorthS
       if (!user) throw new Error('User not found');
 
       const { error } = await supabase
-        .from('0008-ap-users')
-        .update({
-          mission_text: missionText.trim() || null,
-          vision_text: visionText.trim() || null,
-          updated_at: toLocalISOString(new Date()),
-        })
-        .eq('id', user.id);
+  .from('0008-ap-north-star')
+  .upsert({
+    user_id: user.id,
+    mission_statement: missionText.trim() || null,
+    '5yr_vision': visionText.trim() || null,
+    updated_at: toLocalISOString(new Date()),
+  }, { onConflict: 'user_id' });
 
       if (error) throw error;
 
