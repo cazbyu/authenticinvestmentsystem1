@@ -832,7 +832,7 @@ export function LifeCompass({
   size={responsiveSize}
   onCardinalPress={handleCardinalPress}
   contentCounts={domainContentCounts}
-/>
+/> 
 
 <CompassHub
   size={responsiveSize}
