@@ -202,33 +202,58 @@ export function GoalDetailView({
   };
 
   const handleToggleCompletion = async (
-    actionId: string,
-    dateString: string,
-    currentlyCompleted: boolean
-  ) => {
-    console.log('[GoalDetailView] Toggle completion:', {
-      actionId,
-      dateString,
-      currentlyCompleted,
-    });
+  actionId: string,
+  dateString: string,
+  currentlyCompleted: boolean
+) => {
+  console.log('[GoalDetailView] Toggle completion:', {
+    actionId,
+    dateString,
+    currentlyCompleted,
+  });
 
-    try {
-      if (currentlyCompleted) {
-        // Uncomplete - remove the child task
-        await handleActionUncompletion(actionId, dateString);
-      } else {
-        // Complete - create child task
-        await handleActionCompletion(actionId, dateString);
-      }
-      
-      // Refresh the actions list
-      setRefreshTrigger(prev => prev + 1);
-      onGoalUpdated();
-    } catch (error) {
-      console.error('[GoalDetailView] Error toggling completion:', error);
-      Alert.alert('Error', 'Failed to update completion status');
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('Not authenticated');
     }
-  };
+
+    if (currentlyCompleted) {
+      // Uncomplete - remove the child task
+      await handleActionUncompletion(supabase, actionId, dateString);
+    } else {
+      // Complete - create child task
+      // Get the action to find timeline info
+      const action = recurringActions.find(a => a.id === actionId);
+      
+      // Determine timeline
+      let timeline: { id: string; source: 'global' | 'custom' } | null = null;
+      if (goal.user_global_timeline_id) {
+        timeline = { id: goal.user_global_timeline_id, source: 'global' };
+      } else if (goal.custom_timeline_id) {
+        timeline = { id: goal.custom_timeline_id, source: 'custom' };
+      }
+
+      await handleActionCompletion(
+        supabase,
+        user.id,
+        actionId,
+        dateString,
+        timeline,
+        action?.weeklyTarget
+      );
+    }
+    
+    // Refresh the actions list
+    setRefreshTrigger(prev => prev + 1);
+    onGoalUpdated();
+  } catch (error) {
+    console.error('[GoalDetailView] Error toggling completion:', error);
+    Alert.alert('Error', 'Failed to update completion status');
+  }
+};
 
   const fetchIdeas = async () => {
     setIdeasLoading(true);
