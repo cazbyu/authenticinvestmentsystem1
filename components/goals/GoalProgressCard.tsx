@@ -120,6 +120,11 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   });
 
   const getProgressColor = useCallback((percentage: number) => {
+  if (percentage >= 85) return '#16a34a'; // Green for 85% and above
+  if (percentage >= 60) return '#eab308';
+  return '#dc2626';
+}, []);
+  
   const getWeeklyProgressColor = useCallback((actual: number, target: number) => {
     const percentage = target > 0 ? (actual / target) * 100 : 0;
     return getProgressColor(percentage);
