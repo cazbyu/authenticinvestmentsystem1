@@ -368,35 +368,62 @@ export function CreateGoalModal({
         parentType = '1y_goal';
 
       } else if (selectedTimeframe === '12week') {
-        // Verify global timeline is active
+        // Verify global timeline is active and fetch cycle dates
         if (!selectedGlobalTimelineId) {
           throw new Error('No global timeline selected');
         }
 
-        const { data: timelineCheck } = await supabase
+        // Fetch timeline with global cycle dates
+        const { data: timelineWithCycle, error: timelineError } = await supabase
           .from('0008-ap-user-global-timelines')
-          .select('status')
+          .select(`
+            id,
+            status,
+            global_cycle_id,
+            start_date,
+            end_date,
+            global_cycle:0008-ap-global-cycles(
+              id,
+              start_date,
+              end_date
+            )
+          `)
           .eq('id', selectedGlobalTimelineId)
           .eq('user_id', user.id)
           .maybeSingle();
 
-        if (!timelineCheck || timelineCheck.status !== 'active') {
+        if (timelineError) throw timelineError;
+
+        if (!timelineWithCycle || timelineWithCycle.status !== 'active') {
           Alert.alert('Timeline Inactive', 'This timeline is no longer active.');
           setSaving(false);
           return;
         }
 
-        // Create 12-week goal
+        // Get dates from global_cycle (primary) or user_timeline (fallback)
+        const cycleStartDate = timelineWithCycle.global_cycle?.start_date || timelineWithCycle.start_date;
+        const cycleEndDate = timelineWithCycle.global_cycle?.end_date || timelineWithCycle.end_date;
+
+        if (!cycleStartDate || !cycleEndDate) {
+          Alert.alert('Error', 'Could not determine cycle dates. Please contact support.');
+          setSaving(false);
+          return;
+        }
+
+        // Create 12-week goal WITH required dates
         const { data: newGoal, error } = await supabase
           .from('0008-ap-goals-12wk')
           .insert({
             user_id: user.id,
             user_global_timeline_id: selectedGlobalTimelineId,
+            global_cycle_id: timelineWithCycle.global_cycle_id,
             title: formData.title.trim(),
             description: formData.description.trim() || null,
             status: 'active',
             parent_goal_id: formData.parentGoalId,
             parent_goal_type: formData.parentGoalId ? '1y' : null,
+            start_date: cycleStartDate,
+            end_date: cycleEndDate,
           })
           .select()
           .single();
