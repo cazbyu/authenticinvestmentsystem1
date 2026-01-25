@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,9 @@ import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X 
 import { UnifiedGoal } from './MyGoalsView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { TaskCard, Task } from '@/components/tasks/TaskCard';
+import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
-import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
 
 interface GoalDetailViewProps {
@@ -88,6 +88,84 @@ export function GoalDetailView({
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('12W');
 
+  // Calculate current week bounds (Monday to Sunday)
+  const currentWeekData = useMemo(() => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    
+    // Calculate start of week (Sunday-based to match your day bubbles)
+    // If you want Monday-based, use: const sundayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const sundayOffset = -dayOfWeek;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() + sundayOffset);
+    weekStart.setHours(0, 0, 0, 0);
+    
+    // Calculate end of week (Saturday)
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    // Use goal's current week number or default to 1
+    const weekNumber = goal.current_week || 1;
+
+    console.log('[GoalDetailView] Week data calculated:', {
+      weekNumber,
+      startDate: formatLocalDate(weekStart),
+      endDate: formatLocalDate(weekEnd),
+      today: formatLocalDate(today),
+    });
+
+    return {
+      weekNumber,
+      startDate: formatLocalDate(weekStart),
+      endDate: formatLocalDate(weekEnd),
+    };
+  }, [goal.current_week]);
+
+  // Transform recurring actions to the format GoalProgressCard expects
+  const transformedWeekActions = useMemo(() => {
+    console.log('[GoalDetailView] Transforming actions:', {
+      count: recurringActions.length,
+      sample: recurringActions[0]?.title,
+      sampleCompletedDates: recurringActions[0]?.completedDates,
+    });
+
+    return recurringActions.map(action => ({
+      id: action.id,
+      title: action.title,
+      input_kind: 'count' as const,
+      weeklyActual: action.weeklyActual,
+      weeklyTarget: action.weeklyTarget,
+      logs: (action.completedDates || []).map(dateStr => ({
+        id: `log-${action.id}-${dateStr}`,
+        task_id: action.id,
+        measured_on: dateStr,
+        week_number: currentWeekData.weekNumber,
+        day_of_week: parseLocalDate(dateStr).getDay(),
+        value: 1,
+        completed: true,
+        created_at: dateStr,
+      })),
+    }));
+  }, [recurringActions, currentWeekData.weekNumber]);
+
+  // Create a progress object for GoalProgressCard
+  const goalProgress = useMemo(() => {
+    const totalActual = recurringActions.reduce((sum, a) => sum + Math.min(a.weeklyActual, a.weeklyTarget), 0);
+    const totalTarget = recurringActions.reduce((sum, a) => sum + a.weeklyTarget, 0);
+    const weeklyPercent = totalTarget > 0 ? Math.round((totalActual / totalTarget) * 100) : 0;
+
+    return {
+      currentWeek: currentWeekData.weekNumber,
+      daysRemaining: 0,
+      weeklyActual: totalActual,
+      weeklyTarget: totalTarget,
+      overallActual: totalActual,
+      overallTarget: totalTarget,
+      overallProgress: goal.progress || weeklyPercent,
+    };
+  }, [recurringActions, currentWeekData.weekNumber, goal.progress]);
+
   useEffect(() => {
     if (activeTab === 'act') {
       fetchActions();
@@ -110,6 +188,7 @@ export function GoalDetailView({
       console.log('[GoalDetailView] Fetch result:', {
         recurringCount: result.recurringActions.length,
         oneTimeCount: result.oneTimeActions.length,
+        firstRecurringAction: result.recurringActions[0],
       });
 
       setRecurringActions(result.recurringActions);
@@ -123,20 +202,30 @@ export function GoalDetailView({
   };
 
   const handleToggleCompletion = async (
-    taskId: string,
+    actionId: string,
     dateString: string,
     currentlyCompleted: boolean
   ) => {
+    console.log('[GoalDetailView] Toggle completion:', {
+      actionId,
+      dateString,
+      currentlyCompleted,
+    });
+
     try {
       if (currentlyCompleted) {
-        await handleActionUncompletion(taskId, dateString);
+        // Uncomplete - remove the child task
+        await handleActionUncompletion(actionId, dateString);
       } else {
-        await handleActionCompletion(taskId, dateString);
+        // Complete - create child task
+        await handleActionCompletion(actionId, dateString);
       }
+      
+      // Refresh the actions list
       setRefreshTrigger(prev => prev + 1);
       onGoalUpdated();
     } catch (error) {
-      console.error('Error toggling completion:', error);
+      console.error('[GoalDetailView] Error toggling completion:', error);
       Alert.alert('Error', 'Failed to update completion status');
     }
   };
@@ -242,7 +331,6 @@ export function GoalDetailView({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Calculate date range
       const today = new Date();
       let startDate: Date;
 
@@ -253,17 +341,12 @@ export function GoalDetailView({
         startDate = new Date(today);
         startDate.setDate(today.getDate() - (12 * 7));
       } else {
-        // 'All' - use goal start date or a reasonable default
         startDate = new Date(goal.created_at || today);
       }
 
-      // Fetch actions data using our existing function
       const result = await fetchGoalActions(goal.id, goal.goal_type);
-
-      // Calculate goal score (sum of points from one-time actions)
       const goalScore = result.oneTimeActions.reduce((sum, action) => sum + action.pointsEarned, 0);
 
-      // Calculate weekly data
       const weeklyData: Array<{ weekNumber: number; completionPercent: number }> = [];
       const weekCount = timeRange === '4W' ? 4 : timeRange === '12W' ? 12 : 24;
 
@@ -273,7 +356,6 @@ export function GoalDetailView({
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
 
-        // For simplicity, using recurring actions as a proxy for completion
         const weekActions = result.recurringActions.filter(action => {
           return action.weeklyTarget > 0;
         });
@@ -288,18 +370,15 @@ export function GoalDetailView({
         });
       }
 
-      // Calculate weekly average
       const weeklyAverage = weeklyData.length > 0
         ? Math.round(weeklyData.reduce((sum, w) => sum + w.completionPercent, 0) / weeklyData.length)
         : 0;
 
-      // Calculate consistency (% of weeks meeting 100% target)
       const weeksAt100 = weeklyData.filter(w => w.completionPercent >= 100).length;
       const consistency = weeklyData.length > 0
         ? Math.round((weeksAt100 / weeklyData.length) * 100)
         : 0;
 
-      // Total actions completed
       const totalActions = result.recurringActions.reduce((sum, a) => sum + a.weeklyActual, 0) +
                           result.oneTimeActions.length;
 
@@ -308,7 +387,7 @@ export function GoalDetailView({
         weeklyAverage,
         consistency,
         totalActions,
-        weeklyData: weeklyData.slice(0, 12), // Show max 12 weeks in chart
+        weeklyData: weeklyData.slice(0, 12),
       });
     } catch (error) {
       console.error('[GoalDetailView] Error fetching analytics:', error);
@@ -329,7 +408,6 @@ export function GoalDetailView({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Insert the deposit idea
       const { data: ideaData, error: ideaError } = await supabase
         .from('0008-ap-deposit-ideas')
         .insert({
@@ -342,7 +420,6 @@ export function GoalDetailView({
 
       if (ideaError) throw ideaError;
 
-      // Link to goal via universal-goals-join
       const goalJoinColumn = goal.goal_type === '1y'
         ? 'one_yr_goal_id'
         : goal.goal_type === '12week'
@@ -380,7 +457,6 @@ export function GoalDetailView({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Insert the note
       const { data: noteData, error: noteError } = await supabase
         .from('0008-ap-notes')
         .insert({
@@ -393,7 +469,6 @@ export function GoalDetailView({
 
       if (noteError) throw noteError;
 
-      // Link to goal via universal-notes-join
       const parentType = goal.goal_type === '1y' ? 'goal_1y' :
                         goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
 
@@ -429,7 +504,6 @@ export function GoalDetailView({
             try {
               const supabase = getSupabaseClient();
 
-              // Update idea status
               const { error: updateError } = await supabase
                 .from('0008-ap-deposit-ideas')
                 .update({ status: 'activated' })
@@ -575,34 +649,30 @@ export function GoalDetailView({
               RECURRING ACTIONS
             </Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Leading Indicators
+              Leading Indicators • Tap circles to mark completion
             </Text>
-            {recurringActions.map(action => (
-              <View key={action.id} style={styles.actionCard}>
-                <TaskCard
-                  task={action as any}
-                  onToggleDay={handleToggleCompletion}
-                  onPress={() => {}}
-                  showWeekBubbles={true}
-                />
-                <View style={styles.actionMetrics}>
-                  <Text style={[styles.weeklyProgress, { color: colors.textSecondary }]}>
-                    {action.weeklyActual}/{action.weeklyTarget} this week
-                  </Text>
-                  {action.completedDates.length > 0 && (
-                    <View style={styles.completedDatesContainer}>
-                      {action.completedDates.slice(0, 7).map((date, idx) => (
-                        <View key={idx} style={[styles.dateBubble, { backgroundColor: colors.primary }]}>
-                          <Text style={styles.dateBubbleText}>
-                            {new Date(date).toLocaleDateString('en-US', { weekday: 'short' })[0]}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              </View>
-            ))}
+            
+            {/* GoalProgressCard with day bubbles */}
+            <GoalProgressCard
+              goal={{
+                ...goal,
+                id: goal.id,
+                title: goal.title,
+                goal_type: goal.goal_type,
+                start_date: goal.start_date || currentWeekData.startDate,
+                end_date: goal.end_date || currentWeekData.endDate,
+                roles: goal.roles || [],
+                domains: goal.domains || [],
+              }}
+              progress={goalProgress}
+              expanded={true}
+              week={currentWeekData}
+              weekActions={transformedWeekActions}
+              loadingWeekActions={false}
+              onAddAction={onAddAction}
+              onToggleCompletion={handleToggleCompletion}
+              selectedWeekNumber={currentWeekData.weekNumber}
+            />
           </View>
         )}
 
@@ -1218,34 +1288,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 16,
   },
-  actionCard: {
-    marginBottom: 16,
-  },
-  actionMetrics: {
-    marginTop: 8,
-    marginLeft: 16,
-  },
-  weeklyProgress: {
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  completedDatesContainer: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  dateBubble: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dateBubbleText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
   oneTimeCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1325,36 +1367,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  placeholderContainer: {
-    alignItems: 'center',
-    paddingVertical: 64,
-    paddingHorizontal: 32,
-  },
-  placeholderTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  placeholderMessage: {
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 22,
-  },
-  placeholderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  placeholderButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   timeRangeSelector: {
     flexDirection: 'row',
     gap: 12,
@@ -1370,7 +1382,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  // Ideas Tab Styles
   ideaCard: {
     padding: 16,
     borderRadius: 12,
@@ -1402,7 +1413,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  // Journal Tab Styles
   journalCard: {
     padding: 16,
     borderRadius: 12,
@@ -1430,7 +1440,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  // Analytics Tab Styles
   goalScoreCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1523,7 +1532,6 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1572,9 +1580,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     borderWidth: 1,
   },
-  saveButton: {
-    // backgroundColor set dynamically
-  },
+  saveButton: {},
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
