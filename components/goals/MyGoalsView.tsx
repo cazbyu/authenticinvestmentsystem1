@@ -82,11 +82,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
       const [oneYearResult, twelveWeekResult, customResult, timelineResult] = await Promise.all([
         supabase
           .from('0008-ap-goals-1y')
-          .select(`
-            *,
-            roles:0008-ap-universal-roles-join(role:0008-ap-roles(id, label, color)),
-            domains:0008-ap-universal-domains-join(domain:0008-ap-domains(id, name))
-          `)
+          .select('*')
           .eq('user_id', user.id)
           .neq('status', 'cancelled')
           .neq('status', 'archived')
@@ -103,11 +99,6 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
               end_date,
               status,
               global_cycle:0008-ap-global-cycles(id, title, cycle_label)
-            ),
-            roles:0008-ap-universal-roles-join(role:0008-ap-roles(id, label, color)),
-            domains:0008-ap-universal-domains-join(domain:0008-ap-domains(id, name)),
-            parent_goals:0008-ap-universal-goals-join!twelve_wk_goal_id(
-              one_yr_goal:0008-ap-goals-1y(id, title)
             )
           `)
           .eq('user_id', user.id)
@@ -119,9 +110,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
           .from('0008-ap-goals-custom')
           .select(`
             *,
-            timeline:0008-ap-custom-timelines(id, title, start_date, end_date),
-            roles:0008-ap-universal-roles-join(role:0008-ap-roles(id, label, color)),
-            domains:0008-ap-universal-domains-join(domain:0008-ap-domains(id, name))
+            timeline:0008-ap-custom-timelines(id, title, start_date, end_date)
           `)
           .eq('user_id', user.id)
           .neq('status', 'cancelled')
@@ -136,9 +125,78 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
           .single(),
       ]);
 
-      const annual: UnifiedGoal[] = (oneYearResult.data || []).map((goal: any) => {
-        const childCount = twelveWeekResult.data?.filter((g: any) =>
-          g.parent_goals?.some((pg: any) => pg.one_yr_goal?.id === goal.id)
+      const oneYearGoals = oneYearResult.data || [];
+      const twelveWeekGoals = twelveWeekResult.data || [];
+      const customGoals = customResult.data || [];
+
+      const allGoalIds = [
+        ...oneYearGoals.map(g => g.id),
+        ...twelveWeekGoals.map(g => g.id),
+        ...customGoals.map(g => g.id),
+      ];
+
+      if (allGoalIds.length === 0) {
+        setAnnualGoals([]);
+        setCycleGoals([]);
+        setCustomGoals([]);
+        setActiveTimelineName('');
+        setCurrentCycleWeek(0);
+        setCurrentWeekDates(getCurrentWeekDates());
+        return;
+      }
+
+      const [
+        { data: rolesData },
+        { data: domainsData },
+        { data: parentGoalsData }
+      ] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('parent_id, role:0008-ap-roles(id, label, color)')
+          .in('parent_id', allGoalIds)
+          .in('parent_type', ['one_yr_goal', 'twelve_wk_goal', 'custom_goal']),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id, domain:0008-ap-domains(id, name)')
+          .in('parent_id', allGoalIds)
+          .in('parent_type', ['one_yr_goal', 'twelve_wk_goal', 'custom_goal']),
+        supabase
+          .from('0008-ap-universal-goals-join')
+          .select('twelve_wk_goal_id, one_yr_goal:0008-ap-goals-1y(id, title)')
+          .in('twelve_wk_goal_id', twelveWeekGoals.map(g => g.id))
+          .eq('goal_type', 'twelve_wk_goal'),
+      ]);
+
+      const rolesMap = new Map<string, any[]>();
+      (rolesData || []).forEach((item: any) => {
+        if (!rolesMap.has(item.parent_id)) {
+          rolesMap.set(item.parent_id, []);
+        }
+        if (item.role) {
+          rolesMap.get(item.parent_id)!.push(item.role);
+        }
+      });
+
+      const domainsMap = new Map<string, any[]>();
+      (domainsData || []).forEach((item: any) => {
+        if (!domainsMap.has(item.parent_id)) {
+          domainsMap.set(item.parent_id, []);
+        }
+        if (item.domain) {
+          domainsMap.get(item.parent_id)!.push(item.domain);
+        }
+      });
+
+      const parentGoalsMap = new Map<string, any>();
+      (parentGoalsData || []).forEach((item: any) => {
+        if (item.twelve_wk_goal_id && item.one_yr_goal) {
+          parentGoalsMap.set(item.twelve_wk_goal_id, item.one_yr_goal);
+        }
+      });
+
+      const annual: UnifiedGoal[] = oneYearGoals.map((goal: any) => {
+        const childCount = twelveWeekGoals.filter((g: any) =>
+          parentGoalsMap.get(g.id)?.id === goal.id
         ).length || 0;
 
         return {
@@ -149,8 +207,8 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
           status: goal.status,
           year_target_date: goal.year_target_date,
           child_goal_count: childCount,
-          roles: goal.roles?.map((r: any) => r.role).filter(Boolean) || [],
-          domains: goal.domains?.map((d: any) => d.domain).filter(Boolean) || [],
+          roles: rolesMap.get(goal.id) || [],
+          domains: domainsMap.get(goal.id) || [],
         };
       }).filter((goal: UnifiedGoal) => {
         if (!goal.year_target_date) return true;
@@ -174,10 +232,10 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
         }
       }
 
-      const cycle: UnifiedGoal[] = (twelveWeekResult.data || [])
+      const cycle: UnifiedGoal[] = twelveWeekGoals
         .filter((goal: any) => goal.timeline && goal.timeline.status === 'active')
         .map((goal: any) => {
-          const parentGoal = goal.parent_goals?.[0]?.one_yr_goal;
+          const parentGoal = parentGoalsMap.get(goal.id);
 
           return {
             id: goal.id,
@@ -193,12 +251,12 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
             end_date: goal.end_date,
             parent_goal_id: parentGoal?.id,
             parent_goal_title: parentGoal?.title,
-            roles: goal.roles?.map((r: any) => r.role).filter(Boolean) || [],
-            domains: goal.domains?.map((d: any) => d.domain).filter(Boolean) || [],
+            roles: rolesMap.get(goal.id) || [],
+            domains: domainsMap.get(goal.id) || [],
           };
         });
 
-      const custom: UnifiedGoal[] = (customResult.data || []).map((goal: any) => {
+      const custom: UnifiedGoal[] = customGoals.map((goal: any) => {
         let weekInfo = { current: 0, total: 0 };
         if (goal.timeline?.start_date && goal.timeline?.end_date) {
           const start = new Date(goal.timeline.start_date);
@@ -226,8 +284,8 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
           end_date: goal.end_date,
           current_week: weekInfo.current,
           total_weeks: weekInfo.total,
-          roles: goal.roles?.map((r: any) => r.role).filter(Boolean) || [],
-          domains: goal.domains?.map((d: any) => d.domain).filter(Boolean) || [],
+          roles: rolesMap.get(goal.id) || [],
+          domains: domainsMap.get(goal.id) || [],
         };
       });
 
