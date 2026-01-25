@@ -430,7 +430,7 @@ export function CreateGoalModal({
 
         if (error) throw error;
         goalId = newGoal.id;
-        parentType = 'goal';
+        parentType = 'twelve_wk_goal';
 
       } else {
         // Create custom goal

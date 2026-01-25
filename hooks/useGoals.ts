@@ -296,17 +296,17 @@ export function useGoals(options: UseGoalsOptions = {}) {
           .from(DB.UNIVERSAL_ROLES_JOIN)
           .select(`parent_id, role:${DB.ROLES}(id, label, color)`)
           .in('parent_id', allGoalIds)
-          .in('parent_type', ['goal', 'custom_goal']),
+          .in('parent_type', ['twelve_wk_goal', 'custom_goal']),
         supabase
           .from(DB.UNIVERSAL_DOMAINS_JOIN)
           .select(`parent_id, domain:${DB.DOMAINS}(id, name)`)
           .in('parent_id', allGoalIds)
-          .in('parent_type', ['goal', 'custom_goal']),
+          .in('parent_type', ['twelve_wk_goal', 'custom_goal']),
         supabase
           .from(DB.UNIVERSAL_KEY_REL_JOIN)
           .select(`parent_id, key_relationship:${DB.KEY_REL}(id, name)`)
           .in('parent_id', allGoalIds)
-          .in('parent_type', ['goal', 'custom_goal']),
+          .in('parent_type', ['twelve_wk_goal', 'custom_goal']),
       ]);
 
       if (rolesError) throw rolesError;

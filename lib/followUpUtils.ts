@@ -4,7 +4,7 @@ import { toLocalISOString } from '@/lib/dateUtils';
 export interface FollowUpItem {
   id: string;
   user_id: string;
-  parent_type: 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'goal' | 'custom_goal' | '1y_goal';
+  parent_type: 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'twelve_wk_goal' | 'custom_goal' | '1y_goal';
   parent_id: string;
   follow_up_date: string;
   status: 'pending' | 'done' | 'snoozed' | 'cancelled';
@@ -26,7 +26,7 @@ async function filterFollowUpsByActiveParents(items: FollowUpItem[]): Promise<Fo
   const depositIdeaIds = collectIds(['depositIdea']);
   const withdrawalIds = collectIds(['withdrawal']);
   const reflectionIds = collectIds(['reflection']);
-  const goalIds = collectIds(['goal']);
+  const goalIds = collectIds(['twelve_wk_goal']);
   const customGoalIds = collectIds(['custom_goal']);
   const oneYearGoalIds = collectIds(['1y_goal']);
 
@@ -117,7 +117,7 @@ async function filterFollowUpsByActiveParents(items: FollowUpItem[]): Promise<Fo
         return activeWithdrawalIds.has(item.parent_id);
       case 'reflection':
         return activeReflectionIds.has(item.parent_id);
-      case 'goal':
+      case 'twelve_wk_goal':
         return activeGoalIds.has(item.parent_id);
       case 'custom_goal':
         return activeCustomGoalIds.has(item.parent_id);

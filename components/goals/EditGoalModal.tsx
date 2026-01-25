@@ -203,7 +203,7 @@ export function EditGoalModal({ visible, onClose, onUpdate, goal, deleteGoal }: 
         }
 
         if (toAdd.length > 0) {
-          const parentType = goal.goal_type === '12week' ? 'goal' : 'custom_goal';
+          const parentType = goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
           const inserts = toAdd.map(id => ({
             parent_id: goal.id,
             parent_type: parentType,
@@ -218,7 +218,7 @@ export function EditGoalModal({ visible, onClose, onUpdate, goal, deleteGoal }: 
       };
 
       // Fetch current joins for comparison
-      const parentType = goal.goal_type === '12week' ? 'goal' : 'custom_goal';
+      const parentType = goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
       console.log('[EditGoalModal] Fetching current joins with parent_type:', parentType);
 
       const [{ data: currentRolesJoins }, { data: currentDomainsJoins }, { data: currentKRsJoins }] = await Promise.all([
@@ -247,7 +247,7 @@ export function EditGoalModal({ visible, onClose, onUpdate, goal, deleteGoal }: 
           .single();
         if (newNoteError) throw newNoteError;
 
-        const noteParentType = goal.goal_type === '12week' ? 'goal' : 'custom_goal';
+        const noteParentType = goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
         const { error: noteJoinError } = await supabase
           .from('0008-ap-universal-notes-join')
           .insert({ parent_id: goal.id, parent_type: noteParentType, note_id: newNote.id, user_id: user.id });
