@@ -99,20 +99,28 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   loadingWeekActions = false,
   onAddAction,
   onToggleCompletion,
-  onEdit, // New prop
+  onEdit,
   onPress,
   compact = false,
   selectedWeekNumber,
-  onEditAction, // New prop
-  onDeleteAction, // New prop
-  onToggleExpanded, // New prop
+  onEditAction,
+  onDeleteAction,
+  onToggleExpanded,
 }: GoalProgressCardProps) {
   const weekActions = weekActionsProp ?? [];
+  
+  // ADD THIS DEBUG LOG HERE (after weekActions is defined):
+  console.log('[GoalProgressCard] Render check:', {
+    goalTitle: goal?.title,
+    hasWeek: !!week,
+    weekStartDate: week?.startDate,
+    weekActionsCount: weekActions.length,
+    expanded,
+    firstActionLogs: weekActions[0]?.logs?.slice(0, 2),
+  });
+
   const getProgressColor = useCallback((percentage: number) => {
-    if (percentage >= 85) return '#16a34a'; // Green for 85% and above
-    if (percentage >= 60) return '#eab308';
-    return '#dc2626';
-  }, []);
+    // ... rest of code
 
   const getWeeklyProgressColor = useCallback((actual: number, target: number) => {
     const percentage = target > 0 ? (actual / target) * 100 : 0;
