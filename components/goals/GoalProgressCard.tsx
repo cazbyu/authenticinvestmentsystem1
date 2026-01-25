@@ -120,8 +120,6 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   });
 
   const getProgressColor = useCallback((percentage: number) => {
-    // ... rest of code
-
   const getWeeklyProgressColor = useCallback((actual: number, target: number) => {
     const percentage = target > 0 ? (actual / target) * 100 : 0;
     return getProgressColor(percentage);
