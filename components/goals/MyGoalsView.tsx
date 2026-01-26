@@ -258,22 +258,49 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
         }
 
         return {
-          id: goal.id,
-          title: goal.title,
-          description: goal.description,
-          goal_type: 'custom' as const,
-          status: goal.status,
-          progress: goal.progress || 0,
-          timeline_id: goal.custom_timeline_id,
-          timeline_name: goal.timeline?.title,
-          timeline_source: 'custom' as const,
-          start_date: goal.start_date,
-          end_date: goal.end_date,
-          current_week: weekInfo.current,
-          total_weeks: weekInfo.total,
-          roles: rolesMap.get(goal.id) || [],
-          domains: domainsMap.get(goal.id) || [],
-        };
+  id: goal.id,
+  title: goal.title,
+  description: goal.description,
+  goal_type: 'custom' as const,
+  status: goal.status,
+  progress: goal.progress || 0,
+  timeline_id: goal.custom_timeline_id,
+  timeline_name: goal.timeline?.title,
+  timeline_source: 'custom' as const,
+  custom_timeline_id: goal.custom_timeline_id,  // ADD THIS
+  start_date: goal.start_date,
+  end_date: goal.end_date,
+  current_week: weekInfo.current,
+  total_weeks: weekInfo.total,
+  roles: rolesMap.get(goal.id) || [],
+  domains: domainsMap.get(goal.id) || [],
+};
+```
+
+---
+
+## Summary of Changes
+
+| Location | Change |
+|----------|--------|
+| Interface (line ~15) | Add `user_global_timeline_id?: string` and `custom_timeline_id?: string` |
+| 12-week mapping (line ~200) | Add `user_global_timeline_id: goal.user_global_timeline_id` |
+| Custom mapping (line ~235) | Add `custom_timeline_id: goal.custom_timeline_id` |
+
+---
+
+## Verification
+
+After making these changes:
+1. Save the file
+2. Reload the app
+3. Click on "Test Weight 200"
+4. Check the console - you should now see:
+```
+   [DEBUG] Goal object: {
+     user_global_timeline_id: '5cf3e1f2-...',  // NOW HAS VALUE!
+     ...
+   }
       });
 
       setAnnualGoals(annual);
