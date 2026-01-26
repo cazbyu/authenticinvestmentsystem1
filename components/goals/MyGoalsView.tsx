@@ -515,12 +515,10 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
       )}
 
       {renderSection(
-        'THIS CYCLE',
-        activeTimelineName && currentCycleWeek > 0
-          ? `${activeTimelineName} • Week ${currentCycleWeek} of 12`
-          : activeTimelineName || null,
-        cycleGoals
-      )}
+  '12 WEEK GOALS',
+  null,
+  cycleGoals
+)}
 
       {renderSection(
         'CUSTOM TIMELINES',
