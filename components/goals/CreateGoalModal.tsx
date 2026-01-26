@@ -285,14 +285,15 @@ export function CreateGoalModal({
       if (!user) throw new Error('User not found');
 
       const { data: newTimeline, error } = await supabase
-        .from('0008-ap-custom-timelines')
-        .insert({
-          user_id: user.id,
-          name: newTimelineName.trim(),
-          start_date: newTimelineStartDate,
-          end_date: newTimelineEndDate,
-          timeline_type: 'custom',
-        })
+  .from('0008-ap-custom-timelines')
+  .insert({
+    user_id: user.id,
+    title: newTimelineName.trim(),
+    start_date: newTimelineStartDate,
+    end_date: newTimelineEndDate,
+    timeline_type: 'custom',
+    status: 'active',
+  })
         .select()
         .single();
 
