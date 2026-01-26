@@ -76,6 +76,8 @@ export function GoalDetailView({
   const [newActionTitle, setNewActionTitle] = useState('');
   const [newActionFrequency, setNewActionFrequency] = useState(7);
   const [creatingAction, setCreatingAction] = useState(false);
+  const [actionStartDate, setActionStartDate] = useState<string | null>(null);
+  const [actionEndDate, setActionEndDate] = useState<string | null>(null);
 
   // Ideas tab state
   const [ideas, setIdeas] = useState<DepositIdea[]>([]);
@@ -766,6 +768,23 @@ export function GoalDetailView({
     );
   };
 
+  const generateRecurrenceRule = (timesPerWeek: number): string => {
+    if (timesPerWeek === 7) {
+      return 'RRULE:FREQ=DAILY';
+    }
+
+    const dayMappings: { [key: number]: string } = {
+      1: 'MO',
+      2: 'MO,TH',
+      3: 'MO,WE,FR',
+      4: 'MO,TU,TH,FR',
+      5: 'MO,TU,WE,TH,FR',
+      6: 'MO,TU,WE,TH,FR,SA',
+    };
+
+    return `RRULE:FREQ=WEEKLY;BYDAY=${dayMappings[timesPerWeek]}`;
+  };
+
   const handleCreateAction = async () => {
     if (!newActionTitle.trim()) {
       Alert.alert('Error', 'Please enter an action name');
@@ -778,24 +797,58 @@ export function GoalDetailView({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user found');
 
-      const { error } = await supabase
+      // Step 1: Create the task
+      const { data: newTask, error: taskError } = await supabase
         .from('0008-ap-tasks')
         .insert({
           user_id: user.id,
           title: newActionTitle.trim(),
-          parent_type: 'goal',
-          parent_id: goal.id,
-          is_recurring: true,
-          frequency_per_week: newActionFrequency,
-          status: 'active',
-          created_at: new Date().toISOString(),
-        });
+          status: 'pending',
+          type: 'task',
+          recurrence_rule: generateRecurrenceRule(newActionFrequency),
+          start_date: actionStartDate,
+          end_date: actionEndDate,
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (taskError) {
+        console.error('Error creating task:', taskError);
+        Alert.alert('Error', 'Failed to create action');
+        return;
+      }
+
+      // Step 2: Link task to goal via universal join table
+      const goalType = goal.goal_type === '12week' ? 'twelve_wk_goal' :
+                       goal.goal_type === 'custom' ? 'custom_goal' :
+                       'one_yr_goal';
+
+      const joinData: any = {
+        user_id: user.id,
+        parent_type: 'task',
+        parent_id: newTask.id,
+        goal_type: goalType,
+        twelve_wk_goal_id: goal.goal_type === '12week' ? goal.id : null,
+        custom_goal_id: goal.goal_type === 'custom' ? goal.id : null,
+        one_yr_goal_id: goal.goal_type === '1y' ? goal.id : null,
+      };
+
+      const { error: joinError } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .insert(joinData);
+
+      if (joinError) {
+        console.error('Error linking action to goal:', joinError);
+        await supabase.from('0008-ap-tasks').delete().eq('id', newTask.id);
+        Alert.alert('Error', 'Failed to link action to goal');
+        return;
+      }
 
       setShowAddActionModal(false);
       setNewActionTitle('');
       setNewActionFrequency(7);
+      setActionStartDate(null);
+      setActionEndDate(null);
       setRefreshTrigger(prev => prev + 1);
       onGoalUpdated();
       Alert.alert('Success', 'Action created successfully');
@@ -1164,6 +1217,43 @@ export function GoalDetailView({
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={[styles.inputLabel, { color: colors.text, marginTop: 16, marginBottom: 8 }]}>
+                Active Period (Optional)
+              </Text>
+              <View style={styles.dateInputRow}>
+                <View style={styles.dateInputContainer}>
+                  <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Start Date</Text>
+                  <TextInput
+                    style={[styles.dateInput, {
+                      color: colors.text,
+                      borderColor: colors.border,
+                      backgroundColor: colors.background
+                    }]}
+                    value={actionStartDate || ''}
+                    onChangeText={setActionStartDate}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+                <View style={styles.dateInputContainer}>
+                  <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>End Date</Text>
+                  <TextInput
+                    style={[styles.dateInput, {
+                      color: colors.text,
+                      borderColor: colors.border,
+                      backgroundColor: colors.background
+                    }]}
+                    value={actionEndDate || ''}
+                    onChangeText={setActionEndDate}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+              </View>
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                Leave empty for no time restriction
+              </Text>
             </View>
 
             <View style={styles.modalActions}>
@@ -1761,5 +1851,28 @@ const styles = StyleSheet.create({
   frequencyButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  dateInputRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
+  },
+  dateInputContainer: {
+    flex: 1,
+  },
+  dateLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  helperText: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 });

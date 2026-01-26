@@ -411,44 +411,28 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
           )}
         </View>
 
-        {goal.roles && goal.roles.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {goal.roles.slice(0, 3).map((role) => (
-              <View
-                key={role.id}
-                style={[styles.tag, { backgroundColor: role.color || colors.primary + '20' }]}
-              >
-                <Text style={[styles.tagText, { color: role.color || colors.primary }]}>
-                  {role.label}
-                </Text>
-              </View>
-            ))}
-            {goal.roles.length > 3 && (
-              <Text style={[styles.moreText, { color: colors.textSecondary }]}>
-                +{goal.roles.length - 3}
-              </Text>
-            )}
-          </View>
-        )}
       </TouchableOpacity>
     );
   };
 
-  const renderSection = (title: string, subtitle: string | null, goals: UnifiedGoal[]) => {
-    if (goals.length === 0) return null;
+  const getAllGoalsSorted = (): UnifiedGoal[] => {
+    const allGoals = [
+      ...annualGoals.map(g => ({
+        ...g,
+        sortDate: g.year_target_date || '2099-12-31'
+      })),
+      ...cycleGoals.map(g => ({
+        ...g,
+        sortDate: g.end_date || '2099-12-31'
+      })),
+      ...customGoals.map(g => ({
+        ...g,
+        sortDate: g.end_date || '2099-12-31'
+      }))
+    ];
 
-    return (
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-          {subtitle && (
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              {subtitle}
-            </Text>
-          )}
-        </View>
-        {goals.map(renderGoalCard)}
-      </View>
+    return allGoals.sort((a, b) =>
+      new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime()
     );
   };
 
@@ -507,23 +491,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
         </View>
       )}
 
-      {renderSection(
-        `${new Date().getFullYear()} ANNUAL GOALS`,
-        null,
-        annualGoals
-      )}
-
-      {renderSection(
-  '12 WEEK GOALS',
-  null,
-  cycleGoals
-)}
-
-      {renderSection(
-        'CUSTOM TIMELINES',
-        null,
-        customGoals
-      )}
+      {getAllGoalsSorted().map(goal => renderGoalCard(goal))}
     </ScrollView>
   );
 }
