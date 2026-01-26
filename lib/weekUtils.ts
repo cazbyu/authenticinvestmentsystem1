@@ -40,7 +40,7 @@ export function getEffectiveTargetDays(
   selectedTargetDays: number,
   weekStart: string,
   weekEnd: string,
-  isPartialWeek: boolean
+  isPartialWeek: boolean = false
 ): number {
   if (!isPartialWeek) {
     return selectedTargetDays;
