@@ -722,10 +722,10 @@ export function CreateGoalModal({
                   <View style={styles.radioContent}>
                     <Text style={styles.radioLabel}>{timeline.title}</Text>
                     {timeline.start_date && timeline.end_date && (
-                      <Text style={styles.radioSubtext}>
-                        {formatLocalDate(timeline.start_date)} - {formatLocalDate(timeline.end_date)}
-                      </Text>
-                    )}
+  <Text style={styles.radioSubtext}>
+    {new Date(timeline.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - {new Date(timeline.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+  </Text>
+)}
                   </View>
                 </TouchableOpacity>
               ))}
