@@ -813,8 +813,8 @@ export function CreateGoalModal({
               <View style={styles.radioContent}>
                 <Text style={styles.radioLabel}>{goal.title}</Text>
                 <Text style={styles.radioSubtext}>
-                  Target: {formatLocalDate(goal.year_target_date)}
-                </Text>
+  Target: {new Date(goal.year_target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+</Text>
               </View>
             </TouchableOpacity>
           ))}
