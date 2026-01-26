@@ -322,7 +322,14 @@ export function CreateGoalModal({
   };
 
   const handleCreateGoal = async () => {
-    if (!formData.title.trim()) {
+  console.log('[CreateGoalModal] Save clicked', {
+    title: formData.title,
+    timeframe: selectedTimeframe,
+    customTimelineId: selectedCustomTimelineId,
+    globalTimelineId: selectedGlobalTimelineId,
+  });
+  
+  if (!formData.title.trim()) {
       Alert.alert('Error', 'Please enter a goal title');
       return;
     }
