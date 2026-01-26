@@ -10,7 +10,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, Edit3, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, Edit3, ChevronLeft, ChevronRight, Square, CheckSquare } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
 import { EditGoalModal } from './EditGoalModal';
@@ -360,6 +360,51 @@ export function GoalDetailView({
     } catch (error) {
       console.error('[GoalDetailView] Error toggling completion:', error);
       Alert.alert('Error', 'Failed to update completion status');
+    }
+  };
+
+  const handleToggleBoostTask = async (task: OneTimeActionResult) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
+
+      const isCompleted = task.status === 'completed';
+
+      if (isCompleted) {
+        // Mark as incomplete
+        const { error } = await supabase
+          .from('0008-ap-tasks')
+          .update({
+            status: 'pending',
+            completed_at: null,
+            updated_at: toLocalISOString(new Date()),
+          })
+          .eq('id', task.id);
+
+        if (error) throw error;
+      } else {
+        // Mark as complete
+        const { error } = await supabase
+          .from('0008-ap-tasks')
+          .update({
+            status: 'completed',
+            completed_at: toLocalISOString(new Date()),
+            updated_at: toLocalISOString(new Date()),
+          })
+          .eq('id', task.id);
+
+        if (error) throw error;
+      }
+
+      setRefreshTrigger(prev => prev + 1);
+      onGoalUpdated();
+    } catch (error) {
+      console.error('[GoalDetailView] Error toggling boost task:', error);
+      Alert.alert('Error', 'Failed to update task status');
     }
   };
 
@@ -1066,38 +1111,51 @@ export function GoalDetailView({
         {oneTimeActions.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              ONE-TIME ACTIONS
+              BOOST ACTIONS
             </Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Boosts
+              One-time tasks linked to this goal
             </Text>
-            {oneTimeActions.map(action => (
-              <View
-                key={action.id}
-                style={[styles.oneTimeCard, { backgroundColor: colors.surface }]}
-              >
-                <View style={styles.checkmark}>
-                  <Text style={styles.checkmarkText}>✓</Text>
-                </View>
-                <View style={styles.oneTimeContent}>
-                  <Text style={[styles.oneTimeTitle, { color: colors.text }]}>
-                    {action.title}
-                  </Text>
-                  <View style={styles.oneTimeMetadata}>
-                    {action.completedAt && (
-                      <Text style={[styles.oneTimeDate, { color: colors.textSecondary }]}>
-                        {formatLocalDate(action.completedAt)}
+            <View style={styles.boostList}>
+              {oneTimeActions.map(task => {
+                const isCompleted = task.status === 'completed';
+                const formattedDueDate = task.due_date ? formatLocalDate(task.due_date) : null;
+
+                return (
+                  <TouchableOpacity
+                    key={task.id}
+                    style={[styles.boostItem, { backgroundColor: colors.surface }]}
+                    onPress={() => handleToggleBoostTask(task)}
+                  >
+                    <View style={styles.boostCheckbox}>
+                      {isCompleted ? (
+                        <CheckSquare size={20} color={colors.primary} />
+                      ) : (
+                        <Square size={20} color={colors.textSecondary} />
+                      )}
+                    </View>
+                    <View style={styles.boostContent}>
+                      <Text
+                        style={[
+                          styles.boostTitle,
+                          { color: colors.text },
+                          isCompleted && styles.boostTitleCompleted,
+                        ]}
+                      >
+                        {task.title}
                       </Text>
-                    )}
-                    <View style={[styles.pointsBadge, { backgroundColor: colors.primary + '20' }]}>
-                      <Text style={[styles.pointsText, { color: colors.primary }]}>
-                        +{action.pointsEarned} pts
+                      <Text style={[styles.boostDue, { color: colors.textSecondary }]}>
+                        {isCompleted
+                          ? 'Completed'
+                          : formattedDueDate
+                          ? `Due: ${formattedDueDate}`
+                          : 'No due date'}
                       </Text>
                     </View>
-                  </View>
-                </View>
-              </View>
-            ))}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         )}
 
@@ -1864,53 +1922,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 16,
   },
-  oneTimeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  checkmark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#10b981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  checkmarkText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  oneTimeContent: {
-    flex: 1,
-  },
-  oneTimeTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  oneTimeMetadata: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  boostList: {
     gap: 8,
   },
-  oneTimeDate: {
-    fontSize: 13,
+  boostItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 8,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  boostCheckbox: {
+    marginRight: 12,
+  },
+  boostContent: {
     flex: 1,
   },
-  pointsBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  boostTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 4,
   },
-  pointsText: {
-    fontSize: 12,
-    fontWeight: '700',
+  boostTitleCompleted: {
+    textDecorationLine: 'line-through',
+    opacity: 0.6,
+  },
+  boostDue: {
+    fontSize: 13,
   },
   emptyState: {
     alignItems: 'center',

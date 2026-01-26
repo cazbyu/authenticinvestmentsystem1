@@ -288,18 +288,16 @@ export async function fetchGoalActions(
     let oneTimeActions: OneTimeActionResult[] = [];
 
     if (oneTimeTaskIds.length > 0) {
-      // 2b. Fetch one-time tasks (no recurrence_rule, completed in this week)
+      // 2b. Fetch one-time tasks (no recurrence_rule, both pending and completed)
       const { data: oneTimeTasks, error: oneTimeTasksError } = await supabase
         .from('0008-ap-tasks')
         .select('*')
         .in('id', oneTimeTaskIds)
         .eq('user_id', user.id)
         .is('recurrence_rule', null)
-        .eq('status', 'completed')
-        .gte('completed_at', wStart)
-        .lte('completed_at', wEnd)
+        .neq('status', 'cancelled')
         .is('deleted_at', null)
-        .order('completed_at', { ascending: false });
+        .order('due_date', { ascending: true, nullsFirst: false });
 
       if (oneTimeTasksError) {
         console.error('[fetchGoalActions] Error fetching one-time tasks:', oneTimeTasksError);
