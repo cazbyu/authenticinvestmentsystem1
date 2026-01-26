@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
+import ActionEffortModal from './ActionEffortModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
+import { useGoals, Timeline } from '@/hooks/useGoals';
 
 interface GoalDetailViewProps {
   goal: UnifiedGoal;
@@ -57,6 +59,12 @@ interface AnalyticsData {
   }>;
 }
 
+interface CycleWeek {
+  week_number: number;
+  start_date: string;
+  end_date: string;
+}
+
 export function GoalDetailView({
   goal,
   onClose,
@@ -71,13 +79,17 @@ export function GoalDetailView({
   const [oneTimeActions, setOneTimeActions] = useState<OneTimeActionResult[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Action creation state
-  const [showAddActionModal, setShowAddActionModal] = useState(false);
-  const [newActionTitle, setNewActionTitle] = useState('');
-  const [newActionFrequency, setNewActionFrequency] = useState(7);
-  const [creatingAction, setCreatingAction] = useState(false);
-  const [actionStartDate, setActionStartDate] = useState<string | null>(null);
-  const [actionEndDate, setActionEndDate] = useState<string | null>(null);
+  // Timeline and weeks state for ActionEffortModal
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [cycleWeeks, setCycleWeeks] = useState<CycleWeek[]>([]);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+
+  // ActionEffortModal state
+  const [showActionEffortModal, setShowActionEffortModal] = useState(false);
+
+  // Get createTaskWithWeekPlan from useGoals hook
+  const { createTaskWithWeekPlan } = useGoals();
 
   // Ideas tab state
   const [ideas, setIdeas] = useState<DepositIdea[]>([]);
@@ -96,32 +108,21 @@ export function GoalDetailView({
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('12W');
 
-  // Calculate current week bounds (Monday to Sunday)
+  // Calculate current week bounds (Sunday to Saturday)
   const currentWeekData = useMemo(() => {
     const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const dayOfWeek = today.getDay();
     
-    // Calculate start of week (Sunday-based to match your day bubbles)
-    // If you want Monday-based, use: const sundayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const sundayOffset = -dayOfWeek;
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() + sundayOffset);
     weekStart.setHours(0, 0, 0, 0);
     
-    // Calculate end of week (Saturday)
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
 
-    // Use goal's current week number or default to 1
     const weekNumber = goal.current_week || 1;
-
-    console.log('[GoalDetailView] Week data calculated:', {
-      weekNumber,
-      startDate: formatLocalDate(weekStart),
-      endDate: formatLocalDate(weekEnd),
-      today: formatLocalDate(today),
-    });
 
     return {
       weekNumber,
@@ -132,12 +133,6 @@ export function GoalDetailView({
 
   // Transform recurring actions to the format GoalProgressCard expects
   const transformedWeekActions = useMemo(() => {
-    console.log('[GoalDetailView] Transforming actions:', {
-      count: recurringActions.length,
-      sample: recurringActions[0]?.title,
-      sampleCompletedDates: recurringActions[0]?.completedDates,
-    });
-
     return recurringActions.map(action => ({
       id: action.id,
       title: action.title,
@@ -174,6 +169,146 @@ export function GoalDetailView({
     };
   }, [recurringActions, currentWeekData.weekNumber, goal.progress]);
 
+  // Fetch timeline and weeks for the goal
+  const fetchTimelineAndWeeks = useCallback(async () => {
+    setLoadingTimeline(true);
+    setTimelineError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+
+      // Determine timeline ID and source based on goal type
+      let timelineId: string | null = null;
+      let timelineSource: 'global' | 'custom' | null = null;
+
+      if (goal.goal_type === '12week' && goal.user_global_timeline_id) {
+        timelineId = goal.user_global_timeline_id;
+        timelineSource = 'global';
+      } else if (goal.goal_type === 'custom' && goal.custom_timeline_id) {
+        timelineId = goal.custom_timeline_id;
+        timelineSource = 'custom';
+      }
+
+      if (!timelineId || !timelineSource) {
+        // 1-year goals don't have direct timelines, or goal is missing timeline
+        if (goal.goal_type === '1y') {
+          setTimelineError('Annual goals use 12-week or custom goals for actions.');
+        } else {
+          setTimelineError('This goal is not assigned to an active timeline.');
+        }
+        setTimeline(null);
+        setCycleWeeks([]);
+        return;
+      }
+
+      // Fetch timeline details
+      let timelineData: any = null;
+
+      if (timelineSource === 'global') {
+        const { data, error } = await supabase
+          .from('0008-ap-user-global-timelines')
+          .select(`
+            id,
+            title,
+            start_date,
+            end_date,
+            status,
+            global_cycle:0008-ap-global-cycles(
+              id,
+              title,
+              cycle_label,
+              start_date,
+              end_date
+            )
+          `)
+          .eq('id', timelineId)
+          .eq('status', 'active')
+          .single();
+
+        if (error || !data) {
+          setTimelineError('This timeline is no longer active.');
+          setTimeline(null);
+          setCycleWeeks([]);
+          return;
+        }
+
+        timelineData = {
+          id: data.id,
+          source: 'global' as const,
+          title: data.global_cycle?.title || data.global_cycle?.cycle_label || data.title || 'Global Timeline',
+          start_date: data.global_cycle?.start_date || data.start_date,
+          end_date: data.global_cycle?.end_date || data.end_date,
+          global_cycle_id: data.global_cycle?.id,
+        };
+      } else {
+        const { data, error } = await supabase
+          .from('0008-ap-custom-timelines')
+          .select('*')
+          .eq('id', timelineId)
+          .eq('status', 'active')
+          .single();
+
+        if (error || !data) {
+          setTimelineError('This timeline is no longer active.');
+          setTimeline(null);
+          setCycleWeeks([]);
+          return;
+        }
+
+        timelineData = {
+          id: data.id,
+          source: 'custom' as const,
+          title: data.title,
+          start_date: data.start_date,
+          end_date: data.end_date,
+        };
+      }
+
+      setTimeline(timelineData);
+
+      // Fetch weeks from unified view
+      const { data: weeksData, error: weeksError } = await supabase
+        .from('v_unified_timeline_weeks')
+        .select('week_number, week_start, week_end')
+        .eq('timeline_id', timelineId)
+        .eq('source', timelineSource)
+        .order('week_number', { ascending: true });
+
+      if (weeksError) {
+        console.error('[GoalDetailView] Error fetching weeks:', weeksError);
+        setTimelineError('Failed to load timeline weeks.');
+        setCycleWeeks([]);
+        return;
+      }
+
+      // Normalize week data to match CycleWeek interface
+      const normalizedWeeks: CycleWeek[] = (weeksData || []).map(week => ({
+        week_number: week.week_number,
+        start_date: week.week_start,
+        end_date: week.week_end,
+      }));
+
+      setCycleWeeks(normalizedWeeks);
+
+      if (normalizedWeeks.length === 0) {
+        setTimelineError('No weeks found for this timeline.');
+      }
+
+    } catch (error) {
+      console.error('[GoalDetailView] Error fetching timeline:', error);
+      setTimelineError('Failed to load timeline data.');
+      setTimeline(null);
+      setCycleWeeks([]);
+    } finally {
+      setLoadingTimeline(false);
+    }
+  }, [goal.goal_type, goal.user_global_timeline_id, goal.custom_timeline_id]);
+
+  // Fetch timeline on mount
+  useEffect(() => {
+    fetchTimelineAndWeeks();
+  }, [fetchTimelineAndWeeks]);
+
   useEffect(() => {
     if (activeTab === 'act') {
       fetchActions();
@@ -189,16 +324,7 @@ export function GoalDetailView({
   const fetchActions = async () => {
     setLoading(true);
     try {
-      console.log('[GoalDetailView] Fetching actions for goal:', goal.id, 'type:', goal.goal_type);
-
       const result = await fetchGoalActions(goal.id, goal.goal_type);
-
-      console.log('[GoalDetailView] Fetch result:', {
-        recurringCount: result.recurringActions.length,
-        oneTimeCount: result.oneTimeActions.length,
-        firstRecurringAction: result.recurringActions[0],
-      });
-
       setRecurringActions(result.recurringActions);
       setOneTimeActions(result.oneTimeActions);
     } catch (error) {
@@ -210,58 +336,79 @@ export function GoalDetailView({
   };
 
   const handleToggleCompletion = async (
-  actionId: string,
-  dateString: string,
-  currentlyCompleted: boolean
-) => {
-  console.log('[GoalDetailView] Toggle completion:', {
-    actionId,
-    dateString,
-    currentlyCompleted,
-  });
-
-  try {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      throw new Error('Not authenticated');
-    }
-
-    if (currentlyCompleted) {
-      // Uncomplete - remove the child task
-      await handleActionUncompletion(supabase, actionId, dateString);
-    } else {
-      // Complete - create child task
-      // Get the action to find timeline info
-      const action = recurringActions.find(a => a.id === actionId);
+    actionId: string,
+    dateString: string,
+    currentlyCompleted: boolean
+  ) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
       
-      // Determine timeline
-      let timeline: { id: string; source: 'global' | 'custom' } | null = null;
-      if (goal.user_global_timeline_id) {
-        timeline = { id: goal.user_global_timeline_id, source: 'global' };
-      } else if (goal.custom_timeline_id) {
-        timeline = { id: goal.custom_timeline_id, source: 'custom' };
+      if (!user) {
+        throw new Error('Not authenticated');
       }
 
-      await handleActionCompletion(
-        supabase,
-        user.id,
-        actionId,
-        dateString,
-        timeline,
-        action?.weeklyTarget
-      );
+      if (currentlyCompleted) {
+        await handleActionUncompletion(supabase, actionId, dateString);
+      } else {
+        const action = recurringActions.find(a => a.id === actionId);
+        
+        await handleActionCompletion(
+          supabase,
+          user.id,
+          actionId,
+          dateString,
+          timeline,
+          action?.weeklyTarget
+        );
+      }
+      
+      setRefreshTrigger(prev => prev + 1);
+      onGoalUpdated();
+    } catch (error) {
+      console.error('[GoalDetailView] Error toggling completion:', error);
+      Alert.alert('Error', 'Failed to update completion status');
     }
-    
-    // Refresh the actions list
+  };
+
+  const handleAddActionPress = () => {
+    if (timelineError) {
+      Alert.alert('Cannot Add Action', timelineError);
+      return;
+    }
+
+    if (!timeline) {
+      Alert.alert('Cannot Add Action', 'Timeline information is not available.');
+      return;
+    }
+
+    if (cycleWeeks.length === 0) {
+      Alert.alert('Cannot Add Action', 'No weeks available for this timeline.');
+      return;
+    }
+
+    setShowActionEffortModal(true);
+  };
+
+  const handleActionEffortModalClose = async () => {
+    setShowActionEffortModal(false);
+    // Refresh actions after modal closes
     setRefreshTrigger(prev => prev + 1);
     onGoalUpdated();
-  } catch (error) {
-    console.error('[GoalDetailView] Error toggling completion:', error);
-    Alert.alert('Error', 'Failed to update completion status');
-  }
-};
+  };
+
+  // Prepare goal object for ActionEffortModal with proper typing
+  const goalForModal = useMemo(() => {
+    return {
+      id: goal.id,
+      title: goal.title,
+      description: goal.description,
+      goal_type: goal.goal_type as '12week' | 'custom',
+      roles: goal.roles || [],
+      domains: goal.domains || [],
+      keyRelationships: goal.keyRelationships || [],
+    };
+  }, [goal]);
 
   const fetchIdeas = async () => {
     setIdeasLoading(true);
@@ -685,7 +832,6 @@ export function GoalDetailView({
               Leading Indicators • Tap circles to mark completion
             </Text>
             
-            {/* GoalProgressCard with day bubbles */}
             <GoalProgressCard
               goal={{
                 ...goal,
@@ -702,7 +848,7 @@ export function GoalDetailView({
               week={currentWeekData}
               weekActions={transformedWeekActions}
               loadingWeekActions={false}
-              onAddAction={onAddAction}
+              onAddAction={handleAddActionPress}
               onToggleCompletion={handleToggleCompletion}
               selectedWeekNumber={currentWeekData.weekNumber}
             />
@@ -758,106 +904,29 @@ export function GoalDetailView({
         )}
 
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={() => setShowAddActionModal(true)}
+          style={[
+            styles.addButton, 
+            { backgroundColor: colors.primary },
+            (loadingTimeline || !!timelineError) && styles.addButtonDisabled
+          ]}
+          onPress={handleAddActionPress}
+          disabled={loadingTimeline}
         >
-          <Plus size={20} color="#ffffff" />
-          <Text style={styles.addButtonText}>Add Action</Text>
+          {loadingTimeline ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <>
+              <Plus size={20} color="#ffffff" />
+              <Text style={styles.addButtonText}>Add Action</Text>
+            </>
+          )}
         </TouchableOpacity>
+
+        {timelineError && goal.goal_type !== '1y' && (
+          <Text style={styles.timelineErrorText}>{timelineError}</Text>
+        )}
       </View>
     );
-  };
-
-  const generateRecurrenceRule = (timesPerWeek: number): string => {
-    if (timesPerWeek === 7) {
-      return 'RRULE:FREQ=DAILY';
-    }
-
-    const dayMappings: { [key: number]: string } = {
-      1: 'MO',
-      2: 'MO,TH',
-      3: 'MO,WE,FR',
-      4: 'MO,TU,TH,FR',
-      5: 'MO,TU,WE,TH,FR',
-      6: 'MO,TU,WE,TH,FR,SA',
-    };
-
-    return `RRULE:FREQ=WEEKLY;BYDAY=${dayMappings[timesPerWeek]}`;
-  };
-
-  const handleCreateAction = async () => {
-    if (!newActionTitle.trim()) {
-      Alert.alert('Error', 'Please enter an action name');
-      return;
-    }
-
-    setCreatingAction(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No user found');
-
-      // Step 1: Create the task
-      const { data: newTask, error: taskError } = await supabase
-        .from('0008-ap-tasks')
-        .insert({
-          user_id: user.id,
-          title: newActionTitle.trim(),
-          status: 'pending',
-          type: 'task',
-          recurrence_rule: generateRecurrenceRule(newActionFrequency),
-          start_date: actionStartDate,
-          end_date: actionEndDate,
-        })
-        .select()
-        .single();
-
-      if (taskError) {
-        console.error('Error creating task:', taskError);
-        Alert.alert('Error', 'Failed to create action');
-        return;
-      }
-
-      // Step 2: Link task to goal via universal join table
-      const goalType = goal.goal_type === '12week' ? 'twelve_wk_goal' :
-                       goal.goal_type === 'custom' ? 'custom_goal' :
-                       'one_yr_goal';
-
-      const joinData: any = {
-        user_id: user.id,
-        parent_type: 'task',
-        parent_id: newTask.id,
-        goal_type: goalType,
-        twelve_wk_goal_id: goal.goal_type === '12week' ? goal.id : null,
-        custom_goal_id: goal.goal_type === 'custom' ? goal.id : null,
-        one_yr_goal_id: goal.goal_type === '1y' ? goal.id : null,
-      };
-
-      const { error: joinError } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .insert(joinData);
-
-      if (joinError) {
-        console.error('Error linking action to goal:', joinError);
-        await supabase.from('0008-ap-tasks').delete().eq('id', newTask.id);
-        Alert.alert('Error', 'Failed to link action to goal');
-        return;
-      }
-
-      setShowAddActionModal(false);
-      setNewActionTitle('');
-      setNewActionFrequency(7);
-      setActionStartDate(null);
-      setActionEndDate(null);
-      setRefreshTrigger(prev => prev + 1);
-      onGoalUpdated();
-      Alert.alert('Success', 'Action created successfully');
-    } catch (error) {
-      console.error('Error creating action:', error);
-      Alert.alert('Error', 'Failed to create action');
-    } finally {
-      setCreatingAction(false);
-    }
   };
 
   const renderIdeasTab = () => {
@@ -1163,121 +1232,16 @@ export function GoalDetailView({
         {renderContent()}
       </ScrollView>
 
-      {/* Add Action Modal */}
-      <Modal
-        visible={showAddActionModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAddActionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Action</Text>
-              <TouchableOpacity onPress={() => setShowAddActionModal(false)}>
-                <X size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalContent}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Action Name</Text>
-              <TextInput
-                style={[styles.modalInput, {
-                  color: colors.text,
-                  borderColor: colors.border,
-                  marginBottom: 16
-                }]}
-                value={newActionTitle}
-                onChangeText={setNewActionTitle}
-                placeholder="e.g., Morning workout"
-                placeholderTextColor={colors.textSecondary}
-              />
-
-              <Text style={[styles.inputLabel, { color: colors.text, marginBottom: 8 }]}>Times per Week</Text>
-              <View style={styles.frequencyButtons}>
-                {[1, 2, 3, 4, 5, 6, 7].map(freq => (
-                  <TouchableOpacity
-                    key={freq}
-                    style={[
-                      styles.frequencyButton,
-                      { borderColor: colors.border },
-                      newActionFrequency === freq && {
-                        backgroundColor: colors.primary,
-                        borderColor: colors.primary
-                      }
-                    ]}
-                    onPress={() => setNewActionFrequency(freq)}
-                  >
-                    <Text style={[
-                      styles.frequencyButtonText,
-                      { color: newActionFrequency === freq ? '#ffffff' : colors.text }
-                    ]}>
-                      {freq}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={[styles.inputLabel, { color: colors.text, marginTop: 16, marginBottom: 8 }]}>
-                Active Period (Optional)
-              </Text>
-              <View style={styles.dateInputRow}>
-                <View style={styles.dateInputContainer}>
-                  <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Start Date</Text>
-                  <TextInput
-                    style={[styles.dateInput, {
-                      color: colors.text,
-                      borderColor: colors.border,
-                      backgroundColor: colors.background
-                    }]}
-                    value={actionStartDate || ''}
-                    onChangeText={setActionStartDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.textSecondary}
-                  />
-                </View>
-                <View style={styles.dateInputContainer}>
-                  <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>End Date</Text>
-                  <TextInput
-                    style={[styles.dateInput, {
-                      color: colors.text,
-                      borderColor: colors.border,
-                      backgroundColor: colors.background
-                    }]}
-                    value={actionEndDate || ''}
-                    onChangeText={setActionEndDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.textSecondary}
-                  />
-                </View>
-              </View>
-              <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-                Leave empty for no time restriction
-              </Text>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton, { borderColor: colors.border }]}
-                onPress={() => setShowAddActionModal(false)}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton, { backgroundColor: colors.primary }]}
-                onPress={handleCreateAction}
-                disabled={creatingAction}
-              >
-                {creatingAction ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                  <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Create</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* ActionEffortModal - Full featured modal for adding actions */}
+      <ActionEffortModal
+        visible={showActionEffortModal}
+        onClose={handleActionEffortModalClose}
+        goal={goalForModal}
+        cycleWeeks={cycleWeeks}
+        timeline={timeline}
+        createTaskWithWeekPlan={createTaskWithWeekPlan}
+        mode="create"
+      />
 
       {/* Add Idea Modal */}
       <Modal
@@ -1603,10 +1567,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 16,
   },
+  addButtonDisabled: {
+    opacity: 0.6,
+  },
   addButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  timelineErrorText: {
+    color: '#dc2626',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   timeRangeSelector: {
     flexDirection: 'row',
@@ -1825,54 +1799,5 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  modalContent: {
-    padding: 16,
-  },
-  frequencyButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
-  },
-  frequencyButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  frequencyButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  dateInputRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-  },
-  dateInputContainer: {
-    flex: 1,
-  },
-  dateLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  dateInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  helperText: {
-    fontSize: 12,
-    fontStyle: 'italic',
   },
 });
