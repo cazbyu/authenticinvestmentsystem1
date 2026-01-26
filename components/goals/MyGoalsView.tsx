@@ -449,9 +449,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
   if (loading) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <View style={[styles.weekHeader, { backgroundColor: colors.surface }]}>
-          <View style={[styles.skeletonLine, styles.skeletonWeek, { backgroundColor: colors.border }]} />
-        </View>
+        
         <View style={styles.section}>
           <View style={[styles.skeletonLine, styles.skeletonSectionTitle, { backgroundColor: colors.border }]} />
           {renderSkeletonCard('skeleton-1')}
@@ -542,16 +540,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
-  weekHeader: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 24,
-    alignItems: 'center',
-  },
-  weekText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
+ 
   section: {
     marginBottom: 32,
   },
@@ -728,12 +717,7 @@ annualGoalTitle: {
     width: 80,
     height: 14,
   },
-  skeletonWeek: {
-    width: 150,
-    height: 16,
-    alignSelf: 'center',
-  },
-  skeletonSectionTitle: {
+    skeletonSectionTitle: {
     width: 200,
     height: 18,
     marginBottom: 16,
