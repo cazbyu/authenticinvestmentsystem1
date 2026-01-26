@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Switch,
 } from 'react-native';
-import { X, Lock } from 'lucide-react-native';
+import { X, Lock, ChevronDown, ChevronUp, Paperclip, Plus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Timeline } from '@/hooks/useGoals';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
@@ -97,6 +97,14 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   const [inheritedRoleIds, setInheritedRoleIds] = useState<string[]>([]);
   const [inheritedDomainIds, setInheritedDomainIds] = useState<string[]>([]);
 
+  // Collapsible section states
+  const [rolesExpanded, setRolesExpanded] = useState(false);
+  const [domainsExpanded, setDomainsExpanded] = useState(false);
+  const [keyRelationshipsExpanded, setKeyRelationshipsExpanded] = useState(false);
+
+  // Attachment state
+  const [attachments, setAttachments] = useState<Array<{ name: string; uri: string }>>([]);
+
   // Time picker state (for custom frequency)
   const [isAnytime, setIsAnytime] = useState(true);
   const [startTimeHours, setStartTimeHours] = useState(9);
@@ -128,13 +136,13 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       }
 
       // Process weeks with availability information
-if (cycleWeeks && cycleWeeks.length > 0) {
-  const timelineSource = timeline?.source || 'global';
-  const processed = processWeeksWithAvailability(cycleWeeks, timelineSource);
-  setProcessedWeeks(processed);
-} else {
-  setProcessedWeeks([]);
-}
+      if (cycleWeeks && cycleWeeks.length > 0) {
+        const timelineSource = timeline?.source || 'global';
+        const processed = processWeeksWithAvailability(cycleWeeks, timelineSource);
+        setProcessedWeeks(processed);
+      } else {
+        setProcessedWeeks([]);
+      }
     }
   }, [visible, goal, mode, initialData, cycleWeeks, timeline]);
 
@@ -182,6 +190,12 @@ if (cycleWeeks && cycleWeeks.length > 0) {
     setSelectedWeeks([]);
     setRecurrenceType('daily');
     setSelectedCustomDays([]);
+    setAttachments([]);
+
+    // Reset collapsed states
+    setRolesExpanded(false);
+    setDomainsExpanded(false);
+    setKeyRelationshipsExpanded(false);
 
     // Reset time picker to defaults
     const defaultStart = getDefaultStartTime();
@@ -214,6 +228,10 @@ if (cycleWeeks && cycleWeeks.length > 0) {
 
       setInheritedRoleIds(roleIds);
       setInheritedDomainIds(domainIds);
+
+      // Auto-expand sections if they have inherited items
+      if (roleIds.length > 0) setRolesExpanded(true);
+      if (domainIds.length > 0) setDomainsExpanded(true);
     } else {
       setSelectedRoleIds([]);
       setSelectedDomainIds([]);
@@ -230,6 +248,7 @@ if (cycleWeeks && cycleWeeks.length > 0) {
 
     setTitle(initialData.title || '');
     setNotes('');
+    setAttachments([]);
 
     // Parse recurrence rule to set frequency
     if (initialData.recurrence_rule) {
@@ -299,13 +318,17 @@ if (cycleWeeks && cycleWeeks.length > 0) {
       const inheritedDomains = goal.domains?.map(d => d.id) || [];
       setInheritedRoleIds(inheritedRoles);
       setInheritedDomainIds(inheritedDomains);
+
+      // Auto-expand sections with selections
+      if (roleIds.length > 0) setRolesExpanded(true);
+      if (domainIds.length > 0) setDomainsExpanded(true);
     }
 
     const weeks = initialData.selectedWeeks || [];
     setSelectedWeeks(weeks);
   };
 
-  const handleMultiSelect = (field: 'roles' | 'domains' | 'keyRelationships', id: string) => {
+  const handleToggleSelect = (field: 'roles' | 'domains' | 'keyRelationships', id: string) => {
     let setter: React.Dispatch<React.SetStateAction<string[]>>;
     let currentSelection: string[];
     let inheritedIds: string[];
@@ -366,7 +389,7 @@ if (cycleWeeks && cycleWeeks.length > 0) {
     setRecurrenceType(type);
     if (type !== 'custom') {
       setSelectedCustomDays([]);
-      setIsAnytime(true); // Reset to anytime when switching away from custom
+      setIsAnytime(true);
     }
   };
 
@@ -384,7 +407,6 @@ if (cycleWeeks && cycleWeeks.length > 0) {
       setStartTimeMinutes(minutes);
       setShowStartTimePicker(false);
 
-      // Auto-adjust end time if it's before start time
       const startTotal = hours * 60 + minutes;
       const endTotal = endTimeHours * 60 + endTimeMinutes;
       if (endTotal <= startTotal) {
@@ -397,6 +419,15 @@ if (cycleWeeks && cycleWeeks.length > 0) {
       setEndTimeMinutes(minutes);
       setShowEndTimePicker(false);
     }
+  };
+
+  const handleAddAttachment = () => {
+    // For now, show a placeholder alert - actual file picking requires expo-document-picker
+    Alert.alert(
+      'Add Attachment',
+      'Attachment functionality coming soon! This will allow you to add files, images, or links to your action notes.',
+      [{ text: 'OK' }]
+    );
   };
 
   const getTargetDays = () => {
@@ -461,7 +492,6 @@ if (cycleWeeks && cycleWeeks.length > 0) {
       const targetDays = getTargetDays();
       const recurrenceRule = generateRecurrenceRule();
 
-      // Build task data with time fields for custom frequency
       const taskData: any = {
         title: title.trim(),
         description: notes.trim() || undefined,
@@ -473,10 +503,9 @@ if (cycleWeeks && cycleWeeks.length > 0) {
         selectedDomainIds,
         selectedKeyRelationshipIds,
         selectedWeeks: selectedWeeks.map(weekNumber => {
-          // Find the processed week to get available days
           const processedWeek = processedWeeks.find(w => w.week_number === weekNumber);
           const effectiveTarget = processedWeek
-            ? getEffectiveTargetDays(targetDays, processedWeek.start_date, processedWeek.end_date)
+            ? getEffectiveTargetDays(targetDays, processedWeek.start_date, processedWeek.end_date, processedWeek.is_partial)
             : targetDays;
 
           return {
@@ -487,7 +516,6 @@ if (cycleWeeks && cycleWeeks.length > 0) {
         ...(mode === 'edit' && initialData ? { id: initialData.id } : {}),
       };
 
-      // Add time fields for custom frequency (scheduled events)
       if (recurrenceType === 'custom' && !isAnytime) {
         taskData.start_time = formatTimeForDB(startTimeHours, startTimeMinutes);
         taskData.end_time = formatTimeForDB(endTimeHours, endTimeMinutes);
@@ -554,6 +582,11 @@ if (cycleWeeks && cycleWeeks.length > 0) {
     }
   };
 
+  // Get selected count for section headers
+  const getSelectedRolesCount = () => selectedRoleIds.length;
+  const getSelectedDomainsCount = () => selectedDomainIds.length;
+  const getSelectedKRCount = () => selectedKeyRelationshipIds.length;
+
   // Filter key relationships based on selected roles
   const filteredKeyRelationships = allKeyRelationships.filter(kr =>
     selectedRoleIds.includes(kr.role_id)
@@ -602,7 +635,7 @@ if (cycleWeeks && cycleWeeks.length > 0) {
                 />
               </View>
 
-              {/* Weeks - Dynamic with partial week indicators */}
+              {/* Weeks */}
               <View style={styles.field}>
                 <Text style={styles.label}>Weeks *</Text>
                 <View style={styles.weekSelector}>
@@ -730,7 +763,6 @@ if (cycleWeeks && cycleWeeks.length > 0) {
                           </View>
                         </View>
 
-                        {/* Start Time Picker Dropdown */}
                         {showStartTimePicker && (
                           <View style={styles.timeOptionsContainer}>
                             <Text style={styles.timeOptionsTitle}>Select Start Time</Text>
@@ -756,7 +788,6 @@ if (cycleWeeks && cycleWeeks.length > 0) {
                           </View>
                         )}
 
-                        {/* End Time Picker Dropdown */}
                         {showEndTimePicker && (
                           <View style={styles.timeOptionsContainer}>
                             <Text style={styles.timeOptionsTitle}>Select End Time</Text>
@@ -787,91 +818,167 @@ if (cycleWeeks && cycleWeeks.length > 0) {
                 </View>
               )}
 
-              {/* Roles - with locked inherited items */}
-              <View style={styles.field}>
-                <Text style={styles.label}>Roles</Text>
-                <View style={styles.checkboxGrid}>
-                  {allRoles.map(role => {
-                    const isSelected = selectedRoleIds.includes(role.id);
-                    const isInherited = inheritedRoleIds.includes(role.id);
-                    return (
-                      <TouchableOpacity
-                        key={role.id}
-                        style={[styles.checkItem, isInherited && styles.checkItemLocked]}
-                        onPress={() => handleMultiSelect('roles', role.id)}
-                      >
-                        <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
-                          {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                        </View>
-                        <Text style={[
-                          styles.checkLabel,
-                          isInherited && styles.lockedLabel
-                        ]}>
-                          {role.label}
-                        </Text>
-                        {isInherited && <Lock size={12} color="#0078d4" style={styles.lockIcon} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
+              {/* Roles - Collapsible with Toggle Switches */}
+              <View style={styles.collapsibleSection}>
+                <TouchableOpacity
+                  style={styles.collapsibleHeader}
+                  onPress={() => setRolesExpanded(!rolesExpanded)}
+                >
+                  <View style={styles.collapsibleHeaderLeft}>
+                    <Text style={styles.label}>Roles</Text>
+                    {getSelectedRolesCount() > 0 && (
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countBadgeText}>{getSelectedRolesCount()}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {rolesExpanded ? (
+                    <ChevronUp size={20} color="#6b7280" />
+                  ) : (
+                    <ChevronDown size={20} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
 
-              {/* Domains - with locked inherited items */}
-              <View style={styles.field}>
-                <Text style={styles.label}>Wellness Zones</Text>
-                <View style={styles.checkboxGrid}>
-                  {allDomains.map(domain => {
-                    const isSelected = selectedDomainIds.includes(domain.id);
-                    const isInherited = inheritedDomainIds.includes(domain.id);
-                    return (
-                      <TouchableOpacity
-                        key={domain.id}
-                        style={[styles.checkItem, isInherited && styles.checkItemLocked]}
-                        onPress={() => handleMultiSelect('domains', domain.id)}
-                      >
-                        <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
-                          {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                        </View>
-                        <Text style={[
-                          styles.checkLabel,
-                          isInherited && styles.lockedLabel
-                        ]}>
-                          {domain.name}
-                        </Text>
-                        {isInherited && <Lock size={12} color="#0078d4" style={styles.lockIcon} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Key Relationships */}
-              {filteredKeyRelationships.length > 0 && (
-                <View style={styles.field}>
-                  <Text style={styles.label}>Key Relationships</Text>
-                  <View style={styles.checkboxGrid}>
-                    {filteredKeyRelationships.map(kr => {
-                      const isSelected = selectedKeyRelationshipIds.includes(kr.id);
+                {rolesExpanded && (
+                  <View style={styles.collapsibleContent}>
+                    {allRoles.map(role => {
+                      const isSelected = selectedRoleIds.includes(role.id);
+                      const isInherited = inheritedRoleIds.includes(role.id);
                       return (
-                        <TouchableOpacity
-                          key={kr.id}
-                          style={styles.checkItem}
-                          onPress={() => handleMultiSelect('keyRelationships', kr.id)}
-                        >
-                          <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
-                            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                        <View key={role.id} style={styles.toggleRow}>
+                          <View style={styles.toggleLabelContainer}>
+                            <Text style={[
+                              styles.toggleLabel,
+                              isInherited && styles.toggleLabelLocked
+                            ]}>
+                              {role.label}
+                            </Text>
+                            {isInherited && (
+                              <Lock size={12} color="#0078d4" style={styles.lockIcon} />
+                            )}
                           </View>
-                          <Text style={styles.checkLabel}>{kr.name}</Text>
-                        </TouchableOpacity>
+                          <Switch
+                            value={isSelected}
+                            onValueChange={() => handleToggleSelect('roles', role.id)}
+                            trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                            thumbColor="#ffffff"
+                            disabled={isInherited && isSelected}
+                          />
+                        </View>
                       );
                     })}
                   </View>
+                )}
+              </View>
+
+              {/* Wellness Zones - Collapsible with Toggle Switches */}
+              <View style={styles.collapsibleSection}>
+                <TouchableOpacity
+                  style={styles.collapsibleHeader}
+                  onPress={() => setDomainsExpanded(!domainsExpanded)}
+                >
+                  <View style={styles.collapsibleHeaderLeft}>
+                    <Text style={styles.label}>Wellness Zones</Text>
+                    {getSelectedDomainsCount() > 0 && (
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countBadgeText}>{getSelectedDomainsCount()}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {domainsExpanded ? (
+                    <ChevronUp size={20} color="#6b7280" />
+                  ) : (
+                    <ChevronDown size={20} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
+
+                {domainsExpanded && (
+                  <View style={styles.collapsibleContent}>
+                    {allDomains.map(domain => {
+                      const isSelected = selectedDomainIds.includes(domain.id);
+                      const isInherited = inheritedDomainIds.includes(domain.id);
+                      return (
+                        <View key={domain.id} style={styles.toggleRow}>
+                          <View style={styles.toggleLabelContainer}>
+                            <Text style={[
+                              styles.toggleLabel,
+                              isInherited && styles.toggleLabelLocked
+                            ]}>
+                              {domain.name}
+                            </Text>
+                            {isInherited && (
+                              <Lock size={12} color="#0078d4" style={styles.lockIcon} />
+                            )}
+                          </View>
+                          <Switch
+                            value={isSelected}
+                            onValueChange={() => handleToggleSelect('domains', domain.id)}
+                            trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                            thumbColor="#ffffff"
+                            disabled={isInherited && isSelected}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
+              {/* Key Relationships - Collapsible with Toggle Switches */}
+              {filteredKeyRelationships.length > 0 && (
+                <View style={styles.collapsibleSection}>
+                  <TouchableOpacity
+                    style={styles.collapsibleHeader}
+                    onPress={() => setKeyRelationshipsExpanded(!keyRelationshipsExpanded)}
+                  >
+                    <View style={styles.collapsibleHeaderLeft}>
+                      <Text style={styles.label}>Key Relationships</Text>
+                      {getSelectedKRCount() > 0 && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>{getSelectedKRCount()}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {keyRelationshipsExpanded ? (
+                      <ChevronUp size={20} color="#6b7280" />
+                    ) : (
+                      <ChevronDown size={20} color="#6b7280" />
+                    )}
+                  </TouchableOpacity>
+
+                  {keyRelationshipsExpanded && (
+                    <View style={styles.collapsibleContent}>
+                      {filteredKeyRelationships.map(kr => {
+                        const isSelected = selectedKeyRelationshipIds.includes(kr.id);
+                        return (
+                          <View key={kr.id} style={styles.toggleRow}>
+                            <Text style={styles.toggleLabel}>{kr.name}</Text>
+                            <Switch
+                              value={isSelected}
+                              onValueChange={() => handleToggleSelect('keyRelationships', kr.id)}
+                              trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                              thumbColor="#ffffff"
+                            />
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               )}
 
-              {/* Notes */}
+              {/* Notes with Attachment Option */}
               <View style={styles.field}>
-                <Text style={styles.label}>Notes (optional)</Text>
+                <View style={styles.notesHeader}>
+                  <Text style={styles.label}>Notes (optional)</Text>
+                  <TouchableOpacity
+                    style={styles.attachmentButton}
+                    onPress={handleAddAttachment}
+                  >
+                    <Paperclip size={16} color="#0078d4" />
+                    <Text style={styles.attachmentButtonText}>Add Attachment</Text>
+                  </TouchableOpacity>
+                </View>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={notes}
@@ -882,6 +989,16 @@ if (cycleWeeks && cycleWeeks.length > 0) {
                   numberOfLines={3}
                   maxLength={500}
                 />
+                {attachments.length > 0 && (
+                  <View style={styles.attachmentsList}>
+                    {attachments.map((att, idx) => (
+                      <View key={idx} style={styles.attachmentItem}>
+                        <Paperclip size={14} color="#6b7280" />
+                        <Text style={styles.attachmentName}>{att.name}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
           </ScrollView>
@@ -1170,51 +1287,104 @@ const styles = StyleSheet.create({
     color: '#0078d4',
     fontWeight: '600',
   },
-  checkboxGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  checkItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '48%',
-    marginBottom: 8,
-  },
-  checkItemLocked: {
-    opacity: 0.9,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
+  // Collapsible Section Styles
+  collapsibleSection: {
+    marginBottom: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 3,
-    marginRight: 8,
-    justifyContent: 'center',
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
   },
-  checkedBox: {
+  collapsibleHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  countBadge: {
     backgroundColor: '#0078d4',
-    borderColor: '#0078d4',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  checkmark: {
+  countBadgeText: {
     color: '#ffffff',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  checkLabel: {
-    fontSize: 14,
-    color: '#374151',
+  collapsibleContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  // Toggle Row Styles
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  toggleLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
   },
-  lockedLabel: {
+  toggleLabel: {
+    fontSize: 15,
+    color: '#374151',
+  },
+  toggleLabelLocked: {
     fontWeight: '600',
     color: '#0078d4',
   },
   lockIcon: {
-    marginLeft: 4,
+    marginLeft: 6,
   },
+  // Notes with Attachment
+  notesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  attachmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 4,
+  },
+  attachmentButtonText: {
+    fontSize: 14,
+    color: '#0078d4',
+    fontWeight: '500',
+  },
+  attachmentsList: {
+    marginTop: 8,
+    gap: 6,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  attachmentName: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  // Actions
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
