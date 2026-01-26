@@ -452,16 +452,14 @@ export function CreateGoalModal({
         }
 
         const { data: newGoal, error } = await supabase
-          .from('0008-ap-goals-custom')
-          .insert({
-            user_id: user.id,
-            custom_timeline_id: selectedCustomTimelineId,
-            title: formData.title.trim(),
-            description: formData.description.trim() || null,
-            status: 'active',
-            parent_goal_id: formData.parentGoalId,
-            parent_goal_type: formData.parentGoalId ? '1y' : null,
-          })
+  .from('0008-ap-goals-custom')
+  .insert({
+    user_id: user.id,
+    custom_timeline_id: selectedCustomTimelineId,
+    title: formData.title.trim(),
+    description: formData.description.trim() || null,
+    status: 'active',
+  })
           .select()
           .single();
 
