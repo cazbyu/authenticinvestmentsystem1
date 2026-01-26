@@ -278,8 +278,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
       setCustomGoals(custom);
       setActiveTimelineName(timelineName);
       setCurrentCycleWeek(cycleWeek);
-      setCurrentWeekDates(getCurrentWeekDates());
-    } catch (error) {
+          } catch (error) {
       console.error('Error fetching goals:', error);
     } finally {
       setLoading(false);
