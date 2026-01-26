@@ -53,23 +53,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
   const [customGoals, setCustomGoals] = useState<UnifiedGoal[]>([]);
   const [activeTimelineName, setActiveTimelineName] = useState<string>('');
   const [currentCycleWeek, setCurrentCycleWeek] = useState<number>(0);
-  const [currentWeekDates, setCurrentWeekDates] = useState<string>('');
-
-  const getCurrentWeekDates = () => {
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-
-    const formatDate = (date: Date) => {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    };
-
-    return `Week of ${formatDate(monday)} - ${formatDate(sunday)}`;
-  };
-
+ 
   const fetchAllGoals = useCallback(async () => {
     try {
       const supabase = getSupabaseClient();
