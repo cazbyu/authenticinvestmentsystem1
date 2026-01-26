@@ -144,7 +144,7 @@ export function EditGoalModal({
       
       setAvailableDomains(domainsData || []);
 
-      // Fetch available key relationships - no is_active column
+      // Fetch available key relationships - they have role_id for filtering
       const { data: keyRelData } = await supabase
         .from('0008-ap-key-relationships')
         .select('id, name, role_id')
@@ -153,44 +153,47 @@ export function EditGoalModal({
       
       setAvailableKeyRelationships(keyRelData || []);
 
-      // Determine join column based on goal type
-      const goalJoinColumn = goal.goal_type === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
+      // Determine parent_type based on goal type
+      // 12-week goals use 'goal', custom goals use 'custom_goal'
+      const parentType = goal.goal_type === '12week' ? 'goal' : 'custom_goal';
 
-      // Fetch current role associations
-      const { data: roleJoins } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('parent_id')
-        .eq(goalJoinColumn, goal.id)
-        .eq('parent_type', 'role');
+      // Fetch current role associations from universal-roles-join
+      const { data: roleJoins, error: roleErr } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('role_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
       
-      const currentRoleIds = roleJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      if (roleErr) console.error('[EditGoalModal] Role fetch error:', roleErr);
+      const currentRoleIds = roleJoins?.map(j => j.role_id).filter(Boolean) || [];
       setSelectedRoleIds(currentRoleIds);
       console.log('[EditGoalModal] Current roles:', currentRoleIds);
 
-      // Fetch current domain associations
-      const { data: domainJoins } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('parent_id')
-        .eq(goalJoinColumn, goal.id)
-        .eq('parent_type', 'domain');
+      // Fetch current domain associations from universal-domains-join
+      const { data: domainJoins, error: domainErr } = await supabase
+        .from('0008-ap-universal-domains-join')
+        .select('domain_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
       
-      const currentDomainIds = domainJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      if (domainErr) console.error('[EditGoalModal] Domain fetch error:', domainErr);
+      const currentDomainIds = domainJoins?.map(j => j.domain_id).filter(Boolean) || [];
       setSelectedDomainIds(currentDomainIds);
       console.log('[EditGoalModal] Current domains:', currentDomainIds);
 
-      // Fetch current key relationship associations
-      const { data: keyRelJoins } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('parent_id')
-        .eq(goalJoinColumn, goal.id)
-        .eq('parent_type', 'key_relationship');
+      // Fetch current key relationship associations from universal-key-relationships-join
+      const { data: keyRelJoins, error: krErr } = await supabase
+        .from('0008-ap-universal-key-relationships-join')
+        .select('key_relationship_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
       
-      const currentKeyRelIds = keyRelJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      if (krErr) console.error('[EditGoalModal] KR fetch error:', krErr);
+      const currentKeyRelIds = keyRelJoins?.map(j => j.key_relationship_id).filter(Boolean) || [];
       setSelectedKeyRelationshipIds(currentKeyRelIds);
       console.log('[EditGoalModal] Current key relationships:', currentKeyRelIds);
 
-      // Fetch existing notes for this goal
-      const parentType = goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+      // Fetch existing notes for this goal (using same parentType)
       const { data: noteJoins } = await supabase
         .from('0008-ap-universal-notes-join')
         .select('note_id')
@@ -326,9 +329,10 @@ export function EditGoalModal({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Determine table and join column based on goal type
+      // Determine table based on goal type
       const tableName = goal.goal_type === '12week' ? '0008-ap-goals-12wk' : '0008-ap-goals-custom';
-      const goalJoinColumn = goal.goal_type === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
+      // Parent type for universal join tables: 'goal' for 12-week, 'custom_goal' for custom
+      const parentType = goal.goal_type === '12week' ? 'goal' : 'custom_goal';
 
       // 1. Update the goal itself
       const { error: updateError } = await supabase
@@ -343,22 +347,21 @@ export function EditGoalModal({
       if (updateError) throw updateError;
       console.log('[EditGoalModal] Goal updated successfully');
 
-      // 2. Sync role associations
-      // Get current joins
+      // 2. Sync role associations via universal-roles-join
       const { data: currentRoleJoins } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('id, parent_id')
-        .eq(goalJoinColumn, goal.id)
-        .eq('parent_type', 'role');
+        .from('0008-ap-universal-roles-join')
+        .select('id, role_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
 
-      const currentRoleIdSet = new Set(currentRoleJoins?.map(j => j.parent_id) || []);
+      const currentRoleIdSet = new Set(currentRoleJoins?.map(j => j.role_id) || []);
       const newRoleIdSet = new Set(selectedRoleIds);
 
       // Delete removed roles
-      const rolesToRemove = currentRoleJoins?.filter(j => !newRoleIdSet.has(j.parent_id)) || [];
+      const rolesToRemove = currentRoleJoins?.filter(j => !newRoleIdSet.has(j.role_id)) || [];
       if (rolesToRemove.length > 0) {
         await supabase
-          .from('0008-ap-universal-goals-join')
+          .from('0008-ap-universal-roles-join')
           .delete()
           .in('id', rolesToRemove.map(j => j.id));
         console.log('[EditGoalModal] Removed roles:', rolesToRemove.length);
@@ -368,30 +371,31 @@ export function EditGoalModal({
       const rolesToAdd = selectedRoleIds.filter(id => !currentRoleIdSet.has(id));
       if (rolesToAdd.length > 0) {
         await supabase
-          .from('0008-ap-universal-goals-join')
+          .from('0008-ap-universal-roles-join')
           .insert(rolesToAdd.map(roleId => ({
-            [goalJoinColumn]: goal.id,
-            parent_id: roleId,
-            parent_type: 'role',
+            parent_id: goal.id,
+            parent_type: parentType,
+            role_id: roleId,
+            user_id: user.id,
           })));
         console.log('[EditGoalModal] Added roles:', rolesToAdd.length);
       }
 
-      // 3. Sync domain associations
+      // 3. Sync domain associations via universal-domains-join
       const { data: currentDomainJoins } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('id, parent_id')
-        .eq(goalJoinColumn, goal.id)
-        .eq('parent_type', 'domain');
+        .from('0008-ap-universal-domains-join')
+        .select('id, domain_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
 
-      const currentDomainIdSet = new Set(currentDomainJoins?.map(j => j.parent_id) || []);
+      const currentDomainIdSet = new Set(currentDomainJoins?.map(j => j.domain_id) || []);
       const newDomainIdSet = new Set(selectedDomainIds);
 
       // Delete removed domains
-      const domainsToRemove = currentDomainJoins?.filter(j => !newDomainIdSet.has(j.parent_id)) || [];
+      const domainsToRemove = currentDomainJoins?.filter(j => !newDomainIdSet.has(j.domain_id)) || [];
       if (domainsToRemove.length > 0) {
         await supabase
-          .from('0008-ap-universal-goals-join')
+          .from('0008-ap-universal-domains-join')
           .delete()
           .in('id', domainsToRemove.map(j => j.id));
         console.log('[EditGoalModal] Removed domains:', domainsToRemove.length);
@@ -401,30 +405,31 @@ export function EditGoalModal({
       const domainsToAdd = selectedDomainIds.filter(id => !currentDomainIdSet.has(id));
       if (domainsToAdd.length > 0) {
         await supabase
-          .from('0008-ap-universal-goals-join')
+          .from('0008-ap-universal-domains-join')
           .insert(domainsToAdd.map(domainId => ({
-            [goalJoinColumn]: goal.id,
-            parent_id: domainId,
-            parent_type: 'domain',
+            parent_id: goal.id,
+            parent_type: parentType,
+            domain_id: domainId,
+            user_id: user.id,
           })));
         console.log('[EditGoalModal] Added domains:', domainsToAdd.length);
       }
 
-      // 4. Sync key relationship associations
+      // 4. Sync key relationship associations via universal-key-relationships-join
       const { data: currentKeyRelJoins } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('id, parent_id')
-        .eq(goalJoinColumn, goal.id)
-        .eq('parent_type', 'key_relationship');
+        .from('0008-ap-universal-key-relationships-join')
+        .select('id, key_relationship_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
 
-      const currentKeyRelIdSet = new Set(currentKeyRelJoins?.map(j => j.parent_id) || []);
+      const currentKeyRelIdSet = new Set(currentKeyRelJoins?.map(j => j.key_relationship_id) || []);
       const newKeyRelIdSet = new Set(selectedKeyRelationshipIds);
 
       // Delete removed key relationships
-      const keyRelsToRemove = currentKeyRelJoins?.filter(j => !newKeyRelIdSet.has(j.parent_id)) || [];
+      const keyRelsToRemove = currentKeyRelJoins?.filter(j => !newKeyRelIdSet.has(j.key_relationship_id)) || [];
       if (keyRelsToRemove.length > 0) {
         await supabase
-          .from('0008-ap-universal-goals-join')
+          .from('0008-ap-universal-key-relationships-join')
           .delete()
           .in('id', keyRelsToRemove.map(j => j.id));
         console.log('[EditGoalModal] Removed key relationships:', keyRelsToRemove.length);
@@ -434,11 +439,12 @@ export function EditGoalModal({
       const keyRelsToAdd = selectedKeyRelationshipIds.filter(id => !currentKeyRelIdSet.has(id));
       if (keyRelsToAdd.length > 0) {
         await supabase
-          .from('0008-ap-universal-goals-join')
+          .from('0008-ap-universal-key-relationships-join')
           .insert(keyRelsToAdd.map(keyRelId => ({
-            [goalJoinColumn]: goal.id,
-            parent_id: keyRelId,
-            parent_type: 'key_relationship',
+            parent_id: goal.id,
+            parent_type: parentType,
+            key_relationship_id: keyRelId,
+            user_id: user.id,
           })));
         console.log('[EditGoalModal] Added key relationships:', keyRelsToAdd.length);
       }
@@ -458,14 +464,14 @@ export function EditGoalModal({
         if (noteError) throw noteError;
         console.log('[EditGoalModal] Note created:', noteData.id);
 
-        // Link note to goal via universal join
-        const parentType = goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+        // Link note to goal via universal join (use same parentType)
         const { error: joinError } = await supabase
           .from('0008-ap-universal-notes-join')
           .insert({
             note_id: noteData.id,
             parent_id: goal.id,
             parent_type: parentType,
+            user_id: user.id,
           });
 
         if (joinError) throw joinError;
