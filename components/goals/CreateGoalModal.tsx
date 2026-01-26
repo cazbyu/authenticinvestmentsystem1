@@ -291,7 +291,6 @@ export function CreateGoalModal({
     title: newTimelineName.trim(),
     start_date: newTimelineStartDate,
     end_date: newTimelineEndDate,
-    timeline_type: 'custom',
     status: 'active',
   })
         .select()
