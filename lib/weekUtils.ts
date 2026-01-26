@@ -12,16 +12,21 @@ export interface ProcessedWeek {
 }
 
 /**
- * Calculate the number of days in a week based on start and end dates
- * Only used for custom timelines where weeks might be partial
+ * Calculate the number of days between two date strings (inclusive)
+ * Uses simple date string parsing to avoid timezone issues
  */
 export function calculateDaysInWeek(weekStart: string, weekEnd: string): number {
-  const start = new Date(weekStart + 'T00:00:00');
-  const end = new Date(weekEnd + 'T23:59:59');
+  // Parse as simple date components to avoid timezone issues
+  const [startYear, startMonth, startDay] = weekStart.split('-').map(Number);
+  const [endYear, endMonth, endDay] = weekEnd.split('-').map(Number);
+  
+  // Create dates at noon to avoid DST issues
+  const start = new Date(startYear, startMonth - 1, startDay, 12, 0, 0);
+  const end = new Date(endYear, endMonth - 1, endDay, 12, 0, 0);
   
   // Calculate difference in days (inclusive of both start and end)
   const diffTime = end.getTime() - start.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
   
   // Clamp to 1-7 days
   return Math.max(1, Math.min(7, diffDays));
@@ -56,7 +61,7 @@ export function processWeeksWithAvailability(
   cycleWeeks: Array<{ week_number: number; start_date: string; end_date: string }>,
   timelineSource: 'global' | 'custom' = 'global'
 ): ProcessedWeek[] {
-  // Global 12-week cycles always have full 7-day weeks
+  // Global 12-week cycles always have full 7-day weeks - no calculation needed
   if (timelineSource === 'global') {
     return cycleWeeks.map(week => ({
       week_number: week.week_number,
@@ -67,19 +72,27 @@ export function processWeeksWithAvailability(
     }));
   }
 
-  // For custom timelines, check first and last weeks for partial days
+  // For custom timelines, ONLY check first and last weeks for partial days
+  const lastIndex = cycleWeeks.length - 1;
+  
   return cycleWeeks.map((week, index) => {
     const isFirstWeek = index === 0;
-    const isLastWeek = index === cycleWeeks.length - 1;
+    const isLastWeek = index === lastIndex;
     
-    // Only first and last weeks of custom timelines can be partial
-    let available_days = 7;
-    let is_partial = false;
-    
-    if (isFirstWeek || isLastWeek) {
-      available_days = calculateDaysInWeek(week.start_date, week.end_date);
-      is_partial = available_days < 7;
+    // Middle weeks are always full - don't even calculate
+    if (!isFirstWeek && !isLastWeek) {
+      return {
+        week_number: week.week_number,
+        start_date: week.start_date,
+        end_date: week.end_date,
+        available_days: 7,
+        is_partial: false,
+      };
     }
+    
+    // Only calculate for first and last weeks
+    const available_days = calculateDaysInWeek(week.start_date, week.end_date);
+    const is_partial = available_days < 7;
     
     return {
       week_number: week.week_number,
