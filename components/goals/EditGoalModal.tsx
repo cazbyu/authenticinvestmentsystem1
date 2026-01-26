@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,19 +7,23 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Alert,
-  ActivityIndicator,
   Switch,
+  ActivityIndicator,
+  Alert,
+  Platform,
 } from 'react-native';
-import { X, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { X, ChevronDown, ChevronUp, Trash2, Paperclip } from 'lucide-react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { toLocalISOString } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
+import { uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
+import * as DocumentPicker from 'expo-document-picker';
 
+// Interfaces
 interface Role {
   id: string;
-  label: string;
-  color?: string;
+  title: string;
 }
 
 interface Domain {
@@ -30,12 +34,13 @@ interface Domain {
 interface KeyRelationship {
   id: string;
   name: string;
-  role_id: string;
+  role_id?: string;
 }
 
 interface Note {
-  id?: string;
-  content: string;
+  id: string;
+  content?: string;
+  note_text?: string;
   created_at: string;
 }
 
@@ -51,11 +56,18 @@ interface GoalData {
   notes?: Note[];
 }
 
+interface SelectedFile {
+  uri: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
 interface EditGoalModalProps {
   visible: boolean;
   onClose: () => void;
   onUpdate: () => void;
-  goal: GoalData | null;
+  goal: GoalData;
   deleteGoal: (goalId: string, goalType: '12week' | 'custom') => Promise<void>;
 }
 
@@ -66,194 +78,237 @@ export function EditGoalModal({
   goal,
   deleteGoal,
 }: EditGoalModalProps) {
+  const { colors } = useTheme();
+  
   // Form state
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [title, setTitle] = useState(goal.title);
+  const [description, setDescription] = useState(goal.description || '');
   const [newNoteText, setNewNoteText] = useState('');
-
-  // Multi-select states
+  const [newNoteAttachments, setNewNoteAttachments] = useState<SelectedFile[]>([]);
+  
+  // Selection state
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>([]);
   const [selectedKeyRelationshipIds, setSelectedKeyRelationshipIds] = useState<string[]>([]);
-
-  // Options data
-  const [allRoles, setAllRoles] = useState<Role[]>([]);
-  const [allDomains, setAllDomains] = useState<Domain[]>([]);
-  const [allKeyRelationships, setAllKeyRelationships] = useState<KeyRelationship[]>([]);
-
-  // Collapsible section states
-  const [domainsExpanded, setDomainsExpanded] = useState(false);
+  
+  // Available options
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
+  const [availableDomains, setAvailableDomains] = useState<Domain[]>([]);
+  const [availableKeyRelationships, setAvailableKeyRelationships] = useState<KeyRelationship[]>([]);
+  const [previousNotes, setPreviousNotes] = useState<Note[]>([]);
+  
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Collapsible sections
+  const [domainsExpanded, setDomainsExpanded] = useState(true);
   const [rolesExpanded, setRolesExpanded] = useState(false);
   const [keyRelationshipsExpanded, setKeyRelationshipsExpanded] = useState(false);
 
-  // UI states
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
-
+  // Reset and load data when modal opens
   useEffect(() => {
-    if (visible && goal) {
-      loadGoalData();
-      fetchOptions();
-    } else if (!visible) {
-      // Reset state when modal closes
-      resetState();
+    if (visible) {
+      console.log('[EditGoalModal] Modal opened for goal:', goal.id, goal.title);
+      setTitle(goal.title);
+      setDescription(goal.description || '');
+      setNewNoteText('');
+      setNewNoteAttachments([]);
+      loadData();
     }
-  }, [visible, goal]);
+  }, [visible, goal.id]);
 
-  const resetState = () => {
-    setTitle('');
-    setDescription('');
-    setNewNoteText('');
-    setSelectedRoleIds([]);
-    setSelectedDomainIds([]);
-    setSelectedKeyRelationshipIds([]);
-    setAllRoles([]);
-    setAllDomains([]);
-    setAllKeyRelationships([]);
-    setDomainsExpanded(false);
-    setRolesExpanded(false);
-    setKeyRelationshipsExpanded(false);
-    setLoading(true);
-    setSaving(false);
-  };
-
-  const loadGoalData = () => {
-    if (!goal) return;
-
-    console.log('[EditGoalModal] Loading goal data:', {
-      id: goal.id,
-      title: goal.title,
-      goal_type: goal.goal_type,
-      roles: goal.roles,
-      domains: goal.domains,
-      keyRelationships: goal.keyRelationships,
-      notes: goal.notes,
-    });
-
-    setTitle(goal.title);
-    setDescription(goal.description || '');
-
-    // Load existing associations
-    const roleIds = goal.roles?.map(r => r.id) || [];
-    const domainIds = goal.domains?.map(d => d.id) || [];
-    const krIds = goal.keyRelationships?.map(kr => kr.id) || [];
-
-    console.log('[EditGoalModal] Setting selected IDs:', {
-      roleIds,
-      domainIds,
-      krIds,
-    });
-
-    setSelectedRoleIds(roleIds);
-    setSelectedDomainIds(domainIds);
-    setSelectedKeyRelationshipIds(krIds);
-
-    // Auto-expand sections with selections
-    if (roleIds.length > 0) setRolesExpanded(true);
-    if (domainIds.length > 0) setDomainsExpanded(true);
-    if (krIds.length > 0) setKeyRelationshipsExpanded(true);
-  };
-
-  const fetchOptions = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not found');
+      if (!user) return;
 
-      const [
-        { data: rolesData },
-        { data: domainsData },
-        { data: krData },
-      ] = await Promise.all([
-        supabase
-          .from('0008-ap-roles')
-          .select('id, label, color')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .order('label'),
-        supabase
-          .from('0008-ap-domains')
-          .select('id, name')
-          .order('name'),
-        supabase
-          .from('0008-ap-key-relationships')
-          .select('id, name, role_id')
-          .eq('user_id', user.id)
-          .order('name'),
-      ]);
+      // Fetch available roles
+      const { data: rolesData } = await supabase
+        .from('0008-ap-roles')
+        .select('id, title')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('title');
+      
+      setAvailableRoles(rolesData || []);
 
-      setAllRoles(rolesData || []);
-      setAllDomains(domainsData || []);
-      setAllKeyRelationships(krData || []);
+      // Fetch available domains (wellness zones)
+      const { data: domainsData } = await supabase
+        .from('0008-ap-domains')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('name');
+      
+      setAvailableDomains(domainsData || []);
+
+      // Fetch available key relationships
+      const { data: keyRelData } = await supabase
+        .from('0008-ap-key-relationships')
+        .select('id, name, role_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('name');
+      
+      setAvailableKeyRelationships(keyRelData || []);
+
+      // Determine join column based on goal type
+      const goalJoinColumn = goal.goal_type === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
+
+      // Fetch current role associations
+      const { data: roleJoins } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .eq(goalJoinColumn, goal.id)
+        .eq('parent_type', 'role');
+      
+      const currentRoleIds = roleJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      setSelectedRoleIds(currentRoleIds);
+      console.log('[EditGoalModal] Current roles:', currentRoleIds);
+
+      // Fetch current domain associations
+      const { data: domainJoins } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .eq(goalJoinColumn, goal.id)
+        .eq('parent_type', 'domain');
+      
+      const currentDomainIds = domainJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      setSelectedDomainIds(currentDomainIds);
+      console.log('[EditGoalModal] Current domains:', currentDomainIds);
+
+      // Fetch current key relationship associations
+      const { data: keyRelJoins } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .eq(goalJoinColumn, goal.id)
+        .eq('parent_type', 'key_relationship');
+      
+      const currentKeyRelIds = keyRelJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      setSelectedKeyRelationshipIds(currentKeyRelIds);
+      console.log('[EditGoalModal] Current key relationships:', currentKeyRelIds);
+
+      // Fetch existing notes for this goal
+      const parentType = goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+      const { data: noteJoins } = await supabase
+        .from('0008-ap-universal-notes-join')
+        .select('note_id')
+        .eq('parent_id', goal.id)
+        .eq('parent_type', parentType);
+
+      const noteIds = noteJoins?.map(j => j.note_id).filter(Boolean) || [];
+      
+      if (noteIds.length > 0) {
+        const { data: notesData } = await supabase
+          .from('0008-ap-notes')
+          .select('id, content, note_text, created_at')
+          .in('id', noteIds)
+          .order('created_at', { ascending: false });
+        
+        setPreviousNotes(notesData || []);
+        console.log('[EditGoalModal] Previous notes:', notesData?.length || 0);
+      } else {
+        setPreviousNotes([]);
+      }
+
+      // Auto-expand sections that have selections
+      if (currentDomainIds.length > 0) setDomainsExpanded(true);
+      if (currentRoleIds.length > 0) setRolesExpanded(true);
+      if (currentKeyRelIds.length > 0) setKeyRelationshipsExpanded(true);
+
     } catch (error) {
-      console.error('[EditGoalModal] Error fetching options:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to load options.');
+      console.error('[EditGoalModal] Error loading data:', error);
+      Alert.alert('Error', 'Failed to load goal data');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggleSelect = (
-    field: 'roles' | 'domains' | 'keyRelationships',
-    id: string
-  ) => {
-    let setter: React.Dispatch<React.SetStateAction<string[]>>;
-    let currentSelection: string[];
-
-    switch (field) {
-      case 'roles':
-        setter = setSelectedRoleIds;
-        currentSelection = selectedRoleIds;
-        break;
-      case 'domains':
-        setter = setSelectedDomainIds;
-        currentSelection = selectedDomainIds;
-        break;
-      case 'keyRelationships':
-        setter = setSelectedKeyRelationshipIds;
-        currentSelection = selectedKeyRelationshipIds;
-        break;
-      default:
-        return;
-    }
-
-    const newSelection = currentSelection.includes(id)
-      ? currentSelection.filter(itemId => itemId !== id)
-      : [...currentSelection, id];
-    setter(newSelection);
+  // Toggle handlers
+  const toggleRole = (roleId: string) => {
+    setSelectedRoleIds(prev => 
+      prev.includes(roleId) 
+        ? prev.filter(id => id !== roleId)
+        : [...prev, roleId]
+    );
   };
 
+  const toggleDomain = (domainId: string) => {
+    setSelectedDomainIds(prev => 
+      prev.includes(domainId) 
+        ? prev.filter(id => id !== domainId)
+        : [...prev, domainId]
+    );
+  };
+
+  const toggleKeyRelationship = (keyRelId: string) => {
+    setSelectedKeyRelationshipIds(prev => 
+      prev.includes(keyRelId) 
+        ? prev.filter(id => id !== keyRelId)
+        : [...prev, keyRelId]
+    );
+  };
+
+  // File picker for attachments
+  const handlePickAttachment = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const files: SelectedFile[] = result.assets.map(asset => ({
+        uri: asset.uri,
+        name: asset.name,
+        type: asset.mimeType || 'application/octet-stream',
+        size: asset.size || 0,
+      }));
+
+      // Check file sizes (5MB limit)
+      const oversizedFiles = files.filter(f => f.size > 5 * 1024 * 1024);
+      if (oversizedFiles.length > 0) {
+        Alert.alert('File Too Large', 'Files must be under 5MB each');
+        return;
+      }
+
+      setNewNoteAttachments(prev => [...prev, ...files]);
+      console.log('[EditGoalModal] Added attachments:', files.length);
+    } catch (error) {
+      console.error('[EditGoalModal] Error picking file:', error);
+      Alert.alert('Error', 'Failed to select file');
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setNewNoteAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Save handler
   const handleSave = async () => {
-    if (!goal || !title.trim()) {
-      Alert.alert('Error', 'Goal title cannot be empty.');
+    if (!title.trim()) {
+      Alert.alert('Error', 'Goal title is required');
       return;
     }
-
-    console.log('[EditGoalModal] Saving goal:', {
-      id: goal.id,
-      title: title.trim(),
-      goal_type: goal.goal_type,
-      selectedRoleIds,
-      selectedDomainIds,
-      selectedKeyRelationshipIds,
-    });
 
     setSaving(true);
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not found');
+      if (!user) throw new Error('Not authenticated');
 
-      // 1. Update main goal data
-      const tableName =
-        goal.goal_type === '12week'
-          ? '0008-ap-goals-12wk'
-          : '0008-ap-goals-custom';
-      console.log('[EditGoalModal] Updating table:', tableName);
+      // Determine table and join column based on goal type
+      const tableName = goal.goal_type === '12week' ? '0008-ap-goals-12wk' : '0008-ap-goals-custom';
+      const goalJoinColumn = goal.goal_type === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
 
-      const { error: goalUpdateError } = await supabase
+      // 1. Update the goal itself
+      const { error: updateError } = await supabase
         .from(tableName)
         .update({
           title: title.trim(),
@@ -262,221 +317,291 @@ export function EditGoalModal({
         })
         .eq('id', goal.id);
 
-      if (goalUpdateError) {
-        console.error('[EditGoalModal] Goal update error:', goalUpdateError);
-        throw goalUpdateError;
-      }
+      if (updateError) throw updateError;
       console.log('[EditGoalModal] Goal updated successfully');
 
-      // 2. Handle Joins (Roles, Domains, Key Relationships)
-      const updateJoins = async (
-        joinTableName: string,
-        childIdField: string,
-        currentLinkedIds: string[],
-        newLinkedIds: string[]
-      ) => {
-        const toAdd = newLinkedIds.filter(id => !currentLinkedIds.includes(id));
-        const toRemove = currentLinkedIds.filter(id => !newLinkedIds.includes(id));
+      // 2. Sync role associations
+      // Get current joins
+      const { data: currentRoleJoins } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('id, parent_id')
+        .eq(goalJoinColumn, goal.id)
+        .eq('parent_type', 'role');
 
-        console.log('[EditGoalModal] Updating joins for', joinTableName, ':', {
-          toAdd: toAdd.length,
-          toRemove: toRemove.length,
-        });
+      const currentRoleIdSet = new Set(currentRoleJoins?.map(j => j.parent_id) || []);
+      const newRoleIdSet = new Set(selectedRoleIds);
 
-        if (toRemove.length > 0) {
-          const { error } = await supabase
-            .from(joinTableName)
-            .delete()
-            .eq('parent_id', goal.id)
-            .in(childIdField, toRemove);
-          if (error) throw error;
-        }
-
-        if (toAdd.length > 0) {
-          const parentType =
-            goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
-          const inserts = toAdd.map(id => ({
-            parent_id: goal.id,
-            parent_type: parentType,
-            [childIdField]: id,
-            user_id: user.id,
-          }));
-          const { error } = await supabase.from(joinTableName).insert(inserts);
-          if (error) throw error;
-        }
-      };
-
-      // Fetch current joins for comparison
-      const parentType =
-        goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
-      console.log(
-        '[EditGoalModal] Fetching current joins with parent_type:',
-        parentType
-      );
-
-      const [
-        { data: currentRolesJoins },
-        { data: currentDomainsJoins },
-        { data: currentKRsJoins },
-      ] = await Promise.all([
-        supabase
-          .from('0008-ap-universal-roles-join')
-          .select('role_id')
-          .eq('parent_id', goal.id)
-          .eq('parent_type', parentType),
-        supabase
-          .from('0008-ap-universal-domains-join')
-          .select('domain_id')
-          .eq('parent_id', goal.id)
-          .eq('parent_type', parentType),
-        supabase
-          .from('0008-ap-universal-key-relationships-join')
-          .select('key_relationship_id')
-          .eq('parent_id', goal.id)
-          .eq('parent_type', parentType),
-      ]);
-
-      const currentRoleIds = currentRolesJoins?.map(j => j.role_id) || [];
-      const currentDomainIds = currentDomainsJoins?.map(j => j.domain_id) || [];
-      const currentKRIds =
-        currentKRsJoins?.map(j => j.key_relationship_id) || [];
-
-      await Promise.all([
-        updateJoins(
-          '0008-ap-universal-roles-join',
-          'role_id',
-          currentRoleIds,
-          selectedRoleIds
-        ),
-        updateJoins(
-          '0008-ap-universal-domains-join',
-          'domain_id',
-          currentDomainIds,
-          selectedDomainIds
-        ),
-        updateJoins(
-          '0008-ap-universal-key-relationships-join',
-          'key_relationship_id',
-          currentKRIds,
-          selectedKeyRelationshipIds
-        ),
-      ]);
-
-      // 3. Add new note if provided
-      if (newNoteText.trim()) {
-        console.log('[EditGoalModal] Adding new note');
-        const { data: newNote, error: newNoteError } = await supabase
-          .from('0008-ap-notes')
-          .insert({ user_id: user.id, content: newNoteText.trim() })
-          .select('id')
-          .single();
-        if (newNoteError) throw newNoteError;
-
-        const noteParentType =
-          goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
-        const { error: noteJoinError } = await supabase
-          .from('0008-ap-universal-notes-join')
-          .insert({
-            parent_id: goal.id,
-            parent_type: noteParentType,
-            note_id: newNote.id,
-            user_id: user.id,
-          });
-        if (noteJoinError) throw noteJoinError;
+      // Delete removed roles
+      const rolesToRemove = currentRoleJoins?.filter(j => !newRoleIdSet.has(j.parent_id)) || [];
+      if (rolesToRemove.length > 0) {
+        await supabase
+          .from('0008-ap-universal-goals-join')
+          .delete()
+          .in('id', rolesToRemove.map(j => j.id));
+        console.log('[EditGoalModal] Removed roles:', rolesToRemove.length);
       }
 
-      console.log('[EditGoalModal] Goal save completed successfully');
+      // Add new roles
+      const rolesToAdd = selectedRoleIds.filter(id => !currentRoleIdSet.has(id));
+      if (rolesToAdd.length > 0) {
+        await supabase
+          .from('0008-ap-universal-goals-join')
+          .insert(rolesToAdd.map(roleId => ({
+            [goalJoinColumn]: goal.id,
+            parent_id: roleId,
+            parent_type: 'role',
+          })));
+        console.log('[EditGoalModal] Added roles:', rolesToAdd.length);
+      }
+
+      // 3. Sync domain associations
+      const { data: currentDomainJoins } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('id, parent_id')
+        .eq(goalJoinColumn, goal.id)
+        .eq('parent_type', 'domain');
+
+      const currentDomainIdSet = new Set(currentDomainJoins?.map(j => j.parent_id) || []);
+      const newDomainIdSet = new Set(selectedDomainIds);
+
+      // Delete removed domains
+      const domainsToRemove = currentDomainJoins?.filter(j => !newDomainIdSet.has(j.parent_id)) || [];
+      if (domainsToRemove.length > 0) {
+        await supabase
+          .from('0008-ap-universal-goals-join')
+          .delete()
+          .in('id', domainsToRemove.map(j => j.id));
+        console.log('[EditGoalModal] Removed domains:', domainsToRemove.length);
+      }
+
+      // Add new domains
+      const domainsToAdd = selectedDomainIds.filter(id => !currentDomainIdSet.has(id));
+      if (domainsToAdd.length > 0) {
+        await supabase
+          .from('0008-ap-universal-goals-join')
+          .insert(domainsToAdd.map(domainId => ({
+            [goalJoinColumn]: goal.id,
+            parent_id: domainId,
+            parent_type: 'domain',
+          })));
+        console.log('[EditGoalModal] Added domains:', domainsToAdd.length);
+      }
+
+      // 4. Sync key relationship associations
+      const { data: currentKeyRelJoins } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('id, parent_id')
+        .eq(goalJoinColumn, goal.id)
+        .eq('parent_type', 'key_relationship');
+
+      const currentKeyRelIdSet = new Set(currentKeyRelJoins?.map(j => j.parent_id) || []);
+      const newKeyRelIdSet = new Set(selectedKeyRelationshipIds);
+
+      // Delete removed key relationships
+      const keyRelsToRemove = currentKeyRelJoins?.filter(j => !newKeyRelIdSet.has(j.parent_id)) || [];
+      if (keyRelsToRemove.length > 0) {
+        await supabase
+          .from('0008-ap-universal-goals-join')
+          .delete()
+          .in('id', keyRelsToRemove.map(j => j.id));
+        console.log('[EditGoalModal] Removed key relationships:', keyRelsToRemove.length);
+      }
+
+      // Add new key relationships
+      const keyRelsToAdd = selectedKeyRelationshipIds.filter(id => !currentKeyRelIdSet.has(id));
+      if (keyRelsToAdd.length > 0) {
+        await supabase
+          .from('0008-ap-universal-goals-join')
+          .insert(keyRelsToAdd.map(keyRelId => ({
+            [goalJoinColumn]: goal.id,
+            parent_id: keyRelId,
+            parent_type: 'key_relationship',
+          })));
+        console.log('[EditGoalModal] Added key relationships:', keyRelsToAdd.length);
+      }
+
+      // 5. Add new note with attachments if provided
+      if (newNoteText.trim() || newNoteAttachments.length > 0) {
+        // Create the note in 0008-ap-notes
+        const { data: noteData, error: noteError } = await supabase
+          .from('0008-ap-notes')
+          .insert({
+            user_id: user.id,
+            content: newNoteText.trim() || 'Attached files',
+          })
+          .select()
+          .single();
+
+        if (noteError) throw noteError;
+        console.log('[EditGoalModal] Note created:', noteData.id);
+
+        // Link note to goal via universal join
+        const parentType = goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+        const { error: joinError } = await supabase
+          .from('0008-ap-universal-notes-join')
+          .insert({
+            note_id: noteData.id,
+            parent_id: goal.id,
+            parent_type: parentType,
+          });
+
+        if (joinError) throw joinError;
+        console.log('[EditGoalModal] Note linked to goal');
+
+        // Upload attachments to storage and save metadata
+        if (newNoteAttachments.length > 0) {
+          for (const file of newNoteAttachments) {
+            try {
+              // Fetch file data
+              let fileData: Blob;
+              if (Platform.OS === 'web') {
+                const response = await fetch(file.uri);
+                fileData = await response.blob();
+              } else {
+                const response = await fetch(file.uri);
+                fileData = await response.blob();
+              }
+
+              // Upload to storage
+              const filePath = await uploadNoteAttachment(
+                fileData,
+                file.name,
+                file.type,
+                user.id
+              );
+
+              if (filePath) {
+                // Save metadata to 0008-ap-note-attachments
+                await saveNoteAttachmentMetadata(
+                  noteData.id,
+                  user.id,
+                  file.name,
+                  filePath,
+                  file.type,
+                  file.size
+                );
+                console.log('[EditGoalModal] Attachment saved:', file.name);
+              }
+            } catch (attachError) {
+              console.error('[EditGoalModal] Error uploading attachment:', attachError);
+            }
+          }
+        }
+      }
 
       // Emit event for other components to refresh
-      eventBus.emit(EVENTS.GOAL_UPDATED, {
-        goalId: goal.id,
-        goalType: goal.goal_type,
-      });
+      eventBus.emit(EVENTS.GOAL_UPDATED, { goalId: goal.id, goalType: goal.goal_type });
 
-      Alert.alert('Success', 'Goal updated successfully!');
       onUpdate();
       onClose();
+      Alert.alert('Success', 'Goal updated successfully');
+
     } catch (error) {
-      console.error('[EditGoalModal] Error saving goal:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to save goal.');
+      console.error('[EditGoalModal] Error saving:', error);
+      Alert.alert('Error', 'Failed to save changes');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = () => {
-    console.log('[EditGoalModal] Delete button clicked, goal:', goal?.id);
-    if (!goal) return;
-    setShowConfirmDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    console.log('[EditGoalModal] Delete confirmed, starting deletion process...');
-    if (!goal) return;
-
+  // Delete handler
+  const handleDelete = async () => {
     try {
-      setSaving(true);
-      setShowConfirmDeleteModal(false);
-
-      // Use the soft delete function passed as prop
       await deleteGoal(goal.id, goal.goal_type);
-      console.log('[EditGoalModal] Goal soft deleted successfully');
-
-      // Emit event for other components to refresh
-      eventBus.emit(EVENTS.GOAL_DELETED, {
-        goalId: goal.id,
-        goalType: goal.goal_type,
-      });
-
-      Alert.alert('Success', 'Goal cancelled successfully!');
+      eventBus.emit(EVENTS.GOAL_DELETED, { goalId: goal.id, goalType: goal.goal_type });
+      setShowDeleteConfirm(false);
       onUpdate();
       onClose();
     } catch (error) {
       console.error('[EditGoalModal] Error deleting goal:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to cancel goal.');
-    } finally {
-      setSaving(false);
+      Alert.alert('Error', 'Failed to cancel goal');
     }
   };
 
-  // Get selected counts for section headers
-  const getSelectedCount = (type: 'roles' | 'domains' | 'keyRelationships') => {
-    switch (type) {
-      case 'roles':
-        return selectedRoleIds.length;
-      case 'domains':
-        return selectedDomainIds.length;
-      case 'keyRelationships':
-        return selectedKeyRelationshipIds.length;
-      default:
-        return 0;
-    }
-  };
-
-  // Filter key relationships based on selected roles
-  const filteredKeyRelationships = allKeyRelationships.filter(kr =>
-    selectedRoleIds.includes(kr.role_id)
+  // Filter key relationships by selected roles
+  const filteredKeyRelationships = availableKeyRelationships.filter(kr => 
+    !kr.role_id || selectedRoleIds.includes(kr.role_id)
   );
 
-  if (!goal) return null;
+  // Render collapsible section header
+  const renderSectionHeader = (
+    title: string,
+    count: number,
+    expanded: boolean,
+    onToggle: () => void
+  ) => (
+    <TouchableOpacity 
+      style={[styles.sectionHeader, { borderBottomColor: colors.border }]}
+      onPress={onToggle}
+    >
+      <View style={styles.sectionTitleRow}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+        {count > 0 && (
+          <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+            <Text style={styles.countBadgeText}>{count}</Text>
+          </View>
+        )}
+      </View>
+      {expanded ? (
+        <ChevronUp size={20} color={colors.textSecondary} />
+      ) : (
+        <ChevronDown size={20} color={colors.textSecondary} />
+      )}
+    </TouchableOpacity>
+  );
+
+  // Render 2-column toggle grid
+  const renderToggleGrid = (
+    items: Array<{ id: string; title?: string; name?: string }>,
+    selectedIds: string[],
+    onToggle: (id: string) => void
+  ) => (
+    <View style={styles.toggleGrid}>
+      {items.map(item => (
+        <View key={item.id} style={styles.toggleItem}>
+          <Text 
+            style={[styles.toggleLabel, { color: colors.text }]}
+            numberOfLines={1}
+          >
+            {item.title || item.name}
+          </Text>
+          <Switch
+            value={selectedIds.includes(item.id)}
+            onValueChange={() => onToggle(item.id)}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor="#ffffff"
+          />
+        </View>
+      ))}
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <Modal visible={visible} animationType="slide" transparent>
+        <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.container, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
-    <>
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.container}>
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+        <View style={[styles.container, { backgroundColor: colors.surface }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color="#1f2937" />
+              <X size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Edit Goal</Text>
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                (!title.trim() || saving) && styles.saveButtonDisabled,
-              ]}
-              onPress={handleSave}
-              disabled={!title.trim() || saving}
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Goal</Text>
+            <TouchableOpacity 
+              onPress={handleSave} 
+              style={[styles.saveButton, { backgroundColor: colors.primary }]}
+              disabled={saving}
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#ffffff" />
@@ -486,489 +611,384 @@ export function EditGoalModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0078d4" />
-                <Text style={styles.loadingText}>Loading data...</Text>
-              </View>
-            ) : (
-              <View style={styles.form}>
-                {/* Goal Type Badge */}
-                <View style={styles.typeBadgeContainer}>
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      goal.goal_type === '12week' && { backgroundColor: '#dbeafe' },
-                      goal.goal_type === 'custom' && { backgroundColor: '#f3e8ff' },
-                    ]}
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Goal Type Badge */}
+            <View style={[styles.typeBadge, { backgroundColor: colors.primary + '20' }]}>
+              <Text style={[styles.typeBadgeText, { color: colors.primary }]}>
+                {goal.goal_type === '12week' ? '12-Week Goal' : 'Custom Goal'}
+              </Text>
+            </View>
+
+            {/* Title Input */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Title</Text>
+              <TextInput
+                style={[styles.input, { color: colors.text, borderColor: colors.border }]}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Goal title"
+                placeholderTextColor={colors.textSecondary}
+              />
+            </View>
+
+            {/* Description Input */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Description</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, { color: colors.text, borderColor: colors.border }]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Optional description"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            {/* Wellness Zones Section */}
+            {renderSectionHeader(
+              'Wellness Zones',
+              selectedDomainIds.length,
+              domainsExpanded,
+              () => setDomainsExpanded(!domainsExpanded)
+            )}
+            {domainsExpanded && renderToggleGrid(
+              availableDomains,
+              selectedDomainIds,
+              toggleDomain
+            )}
+
+            {/* Roles Section */}
+            {renderSectionHeader(
+              'Roles',
+              selectedRoleIds.length,
+              rolesExpanded,
+              () => setRolesExpanded(!rolesExpanded)
+            )}
+            {rolesExpanded && renderToggleGrid(
+              availableRoles,
+              selectedRoleIds,
+              toggleRole
+            )}
+
+            {/* Key Relationships Section (only if roles selected) */}
+            {selectedRoleIds.length > 0 && filteredKeyRelationships.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  'Key Relationships',
+                  selectedKeyRelationshipIds.length,
+                  keyRelationshipsExpanded,
+                  () => setKeyRelationshipsExpanded(!keyRelationshipsExpanded)
+                )}
+                {keyRelationshipsExpanded && renderToggleGrid(
+                  filteredKeyRelationships,
+                  selectedKeyRelationshipIds,
+                  toggleKeyRelationship
+                )}
+              </>
+            )}
+
+            {/* Previous Notes Section */}
+            {previousNotes.length > 0 && (
+              <View style={styles.previousNotesSection}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>
+                  Previous Notes ({previousNotes.length})
+                </Text>
+                {previousNotes.map(note => (
+                  <View 
+                    key={note.id} 
+                    style={[styles.previousNote, { borderLeftColor: colors.primary }]}
                   >
-                    <Text
-                      style={[
-                        styles.typeBadgeText,
-                        goal.goal_type === '12week' && { color: '#1e40af' },
-                        goal.goal_type === 'custom' && { color: '#7c3aed' },
-                      ]}
-                    >
-                      {goal.goal_type === '12week' ? '12-Week Goal' : 'Custom Goal'}
+                    <Text style={[styles.previousNoteText, { color: colors.text }]}>
+                      {note.content || note.note_text}
+                    </Text>
+                    <Text style={[styles.previousNoteDate, { color: colors.textSecondary }]}>
+                      {formatLocalDate(note.created_at)}
                     </Text>
                   </View>
-                </View>
-
-                {/* Goal Title */}
-                <View style={styles.field}>
-                  <Text style={styles.label}>Goal Title *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={title}
-                    onChangeText={setTitle}
-                    placeholder="Enter goal title"
-                    placeholderTextColor="#9ca3af"
-                    maxLength={100}
-                  />
-                </View>
-
-                {/* Goal Description */}
-                <View style={styles.field}>
-                  <Text style={styles.label}>Description</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={description}
-                    onChangeText={setDescription}
-                    placeholder="Describe your goal and why it matters..."
-                    placeholderTextColor="#9ca3af"
-                    multiline
-                    numberOfLines={3}
-                    maxLength={500}
-                  />
-                </View>
-
-                {/* Wellness Zones - Collapsible */}
-                <View style={styles.collapsibleSection}>
-                  <TouchableOpacity
-                    style={styles.collapsibleHeader}
-                    onPress={() => setDomainsExpanded(!domainsExpanded)}
-                  >
-                    <View style={styles.collapsibleHeaderLeft}>
-                      <Text style={styles.collapsibleLabel}>Wellness Zones</Text>
-                      {getSelectedCount('domains') > 0 && (
-                        <View style={styles.countBadge}>
-                          <Text style={styles.countBadgeText}>
-                            {getSelectedCount('domains')}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    {domainsExpanded ? (
-                      <ChevronUp size={20} color="#6b7280" />
-                    ) : (
-                      <ChevronDown size={20} color="#6b7280" />
-                    )}
-                  </TouchableOpacity>
-
-                  {domainsExpanded && (
-                    <View style={styles.collapsibleContent}>
-                      <View style={styles.toggleGrid}>
-                        {allDomains.map(domain => {
-                          const isSelected = selectedDomainIds.includes(domain.id);
-                          return (
-                            <View key={domain.id} style={styles.toggleGridItem}>
-                              <Text style={styles.toggleLabel} numberOfLines={1}>
-                                {domain.name}
-                              </Text>
-                              <Switch
-                                value={isSelected}
-                                onValueChange={() =>
-                                  handleToggleSelect('domains', domain.id)
-                                }
-                                trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                                thumbColor="#ffffff"
-                              />
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-                </View>
-
-                {/* Roles - Collapsible */}
-                <View style={styles.collapsibleSection}>
-                  <TouchableOpacity
-                    style={styles.collapsibleHeader}
-                    onPress={() => setRolesExpanded(!rolesExpanded)}
-                  >
-                    <View style={styles.collapsibleHeaderLeft}>
-                      <Text style={styles.collapsibleLabel}>Roles</Text>
-                      {getSelectedCount('roles') > 0 && (
-                        <View style={styles.countBadge}>
-                          <Text style={styles.countBadgeText}>
-                            {getSelectedCount('roles')}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    {rolesExpanded ? (
-                      <ChevronUp size={20} color="#6b7280" />
-                    ) : (
-                      <ChevronDown size={20} color="#6b7280" />
-                    )}
-                  </TouchableOpacity>
-
-                  {rolesExpanded && (
-                    <View style={styles.collapsibleContent}>
-                      <View style={styles.toggleGrid}>
-                        {allRoles.map(role => {
-                          const isSelected = selectedRoleIds.includes(role.id);
-                          return (
-                            <View key={role.id} style={styles.toggleGridItem}>
-                              <Text style={styles.toggleLabel} numberOfLines={1}>
-                                {role.label}
-                              </Text>
-                              <Switch
-                                value={isSelected}
-                                onValueChange={() =>
-                                  handleToggleSelect('roles', role.id)
-                                }
-                                trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                                thumbColor="#ffffff"
-                              />
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-                </View>
-
-                {/* Key Relationships - Collapsible (filtered by selected roles) */}
-                {filteredKeyRelationships.length > 0 && (
-                  <View style={styles.collapsibleSection}>
-                    <TouchableOpacity
-                      style={styles.collapsibleHeader}
-                      onPress={() =>
-                        setKeyRelationshipsExpanded(!keyRelationshipsExpanded)
-                      }
-                    >
-                      <View style={styles.collapsibleHeaderLeft}>
-                        <Text style={styles.collapsibleLabel}>Key Relationships</Text>
-                        {getSelectedCount('keyRelationships') > 0 && (
-                          <View style={styles.countBadge}>
-                            <Text style={styles.countBadgeText}>
-                              {getSelectedCount('keyRelationships')}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      {keyRelationshipsExpanded ? (
-                        <ChevronUp size={20} color="#6b7280" />
-                      ) : (
-                        <ChevronDown size={20} color="#6b7280" />
-                      )}
-                    </TouchableOpacity>
-
-                    {keyRelationshipsExpanded && (
-                      <View style={styles.collapsibleContent}>
-                        <View style={styles.toggleGrid}>
-                          {filteredKeyRelationships.map(kr => {
-                            const isSelected = selectedKeyRelationshipIds.includes(
-                              kr.id
-                            );
-                            return (
-                              <View key={kr.id} style={styles.toggleGridItem}>
-                                <Text style={styles.toggleLabel} numberOfLines={1}>
-                                  {kr.name}
-                                </Text>
-                                <Switch
-                                  value={isSelected}
-                                  onValueChange={() =>
-                                    handleToggleSelect('keyRelationships', kr.id)
-                                  }
-                                  trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                                  thumbColor="#ffffff"
-                                />
-                              </View>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {/* Existing Notes - Read Only Display */}
-                {goal.notes && goal.notes.length > 0 && (
-                  <View style={styles.field}>
-                    <Text style={styles.label}>Previous Notes</Text>
-                    <View style={styles.existingNotesContainer}>
-                      {goal.notes.map((note, index) => (
-                        <View key={note.id || index} style={styles.existingNoteItem}>
-                          <Text style={styles.existingNoteContent}>
-                            {note.content}
-                          </Text>
-                          <Text style={styles.existingNoteDate}>
-                            {new Date(note.created_at).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Add New Note */}
-                <View style={styles.field}>
-                  <Text style={styles.label}>Add New Note</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={newNoteText}
-                    onChangeText={setNewNoteText}
-                    placeholder="Write a new note for this goal..."
-                    placeholderTextColor="#9ca3af"
-                    multiline
-                    numberOfLines={3}
-                    maxLength={500}
-                  />
-                </View>
-
-                {/* Delete Button */}
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={handleDelete}
-                  disabled={saving}
-                >
-                  <Trash2 size={18} color="#dc2626" />
-                  <Text style={styles.deleteButtonText}>Cancel Goal</Text>
-                </TouchableOpacity>
+                ))}
               </View>
             )}
+
+            {/* Add New Note Section */}
+            <View style={styles.newNoteSection}>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Add New Note</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, { color: colors.text, borderColor: colors.border }]}
+                value={newNoteText}
+                onChangeText={setNewNoteText}
+                placeholder="Write a new note for this goal..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={4}
+              />
+
+              {/* Attachment Button */}
+              <TouchableOpacity
+                style={[styles.attachmentButton, { borderColor: colors.border }]}
+                onPress={handlePickAttachment}
+              >
+                <Paperclip size={18} color={colors.primary} />
+                <Text style={[styles.attachmentButtonText, { color: colors.primary }]}>
+                  Add Attachment
+                </Text>
+              </TouchableOpacity>
+
+              {/* Attachment Preview */}
+              {newNoteAttachments.length > 0 && (
+                <View style={styles.attachmentsPreview}>
+                  <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
+                    Attachments ({newNoteAttachments.length})
+                  </Text>
+                  {newNoteAttachments.map((file, index) => (
+                    <View 
+                      key={index} 
+                      style={[styles.attachmentItem, { borderColor: colors.border }]}
+                    >
+                      <Paperclip size={16} color={colors.textSecondary} />
+                      <Text 
+                        style={[styles.attachmentName, { color: colors.text }]}
+                        numberOfLines={1}
+                      >
+                        {file.name}
+                      </Text>
+                      <Text style={[styles.attachmentSize, { color: colors.textSecondary }]}>
+                        {(file.size / 1024).toFixed(1)} KB
+                      </Text>
+                      <TouchableOpacity 
+                        onPress={() => removeAttachment(index)}
+                        style={styles.removeAttachmentButton}
+                      >
+                        <X size={16} color={colors.error || '#ef4444'} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Delete Button */}
+            <TouchableOpacity
+              style={[styles.deleteButton, { borderColor: '#ef4444' }]}
+              onPress={() => setShowDeleteConfirm(true)}
+            >
+              <Trash2 size={18} color="#ef4444" />
+              <Text style={styles.deleteButtonText}>Cancel Goal</Text>
+            </TouchableOpacity>
+
+            <View style={{ height: 40 }} />
           </ScrollView>
         </View>
-      </Modal>
+      </View>
 
-      {/* Custom Delete Confirmation Modal */}
-      <Modal
-        visible={showConfirmDeleteModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowConfirmDeleteModal(false)}
-      >
+      {/* Delete Confirmation Modal */}
+      <Modal visible={showDeleteConfirm} animationType="fade" transparent>
         <View style={styles.confirmOverlay}>
-          <View style={styles.confirmContainer}>
-            <Text style={styles.confirmTitle}>Cancel Goal</Text>
-            <Text style={styles.confirmMessage}>
-              Are you sure you want to cancel this goal? This will mark it as
-              cancelled and remove it from your active goals. This action cannot be
-              undone.
+          <View style={[styles.confirmDialog, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>Cancel Goal?</Text>
+            <Text style={[styles.confirmMessage, { color: colors.textSecondary }]}>
+              This will archive the goal and hide it from your active goals. This action can be undone later.
             </Text>
-            <View style={styles.confirmActions}>
+            <View style={styles.confirmButtons}>
               <TouchableOpacity
-                style={styles.confirmCancelButton}
-                onPress={() => setShowConfirmDeleteModal(false)}
-                disabled={saving}
+                style={[styles.confirmButton, { borderColor: colors.border }]}
+                onPress={() => setShowDeleteConfirm(false)}
               >
-                <Text style={styles.confirmCancelButtonText}>Keep Goal</Text>
+                <Text style={[styles.confirmButtonText, { color: colors.text }]}>Keep Goal</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.confirmDeleteButton,
-                  saving && styles.confirmDeleteButtonDisabled,
-                ]}
-                onPress={confirmDelete}
-                disabled={saving}
+                style={[styles.confirmButton, styles.confirmDeleteButton]}
+                onPress={handleDelete}
               >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.confirmDeleteButtonText}>Cancel Goal</Text>
-                )}
+                <Text style={[styles.confirmButtonText, { color: '#ffffff' }]}>Cancel Goal</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    justifyContent: 'flex-end',
+  },
+  container: {
+    maxHeight: '90%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
   },
   closeButton: {
     padding: 4,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
   },
   saveButton: {
-    backgroundColor: '#0078d4',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 6,
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#9ca3af',
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
   },
   saveButtonText: {
     color: '#ffffff',
-    fontWeight: '600',
     fontSize: 14,
+    fontWeight: '600',
   },
   content: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  form: {
     padding: 16,
-  },
-  typeBadgeContainer: {
-    marginBottom: 20,
   },
   typeBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 16,
+    marginBottom: 16,
   },
   typeBadgeText: {
     fontSize: 13,
     fontWeight: '600',
   },
-  field: {
-    marginBottom: 24,
+  inputGroup: {
+    marginBottom: 16,
   },
   label: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1f2937',
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1f2937',
+    padding: 12,
+    fontSize: 15,
   },
   textArea: {
-    height: 100,
+    minHeight: 80,
     textAlignVertical: 'top',
   },
-  // Collapsible Section Styles
-  collapsibleSection: {
-    marginBottom: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  collapsibleHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    marginTop: 8,
   },
-  collapsibleHeaderLeft: {
+  sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  collapsibleLabel: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1f2937',
   },
   countBadge: {
-    backgroundColor: '#0078d4',
-    borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
   },
   countBadgeText: {
     color: '#ffffff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  collapsibleContent: {
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  // 2-Column Toggle Grid
   toggleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 8,
+    paddingVertical: 12,
   },
-  toggleGridItem: {
+  toggleItem: {
     width: '50%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingRight: 12,
+    paddingVertical: 8,
+    paddingRight: 16,
   },
   toggleLabel: {
     fontSize: 14,
-    color: '#374151',
     flex: 1,
     marginRight: 8,
   },
-  // Existing Notes
-  existingNotesContainer: {
-    gap: 8,
+  previousNotesSection: {
+    marginTop: 24,
   },
-  existingNoteItem: {
+  previousNote: {
     backgroundColor: '#f8fafc',
     padding: 12,
     borderRadius: 8,
+    marginBottom: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#0078d4',
   },
-  existingNoteContent: {
+  previousNoteText: {
     fontSize: 14,
-    color: '#1f2937',
     lineHeight: 20,
     marginBottom: 4,
   },
-  existingNoteDate: {
+  previousNoteDate: {
     fontSize: 12,
-    color: '#6b7280',
-    fontStyle: 'italic',
   },
-  // Delete Button
+  newNoteSection: {
+    marginTop: 24,
+  },
+  attachmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  attachmentButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  attachmentsPreview: {
+    marginTop: 12,
+  },
+  attachmentsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderWidth: 1,
+    borderRadius: 6,
+    marginBottom: 8,
+    gap: 8,
+  },
+  attachmentName: {
+    flex: 1,
+    fontSize: 13,
+  },
+  attachmentSize: {
+    fontSize: 12,
+  },
+  removeAttachmentButton: {
+    padding: 4,
+  },
   deleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -976,79 +996,56 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: '#dc2626',
-    borderRadius: 8,
-    marginTop: 16,
-    marginBottom: 32,
+    borderRadius: 12,
+    marginTop: 32,
   },
   deleteButtonText: {
-    color: '#dc2626',
-    fontSize: 16,
+    color: '#ef4444',
+    fontSize: 15,
     fontWeight: '600',
   },
-  // Confirmation Modal
   confirmOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-  },
-  confirmContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
     padding: 24,
-    minWidth: 300,
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+  },
+  confirmDialog: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 16,
+    padding: 24,
   },
   confirmTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
     marginBottom: 12,
     textAlign: 'center',
   },
   confirmMessage: {
-    fontSize: 15,
-    color: '#6b7280',
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: 'center',
     marginBottom: 24,
   },
-  confirmActions: {
+  confirmButtons: {
     flexDirection: 'row',
     gap: 12,
   },
-  confirmCancelButton: {
+  confirmButton: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
     paddingVertical: 12,
     borderRadius: 8,
+    borderWidth: 1,
     alignItems: 'center',
-  },
-  confirmCancelButtonText: {
-    color: '#374151',
-    fontSize: 16,
-    fontWeight: '600',
   },
   confirmDeleteButton: {
-    flex: 1,
-    backgroundColor: '#dc2626',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    borderColor: '#ef4444',
   },
-  confirmDeleteButtonDisabled: {
-    backgroundColor: '#9ca3af',
-  },
-  confirmDeleteButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
+  confirmButtonText: {
+    fontSize: 14,
     fontWeight: '600',
   },
 });
