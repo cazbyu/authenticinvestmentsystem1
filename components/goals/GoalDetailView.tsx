@@ -10,10 +10,11 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare } from 'lucide-react-native';
+import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare, Calendar as CalendarIcon } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
 import { EditGoalModal } from './EditGoalModal';
+import { DepositIdeaCard, type DepositIdea as DepositIdeaType } from '@/components/depositIdeas/DepositIdeaCard';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
@@ -44,6 +45,8 @@ interface JournalNote {
   id: string;
   note_text: string;
   created_at: string;
+  entry_type?: 'task' | 'event' | 'reflection';
+  source_data?: any;
   attachment_count?: number;
   [key: string]: any;
 }
@@ -551,13 +554,47 @@ export function GoalDetailView({
         .from('0008-ap-deposit-ideas')
         .select('*')
         .in('id', ideaIds)
-        .neq('status', 'activated')
-        .is('deleted_at', null)
+        .eq('is_active', true)
+        .eq('archived', false)
+        .is('activated_task_id', null)
         .order('created_at', { ascending: false });
 
       if (ideasError) throw ideasError;
 
-      setIdeas(ideasData || []);
+      // Fetch associations for each idea (roles, domains, etc.)
+      const enrichedIdeas = await Promise.all((ideasData || []).map(async (idea) => {
+        const [rolesData, domainsData, krData] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('role:0008-ap-roles(id, label, color)')
+            .eq('parent_id', idea.id)
+            .eq('parent_type', 'deposit_idea'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('domain:0008-ap-domains(id, name)')
+            .eq('parent_id', idea.id)
+            .eq('parent_type', 'deposit_idea'),
+          supabase
+            .from('0008-ap-universal-key-relationships-join')
+            .select('key_relationship:0008-ap-key-relationships(id, name)')
+            .eq('parent_id', idea.id)
+            .eq('parent_type', 'deposit_idea'),
+        ]);
+
+        const roles = rolesData.data?.map((r: any) => r.role).filter(Boolean) || [];
+        const domains = domainsData.data?.map((d: any) => d.domain).filter(Boolean) || [];
+        const keyRelationships = krData.data?.map((kr: any) => kr.key_relationship).filter(Boolean) || [];
+
+        return {
+          ...idea,
+          title: idea.idea_text || idea.title, // Map idea_text to title for DepositIdeaCard
+          roles,
+          domains,
+          keyRelationships,
+        };
+      }));
+
+      setIdeas(enrichedIdeas);
     } catch (error) {
       console.error('[GoalDetailView] Error fetching ideas:', error);
       Alert.alert('Error', 'Failed to load ideas for this goal');
@@ -573,40 +610,79 @@ export function GoalDetailView({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const parentType = currentGoal.goal_type === '1y' ? 'goal_1y' :
-                        currentGoal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+      const goalJoinColumn = currentGoal.goal_type === '1y'
+        ? 'one_yr_goal_id'
+        : currentGoal.goal_type === '12week'
+        ? 'twelve_wk_goal_id'
+        : 'custom_goal_id';
 
-      const { data: noteJoins, error: joinError } = await supabase
-        .from('0008-ap-universal-notes-join')
-        .select('note_id')
-        .eq('parent_id', currentGoal.id)
-        .eq('parent_type', parentType);
+      // Get all items linked to this goal
+      const { data: goalJoins, error: joinError } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id, parent_type')
+        .eq(goalJoinColumn, currentGoal.id);
 
       if (joinError) throw joinError;
 
-      const noteIds = noteJoins?.map(j => j.note_id).filter(Boolean) || [];
+      const journalEntries: JournalNote[] = [];
 
-      if (noteIds.length === 0) {
-        setJournalNotes([]);
-        return;
+      // Fetch completed tasks
+      const taskIds = goalJoins?.filter(j => j.parent_type === 'task').map(j => j.parent_id) || [];
+
+      if (taskIds.length > 0) {
+        const { data: tasks, error: tasksError } = await supabase
+          .from('0008-ap-tasks')
+          .select('*')
+          .in('id', taskIds)
+          .eq('status', 'completed')
+          .is('deleted_at', null)
+          .order('completed_at', { ascending: false });
+
+        if (!tasksError && tasks) {
+          tasks.forEach(task => {
+            journalEntries.push({
+              id: task.id,
+              created_at: task.completed_at || task.created_at,
+              note_text: task.title,
+              entry_type: task.type === 'event' ? 'event' : 'task',
+              source_data: task,
+            });
+          });
+        }
       }
 
-      const { data: notesData, error: notesError } = await supabase
-        .from('0008-ap-notes')
-        .select('*, note_attachments:0008-ap-note-attachments(count)')
-        .in('id', noteIds)
-        .order('created_at', { ascending: false });
+      // Fetch reflections
+      const reflectionIds = goalJoins?.filter(j => j.parent_type === 'reflection').map(j => j.parent_id) || [];
 
-      if (notesError) throw notesError;
+      if (reflectionIds.length > 0) {
+        const { data: reflections, error: reflectionsError } = await supabase
+          .from('0008-ap-reflections')
+          .select('*')
+          .in('id', reflectionIds)
+          .eq('archived', false)
+          .order('created_at', { ascending: false });
 
-      const notesWithAttachments = (notesData || []).map(note => ({
-        ...note,
-        attachment_count: note.note_attachments?.[0]?.count || 0,
-      }));
+        if (!reflectionsError && reflections) {
+          reflections.forEach(ref => {
+            journalEntries.push({
+              id: ref.id,
+              created_at: ref.created_at,
+              note_text: ref.content?.substring(0, 100) + (ref.content?.length > 100 ? '...' : ''),
+              entry_type: 'reflection',
+              source_data: ref,
+            });
+          });
+        }
+      }
 
-      setJournalNotes(notesWithAttachments);
+      // Sort by date (newest first)
+      journalEntries.sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setJournalNotes(journalEntries);
     } catch (error) {
-      console.error('[GoalDetailView] Error fetching journal notes:', error);
+      console.error('[GoalDetailView] Error fetching journal:', error);
       Alert.alert('Error', 'Failed to load journal entries for this goal');
     } finally {
       setJournalLoading(false);
@@ -781,10 +857,15 @@ export function GoalDetailView({
     }
   };
 
-  const handleActivateIdea = async (ideaId: string) => {
+  const handleUpdateIdea = (idea: DepositIdeaType) => {
+    // TODO: Open edit modal for deposit idea
+    Alert.alert('Edit Idea', 'This feature will be available in a future update');
+  };
+
+  const handleActivateIdea = (idea: DepositIdeaType) => {
     Alert.alert(
       'Activate Idea',
-      'Convert this idea into an action?',
+      'Convert this idea into an action linked to this goal?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -792,11 +873,52 @@ export function GoalDetailView({
           onPress: async () => {
             try {
               const supabase = getSupabaseClient();
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) return;
 
+              // Create a task from this idea
+              const { data: newTask, error: taskError } = await supabase
+                .from('0008-ap-tasks')
+                .insert({
+                  user_id: user.id,
+                  title: idea.title,
+                  status: 'pending',
+                  type: 'task',
+                  created_at: toLocalISOString(new Date()),
+                  updated_at: toLocalISOString(new Date()),
+                })
+                .select()
+                .single();
+
+              if (taskError) throw taskError;
+
+              // Link the task to this goal
+              const goalJoinColumn = currentGoal.goal_type === '1y'
+                ? 'one_yr_goal_id'
+                : currentGoal.goal_type === '12week'
+                ? 'twelve_wk_goal_id'
+                : 'custom_goal_id';
+
+              const { error: joinError } = await supabase
+                .from('0008-ap-universal-goals-join')
+                .insert({
+                  parent_id: newTask.id,
+                  parent_type: 'task',
+                  [goalJoinColumn]: currentGoal.id,
+                  created_at: toLocalISOString(new Date()),
+                });
+
+              if (joinError) throw joinError;
+
+              // Mark idea as activated
               const { error: updateError } = await supabase
                 .from('0008-ap-deposit-ideas')
-                .update({ status: 'activated' })
-                .eq('id', ideaId);
+                .update({
+                  is_active: false,
+                  archived: true,
+                  activated_task_id: newTask.id,
+                })
+                .eq('id', idea.id);
 
               if (updateError) throw updateError;
 
@@ -810,6 +932,47 @@ export function GoalDetailView({
         },
       ]
     );
+  };
+
+  const handleCancelIdea = async (idea: DepositIdeaType) => {
+    Alert.alert(
+      'Cancel Idea',
+      'Are you sure you want to cancel this idea?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const supabase = getSupabaseClient();
+
+              const { error } = await supabase
+                .from('0008-ap-deposit-ideas')
+                .update({
+                  is_active: false,
+                  archived: true,
+                  updated_at: toLocalISOString(new Date()),
+                })
+                .eq('id', idea.id);
+
+              if (error) throw error;
+
+              fetchIdeas();
+              Alert.alert('Success', 'Idea cancelled');
+            } catch (error) {
+              console.error('[GoalDetailView] Error cancelling idea:', error);
+              Alert.alert('Error', 'Failed to cancel idea');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleIdeaPress = (idea: DepositIdeaType) => {
+    // TODO: Open detail modal for deposit idea
+    Alert.alert('Idea Details', idea.title);
   };
 
   const getTimelineBadge = () => {
@@ -1248,51 +1411,61 @@ export function GoalDetailView({
     }
 
     return (
-      <View style={styles.tabContent}>
-        {ideas.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>DEPOSIT IDEAS</Text>
-            {ideas.map(idea => (
-              <View key={idea.id} style={[styles.ideaCard, { backgroundColor: colors.surface }]}>
-                <View style={styles.ideaHeader}>
-                  <Lightbulb size={20} color={colors.primary} />
-                  <Text style={[styles.ideaDate, { color: colors.textSecondary }]}>
-                    {formatLocalDate(idea.created_at)}
-                  </Text>
-                </View>
-                <Text style={[styles.ideaText, { color: colors.text }]}>
-                  {idea.idea_text}
-                </Text>
-                <TouchableOpacity
-                  style={[styles.activateButton, { backgroundColor: colors.primary }]}
-                  onPress={() => handleActivateIdea(idea.id)}
-                >
-                  <Text style={styles.activateButtonText}>Activate</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {ideas.length === 0 && (
+      <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabScrollContent}>
+        {ideas.length === 0 ? (
           <View style={styles.emptyState}>
             <Lightbulb size={64} color={colors.textSecondary} style={styles.emptyIcon} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Ideas Yet</Text>
             <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
-              Capture ideas that could help you achieve this goal
+              Ideas linked to this goal will appear here
             </Text>
           </View>
+        ) : (
+          <View style={styles.ideasList}>
+            {ideas.map(idea => (
+              <DepositIdeaCard
+                key={idea.id}
+                depositIdea={idea}
+                onUpdate={handleUpdateIdea}
+                onActivate={handleActivateIdea}
+                onCancel={handleCancelIdea}
+                onPress={handleIdeaPress}
+              />
+            ))}
+          </View>
         )}
-
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={() => setShowAddIdeaModal(true)}
-        >
-          <Plus size={20} color="#ffffff" />
-          <Text style={styles.addButtonText}>Add Idea</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
+  };
+
+  const getEntryIcon = (type?: string) => {
+    switch (type) {
+      case 'task':
+        return <CheckSquare size={20} color="#2563eb" />;
+      case 'event':
+        return <CalendarIcon size={20} color="#2563eb" />;
+      case 'reflection':
+        return <BookOpen size={20} color="#7c3aed" />;
+      default:
+        return <CheckSquare size={20} color={colors.textSecondary} />;
+    }
+  };
+
+  const getIconStyle = (type?: string) => {
+    switch (type) {
+      case 'task':
+      case 'event':
+        return { backgroundColor: '#dbeafe' };
+      case 'reflection':
+        return { backgroundColor: '#f3e8ff' };
+      default:
+        return { backgroundColor: colors.surface };
+    }
+  };
+
+  const handleJournalEntryPress = (entry: JournalNote) => {
+    // TODO: Open detail modal for entry
+    Alert.alert('Entry Details', entry.note_text);
   };
 
   const renderJournalTab = () => {
@@ -1301,62 +1474,46 @@ export function GoalDetailView({
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Loading journal entries...
+            Loading journal...
           </Text>
         </View>
       );
     }
 
     return (
-      <View style={styles.tabContent}>
-        {journalNotes.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>JOURNAL ENTRIES</Text>
-            {journalNotes.map(note => (
-              <View key={note.id} style={[styles.journalCard, { backgroundColor: colors.surface }]}>
-                <View style={styles.journalHeader}>
-                  <BookOpen size={20} color={colors.primary} />
-                  <Text style={[styles.journalDate, { color: colors.textSecondary }]}>
-                    {formatLocalDate(note.created_at)}
-                  </Text>
-                  {note.attachment_count > 0 && (
-                    <View style={styles.attachmentBadge}>
-                      <Paperclip size={14} color={colors.textSecondary} />
-                      <Text style={[styles.attachmentCount, { color: colors.textSecondary }]}>
-                        {note.attachment_count}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <Text
-                  style={[styles.journalText, { color: colors.text }]}
-                  numberOfLines={4}
-                >
-                  {note.note_text}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {journalNotes.length === 0 && (
+      <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabScrollContent}>
+        {journalNotes.length === 0 ? (
           <View style={styles.emptyState}>
             <BookOpen size={64} color={colors.textSecondary} style={styles.emptyIcon} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Journal Entries</Text>
             <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
-              Document your thoughts, progress, and reflections for this goal
+              Complete tasks and add reflections linked to this goal to see them here
             </Text>
           </View>
+        ) : (
+          <View style={styles.journalList}>
+            {journalNotes.map(entry => (
+              <TouchableOpacity
+                key={entry.id}
+                style={[styles.journalEntry, { backgroundColor: colors.surface }]}
+                onPress={() => handleJournalEntryPress(entry)}
+              >
+                <View style={[styles.journalIcon, getIconStyle(entry.entry_type)]}>
+                  {getEntryIcon(entry.entry_type)}
+                </View>
+                <View style={styles.journalContent}>
+                  <Text style={[styles.journalTitle, { color: colors.text }]} numberOfLines={1}>
+                    {entry.note_text}
+                  </Text>
+                  <Text style={[styles.journalDate, { color: colors.textSecondary }]}>
+                    {formatLocalDate(entry.created_at)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
-
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={() => setShowAddJournalModal(true)}
-        >
-          <Plus size={20} color="#ffffff" />
-          <Text style={styles.addButtonText}>Add Entry</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   };
 
@@ -1841,7 +1998,46 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     flex: 1,
+  },
+  tabScrollContent: {
     padding: 16,
+  },
+  ideasList: {
+    gap: 8,
+  },
+  journalList: {
+    gap: 8,
+  },
+  journalEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  journalIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  journalContent: {
+    flex: 1,
+  },
+  journalTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  journalDate: {
+    fontSize: 12,
   },
   liCard: {
     borderRadius: 12,

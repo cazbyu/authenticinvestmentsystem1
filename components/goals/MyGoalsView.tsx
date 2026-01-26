@@ -318,6 +318,22 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
     </View>
   );
 
+  const formatGoalDateRange = (startDate: string, endDate: string): string => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+    const startYear = start.getFullYear();
+    const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
+    const endYear = end.getFullYear();
+
+    if (startYear === endYear) {
+      return `(${startMonth} - ${endMonth} ${endYear})`;
+    } else {
+      return `(${startMonth} ${startYear} - ${endMonth} ${endYear})`;
+    }
+  };
+
   const renderGoalCard = (goal: UnifiedGoal) => {
     const isAnnualGoal = goal.goal_type === '1y';
     const cardStyle = [
@@ -378,11 +394,14 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
             const diffTime = now.getTime() - startOfYear.getTime();
             const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
             const currentWeek = Math.floor(diffDays / 7) + 1;
+            const dateRange = goal.start_date && goal.end_date
+              ? ` ${formatGoalDateRange(goal.start_date, goal.end_date)}`
+              : '';
             return (
               <View style={styles.metaItem}>
                 <Calendar size={14} color={colors.textSecondary} />
                 <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                  Week {currentWeek} of 52
+                  Week {currentWeek} of 52{dateRange}
                 </Text>
               </View>
             );
@@ -392,7 +411,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
             <View style={styles.metaItem}>
               <Calendar size={14} color={colors.textSecondary} />
               <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                Week {currentCycleWeek} of 12
+                Week {currentCycleWeek} of 12{goal.start_date && goal.end_date ? ` ${formatGoalDateRange(goal.start_date, goal.end_date)}` : ''}
               </Text>
             </View>
           )}
@@ -401,7 +420,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
             <View style={styles.metaItem}>
               <Calendar size={14} color={colors.textSecondary} />
               <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                Week {goal.current_week} of {goal.total_weeks}
+                Week {goal.current_week} of {goal.total_weeks}{goal.start_date && goal.end_date ? ` ${formatGoalDateRange(goal.start_date, goal.end_date)}` : ''}
               </Text>
             </View>
           )}
