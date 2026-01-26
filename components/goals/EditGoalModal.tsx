@@ -125,32 +125,30 @@ export function EditGoalModal({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch available roles
+      // Fetch available roles - column is 'label' not 'title'
       const { data: rolesData } = await supabase
         .from('0008-ap-roles')
-        .select('id, title')
+        .select('id, label')
         .eq('user_id', user.id)
         .eq('is_active', true)
-        .order('title');
+        .order('label');
       
-      setAvailableRoles(rolesData || []);
+      // Map to expected format
+      setAvailableRoles((rolesData || []).map(r => ({ id: r.id, title: r.label })));
 
-      // Fetch available domains (wellness zones)
+      // Fetch available domains (wellness zones) - no user_id filter, they're global
       const { data: domainsData } = await supabase
         .from('0008-ap-domains')
         .select('id, name')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
         .order('name');
       
       setAvailableDomains(domainsData || []);
 
-      // Fetch available key relationships
+      // Fetch available key relationships - no is_active column
       const { data: keyRelData } = await supabase
         .from('0008-ap-key-relationships')
         .select('id, name, role_id')
         .eq('user_id', user.id)
-        .eq('is_active', true)
         .order('name');
       
       setAvailableKeyRelationships(keyRelData || []);
