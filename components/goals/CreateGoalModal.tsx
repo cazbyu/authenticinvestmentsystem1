@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Switch,
   Image,
+  Platform,
 } from 'react-native';
 import { X, Target, Calendar, ChevronDown, Paperclip, Image as ImageIcon } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -125,6 +126,10 @@ export function CreateGoalModal({
   const [newTimelineName, setNewTimelineName] = useState('');
   const [newTimelineStartDate, setNewTimelineStartDate] = useState('');
   const [newTimelineEndDate, setNewTimelineEndDate] = useState('');
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [tempStartDate, setTempStartDate] = useState(new Date());
+  const [tempEndDate, setTempEndDate] = useState(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000));
 
   useEffect(() => {
     if (visible) {
@@ -755,20 +760,285 @@ export function CreateGoalModal({
                 placeholder="Timeline name"
                 placeholderTextColor="#9ca3af"
               />
-              <TextInput
-                style={styles.input}
-                value={newTimelineStartDate}
-                onChangeText={setNewTimelineStartDate}
-                placeholder="Start date (YYYY-MM-DD)"
-                placeholderTextColor="#9ca3af"
-              />
-              <TextInput
-                style={styles.input}
-                value={newTimelineEndDate}
-                onChangeText={setNewTimelineEndDate}
-                placeholder="End date (YYYY-MM-DD)"
-                placeholderTextColor="#9ca3af"
-              />
+              <View style={styles.datePickerField}>
+                <Text style={styles.datePickerLabel}>Start Date</Text>
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
+                    value={newTimelineStartDate}
+                    onChange={(e) => setNewTimelineStartDate(e.target.value)}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderWidth: 1,
+                      borderColor: '#d1d5db',
+                      borderRadius: 8,
+                      padding: 12,
+                      fontSize: 16,
+                      color: '#1f2937',
+                      marginBottom: 8,
+                      width: '100%',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.datePickerButton}
+                      onPress={() => setShowStartDatePicker(true)}
+                    >
+                      <Calendar size={20} color="#6b7280" />
+                      <Text style={styles.datePickerButtonText}>
+                        {newTimelineStartDate || 'Select start date'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Modal
+                      visible={showStartDatePicker}
+                      transparent
+                      animationType="fade"
+                      onRequestClose={() => setShowStartDatePicker(false)}
+                    >
+                      <View style={styles.modalOverlay}>
+                        <View style={[styles.datePickerModal, { backgroundColor: '#ffffff' }]}>
+                          <View style={styles.datePickerHeader}>
+                            <Text style={styles.datePickerTitle}>Select Start Date</Text>
+                            <TouchableOpacity onPress={() => setShowStartDatePicker(false)}>
+                              <X size={24} color="#1f2937" />
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={styles.datePickerContent}>
+                            <View style={styles.dateSelector}>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempStartDate);
+                                  date.setMonth(date.getMonth() - 1);
+                                  setTempStartDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>◀</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.dateDisplay}>
+                                {tempStartDate.toLocaleDateString('en-US', {
+                                  month: 'long',
+                                  year: 'numeric'
+                                })}
+                              </Text>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempStartDate);
+                                  date.setMonth(date.getMonth() + 1);
+                                  setTempStartDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>▶</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.dateSelector}>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempStartDate);
+                                  date.setDate(date.getDate() - 1);
+                                  setTempStartDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>◀</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.dateDisplay}>
+                                {tempStartDate.toLocaleDateString('en-US', {
+                                  day: 'numeric',
+                                  month: 'short'
+                                })}
+                              </Text>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempStartDate);
+                                  date.setDate(date.getDate() + 1);
+                                  setTempStartDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>▶</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.dateQuickActions}>
+                              <TouchableOpacity
+                                style={styles.quickActionButton}
+                                onPress={() => setTempStartDate(new Date())}
+                              >
+                                <Text style={styles.quickActionText}>Today</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+
+                          <View style={styles.datePickerActions}>
+                            <TouchableOpacity
+                              style={[styles.datePickerActionButton, styles.dateCancelButton]}
+                              onPress={() => setShowStartDatePicker(false)}
+                            >
+                              <Text style={styles.dateCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.datePickerActionButton, styles.dateConfirmButton]}
+                              onPress={() => {
+                                setNewTimelineStartDate(tempStartDate.toISOString().split('T')[0]);
+                                setShowStartDatePicker(false);
+                              }}
+                            >
+                              <Text style={styles.dateConfirmButtonText}>Confirm</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </Modal>
+                  </>
+                )}
+              </View>
+
+              <View style={styles.datePickerField}>
+                <Text style={styles.datePickerLabel}>End Date</Text>
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
+                    value={newTimelineEndDate}
+                    onChange={(e) => setNewTimelineEndDate(e.target.value)}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderWidth: 1,
+                      borderColor: '#d1d5db',
+                      borderRadius: 8,
+                      padding: 12,
+                      fontSize: 16,
+                      color: '#1f2937',
+                      marginBottom: 8,
+                      width: '100%',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.datePickerButton}
+                      onPress={() => setShowEndDatePicker(true)}
+                    >
+                      <Calendar size={20} color="#6b7280" />
+                      <Text style={styles.datePickerButtonText}>
+                        {newTimelineEndDate || 'Select end date'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Modal
+                      visible={showEndDatePicker}
+                      transparent
+                      animationType="fade"
+                      onRequestClose={() => setShowEndDatePicker(false)}
+                    >
+                      <View style={styles.modalOverlay}>
+                        <View style={[styles.datePickerModal, { backgroundColor: '#ffffff' }]}>
+                          <View style={styles.datePickerHeader}>
+                            <Text style={styles.datePickerTitle}>Select End Date</Text>
+                            <TouchableOpacity onPress={() => setShowEndDatePicker(false)}>
+                              <X size={24} color="#1f2937" />
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={styles.datePickerContent}>
+                            <View style={styles.dateSelector}>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempEndDate);
+                                  date.setMonth(date.getMonth() - 1);
+                                  setTempEndDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>◀</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.dateDisplay}>
+                                {tempEndDate.toLocaleDateString('en-US', {
+                                  month: 'long',
+                                  year: 'numeric'
+                                })}
+                              </Text>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempEndDate);
+                                  date.setMonth(date.getMonth() + 1);
+                                  setTempEndDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>▶</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.dateSelector}>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempEndDate);
+                                  date.setDate(date.getDate() - 1);
+                                  setTempEndDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>◀</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.dateDisplay}>
+                                {tempEndDate.toLocaleDateString('en-US', {
+                                  day: 'numeric',
+                                  month: 'short'
+                                })}
+                              </Text>
+                              <TouchableOpacity
+                                style={styles.dateSelectorButton}
+                                onPress={() => {
+                                  const date = new Date(tempEndDate);
+                                  date.setDate(date.getDate() + 1);
+                                  setTempEndDate(date);
+                                }}
+                              >
+                                <Text style={styles.dateSelectorButtonText}>▶</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.dateQuickActions}>
+                              <TouchableOpacity
+                                style={styles.quickActionButton}
+                                onPress={() => setTempEndDate(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000))}
+                              >
+                                <Text style={styles.quickActionText}>90 Days</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+
+                          <View style={styles.datePickerActions}>
+                            <TouchableOpacity
+                              style={[styles.datePickerActionButton, styles.dateCancelButton]}
+                              onPress={() => setShowEndDatePicker(false)}
+                            >
+                              <Text style={styles.dateCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.datePickerActionButton, styles.dateConfirmButton]}
+                              onPress={() => {
+                                setNewTimelineEndDate(tempEndDate.toISOString().split('T')[0]);
+                                setShowEndDatePicker(false);
+                              }}
+                            >
+                              <Text style={styles.dateConfirmButtonText}>Confirm</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </Modal>
+                  </>
+                )}
+              </View>
               <TouchableOpacity
                 style={styles.createTimelineSubmit}
                 onPress={handleCreateCustomTimeline}
@@ -1394,5 +1664,135 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     padding: 4,
+  },
+  datePickerField: {
+    marginBottom: 12,
+  },
+  datePickerLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
+  datePickerButtonText: {
+    fontSize: 16,
+    color: '#1f2937',
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  datePickerModal: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  datePickerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  datePickerContent: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  dateSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+  },
+  dateSelectorButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateSelectorButtonText: {
+    fontSize: 20,
+    color: '#1f2937',
+    fontWeight: '600',
+  },
+  dateDisplay: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  dateQuickActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  quickActionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#0078d4',
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0078d4',
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  datePickerActionButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  dateCancelButton: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
+  },
+  dateCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  dateConfirmButton: {
+    backgroundColor: '#0078d4',
+  },
+  dateConfirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
