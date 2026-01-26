@@ -24,6 +24,8 @@ export interface UnifiedGoal {
   timeline_id?: string;
   timeline_name?: string;
   timeline_source?: 'global' | 'custom';
+  user_global_timeline_id?: string;  // ADD THIS
+  custom_timeline_id?: string;        // ADD THIS
   start_date?: string;
   end_date?: string;
   current_week?: number;
