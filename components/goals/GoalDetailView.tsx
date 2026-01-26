@@ -10,7 +10,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, Edit3 } from 'lucide-react-native';
+import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, Edit3, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
 import { EditGoalModal } from './EditGoalModal';
@@ -112,6 +112,14 @@ export function GoalDetailView({
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('12W');
+
+  // Week navigation state
+  const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(1);
+
+  // Update displayedWeekNumber when goal changes
+  useEffect(() => {
+    setDisplayedWeekNumber(currentGoal.current_week || 1);
+  }, [currentGoal.current_week]);
 
   // Update currentGoal when goal prop changes
   useEffect(() => {
@@ -786,19 +794,33 @@ export function GoalDetailView({
     }
 
     if (currentGoal.goal_type === '12week' && currentGoal.timeline_name) {
-      const weekInfo = currentGoal.current_week ? ` • Week ${currentGoal.current_week} of 12` : '';
-      return `${currentGoal.timeline_name}${weekInfo}`;
+      return currentGoal.timeline_name;
     }
 
     if (currentGoal.goal_type === 'custom' && currentGoal.timeline_name) {
-      const weekInfo =
-        currentGoal.current_week && currentGoal.total_weeks
-          ? ` • Week ${currentGoal.current_week} of ${currentGoal.total_weeks}`
-          : '';
-      return `${currentGoal.timeline_name}${weekInfo}`;
+      return currentGoal.timeline_name;
     }
 
     return 'Goal Timeline';
+  };
+
+  const getTotalWeeks = () => {
+    if (currentGoal.goal_type === '12week') return 12;
+    if (currentGoal.goal_type === 'custom') return currentGoal.total_weeks || 1;
+    return 1;
+  };
+
+  const handlePreviousWeek = () => {
+    if (displayedWeekNumber > 1) {
+      setDisplayedWeekNumber(prev => prev - 1);
+    }
+  };
+
+  const handleNextWeek = () => {
+    const totalWeeks = getTotalWeeks();
+    if (displayedWeekNumber < totalWeeks) {
+      setDisplayedWeekNumber(prev => prev + 1);
+    }
   };
 
   const renderHeader = () => (
@@ -848,51 +870,93 @@ export function GoalDetailView({
     </View>
   );
 
-  const renderGoalBanner = () => (
-    <View style={[styles.goalBanner, { backgroundColor: colors.surface }]}>
-      <View style={styles.bannerTop}>
-        <View style={[styles.timelineBadge, { backgroundColor: colors.primary + '20' }]}>
-          <Text style={[styles.timelineBadgeText, { color: colors.primary }]}>
-            {getTimelineBadge()}
-          </Text>
-        </View>
-        <View style={styles.bannerRight}>
-          {/* Edit Button */}
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={handleEditGoalPress}
-          >
-            <Edit3 size={16} color={colors.primary} />
-            <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit</Text>
-          </TouchableOpacity>
-          {currentGoal.progress !== undefined && (
-            <Text style={[styles.progressPercentage, { color: colors.text }]}>
-              {Math.round(currentGoal.progress)}%
+  const renderGoalBanner = () => {
+    const totalWeeks = getTotalWeeks();
+    const cumulativeProgress = currentGoal.progress !== undefined ? Math.round(currentGoal.progress) : 0;
+    const showWeekNav = currentGoal.goal_type === '12week' || currentGoal.goal_type === 'custom';
+
+    return (
+      <View style={[styles.goalBanner, { backgroundColor: colors.surface }]}>
+        <View style={styles.bannerTop}>
+          <View style={[styles.timelineBadge, { backgroundColor: colors.primary + '20' }]}>
+            <Text style={[styles.timelineBadgeText, { color: colors.primary }]}>
+              {getTimelineBadge()}
             </Text>
-          )}
+          </View>
         </View>
+
+        {showWeekNav && (
+          <View style={[styles.weekNavRow, { borderBottomColor: colors.border }]}>
+            <View style={styles.weekNavLeft}>
+              <TouchableOpacity
+                onPress={handlePreviousWeek}
+                disabled={displayedWeekNumber <= 1}
+                style={[styles.weekNavArrow, displayedWeekNumber <= 1 && styles.weekNavArrowDisabled]}
+              >
+                <ChevronLeft size={20} color={displayedWeekNumber <= 1 ? colors.textSecondary : colors.text} />
+              </TouchableOpacity>
+
+              <Text style={[styles.weekNavText, { color: colors.text }]}>
+                Week {displayedWeekNumber} of {totalWeeks}
+              </Text>
+
+              <TouchableOpacity
+                onPress={handleNextWeek}
+                disabled={displayedWeekNumber >= totalWeeks}
+                style={[styles.weekNavArrow, displayedWeekNumber >= totalWeeks && styles.weekNavArrowDisabled]}
+              >
+                <ChevronRight size={20} color={displayedWeekNumber >= totalWeeks ? colors.textSecondary : colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekNavRight}>
+              <TouchableOpacity onPress={handleEditGoalPress}>
+                <Text style={[styles.editLink, { color: colors.primary }]}>Edit</Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.totalProgress, { color: colors.text }]}>
+                Total {cumulativeProgress}%
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {!showWeekNav && currentGoal.progress !== undefined && (
+          <View style={styles.bannerRight}>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={handleEditGoalPress}
+            >
+              <Edit3 size={16} color={colors.primary} />
+              <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit</Text>
+            </TouchableOpacity>
+            <Text style={[styles.progressPercentage, { color: colors.text }]}>
+              {cumulativeProgress}%
+            </Text>
+          </View>
+        )}
+
+        {currentGoal.progress !== undefined && (
+          <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { backgroundColor: colors.primary, width: `${currentGoal.progress}%` },
+              ]}
+            />
+          </View>
+        )}
+
+        {currentGoal.parent_goal_title && (
+          <TouchableOpacity style={styles.parentGoalLink} activeOpacity={0.7}>
+            <Text style={[styles.parentGoalLinkText, { color: colors.textSecondary }]}>
+              → supports <Text style={{ fontWeight: '600' }}>{currentGoal.parent_goal_title}</Text>
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
-
-      {currentGoal.progress !== undefined && (
-        <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
-          <View
-            style={[
-              styles.progressBarFill,
-              { backgroundColor: colors.primary, width: `${currentGoal.progress}%` },
-            ]}
-          />
-        </View>
-      )}
-
-      {currentGoal.parent_goal_title && (
-        <TouchableOpacity style={styles.parentGoalLink} activeOpacity={0.7}>
-          <Text style={[styles.parentGoalLinkText, { color: colors.textSecondary }]}>
-            → supports <Text style={{ fontWeight: '600' }}>{currentGoal.parent_goal_title}</Text>
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+    );
+  };
 
   const renderActTab = () => {
     if (loading) {
@@ -1581,6 +1645,42 @@ const styles = StyleSheet.create({
   },
   parentGoalLinkText: {
     fontSize: 14,
+  },
+  weekNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    marginBottom: 12,
+  },
+  weekNavLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  weekNavRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  weekNavArrow: {
+    padding: 4,
+  },
+  weekNavArrowDisabled: {
+    opacity: 0.4,
+  },
+  weekNavText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  editLink: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  totalProgress: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   tabContent: {
     flex: 1,
