@@ -71,6 +71,12 @@ export function GoalDetailView({
   const [oneTimeActions, setOneTimeActions] = useState<OneTimeActionResult[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // Action creation state
+  const [showAddActionModal, setShowAddActionModal] = useState(false);
+  const [newActionTitle, setNewActionTitle] = useState('');
+  const [newActionFrequency, setNewActionFrequency] = useState(7);
+  const [creatingAction, setCreatingAction] = useState(false);
+
   // Ideas tab state
   const [ideas, setIdeas] = useState<DepositIdea[]>([]);
   const [ideasLoading, setIdeasLoading] = useState(false);
@@ -751,13 +757,54 @@ export function GoalDetailView({
 
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={onAddAction}
+          onPress={() => setShowAddActionModal(true)}
         >
           <Plus size={20} color="#ffffff" />
           <Text style={styles.addButtonText}>Add Action</Text>
         </TouchableOpacity>
       </View>
     );
+  };
+
+  const handleCreateAction = async () => {
+    if (!newActionTitle.trim()) {
+      Alert.alert('Error', 'Please enter an action name');
+      return;
+    }
+
+    setCreatingAction(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user found');
+
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .insert({
+          user_id: user.id,
+          title: newActionTitle.trim(),
+          parent_type: 'goal',
+          parent_id: goal.id,
+          is_recurring: true,
+          frequency_per_week: newActionFrequency,
+          status: 'active',
+          created_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+
+      setShowAddActionModal(false);
+      setNewActionTitle('');
+      setNewActionFrequency(7);
+      setRefreshTrigger(prev => prev + 1);
+      onGoalUpdated();
+      Alert.alert('Success', 'Action created successfully');
+    } catch (error) {
+      console.error('Error creating action:', error);
+      Alert.alert('Error', 'Failed to create action');
+    } finally {
+      setCreatingAction(false);
+    }
   };
 
   const renderIdeasTab = () => {
@@ -1062,6 +1109,85 @@ export function GoalDetailView({
         {renderGoalBanner()}
         {renderContent()}
       </ScrollView>
+
+      {/* Add Action Modal */}
+      <Modal
+        visible={showAddActionModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddActionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add Action</Text>
+              <TouchableOpacity onPress={() => setShowAddActionModal(false)}>
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Action Name</Text>
+              <TextInput
+                style={[styles.modalInput, {
+                  color: colors.text,
+                  borderColor: colors.border,
+                  marginBottom: 16
+                }]}
+                value={newActionTitle}
+                onChangeText={setNewActionTitle}
+                placeholder="e.g., Morning workout"
+                placeholderTextColor={colors.textSecondary}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.text, marginBottom: 8 }]}>Times per Week</Text>
+              <View style={styles.frequencyButtons}>
+                {[1, 2, 3, 4, 5, 6, 7].map(freq => (
+                  <TouchableOpacity
+                    key={freq}
+                    style={[
+                      styles.frequencyButton,
+                      { borderColor: colors.border },
+                      newActionFrequency === freq && {
+                        backgroundColor: colors.primary,
+                        borderColor: colors.primary
+                      }
+                    ]}
+                    onPress={() => setNewActionFrequency(freq)}
+                  >
+                    <Text style={[
+                      styles.frequencyButtonText,
+                      { color: newActionFrequency === freq ? '#ffffff' : colors.text }
+                    ]}>
+                      {freq}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton, { borderColor: colors.border }]}
+                onPress={() => setShowAddActionModal(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton, { backgroundColor: colors.primary }]}
+                onPress={handleCreateAction}
+                disabled={creatingAction}
+              >
+                {creatingAction ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Add Idea Modal */}
       <Modal
@@ -1607,6 +1733,32 @@ const styles = StyleSheet.create({
   },
   saveButton: {},
   modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  modalContent: {
+    padding: 16,
+  },
+  frequencyButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  frequencyButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  frequencyButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },

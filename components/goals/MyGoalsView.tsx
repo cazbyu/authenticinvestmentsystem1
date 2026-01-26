@@ -343,54 +343,51 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
     >
       {goal.title}
     </Text>
+    {goal.goal_type === '1y' && (
+      <View style={[styles.goalTypeBadge, { backgroundColor: '#dcfce7' }]}>
+        <Text style={[styles.goalTypeBadgeText, { color: '#166534' }]}>Annual Goal</Text>
+      </View>
+    )}
     {goal.goal_type === '12week' && (
-      <View style={[styles.goalTypeBadge, { backgroundColor: colors.primary + '15' }]}>
-        <Text style={[styles.goalTypeBadgeText, { color: colors.primary }]}>12 Week Goal</Text>
+      <View style={[styles.goalTypeBadge, { backgroundColor: '#dbeafe' }]}>
+        <Text style={[styles.goalTypeBadgeText, { color: '#1e40af' }]}>12 Week Goal</Text>
       </View>
     )}
     {goal.goal_type === 'custom' && (
-      <View style={[styles.goalTypeBadge, { backgroundColor: '#8b5cf6' + '15' }]}>
-        <Text style={[styles.goalTypeBadgeText, { color: '#8b5cf6' }]}>Custom Goal</Text>
+      <View style={[styles.goalTypeBadge, { backgroundColor: '#f3e8ff' }]}>
+        <Text style={[styles.goalTypeBadgeText, { color: '#7c3aed' }]}>Custom Goal</Text>
       </View>
     )}
   </View>
-  {goal.goal_type === '12week' && goal.progress !== undefined && (
+  {goal.progress !== undefined && (
     <View style={styles.progressBadge}>
       <Text style={styles.progressText}>{Math.round(goal.progress)}%</Text>
     </View>
   )}
 </View>
 
-        {goal.description && (
-          <Text style={[styles.goalDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-            {goal.description}
-          </Text>
-        )}
-
         <View style={styles.goalMeta}>
-          {goal.goal_type === '1y' && goal.year_target_date && (
+          {goal.goal_type === '1y' && (() => {
+            const now = new Date();
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            const diffTime = now.getTime() - startOfYear.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            const currentWeek = Math.floor(diffDays / 7) + 1;
+            return (
+              <View style={styles.metaItem}>
+                <Calendar size={14} color={colors.textSecondary} />
+                <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+                  Week {currentWeek} of 52
+                </Text>
+              </View>
+            );
+          })()}
+
+          {goal.goal_type === '12week' && currentCycleWeek > 0 && (
             <View style={styles.metaItem}>
               <Calendar size={14} color={colors.textSecondary} />
               <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                {new Date(goal.year_target_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-              </Text>
-            </View>
-          )}
-
-          {goal.goal_type === '1y' && goal.child_goal_count !== undefined && goal.child_goal_count > 0 && (
-            <View style={styles.metaItem}>
-              <Target size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                {goal.child_goal_count} supporting goal{goal.child_goal_count !== 1 ? 's' : ''}
-              </Text>
-            </View>
-          )}
-
-          {goal.parent_goal_title && (
-            <View style={styles.metaItem}>
-              <TrendingUp size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {goal.parent_goal_title}
+                Week {currentCycleWeek} of 12
               </Text>
             </View>
           )}
@@ -400,6 +397,15 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
               <Calendar size={14} color={colors.textSecondary} />
               <Text style={[styles.metaText, { color: colors.textSecondary }]}>
                 Week {goal.current_week} of {goal.total_weeks}
+              </Text>
+            </View>
+          )}
+
+          {goal.parent_goal_title && (
+            <View style={styles.metaItem}>
+              <TrendingUp size={14} color={colors.textSecondary} />
+              <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
+                {goal.parent_goal_title}
               </Text>
             </View>
           )}
