@@ -174,10 +174,15 @@ export function GoalDetailView({
   setLoadingTimeline(true);
   setTimelineError(null);
 
-  console.log('[GoalDetailView] fetchTimelineAndWeeks starting for goal:', {
+  // DEBUG: Log the full goal object
+  console.log('[DEBUG] Goal object:', {
+    id: goal.id,
+    title: goal.title,
     goal_type: goal.goal_type,
     user_global_timeline_id: goal.user_global_timeline_id,
     custom_timeline_id: goal.custom_timeline_id,
+    timeline_name: goal.timeline_name,
+    current_week: goal.current_week,
   });
 
   try {
