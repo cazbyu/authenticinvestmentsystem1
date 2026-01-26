@@ -565,7 +565,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
-            {mode === 'edit' ? 'Edit Action' : 'Add Action Effort'}
+            {mode === 'edit' ? 'Edit Action' : 'Add Action'}
           </Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <X size={24} color="#1f2937" />
