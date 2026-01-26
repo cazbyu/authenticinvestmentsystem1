@@ -608,11 +608,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   goalTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 8,
-  },
+  fontSize: 16,
+  fontWeight: '600',
+},
   annualGoalTitle: {
     fontSize: 18,
     fontWeight: '700',
