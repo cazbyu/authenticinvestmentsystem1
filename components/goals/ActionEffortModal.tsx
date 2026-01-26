@@ -128,12 +128,13 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       }
 
       // Process weeks with availability information
-      if (cycleWeeks && cycleWeeks.length > 0) {
-        const processed = processWeeksWithAvailability(cycleWeeks);
-        setProcessedWeeks(processed);
-      } else {
-        setProcessedWeeks([]);
-      }
+if (cycleWeeks && cycleWeeks.length > 0) {
+  const timelineSource = timeline?.source || 'global';
+  const processed = processWeeksWithAvailability(cycleWeeks, timelineSource);
+  setProcessedWeeks(processed);
+} else {
+  setProcessedWeeks([]);
+}
     }
   }, [visible, goal, mode, initialData, cycleWeeks]);
 
