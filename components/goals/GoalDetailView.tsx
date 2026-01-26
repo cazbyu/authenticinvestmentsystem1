@@ -10,13 +10,12 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, Edit3, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
 import { EditGoalModal } from './EditGoalModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
@@ -149,43 +148,6 @@ export function GoalDetailView({
     };
   }, [currentGoal.current_week]);
 
-  // Transform recurring actions to the format GoalProgressCard expects
-  const transformedWeekActions = useMemo(() => {
-    return recurringActions.map(action => ({
-      id: action.id,
-      title: action.title,
-      input_kind: 'count' as const,
-      weeklyActual: action.weeklyActual,
-      weeklyTarget: action.weeklyTarget,
-      logs: (action.completedDates || []).map(dateStr => ({
-        id: `log-${action.id}-${dateStr}`,
-        task_id: action.id,
-        measured_on: dateStr,
-        week_number: currentWeekData.weekNumber,
-        day_of_week: parseLocalDate(dateStr).getDay(),
-        value: 1,
-        completed: true,
-        created_at: dateStr,
-      })),
-    }));
-  }, [recurringActions, currentWeekData.weekNumber]);
-
-  // Create a progress object for GoalProgressCard
-  const goalProgress = useMemo(() => {
-    const totalActual = recurringActions.reduce((sum, a) => sum + Math.min(a.weeklyActual, a.weeklyTarget), 0);
-    const totalTarget = recurringActions.reduce((sum, a) => sum + a.weeklyTarget, 0);
-    const weeklyPercent = totalTarget > 0 ? Math.round((totalActual / totalTarget) * 100) : 0;
-
-    return {
-      currentWeek: currentWeekData.weekNumber,
-      daysRemaining: 0,
-      weeklyActual: totalActual,
-      weeklyTarget: totalTarget,
-      overallActual: totalActual,
-      overallTarget: totalTarget,
-      overallProgress: currentGoal.progress || weeklyPercent,
-    };
-  }, [recurringActions, currentWeekData.weekNumber, currentGoal.progress]);
 
   // Fetch timeline and weeks for the goal
   const fetchTimelineAndWeeks = useCallback(async () => {
@@ -958,6 +920,122 @@ export function GoalDetailView({
     );
   };
 
+  const getScheduledDaysFromRRule = (rrule: string): number[] => {
+    if (!rrule) return [];
+
+    const dayMap: Record<string, number> = {
+      SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6
+    };
+
+    const byDayMatch = rrule.match(/BYDAY=([^;]+)/);
+    if (!byDayMatch) return [];
+
+    const days = byDayMatch[1].split(',');
+    return days.map(day => dayMap[day]).filter(d => d !== undefined);
+  };
+
+  const getCompletedDaysForWeek = (action: RecurringActionResult): number[] => {
+    return action.completedDates?.map(dateStr => {
+      const date = parseLocalDate(dateStr);
+      return date.getDay();
+    }) || [];
+  };
+
+  const renderLeadingIndicatorCard = (action: RecurringActionResult) => {
+    const scheduledDays = getScheduledDaysFromRRule(action.recurrence_rule);
+    const completedDays = getCompletedDaysForWeek(action);
+    const targetDays = action.weeklyTarget || 1;
+    const completionCount = action.weeklyActual || 0;
+    const progressPercent = targetDays > 0 ? Math.round((completionCount / targetDays) * 100) : 0;
+
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    return (
+      <View key={action.id} style={[styles.liCard, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
+
+        <View style={styles.liProgressContainer}>
+          <View style={[styles.liProgressBar, { backgroundColor: colors.border }]}>
+            <View style={[styles.liProgressFill, { backgroundColor: colors.primary, width: `${progressPercent}%` }]} />
+          </View>
+          <Text style={[styles.liProgressText, { color: colors.text }]}>{progressPercent}%</Text>
+        </View>
+
+        <View style={styles.liDaysRow}>
+          <View style={styles.liDaysContainer}>
+            {dayLabels.map((label, index) => {
+              const isScheduled = scheduledDays.includes(index);
+              const isCompleted = completedDays.includes(index);
+
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.liDayColumn}
+                  onPress={() => isScheduled && handleToggleDay(action.id, index)}
+                  disabled={!isScheduled}
+                >
+                  <Text style={[styles.liDayLabel, { color: colors.textSecondary }]}>{label}</Text>
+                  <View style={[
+                    styles.liBubble,
+                    { borderColor: colors.border },
+                    isScheduled && styles.liBubbleScheduled,
+                    isCompleted && [styles.liBubbleCompleted, { backgroundColor: colors.primary, borderColor: colors.primary }],
+                    !isScheduled && [styles.liBubbleDisabled, { backgroundColor: colors.border + '40' }],
+                  ]}>
+                    {isCompleted && <View style={styles.liBubbleFill} />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.liCount, { color: colors.textSecondary }]}>
+            {completionCount}/{targetDays}
+          </Text>
+        </View>
+
+        {(action.roles?.length > 0 || action.domains?.length > 0) && (
+          <View style={styles.liChips}>
+            {action.roles?.map(role => (
+              <View key={role.id} style={[styles.chip, { backgroundColor: role.color || colors.border }]}>
+                <Text style={[styles.chipText, { color: colors.text }]}>{role.label}</Text>
+              </View>
+            ))}
+            {action.domains?.map(domain => (
+              <View key={domain.id} style={[styles.chip, { backgroundColor: colors.border }]}>
+                <Text style={[styles.chipText, { color: colors.text }]}>{domain.name}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const handleToggleDay = async (actionId: string, dayIndex: number) => {
+    try {
+      const today = new Date();
+      const currentDayOfWeek = today.getDay();
+
+      const dayOfWeek = dayIndex;
+
+      const daysFromToday = dayOfWeek - currentDayOfWeek;
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + daysFromToday);
+      targetDate.setHours(0, 0, 0, 0);
+
+      const dateString = formatLocalDate(targetDate);
+
+      const action = recurringActions.find(a => a.id === actionId);
+      const isCurrentlyCompleted = action?.completedDates?.includes(dateString) || false;
+
+      await handleToggleCompletion(actionId, dateString, isCurrentlyCompleted);
+    } catch (error) {
+      console.error('[GoalDetailView] Error toggling day:', error);
+      Alert.alert('Error', 'Failed to toggle completion');
+    }
+  };
+
   const renderActTab = () => {
     if (loading) {
       return (
@@ -980,27 +1058,8 @@ export function GoalDetailView({
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
               Leading Indicators • Tap circles to mark completion
             </Text>
-            
-            <GoalProgressCard
-              goal={{
-                ...currentGoal,
-                id: currentGoal.id,
-                title: currentGoal.title,
-                goal_type: currentGoal.goal_type,
-                start_date: currentGoal.start_date || currentWeekData.startDate,
-                end_date: currentGoal.end_date || currentWeekData.endDate,
-                roles: currentGoal.roles || [],
-                domains: currentGoal.domains || [],
-              }}
-              progress={goalProgress}
-              expanded={true}
-              week={currentWeekData}
-              weekActions={transformedWeekActions}
-              loadingWeekActions={false}
-              onAddAction={handleAddActionPress}
-              onToggleCompletion={handleToggleCompletion}
-              selectedWeekNumber={currentWeekData.weekNumber}
-            />
+
+            {recurringActions.map(action => renderLeadingIndicatorCard(action))}
           </View>
         )}
 
@@ -1685,6 +1744,102 @@ const styles = StyleSheet.create({
   tabContent: {
     flex: 1,
     padding: 16,
+  },
+  liCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  liTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  liProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  liProgressBar: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  liProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  liProgressText: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  liDaysRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  liDaysContainer: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  liDayColumn: {
+    alignItems: 'center',
+    width: 36,
+  },
+  liDayLabel: {
+    fontSize: 10,
+    marginBottom: 4,
+  },
+  liBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liBubbleScheduled: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+  },
+  liBubbleCompleted: {
+    borderWidth: 2,
+  },
+  liBubbleDisabled: {
+    opacity: 0.5,
+  },
+  liBubbleFill: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+  },
+  liCount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  liChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  chipText: {
+    fontSize: 12,
   },
   loadingContainer: {
     flex: 1,
