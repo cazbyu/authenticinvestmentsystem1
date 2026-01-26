@@ -485,10 +485,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
         />
       }
     >
-      <View style={[styles.weekHeader, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.weekText, { color: colors.text }]}>{currentWeekDates}</Text>
-      </View>
-
+      
       {!hasAnyGoals && (
         <View style={styles.emptyState}>
           <Target size={64} color={colors.textSecondary} style={styles.emptyIcon} />
