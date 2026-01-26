@@ -9,10 +9,20 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
-import { X, Plus } from 'lucide-react-native';
+import { X, Lock } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Timeline } from '@/hooks/useGoals';
+import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
+import {
+  getDefaultStartTime,
+  getDefaultEndTime,
+  formatTimeDisplay,
+  formatTimeForDB,
+  parseDBTime,
+  generateTimeOptions,
+} from '@/lib/timePickerUtils';
 
 interface Role {
   id: string;
@@ -35,6 +45,7 @@ interface TwelveWeekGoal {
   id: string;
   title: string;
   description?: string;
+  goal_type?: '12week' | 'custom';
   roles?: Array<{ id: string; label: string; color?: string }>;
   domains?: Array<{ id: string; name: string }>;
   keyRelationships?: Array<{ id: string; name: string }>;
@@ -54,7 +65,7 @@ interface ActionEffortModalProps {
   timeline: Timeline | null;
   createTaskWithWeekPlan: (taskData: any, timeline: Timeline) => Promise<any>;
   onDelete?: (actionId: string) => Promise<void>;
-  initialData?: any; // For editing existing actions
+  initialData?: any;
   mode?: 'create' | 'edit';
 }
 
@@ -69,11 +80,12 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   initialData,
   mode = 'create',
 }) => {
+  // Form state
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedWeeks, setSelectedWeeks] = useState<number[]>([]);
   const [recurrenceType, setRecurrenceType] = useState('daily');
-  const [selectedCustomDays, setSelectedCustomDays] = useState<number[]>([]); // 0=Sunday, 1=Monday, etc.
+  const [selectedCustomDays, setSelectedCustomDays] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Multi-select states
@@ -81,11 +93,30 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>([]);
   const [selectedKeyRelationshipIds, setSelectedKeyRelationshipIds] = useState<string[]>([]);
 
+  // Track inherited (locked) items
+  const [inheritedRoleIds, setInheritedRoleIds] = useState<string[]>([]);
+  const [inheritedDomainIds, setInheritedDomainIds] = useState<string[]>([]);
+
+  // Time picker state (for custom frequency)
+  const [isAnytime, setIsAnytime] = useState(true);
+  const [startTimeHours, setStartTimeHours] = useState(9);
+  const [startTimeMinutes, setStartTimeMinutes] = useState(0);
+  const [endTimeHours, setEndTimeHours] = useState(9);
+  const [endTimeMinutes, setEndTimeMinutes] = useState(30);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+
+  // Processed weeks with availability info
+  const [processedWeeks, setProcessedWeeks] = useState<ProcessedWeek[]>([]);
+
   // Data fetching states
   const [allRoles, setAllRoles] = useState<Role[]>([]);
   const [allDomains, setAllDomains] = useState<Domain[]>([]);
   const [allKeyRelationships, setAllKeyRelationships] = useState<KeyRelationship[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Generate time options for pickers
+  const timeOptions = generateTimeOptions();
 
   useEffect(() => {
     if (visible) {
@@ -95,8 +126,16 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       } else if (mode === 'edit' && initialData) {
         loadInitialData();
       }
+
+      // Process weeks with availability information
+      if (cycleWeeks && cycleWeeks.length > 0) {
+        const processed = processWeeksWithAvailability(cycleWeeks);
+        setProcessedWeeks(processed);
+      } else {
+        setProcessedWeeks([]);
+      }
     }
-  }, [visible, goal, mode, initialData]);
+  }, [visible, goal, mode, initialData, cycleWeeks]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -105,7 +144,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch all roles
       const { data: rolesData } = await supabase
         .from('0008-ap-roles')
         .select('id, label, color')
@@ -115,7 +153,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
       setAllRoles(rolesData || []);
 
-      // Fetch all domains
       const { data: domainsData } = await supabase
         .from('0008-ap-domains')
         .select('id, name')
@@ -123,7 +160,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
       setAllDomains(domainsData || []);
 
-      // Fetch all key relationships
       const { data: krData } = await supabase
         .from('0008-ap-key-relationships')
         .select('id, name, role_id')
@@ -146,7 +182,16 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setRecurrenceType('daily');
     setSelectedCustomDays([]);
 
-    // Pre-select inherited items from goal
+    // Reset time picker to defaults
+    const defaultStart = getDefaultStartTime();
+    const defaultEnd = getDefaultEndTime(defaultStart.hours, defaultStart.minutes);
+    setStartTimeHours(defaultStart.hours);
+    setStartTimeMinutes(defaultStart.minutes);
+    setEndTimeHours(defaultEnd.hours);
+    setEndTimeMinutes(defaultEnd.minutes);
+    setIsAnytime(true);
+
+    // Pre-select inherited items from goal and track them as locked
     if (goal) {
       console.log('[ActionEffortModal] Pre-filling from goal:', {
         goal_id: goal.id,
@@ -161,19 +206,19 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       const domainIds = goal.domains?.map(d => d.id) || [];
       const krIds = goal.keyRelationships?.map(kr => kr.id) || [];
 
-      console.log('[ActionEffortModal] Setting selected IDs:', {
-        roleIds,
-        domainIds,
-        krIds
-      });
-
+      // Set as selected AND track as inherited (locked)
       setSelectedRoleIds(roleIds);
       setSelectedDomainIds(domainIds);
       setSelectedKeyRelationshipIds(krIds);
+
+      setInheritedRoleIds(roleIds);
+      setInheritedDomainIds(domainIds);
     } else {
       setSelectedRoleIds([]);
       setSelectedDomainIds([]);
       setSelectedKeyRelationshipIds([]);
+      setInheritedRoleIds([]);
+      setInheritedDomainIds([]);
     }
   };
 
@@ -183,7 +228,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     console.log('[ActionEffortModal] Loading initial data:', initialData);
 
     setTitle(initialData.title || '');
-    setNotes(''); // Notes would need to be fetched separately if needed
+    setNotes('');
 
     // Parse recurrence rule to set frequency
     if (initialData.recurrence_rule) {
@@ -198,8 +243,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
           const days = byDayMatch[1].split(',');
           const dayMap: Record<string, number> = { 'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6 };
           const selectedDays = days.map(day => dayMap[day]).filter(d => d !== undefined);
-
-          console.log('[ActionEffortModal] Parsed days:', selectedDays);
 
           if (selectedDays.length === 7) {
             setRecurrenceType('daily');
@@ -223,45 +266,76 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       }
     }
 
-    // Load existing associations
-    const roleIds = initialData.roles?.map(r => r.id) || [];
-    const domainIds = initialData.domains?.map(d => d.id) || [];
-    const krIds = initialData.keyRelationships?.map(kr => kr.id) || [];
+    // Load time data if present
+    if (initialData.start_time) {
+      const parsed = parseDBTime(initialData.start_time);
+      if (parsed) {
+        setStartTimeHours(parsed.hours);
+        setStartTimeMinutes(parsed.minutes);
+      }
+    }
+    if (initialData.end_time) {
+      const parsed = parseDBTime(initialData.end_time);
+      if (parsed) {
+        setEndTimeHours(parsed.hours);
+        setEndTimeMinutes(parsed.minutes);
+      }
+    }
+    setIsAnytime(initialData.is_anytime !== false);
 
-    console.log('[ActionEffortModal] Loading associations:', {
-      roleIds,
-      domainIds,
-      krIds
-    });
+    // Load existing associations
+    const roleIds = initialData.roles?.map((r: any) => r.id) || [];
+    const domainIds = initialData.domains?.map((d: any) => d.id) || [];
+    const krIds = initialData.keyRelationships?.map((kr: any) => kr.id) || [];
 
     setSelectedRoleIds(roleIds);
     setSelectedDomainIds(domainIds);
     setSelectedKeyRelationshipIds(krIds);
 
-    // Load selected weeks from week plans
+    // In edit mode, inherited items come from the goal, not the action
+    if (goal) {
+      const inheritedRoles = goal.roles?.map(r => r.id) || [];
+      const inheritedDomains = goal.domains?.map(d => d.id) || [];
+      setInheritedRoleIds(inheritedRoles);
+      setInheritedDomainIds(inheritedDomains);
+    }
+
     const weeks = initialData.selectedWeeks || [];
-    console.log('[ActionEffortModal] Loading selected weeks:', weeks);
     setSelectedWeeks(weeks);
   };
+
   const handleMultiSelect = (field: 'roles' | 'domains' | 'keyRelationships', id: string) => {
     let setter: React.Dispatch<React.SetStateAction<string[]>>;
     let currentSelection: string[];
+    let inheritedIds: string[];
 
     switch (field) {
       case 'roles':
         setter = setSelectedRoleIds;
         currentSelection = selectedRoleIds;
+        inheritedIds = inheritedRoleIds;
         break;
       case 'domains':
         setter = setSelectedDomainIds;
         currentSelection = selectedDomainIds;
+        inheritedIds = inheritedDomainIds;
         break;
       case 'keyRelationships':
         setter = setSelectedKeyRelationshipIds;
         currentSelection = selectedKeyRelationshipIds;
+        inheritedIds = []; // Key relationships aren't locked
         break;
       default:
         return;
+    }
+
+    // Prevent removing inherited (locked) items
+    if (currentSelection.includes(id) && inheritedIds.includes(id)) {
+      Alert.alert(
+        'Cannot Remove',
+        'This item is inherited from the goal and cannot be removed from the action.'
+      );
+      return;
     }
 
     const newSelection = currentSelection.includes(id)
@@ -271,7 +345,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   };
 
   const handleWeekToggle = (weekNumber: number) => {
-    setSelectedWeeks(prev => 
+    setSelectedWeeks(prev =>
       prev.includes(weekNumber)
         ? prev.filter(w => w !== weekNumber)
         : [...prev, weekNumber]
@@ -279,7 +353,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   };
 
   const handleSelectAll = () => {
-    const allWeekNumbers = cycleWeeks.map(w => w.week_number);
+    const allWeekNumbers = processedWeeks.map(w => w.week_number);
     if (selectedWeeks.length === allWeekNumbers.length) {
       setSelectedWeeks([]);
     } else {
@@ -290,16 +364,38 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   const handleRecurrenceSelect = (type: string) => {
     setRecurrenceType(type);
     if (type !== 'custom') {
-      setSelectedCustomDays([]); // Clear custom days when switching away from custom
+      setSelectedCustomDays([]);
+      setIsAnytime(true); // Reset to anytime when switching away from custom
     }
   };
 
   const handleCustomDayToggle = (dayIndex: number) => {
-    setSelectedCustomDays(prev => 
+    setSelectedCustomDays(prev =>
       prev.includes(dayIndex)
         ? prev.filter(d => d !== dayIndex)
         : [...prev, dayIndex]
     );
+  };
+
+  const handleTimeSelect = (type: 'start' | 'end', hours: number, minutes: number) => {
+    if (type === 'start') {
+      setStartTimeHours(hours);
+      setStartTimeMinutes(minutes);
+      setShowStartTimePicker(false);
+
+      // Auto-adjust end time if it's before start time
+      const startTotal = hours * 60 + minutes;
+      const endTotal = endTimeHours * 60 + endTimeMinutes;
+      if (endTotal <= startTotal) {
+        const newEnd = getDefaultEndTime(hours, minutes);
+        setEndTimeHours(newEnd.hours);
+        setEndTimeMinutes(newEnd.minutes);
+      }
+    } else {
+      setEndTimeHours(hours);
+      setEndTimeMinutes(minutes);
+      setShowEndTimePicker(false);
+    }
   };
 
   const getTargetDays = () => {
@@ -317,12 +413,10 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     } else if (recurrenceType === 'daily') {
       return 'RRULE:FREQ=DAILY';
     } else {
-      // For other frequencies (6days, 5days, etc.), we'll use daily with interval
       const days = parseInt(recurrenceType.replace('days', '').replace('day', ''));
       if (days === 7) {
         return 'RRULE:FREQ=DAILY';
       } else {
-        // For now, treat as weekly with specific days (Mon-Fri for 5days, etc.)
         const weekdays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
         const byDays = weekdays.slice(0, days).join(',');
         return `RRULE:FREQ=WEEKLY;BYDAY=${byDays}`;
@@ -351,7 +445,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       return;
     }
 
-    // Validate goal type matches timeline source
     if (goal?.goal_type === '12week' && timeline.source !== 'global') {
       Alert.alert('Error', '12-week goals can only be used with global timelines.');
       return;
@@ -367,8 +460,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       const targetDays = getTargetDays();
       const recurrenceRule = generateRecurrenceRule();
 
-      // Create or update the task with week plan
-      const taskData = {
+      // Build task data with time fields for custom frequency
+      const taskData: any = {
         title: title.trim(),
         description: notes.trim() || undefined,
         twelve_wk_goal_id: goal?.goal_type === '12week' ? goal.id : undefined,
@@ -378,21 +471,36 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         selectedRoleIds,
         selectedDomainIds,
         selectedKeyRelationshipIds,
-        selectedWeeks: selectedWeeks.map(weekNumber => ({
-          weekNumber,
-          targetDays,
-        })),
+        selectedWeeks: selectedWeeks.map(weekNumber => {
+          // Find the processed week to get available days
+          const processedWeek = processedWeeks.find(w => w.week_number === weekNumber);
+          const effectiveTarget = processedWeek
+            ? getEffectiveTargetDays(targetDays, processedWeek.start_date, processedWeek.end_date)
+            : targetDays;
+
+          return {
+            weekNumber,
+            targetDays: effectiveTarget,
+          };
+        }),
         ...(mode === 'edit' && initialData ? { id: initialData.id } : {}),
       };
+
+      // Add time fields for custom frequency (scheduled events)
+      if (recurrenceType === 'custom' && !isAnytime) {
+        taskData.start_time = formatTimeForDB(startTimeHours, startTimeMinutes);
+        taskData.end_time = formatTimeForDB(endTimeHours, endTimeMinutes);
+        taskData.is_anytime = false;
+        taskData.type = 'event';
+      } else {
+        taskData.is_anytime = true;
+        taskData.type = 'task';
+      }
 
       await createTaskWithWeekPlan(taskData, timeline);
 
       console.log('[ActionEffortModal] Task saved successfully, closing modal');
-
-      // Call onClose to trigger parent refresh (this will refresh the goals list)
       onClose();
-
-      // Show success alert after triggering refresh
       Alert.alert('Success', `Action ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
     } catch (error) {
       console.error('Error saving action:', error);
@@ -404,7 +512,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
   const handleDelete = () => {
     if (!initialData?.id || !onDelete) return;
-    
+
     Alert.alert(
       'Delete Action',
       'Are you sure you want to delete this action? This will remove all associated data and cannot be undone.',
@@ -430,15 +538,16 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       ]
     );
   };
+
   const getRecurrenceLabel = (type: string) => {
     switch (type) {
       case 'daily': return 'Daily';
-      case '6days': return '6 days a week';
-      case '5days': return '5 days a week';
-      case '4days': return '4 days a week';
-      case '3days': return '3 days a week';
-      case '2days': return 'Twice a week';
-      case '1day': return 'Once a week';
+      case '6days': return '6 days';
+      case '5days': return '5 days';
+      case '4days': return '4 days';
+      case '3days': return '3 days';
+      case '2days': return '2 days';
+      case '1day': return '1 day';
       case 'custom': return 'Custom';
       default: return 'Custom';
     }
@@ -492,31 +601,50 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                 />
               </View>
 
-              {/* Weeks */}
+              {/* Weeks - Dynamic with partial week indicators */}
               <View style={styles.field}>
                 <Text style={styles.label}>Weeks *</Text>
                 <View style={styles.weekSelector}>
                   <TouchableOpacity
-                    style={[styles.weekButton, selectedWeeks.length === 12 && styles.weekButtonSelected]}
+                    style={[
+                      styles.weekButton,
+                      selectedWeeks.length === processedWeeks.length && processedWeeks.length > 0 && styles.weekButtonSelected
+                    ]}
                     onPress={handleSelectAll}
                   >
-                    <Text style={[styles.weekButtonText, selectedWeeks.length === 12 && styles.weekButtonTextSelected]}>
+                    <Text style={[
+                      styles.weekButtonText,
+                      selectedWeeks.length === processedWeeks.length && processedWeeks.length > 0 && styles.weekButtonTextSelected
+                    ]}>
                       Select All
                     </Text>
                   </TouchableOpacity>
 
-                  {cycleWeeks.map(weekData => (
+                  {processedWeeks.map(weekData => (
                     <TouchableOpacity
                       key={weekData.week_number}
-                      style={[styles.weekButton, selectedWeeks.includes(weekData.week_number) && styles.weekButtonSelected]}
+                      style={[
+                        styles.weekButton,
+                        selectedWeeks.includes(weekData.week_number) && styles.weekButtonSelected,
+                        weekData.is_partial && styles.weekButtonPartial
+                      ]}
                       onPress={() => handleWeekToggle(weekData.week_number)}
                     >
-                      <Text style={[styles.weekButtonText, selectedWeeks.includes(weekData.week_number) && styles.weekButtonTextSelected]}>
-                        Week {weekData.week_number}
+                      <Text style={[
+                        styles.weekButtonText,
+                        selectedWeeks.includes(weekData.week_number) && styles.weekButtonTextSelected
+                      ]}>
+                        Wk {weekData.week_number}
+                        {weekData.is_partial && ` (${weekData.available_days}d)`}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
+                {processedWeeks.some(w => w.is_partial) && (
+                  <Text style={styles.partialWeekNote}>
+                    Partial weeks shown with available days. Target will be capped automatically.
+                  </Text>
+                )}
               </View>
 
               {/* Frequency */}
@@ -537,7 +665,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                 </View>
               </View>
 
-              {/* Custom Days Selection (only show when custom is selected) */}
+              {/* Custom Days Selection with Time Picker */}
               {recurrenceType === 'custom' && (
                 <View style={styles.field}>
                   <Text style={styles.label}>Select Days *</Text>
@@ -560,20 +688,115 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                       </TouchableOpacity>
                     ))}
                   </View>
+
+                  {/* Time Selection */}
+                  <View style={styles.timeSection}>
+                    <View style={styles.anytimeToggle}>
+                      <Text style={styles.anytimeLabel}>Anytime (no specific time)</Text>
+                      <Switch
+                        value={isAnytime}
+                        onValueChange={setIsAnytime}
+                        trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                        thumbColor="#ffffff"
+                      />
+                    </View>
+
+                    {!isAnytime && (
+                      <View style={styles.timePickerContainer}>
+                        <View style={styles.timePickerRow}>
+                          <View style={styles.timePickerColumn}>
+                            <Text style={styles.timePickerLabel}>Start Time</Text>
+                            <TouchableOpacity
+                              style={styles.timePickerButton}
+                              onPress={() => setShowStartTimePicker(!showStartTimePicker)}
+                            >
+                              <Text style={styles.timePickerButtonText}>
+                                {formatTimeDisplay(startTimeHours, startTimeMinutes)}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={styles.timePickerColumn}>
+                            <Text style={styles.timePickerLabel}>End Time</Text>
+                            <TouchableOpacity
+                              style={styles.timePickerButton}
+                              onPress={() => setShowEndTimePicker(!showEndTimePicker)}
+                            >
+                              <Text style={styles.timePickerButtonText}>
+                                {formatTimeDisplay(endTimeHours, endTimeMinutes)}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        {/* Start Time Picker Dropdown */}
+                        {showStartTimePicker && (
+                          <View style={styles.timeOptionsContainer}>
+                            <Text style={styles.timeOptionsTitle}>Select Start Time</Text>
+                            <ScrollView style={styles.timeOptionsList} nestedScrollEnabled>
+                              {timeOptions.map((option, idx) => (
+                                <TouchableOpacity
+                                  key={idx}
+                                  style={[
+                                    styles.timeOption,
+                                    option.hours === startTimeHours && option.minutes === startTimeMinutes && styles.timeOptionSelected
+                                  ]}
+                                  onPress={() => handleTimeSelect('start', option.hours, option.minutes)}
+                                >
+                                  <Text style={[
+                                    styles.timeOptionText,
+                                    option.hours === startTimeHours && option.minutes === startTimeMinutes && styles.timeOptionTextSelected
+                                  ]}>
+                                    {option.label}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+
+                        {/* End Time Picker Dropdown */}
+                        {showEndTimePicker && (
+                          <View style={styles.timeOptionsContainer}>
+                            <Text style={styles.timeOptionsTitle}>Select End Time</Text>
+                            <ScrollView style={styles.timeOptionsList} nestedScrollEnabled>
+                              {timeOptions.map((option, idx) => (
+                                <TouchableOpacity
+                                  key={idx}
+                                  style={[
+                                    styles.timeOption,
+                                    option.hours === endTimeHours && option.minutes === endTimeMinutes && styles.timeOptionSelected
+                                  ]}
+                                  onPress={() => handleTimeSelect('end', option.hours, option.minutes)}
+                                >
+                                  <Text style={[
+                                    styles.timeOptionText,
+                                    option.hours === endTimeHours && option.minutes === endTimeMinutes && styles.timeOptionTextSelected
+                                  ]}>
+                                    {option.label}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </View>
                 </View>
               )}
 
-              {/* Roles */}
+              {/* Roles - with locked inherited items */}
               <View style={styles.field}>
                 <Text style={styles.label}>Roles</Text>
                 <View style={styles.checkboxGrid}>
                   {allRoles.map(role => {
                     const isSelected = selectedRoleIds.includes(role.id);
-                    const isInherited = goal.roles?.some(gr => gr.id === role.id);
+                    const isInherited = inheritedRoleIds.includes(role.id);
                     return (
                       <TouchableOpacity
                         key={role.id}
-                        style={styles.checkItem}
+                        style={[styles.checkItem, isInherited && styles.checkItemLocked]}
                         onPress={() => handleMultiSelect('roles', role.id)}
                       >
                         <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
@@ -581,28 +804,28 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                         </View>
                         <Text style={[
                           styles.checkLabel,
-                          isInherited && styles.inheritedLabel
+                          isInherited && styles.lockedLabel
                         ]}>
                           {role.label}
-                          {isInherited && ' (from goal)'}
                         </Text>
+                        {isInherited && <Lock size={12} color="#0078d4" style={styles.lockIcon} />}
                       </TouchableOpacity>
                     );
                   })}
                 </View>
               </View>
 
-              {/* Domains */}
+              {/* Domains - with locked inherited items */}
               <View style={styles.field}>
-                <Text style={styles.label}>Domains</Text>
+                <Text style={styles.label}>Wellness Zones</Text>
                 <View style={styles.checkboxGrid}>
                   {allDomains.map(domain => {
                     const isSelected = selectedDomainIds.includes(domain.id);
-                    const isInherited = goal.domains?.some(gd => gd.id === domain.id);
+                    const isInherited = inheritedDomainIds.includes(domain.id);
                     return (
                       <TouchableOpacity
                         key={domain.id}
-                        style={styles.checkItem}
+                        style={[styles.checkItem, isInherited && styles.checkItemLocked]}
                         onPress={() => handleMultiSelect('domains', domain.id)}
                       >
                         <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
@@ -610,25 +833,24 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                         </View>
                         <Text style={[
                           styles.checkLabel,
-                          isInherited && styles.inheritedLabel
+                          isInherited && styles.lockedLabel
                         ]}>
                           {domain.name}
-                          {isInherited && ' (from goal)'}
                         </Text>
+                        {isInherited && <Lock size={12} color="#0078d4" style={styles.lockIcon} />}
                       </TouchableOpacity>
                     );
                   })}
                 </View>
               </View>
 
-              {/* Key Relationships (filtered by selected roles) */}
+              {/* Key Relationships */}
               {filteredKeyRelationships.length > 0 && (
                 <View style={styles.field}>
                   <Text style={styles.label}>Key Relationships</Text>
                   <View style={styles.checkboxGrid}>
                     {filteredKeyRelationships.map(kr => {
                       const isSelected = selectedKeyRelationshipIds.includes(kr.id);
-                      const isInherited = goal.keyRelationships?.some(gkr => gkr.id === kr.id);
                       return (
                         <TouchableOpacity
                           key={kr.id}
@@ -638,13 +860,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                           <View style={[styles.checkbox, isSelected && styles.checkedBox]}>
                             {isSelected && <Text style={styles.checkmark}>✓</Text>}
                           </View>
-                          <Text style={[
-                            styles.checkLabel,
-                            isInherited && styles.inheritedLabel
-                          ]}>
-                            {kr.name}
-                            {isInherited && ' (from goal)'}
-                          </Text>
+                          <Text style={styles.checkLabel}>{kr.name}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -677,10 +893,10 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
               onPress={handleDelete}
               disabled={saving}
             >
-              <Text style={styles.deleteButtonText}>Delete Action</Text>
+              <Text style={styles.deleteButtonText}>Delete</Text>
             </TouchableOpacity>
           )}
-          
+
           <TouchableOpacity
             style={styles.cancelButton}
             onPress={onClose}
@@ -688,10 +904,10 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
-              styles.saveButton, 
+              styles.saveButton,
               (!title.trim() || selectedWeeks.length === 0 || saving) && styles.saveButtonDisabled,
               mode === 'edit' && onDelete && styles.saveButtonWithDelete
             ]}
@@ -769,7 +985,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 8,
   },
   input: {
     backgroundColor: '#ffffff',
@@ -802,6 +1017,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f2937',
     borderColor: '#1f2937',
   },
+  weekButtonPartial: {
+    borderStyle: 'dashed',
+    borderColor: '#f59e0b',
+    borderWidth: 2,
+  },
   weekButtonText: {
     fontSize: 14,
     fontWeight: '500',
@@ -809,6 +1029,12 @@ const styles = StyleSheet.create({
   },
   weekButtonTextSelected: {
     color: '#ffffff',
+  },
+  partialWeekNote: {
+    fontSize: 12,
+    color: '#f59e0b',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   frequencySelector: {
     flexDirection: 'row',
@@ -862,6 +1088,87 @@ const styles = StyleSheet.create({
   customDayButtonTextSelected: {
     color: '#ffffff',
   },
+  timeSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  anytimeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  anytimeLabel: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  timePickerContainer: {
+    gap: 12,
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  timePickerColumn: {
+    flex: 1,
+  },
+  timePickerLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  timePickerButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  timePickerButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1f2937',
+  },
+  timeOptionsContainer: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    marginTop: 8,
+    maxHeight: 200,
+  },
+  timeOptionsTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  timeOptionsList: {
+    maxHeight: 168,
+  },
+  timeOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  timeOptionSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  timeOptionText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  timeOptionTextSelected: {
+    color: '#0078d4',
+    fontWeight: '600',
+  },
   checkboxGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -872,6 +1179,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '48%',
     marginBottom: 8,
+  },
+  checkItemLocked: {
+    opacity: 0.9,
   },
   checkbox: {
     width: 18,
@@ -897,9 +1207,12 @@ const styles = StyleSheet.create({
     color: '#374151',
     flex: 1,
   },
-  inheritedLabel: {
+  lockedLabel: {
     fontWeight: '600',
     color: '#0078d4',
+  },
+  lockIcon: {
+    marginLeft: 4,
   },
   actions: {
     flexDirection: 'row',
