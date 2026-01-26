@@ -611,6 +611,23 @@ const styles = StyleSheet.create({
   fontSize: 16,
   fontWeight: '600',
 },
+
+  goalTitleContainer: {
+  flex: 1,
+  marginRight: 8,
+},
+goalTypeBadge: {
+  alignSelf: 'flex-start',
+  paddingHorizontal: 8,
+  paddingVertical: 3,
+  borderRadius: 6,
+  marginTop: 6,
+},
+goalTypeBadgeText: {
+  fontSize: 11,
+  fontWeight: '600',
+},
+  
   annualGoalTitle: {
     fontSize: 18,
     fontWeight: '700',
