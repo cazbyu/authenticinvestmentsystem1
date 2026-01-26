@@ -349,22 +349,34 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
         accessibilityRole="button"
       >
         <View style={styles.goalCardHeader}>
-          <Text
-            style={[
-              styles.goalTitle,
-              isAnnualGoal && styles.annualGoalTitle,
-              { color: colors.text }
-            ]}
-            numberOfLines={2}
-          >
-            {goal.title}
-          </Text>
-          {goal.goal_type === '12week' && goal.progress !== undefined && (
-            <View style={styles.progressBadge}>
-              <Text style={styles.progressText}>{Math.round(goal.progress)}%</Text>
-            </View>
-          )}
-        </View>
+  <View style={styles.goalTitleContainer}>
+    <Text
+      style={[
+        styles.goalTitle,
+        isAnnualGoal && styles.annualGoalTitle,
+        { color: colors.text }
+      ]}
+      numberOfLines={2}
+    >
+      {goal.title}
+    </Text>
+    {goal.goal_type === '12week' && (
+      <View style={[styles.goalTypeBadge, { backgroundColor: colors.primary + '15' }]}>
+        <Text style={[styles.goalTypeBadgeText, { color: colors.primary }]}>12 Week Goal</Text>
+      </View>
+    )}
+    {goal.goal_type === 'custom' && (
+      <View style={[styles.goalTypeBadge, { backgroundColor: '#8b5cf6' + '15' }]}>
+        <Text style={[styles.goalTypeBadgeText, { color: '#8b5cf6' }]}>Custom Goal</Text>
+      </View>
+    )}
+  </View>
+  {goal.goal_type === '12week' && goal.progress !== undefined && (
+    <View style={styles.progressBadge}>
+      <Text style={styles.progressText}>{Math.round(goal.progress)}%</Text>
+    </View>
+  )}
+</View>
 
         {goal.description && (
           <Text style={[styles.goalDescription, { color: colors.textSecondary }]} numberOfLines={2}>
