@@ -171,25 +171,34 @@ export function GoalDetailView({
 
   // Fetch timeline and weeks for the goal
   const fetchTimelineAndWeeks = useCallback(async () => {
-    setLoadingTimeline(true);
-    setTimelineError(null);
+  setLoadingTimeline(true);
+  setTimelineError(null);
 
-    try {
-      const supabase = getSupabaseClient();
+  console.log('[GoalDetailView] fetchTimelineAndWeeks starting for goal:', {
+    goal_type: goal.goal_type,
+    user_global_timeline_id: goal.user_global_timeline_id,
+    custom_timeline_id: goal.custom_timeline_id,
+  });
 
-      // Determine timeline ID and source based on goal type
-      let timelineId: string | null = null;
-      let timelineSource: 'global' | 'custom' | null = null;
+  try {
+    const supabase = getSupabaseClient();
 
-      if (goal.goal_type === '12week' && goal.user_global_timeline_id) {
-        timelineId = goal.user_global_timeline_id;
-        timelineSource = 'global';
-      } else if (goal.goal_type === 'custom' && goal.custom_timeline_id) {
-        timelineId = goal.custom_timeline_id;
-        timelineSource = 'custom';
-      }
+    // Determine timeline ID and source based on goal type
+    let timelineId: string | null = null;
+    let timelineSource: 'global' | 'custom' | null = null;
 
-      if (!timelineId || !timelineSource) {
+    if (goal.goal_type === '12week' && goal.user_global_timeline_id) {
+      timelineId = goal.user_global_timeline_id;
+      timelineSource = 'global';
+    } else if (goal.goal_type === 'custom' && goal.custom_timeline_id) {
+      timelineId = goal.custom_timeline_id;
+      timelineSource = 'custom';
+    }
+
+    console.log('[GoalDetailView] Determined timeline:', { timelineId, timelineSource });
+
+    if (!timelineId || !timelineSource) {
+      
         // 1-year goals don't have direct timelines, or goal is missing timeline
         if (goal.goal_type === '1y') {
           setTimelineError('Annual goals use 12-week or custom goals for actions.');
