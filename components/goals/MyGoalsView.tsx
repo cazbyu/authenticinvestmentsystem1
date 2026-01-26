@@ -224,22 +224,23 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
           const parentGoal = parentGoalsMap.get(goal.id);
 
           return {
-            id: goal.id,
-            title: goal.title,
-            description: goal.description,
-            goal_type: '12week' as const,
-            status: goal.status,
-            progress: goal.progress || 0,
-            timeline_id: goal.user_global_timeline_id,
-            timeline_name: goal.timeline?.global_cycle?.title || goal.timeline?.title,
-            timeline_source: 'global' as const,
-            start_date: goal.start_date,
-            end_date: goal.end_date,
-            parent_goal_id: parentGoal?.id,
-            parent_goal_title: parentGoal?.title,
-            roles: rolesMap.get(goal.id) || [],
-            domains: domainsMap.get(goal.id) || [],
-          };
+  id: goal.id,
+  title: goal.title,
+  description: goal.description,
+  goal_type: '12week' as const,
+  status: goal.status,
+  progress: goal.progress || 0,
+  timeline_id: goal.user_global_timeline_id,
+  timeline_name: goal.timeline?.global_cycle?.title || goal.timeline?.title,
+  timeline_source: 'global' as const,
+  user_global_timeline_id: goal.user_global_timeline_id,  // ADD THIS
+  start_date: goal.start_date,
+  end_date: goal.end_date,
+  parent_goal_id: parentGoal?.id,
+  parent_goal_title: parentGoal?.title,
+  roles: rolesMap.get(goal.id) || [],
+  domains: domainsMap.get(goal.id) || [],
+};
         });
 
       const custom: UnifiedGoal[] = customGoals.map((goal: any) => {
