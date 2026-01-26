@@ -297,6 +297,12 @@ export function GoalDetailView({
         end_date: week.week_end,
       }));
 
+console.log('[GoalDetailView] Final state:', {
+      timeline: timelineData,
+      weekCount: normalizedWeeks.length,
+      timelineError: null,
+    });
+    
       setCycleWeeks(normalizedWeeks);
 
       if (normalizedWeeks.length === 0) {
