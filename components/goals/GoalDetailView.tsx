@@ -10,9 +10,10 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X } from 'lucide-react-native';
+import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, Edit3 } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
+import { EditGoalModal } from './EditGoalModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
@@ -88,6 +89,10 @@ export function GoalDetailView({
   // ActionEffortModal state
   const [showActionEffortModal, setShowActionEffortModal] = useState(false);
 
+  // EditGoalModal state
+  const [showEditGoalModal, setShowEditGoalModal] = useState(false);
+  const [currentGoal, setCurrentGoal] = useState(goal);
+
   // Get createTaskWithWeekPlan from useGoals hook
   const { createTaskWithWeekPlan } = useGoals();
 
@@ -108,6 +113,11 @@ export function GoalDetailView({
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>('12W');
 
+  // Update currentGoal when goal prop changes
+  useEffect(() => {
+    setCurrentGoal(goal);
+  }, [goal]);
+
   // Calculate current week bounds (Sunday to Saturday)
   const currentWeekData = useMemo(() => {
     const today = new Date();
@@ -122,14 +132,14 @@ export function GoalDetailView({
     weekEnd.setDate(weekStart.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
 
-    const weekNumber = goal.current_week || 1;
+    const weekNumber = currentGoal.current_week || 1;
 
     return {
       weekNumber,
       startDate: formatLocalDate(weekStart),
       endDate: formatLocalDate(weekEnd),
     };
-  }, [goal.current_week]);
+  }, [currentGoal.current_week]);
 
   // Transform recurring actions to the format GoalProgressCard expects
   const transformedWeekActions = useMemo(() => {
@@ -165,47 +175,43 @@ export function GoalDetailView({
       weeklyTarget: totalTarget,
       overallActual: totalActual,
       overallTarget: totalTarget,
-      overallProgress: goal.progress || weeklyPercent,
+      overallProgress: currentGoal.progress || weeklyPercent,
     };
-  }, [recurringActions, currentWeekData.weekNumber, goal.progress]);
+  }, [recurringActions, currentWeekData.weekNumber, currentGoal.progress]);
 
   // Fetch timeline and weeks for the goal
   const fetchTimelineAndWeeks = useCallback(async () => {
-  setLoadingTimeline(true);
-  setTimelineError(null);
+    setLoadingTimeline(true);
+    setTimelineError(null);
 
-  // DEBUG: Log the full goal object
-  console.log('[DEBUG] Goal object:', {
-    id: goal.id,
-    title: goal.title,
-    goal_type: goal.goal_type,
-    user_global_timeline_id: goal.user_global_timeline_id,
-    custom_timeline_id: goal.custom_timeline_id,
-    timeline_name: goal.timeline_name,
-    current_week: goal.current_week,
-  });
+    console.log('[DEBUG] Goal object:', {
+      id: currentGoal.id,
+      title: currentGoal.title,
+      goal_type: currentGoal.goal_type,
+      user_global_timeline_id: currentGoal.user_global_timeline_id,
+      custom_timeline_id: currentGoal.custom_timeline_id,
+      timeline_name: currentGoal.timeline_name,
+      current_week: currentGoal.current_week,
+    });
 
-  try {
-    const supabase = getSupabaseClient();
+    try {
+      const supabase = getSupabaseClient();
 
-    // Determine timeline ID and source based on goal type
-    let timelineId: string | null = null;
-    let timelineSource: 'global' | 'custom' | null = null;
+      let timelineId: string | null = null;
+      let timelineSource: 'global' | 'custom' | null = null;
 
-    if (goal.goal_type === '12week' && goal.user_global_timeline_id) {
-      timelineId = goal.user_global_timeline_id;
-      timelineSource = 'global';
-    } else if (goal.goal_type === 'custom' && goal.custom_timeline_id) {
-      timelineId = goal.custom_timeline_id;
-      timelineSource = 'custom';
-    }
+      if (currentGoal.goal_type === '12week' && currentGoal.user_global_timeline_id) {
+        timelineId = currentGoal.user_global_timeline_id;
+        timelineSource = 'global';
+      } else if (currentGoal.goal_type === 'custom' && currentGoal.custom_timeline_id) {
+        timelineId = currentGoal.custom_timeline_id;
+        timelineSource = 'custom';
+      }
 
-    console.log('[GoalDetailView] Determined timeline:', { timelineId, timelineSource });
+      console.log('[GoalDetailView] Determined timeline:', { timelineId, timelineSource });
 
-    if (!timelineId || !timelineSource) {
-      
-        // 1-year goals don't have direct timelines, or goal is missing timeline
-        if (goal.goal_type === '1y') {
+      if (!timelineId || !timelineSource) {
+        if (currentGoal.goal_type === '1y') {
           setTimelineError('Annual goals use 12-week or custom goals for actions.');
         } else {
           setTimelineError('This goal is not assigned to an active timeline.');
@@ -215,7 +221,6 @@ export function GoalDetailView({
         return;
       }
 
-      // Fetch timeline details
       let timelineData: any = null;
 
       if (timelineSource === 'global') {
@@ -280,7 +285,6 @@ export function GoalDetailView({
 
       setTimeline(timelineData);
 
-      // Fetch weeks from unified view
       const { data: weeksData, error: weeksError } = await supabase
         .from('v_unified_timeline_weeks')
         .select('week_number, week_start, week_end')
@@ -295,19 +299,18 @@ export function GoalDetailView({
         return;
       }
 
-      // Normalize week data to match CycleWeek interface
       const normalizedWeeks: CycleWeek[] = (weeksData || []).map(week => ({
         week_number: week.week_number,
         start_date: week.week_start,
         end_date: week.week_end,
       }));
 
-console.log('[GoalDetailView] Final state:', {
-      timeline: timelineData,
-      weekCount: normalizedWeeks.length,
-      timelineError: null,
-    });
-    
+      console.log('[GoalDetailView] Final state:', {
+        timeline: timelineData,
+        weekCount: normalizedWeeks.length,
+        timelineError: null,
+      });
+
       setCycleWeeks(normalizedWeeks);
 
       if (normalizedWeeks.length === 0) {
@@ -322,9 +325,8 @@ console.log('[GoalDetailView] Final state:', {
     } finally {
       setLoadingTimeline(false);
     }
-  }, [goal.goal_type, goal.user_global_timeline_id, goal.custom_timeline_id]);
+  }, [currentGoal.goal_type, currentGoal.user_global_timeline_id, currentGoal.custom_timeline_id]);
 
-  // Fetch timeline on mount
   useEffect(() => {
     fetchTimelineAndWeeks();
   }, [fetchTimelineAndWeeks]);
@@ -339,12 +341,12 @@ console.log('[GoalDetailView] Final state:', {
     } else if (activeTab === 'analytics') {
       fetchAnalytics();
     }
-  }, [goal.id, activeTab, refreshTrigger, timeRange]);
+  }, [currentGoal.id, activeTab, refreshTrigger, timeRange]);
 
   const fetchActions = async () => {
     setLoading(true);
     try {
-      const result = await fetchGoalActions(goal.id, goal.goal_type);
+      const result = await fetchGoalActions(currentGoal.id, currentGoal.goal_type);
       setRecurringActions(result.recurringActions);
       setOneTimeActions(result.oneTimeActions);
     } catch (error) {
@@ -412,23 +414,76 @@ console.log('[GoalDetailView] Final state:', {
 
   const handleActionEffortModalClose = async () => {
     setShowActionEffortModal(false);
-    // Refresh actions after modal closes
     setRefreshTrigger(prev => prev + 1);
     onGoalUpdated();
+  };
+
+  // Handle Edit Goal Modal
+  const handleEditGoalPress = () => {
+    // Only allow editing for 12week and custom goals
+    if (currentGoal.goal_type === '1y') {
+      Alert.alert('Coming Soon', 'Editing annual goals will be available in a future update.');
+      return;
+    }
+    setShowEditGoalModal(true);
+  };
+
+  const handleEditGoalUpdate = () => {
+    // Refresh data after goal is updated
+    setRefreshTrigger(prev => prev + 1);
+    onGoalUpdated();
+  };
+
+  const handleDeleteGoal = async (goalId: string, goalType: '12week' | 'custom') => {
+    const supabase = getSupabaseClient();
+    const tableName = goalType === '12week' ? '0008-ap-goals-12wk' : '0008-ap-goals-custom';
+
+    const { error } = await supabase
+      .from(tableName)
+      .update({
+        status: 'cancelled',
+        archived: true,
+        updated_at: toLocalISOString(new Date()),
+      })
+      .eq('id', goalId);
+
+    if (error) throw error;
+  };
+
+  const handleGoalDeleted = () => {
+    // Navigate back to Goal Bank after deletion
+    onClose();
   };
 
   // Prepare goal object for ActionEffortModal with proper typing
   const goalForModal = useMemo(() => {
     return {
-      id: goal.id,
-      title: goal.title,
-      description: goal.description,
-      goal_type: goal.goal_type as '12week' | 'custom',
-      roles: goal.roles || [],
-      domains: goal.domains || [],
-      keyRelationships: goal.keyRelationships || [],
+      id: currentGoal.id,
+      title: currentGoal.title,
+      description: currentGoal.description,
+      goal_type: currentGoal.goal_type as '12week' | 'custom',
+      roles: currentGoal.roles || [],
+      domains: currentGoal.domains || [],
+      keyRelationships: currentGoal.keyRelationships || [],
     };
-  }, [goal]);
+  }, [currentGoal]);
+
+  // Prepare goal object for EditGoalModal
+  const goalForEditModal = useMemo(() => {
+    if (currentGoal.goal_type === '1y') return null;
+    
+    return {
+      id: currentGoal.id,
+      title: currentGoal.title,
+      description: currentGoal.description,
+      goal_type: currentGoal.goal_type as '12week' | 'custom',
+      status: currentGoal.status,
+      roles: currentGoal.roles || [],
+      domains: currentGoal.domains || [],
+      keyRelationships: currentGoal.keyRelationships || [],
+      notes: [], // Notes will be fetched by EditGoalModal
+    };
+  }, [currentGoal]);
 
   const fetchIdeas = async () => {
     setIdeasLoading(true);
@@ -437,16 +492,16 @@ console.log('[GoalDetailView] Final state:', {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const goalJoinColumn = goal.goal_type === '1y'
+      const goalJoinColumn = currentGoal.goal_type === '1y'
         ? 'one_yr_goal_id'
-        : goal.goal_type === '12week'
+        : currentGoal.goal_type === '12week'
         ? 'twelve_wk_goal_id'
         : 'custom_goal_id';
 
       const { data: goalJoins, error: joinError } = await supabase
         .from('0008-ap-universal-goals-join')
         .select('parent_id')
-        .eq(goalJoinColumn, goal.id)
+        .eq(goalJoinColumn, currentGoal.id)
         .eq('parent_type', 'deposit_idea');
 
       if (joinError) throw joinError;
@@ -484,13 +539,13 @@ console.log('[GoalDetailView] Final state:', {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const parentType = goal.goal_type === '1y' ? 'goal_1y' :
-                        goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+      const parentType = currentGoal.goal_type === '1y' ? 'goal_1y' :
+                        currentGoal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
 
       const { data: noteJoins, error: joinError } = await supabase
         .from('0008-ap-universal-notes-join')
         .select('note_id')
-        .eq('parent_id', goal.id)
+        .eq('parent_id', currentGoal.id)
         .eq('parent_type', parentType);
 
       if (joinError) throw joinError;
@@ -541,10 +596,10 @@ console.log('[GoalDetailView] Final state:', {
         startDate = new Date(today);
         startDate.setDate(today.getDate() - (12 * 7));
       } else {
-        startDate = new Date(goal.created_at || today);
+        startDate = new Date(currentGoal.created_at || today);
       }
 
-      const result = await fetchGoalActions(goal.id, goal.goal_type);
+      const result = await fetchGoalActions(currentGoal.id, currentGoal.goal_type);
       const goalScore = result.oneTimeActions.reduce((sum, action) => sum + action.pointsEarned, 0);
 
       const weeklyData: Array<{ weekNumber: number; completionPercent: number }> = [];
@@ -620,16 +675,16 @@ console.log('[GoalDetailView] Final state:', {
 
       if (ideaError) throw ideaError;
 
-      const goalJoinColumn = goal.goal_type === '1y'
+      const goalJoinColumn = currentGoal.goal_type === '1y'
         ? 'one_yr_goal_id'
-        : goal.goal_type === '12week'
+        : currentGoal.goal_type === '12week'
         ? 'twelve_wk_goal_id'
         : 'custom_goal_id';
 
       const { error: joinError } = await supabase
         .from('0008-ap-universal-goals-join')
         .insert({
-          [goalJoinColumn]: goal.id,
+          [goalJoinColumn]: currentGoal.id,
           parent_id: ideaData.id,
           parent_type: 'deposit_idea',
         });
@@ -669,14 +724,14 @@ console.log('[GoalDetailView] Final state:', {
 
       if (noteError) throw noteError;
 
-      const parentType = goal.goal_type === '1y' ? 'goal_1y' :
-                        goal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
+      const parentType = currentGoal.goal_type === '1y' ? 'goal_1y' :
+                        currentGoal.goal_type === '12week' ? 'goal_12wk' : 'goal_custom';
 
       const { error: joinError } = await supabase
         .from('0008-ap-universal-notes-join')
         .insert({
           note_id: noteData.id,
-          parent_id: goal.id,
+          parent_id: currentGoal.id,
           parent_type: parentType,
         });
 
@@ -724,23 +779,23 @@ console.log('[GoalDetailView] Final state:', {
   };
 
   const getTimelineBadge = () => {
-    if (goal.goal_type === '1y') {
-      return goal.year_target_date
-        ? `${new Date(goal.year_target_date).getFullYear()} Annual Goal`
+    if (currentGoal.goal_type === '1y') {
+      return currentGoal.year_target_date
+        ? `${new Date(currentGoal.year_target_date).getFullYear()} Annual Goal`
         : 'Annual Goal';
     }
 
-    if (goal.goal_type === '12week' && goal.timeline_name) {
-      const weekInfo = goal.current_week ? ` • Week ${goal.current_week} of 12` : '';
-      return `${goal.timeline_name}${weekInfo}`;
+    if (currentGoal.goal_type === '12week' && currentGoal.timeline_name) {
+      const weekInfo = currentGoal.current_week ? ` • Week ${currentGoal.current_week} of 12` : '';
+      return `${currentGoal.timeline_name}${weekInfo}`;
     }
 
-    if (goal.goal_type === 'custom' && goal.timeline_name) {
+    if (currentGoal.goal_type === 'custom' && currentGoal.timeline_name) {
       const weekInfo =
-        goal.current_week && goal.total_weeks
-          ? ` • Week ${goal.current_week} of ${goal.total_weeks}`
+        currentGoal.current_week && currentGoal.total_weeks
+          ? ` • Week ${currentGoal.current_week} of ${currentGoal.total_weeks}`
           : '';
-      return `${goal.timeline_name}${weekInfo}`;
+      return `${currentGoal.timeline_name}${weekInfo}`;
     }
 
     return 'Goal Timeline';
@@ -766,7 +821,7 @@ console.log('[GoalDetailView] Final state:', {
       <View style={styles.headerTitle}>
         <Target size={28} color="#ffffff" style={styles.titleIcon} />
         <Text style={styles.title} numberOfLines={2}>
-          {goal.title}
+          {currentGoal.title}
         </Text>
       </View>
 
@@ -801,28 +856,38 @@ console.log('[GoalDetailView] Final state:', {
             {getTimelineBadge()}
           </Text>
         </View>
-        {goal.progress !== undefined && (
-          <Text style={[styles.progressPercentage, { color: colors.text }]}>
-            {Math.round(goal.progress)}%
-          </Text>
-        )}
+        <View style={styles.bannerRight}>
+          {/* Edit Button */}
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={handleEditGoalPress}
+          >
+            <Edit3 size={16} color={colors.primary} />
+            <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit</Text>
+          </TouchableOpacity>
+          {currentGoal.progress !== undefined && (
+            <Text style={[styles.progressPercentage, { color: colors.text }]}>
+              {Math.round(currentGoal.progress)}%
+            </Text>
+          )}
+        </View>
       </View>
 
-      {goal.progress !== undefined && (
+      {currentGoal.progress !== undefined && (
         <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
           <View
             style={[
               styles.progressBarFill,
-              { backgroundColor: colors.primary, width: `${goal.progress}%` },
+              { backgroundColor: colors.primary, width: `${currentGoal.progress}%` },
             ]}
           />
         </View>
       )}
 
-      {goal.parent_goal_title && (
+      {currentGoal.parent_goal_title && (
         <TouchableOpacity style={styles.parentGoalLink} activeOpacity={0.7}>
           <Text style={[styles.parentGoalLinkText, { color: colors.textSecondary }]}>
-            → supports <Text style={{ fontWeight: '600' }}>{goal.parent_goal_title}</Text>
+            → supports <Text style={{ fontWeight: '600' }}>{currentGoal.parent_goal_title}</Text>
           </Text>
         </TouchableOpacity>
       )}
@@ -854,14 +919,14 @@ console.log('[GoalDetailView] Final state:', {
             
             <GoalProgressCard
               goal={{
-                ...goal,
-                id: goal.id,
-                title: goal.title,
-                goal_type: goal.goal_type,
-                start_date: goal.start_date || currentWeekData.startDate,
-                end_date: goal.end_date || currentWeekData.endDate,
-                roles: goal.roles || [],
-                domains: goal.domains || [],
+                ...currentGoal,
+                id: currentGoal.id,
+                title: currentGoal.title,
+                goal_type: currentGoal.goal_type,
+                start_date: currentGoal.start_date || currentWeekData.startDate,
+                end_date: currentGoal.end_date || currentWeekData.endDate,
+                roles: currentGoal.roles || [],
+                domains: currentGoal.domains || [],
               }}
               progress={goalProgress}
               expanded={true}
@@ -942,7 +1007,7 @@ console.log('[GoalDetailView] Final state:', {
           )}
         </TouchableOpacity>
 
-        {timelineError && goal.goal_type !== '1y' && (
+        {timelineError && currentGoal.goal_type !== '1y' && (
           <Text style={styles.timelineErrorText}>{timelineError}</Text>
         )}
       </View>
@@ -1263,6 +1328,17 @@ console.log('[GoalDetailView] Final state:', {
         mode="create"
       />
 
+      {/* EditGoalModal - For editing goal details */}
+      {goalForEditModal && (
+        <EditGoalModal
+          visible={showEditGoalModal}
+          onClose={() => setShowEditGoalModal(false)}
+          onUpdate={handleEditGoalUpdate}
+          goal={goalForEditModal}
+          deleteGoal={handleDeleteGoal}
+        />
+      )}
+
       {/* Add Idea Modal */}
       <Modal
         visible={showAddIdeaModal}
@@ -1456,6 +1532,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  bannerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#eff6ff',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  editButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   timelineBadge: {
     paddingHorizontal: 12,
