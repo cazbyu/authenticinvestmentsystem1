@@ -10,8 +10,11 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Platform,
 } from 'react-native';
-import { X, Lock, ChevronDown, ChevronUp, Paperclip, Plus } from 'lucide-react-native';
+import { X, Lock, ChevronDown, ChevronUp, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Timeline } from '@/hooks/useGoals';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
@@ -23,6 +26,7 @@ import {
   parseDBTime,
   generateTimeOptions,
 } from '@/lib/timePickerUtils';
+import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 
 interface Role {
   id: string;
@@ -55,6 +59,17 @@ interface CycleWeek {
   week_number: number;
   start_date: string;
   end_date: string;
+}
+
+interface AttachedFile {
+  uri: string;
+  name: string;
+  type: string;
+  size: number;
+  isExisting?: boolean;
+  id?: string;
+  noteId?: string;
+  filePath?: string;
 }
 
 interface ActionEffortModalProps {
@@ -98,12 +113,12 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   const [inheritedDomainIds, setInheritedDomainIds] = useState<string[]>([]);
 
   // Collapsible section states
-  const [rolesExpanded, setRolesExpanded] = useState(false);
   const [domainsExpanded, setDomainsExpanded] = useState(false);
+  const [rolesExpanded, setRolesExpanded] = useState(false);
   const [keyRelationshipsExpanded, setKeyRelationshipsExpanded] = useState(false);
 
-  // Attachment state
-  const [attachments, setAttachments] = useState<Array<{ name: string; uri: string }>>([]);
+  // Attachment state (matching TaskEventForm pattern)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
   // Time picker state (for custom frequency)
   const [isAnytime, setIsAnytime] = useState(true);
@@ -190,11 +205,11 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setSelectedWeeks([]);
     setRecurrenceType('daily');
     setSelectedCustomDays([]);
-    setAttachments([]);
+    setAttachedFiles([]);
 
     // Reset collapsed states
-    setRolesExpanded(false);
     setDomainsExpanded(false);
+    setRolesExpanded(false);
     setKeyRelationshipsExpanded(false);
 
     // Reset time picker to defaults
@@ -220,6 +235,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       const roleIds = goal.roles?.map(r => r.id) || [];
       const domainIds = goal.domains?.map(d => d.id) || [];
       const krIds = goal.keyRelationships?.map(kr => kr.id) || [];
+
+      console.log('[ActionEffortModal] Extracted IDs:', { roleIds, domainIds, krIds });
 
       // Set as selected AND track as inherited (locked)
       setSelectedRoleIds(roleIds);
@@ -248,7 +265,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
     setTitle(initialData.title || '');
     setNotes('');
-    setAttachments([]);
+    setAttachedFiles([]);
 
     // Parse recurrence rule to set frequency
     if (initialData.recurrence_rule) {
@@ -326,6 +343,113 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
     const weeks = initialData.selectedWeeks || [];
     setSelectedWeeks(weeks);
+  };
+
+  // Attachment handlers (matching TaskEventForm pattern)
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        const validFiles: AttachedFile[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.fileSize || 0;
+          const fileName = asset.fileName || 'image.jpg';
+
+          let mimeType = 'image/jpeg';
+          if (asset.uri) {
+            const lowerUri = asset.uri.toLowerCase();
+            if (lowerUri.endsWith('.png')) mimeType = 'image/png';
+            else if (lowerUri.endsWith('.gif')) mimeType = 'image/gif';
+            else if (lowerUri.endsWith('.webp')) mimeType = 'image/webp';
+            else if (lowerUri.endsWith('.heic')) mimeType = 'image/heic';
+          }
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: mimeType,
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        const validFiles: AttachedFile[] = [];
+        const oversizedFiles: string[] = [];
+
+        result.assets.forEach(asset => {
+          const fileSize = asset.size || 0;
+          const fileName = asset.name;
+
+          if (fileSize > MAX_FILE_SIZE) {
+            oversizedFiles.push(`${fileName} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+          } else {
+            validFiles.push({
+              uri: asset.uri,
+              name: fileName,
+              type: asset.mimeType || 'application/octet-stream',
+              size: fileSize,
+            });
+          }
+        });
+
+        if (oversizedFiles.length > 0) {
+          Alert.alert(
+            'File Size Limit Exceeded',
+            `The following files exceed the 10 MB limit:\n\n${oversizedFiles.join('\n')}`
+          );
+        }
+
+        if (validFiles.length > 0) {
+          setAttachedFiles([...attachedFiles, ...validFiles]);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    const newFiles = attachedFiles.filter((_, i) => i !== index);
+    setAttachedFiles(newFiles);
   };
 
   const handleToggleSelect = (field: 'roles' | 'domains' | 'keyRelationships', id: string) => {
@@ -421,15 +545,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     }
   };
 
-  const handleAddAttachment = () => {
-    // For now, show a placeholder alert - actual file picking requires expo-document-picker
-    Alert.alert(
-      'Add Attachment',
-      'Attachment functionality coming soon! This will allow you to add files, images, or links to your action notes.',
-      [{ text: 'OK' }]
-    );
-  };
-
   const getTargetDays = () => {
     if (recurrenceType === 'custom') {
       return selectedCustomDays.length;
@@ -502,6 +617,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         selectedRoleIds,
         selectedDomainIds,
         selectedKeyRelationshipIds,
+        attachments: attachedFiles, // Include attachments in task data
         selectedWeeks: selectedWeeks.map(weekNumber => {
           const processedWeek = processedWeeks.find(w => w.week_number === weekNumber);
           const effectiveTarget = processedWeek
@@ -583,8 +699,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   };
 
   // Get selected count for section headers
-  const getSelectedRolesCount = () => selectedRoleIds.length;
   const getSelectedDomainsCount = () => selectedDomainIds.length;
+  const getSelectedRolesCount = () => selectedRoleIds.length;
   const getSelectedKRCount = () => selectedKeyRelationshipIds.length;
 
   // Filter key relationships based on selected roles
@@ -818,67 +934,14 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                 </View>
               )}
 
-              {/* Roles - Collapsible with Toggle Switches */}
-              <View style={styles.collapsibleSection}>
-                <TouchableOpacity
-                  style={styles.collapsibleHeader}
-                  onPress={() => setRolesExpanded(!rolesExpanded)}
-                >
-                  <View style={styles.collapsibleHeaderLeft}>
-                    <Text style={styles.label}>Roles</Text>
-                    {getSelectedRolesCount() > 0 && (
-                      <View style={styles.countBadge}>
-                        <Text style={styles.countBadgeText}>{getSelectedRolesCount()}</Text>
-                      </View>
-                    )}
-                  </View>
-                  {rolesExpanded ? (
-                    <ChevronUp size={20} color="#6b7280" />
-                  ) : (
-                    <ChevronDown size={20} color="#6b7280" />
-                  )}
-                </TouchableOpacity>
-
-                {rolesExpanded && (
-                  <View style={styles.collapsibleContent}>
-                    {allRoles.map(role => {
-                      const isSelected = selectedRoleIds.includes(role.id);
-                      const isInherited = inheritedRoleIds.includes(role.id);
-                      return (
-                        <View key={role.id} style={styles.toggleRow}>
-                          <View style={styles.toggleLabelContainer}>
-                            <Text style={[
-                              styles.toggleLabel,
-                              isInherited && styles.toggleLabelLocked
-                            ]}>
-                              {role.label}
-                            </Text>
-                            {isInherited && (
-                              <Lock size={12} color="#0078d4" style={styles.lockIcon} />
-                            )}
-                          </View>
-                          <Switch
-                            value={isSelected}
-                            onValueChange={() => handleToggleSelect('roles', role.id)}
-                            trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                            thumbColor="#ffffff"
-                            disabled={isInherited && isSelected}
-                          />
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-
-              {/* Wellness Zones - Collapsible with Toggle Switches */}
+              {/* Wellness Zones - Collapsible with Toggle Switches (2 columns) - FIRST */}
               <View style={styles.collapsibleSection}>
                 <TouchableOpacity
                   style={styles.collapsibleHeader}
                   onPress={() => setDomainsExpanded(!domainsExpanded)}
                 >
                   <View style={styles.collapsibleHeaderLeft}>
-                    <Text style={styles.label}>Wellness Zones</Text>
+                    <Text style={styles.collapsibleLabel}>Wellness Zones</Text>
                     {getSelectedDomainsCount() > 0 && (
                       <View style={styles.countBadge}>
                         <Text style={styles.countBadgeText}>{getSelectedDomainsCount()}</Text>
@@ -894,37 +957,94 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
                 {domainsExpanded && (
                   <View style={styles.collapsibleContent}>
-                    {allDomains.map(domain => {
-                      const isSelected = selectedDomainIds.includes(domain.id);
-                      const isInherited = inheritedDomainIds.includes(domain.id);
-                      return (
-                        <View key={domain.id} style={styles.toggleRow}>
-                          <View style={styles.toggleLabelContainer}>
-                            <Text style={[
-                              styles.toggleLabel,
-                              isInherited && styles.toggleLabelLocked
-                            ]}>
-                              {domain.name}
-                            </Text>
-                            {isInherited && (
-                              <Lock size={12} color="#0078d4" style={styles.lockIcon} />
-                            )}
+                    <View style={styles.toggleGrid}>
+                      {allDomains.map(domain => {
+                        const isSelected = selectedDomainIds.includes(domain.id);
+                        const isInherited = inheritedDomainIds.includes(domain.id);
+                        return (
+                          <View key={domain.id} style={styles.toggleGridItem}>
+                            <View style={styles.toggleLabelContainer}>
+                              <Text style={[
+                                styles.toggleLabel,
+                                isInherited && styles.toggleLabelLocked
+                              ]} numberOfLines={1}>
+                                {domain.name}
+                              </Text>
+                              {isInherited && (
+                                <Lock size={12} color="#0078d4" style={styles.lockIcon} />
+                              )}
+                            </View>
+                            <Switch
+                              value={isSelected}
+                              onValueChange={() => handleToggleSelect('domains', domain.id)}
+                              trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                              thumbColor="#ffffff"
+                              disabled={isInherited && isSelected}
+                            />
                           </View>
-                          <Switch
-                            value={isSelected}
-                            onValueChange={() => handleToggleSelect('domains', domain.id)}
-                            trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                            thumbColor="#ffffff"
-                            disabled={isInherited && isSelected}
-                          />
-                        </View>
-                      );
-                    })}
+                        );
+                      })}
+                    </View>
                   </View>
                 )}
               </View>
 
-              {/* Key Relationships - Collapsible with Toggle Switches */}
+              {/* Roles - Collapsible with Toggle Switches (2 columns) - SECOND */}
+              <View style={styles.collapsibleSection}>
+                <TouchableOpacity
+                  style={styles.collapsibleHeader}
+                  onPress={() => setRolesExpanded(!rolesExpanded)}
+                >
+                  <View style={styles.collapsibleHeaderLeft}>
+                    <Text style={styles.collapsibleLabel}>Roles</Text>
+                    {getSelectedRolesCount() > 0 && (
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countBadgeText}>{getSelectedRolesCount()}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {rolesExpanded ? (
+                    <ChevronUp size={20} color="#6b7280" />
+                  ) : (
+                    <ChevronDown size={20} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
+
+                {rolesExpanded && (
+                  <View style={styles.collapsibleContent}>
+                    <View style={styles.toggleGrid}>
+                      {allRoles.map(role => {
+                        const isSelected = selectedRoleIds.includes(role.id);
+                        const isInherited = inheritedRoleIds.includes(role.id);
+                        return (
+                          <View key={role.id} style={styles.toggleGridItem}>
+                            <View style={styles.toggleLabelContainer}>
+                              <Text style={[
+                                styles.toggleLabel,
+                                isInherited && styles.toggleLabelLocked
+                              ]} numberOfLines={1}>
+                                {role.label}
+                              </Text>
+                              {isInherited && (
+                                <Lock size={12} color="#0078d4" style={styles.lockIcon} />
+                              )}
+                            </View>
+                            <Switch
+                              value={isSelected}
+                              onValueChange={() => handleToggleSelect('roles', role.id)}
+                              trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                              thumbColor="#ffffff"
+                              disabled={isInherited && isSelected}
+                            />
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Key Relationships - Collapsible with Toggle Switches (2 columns) */}
               {filteredKeyRelationships.length > 0 && (
                 <View style={styles.collapsibleSection}>
                   <TouchableOpacity
@@ -932,7 +1052,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                     onPress={() => setKeyRelationshipsExpanded(!keyRelationshipsExpanded)}
                   >
                     <View style={styles.collapsibleHeaderLeft}>
-                      <Text style={styles.label}>Key Relationships</Text>
+                      <Text style={styles.collapsibleLabel}>Key Relationships</Text>
                       {getSelectedKRCount() > 0 && (
                         <View style={styles.countBadge}>
                           <Text style={styles.countBadgeText}>{getSelectedKRCount()}</Text>
@@ -948,20 +1068,22 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
                   {keyRelationshipsExpanded && (
                     <View style={styles.collapsibleContent}>
-                      {filteredKeyRelationships.map(kr => {
-                        const isSelected = selectedKeyRelationshipIds.includes(kr.id);
-                        return (
-                          <View key={kr.id} style={styles.toggleRow}>
-                            <Text style={styles.toggleLabel}>{kr.name}</Text>
-                            <Switch
-                              value={isSelected}
-                              onValueChange={() => handleToggleSelect('keyRelationships', kr.id)}
-                              trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                              thumbColor="#ffffff"
-                            />
-                          </View>
-                        );
-                      })}
+                      <View style={styles.toggleGrid}>
+                        {filteredKeyRelationships.map(kr => {
+                          const isSelected = selectedKeyRelationshipIds.includes(kr.id);
+                          return (
+                            <View key={kr.id} style={styles.toggleGridItem}>
+                              <Text style={styles.toggleLabel} numberOfLines={1}>{kr.name}</Text>
+                              <Switch
+                                value={isSelected}
+                                onValueChange={() => handleToggleSelect('keyRelationships', kr.id)}
+                                trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                                thumbColor="#ffffff"
+                              />
+                            </View>
+                          );
+                        })}
+                      </View>
                     </View>
                   )}
                 </View>
@@ -971,13 +1093,20 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
               <View style={styles.field}>
                 <View style={styles.notesHeader}>
                   <Text style={styles.label}>Notes (optional)</Text>
-                  <TouchableOpacity
-                    style={styles.attachmentButton}
-                    onPress={handleAddAttachment}
-                  >
-                    <Paperclip size={16} color="#0078d4" />
-                    <Text style={styles.attachmentButtonText}>Add Attachment</Text>
-                  </TouchableOpacity>
+                  <View style={styles.attachmentButtons}>
+                    <TouchableOpacity
+                      style={styles.attachmentIconButton}
+                      onPress={handlePickImage}
+                    >
+                      <ImageIcon size={20} color="#0078d4" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.attachmentIconButton}
+                      onPress={handlePickDocument}
+                    >
+                      <Paperclip size={20} color="#0078d4" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 <TextInput
                   style={[styles.input, styles.textArea]}
@@ -989,14 +1118,37 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                   numberOfLines={3}
                   maxLength={500}
                 />
-                {attachments.length > 0 && (
-                  <View style={styles.attachmentsList}>
-                    {attachments.map((att, idx) => (
-                      <View key={idx} style={styles.attachmentItem}>
-                        <Paperclip size={14} color="#6b7280" />
-                        <Text style={styles.attachmentName}>{att.name}</Text>
-                      </View>
-                    ))}
+
+                {/* Attached Files Display */}
+                {attachedFiles.length > 0 && (
+                  <View style={styles.attachmentsContainer}>
+                    <Text style={styles.attachmentsLabel}>
+                      Attachments ({attachedFiles.length})
+                    </Text>
+                    <View style={styles.attachmentsGrid}>
+                      {attachedFiles.map((file, index) => (
+                        <View key={index} style={styles.attachmentThumbnailWrapper}>
+                          <AttachmentThumbnail
+                            uri={file.uri}
+                            fileType={file.type}
+                            fileName={file.name}
+                            size="medium"
+                          />
+                          <TouchableOpacity
+                            style={styles.removeAttachmentButton}
+                            onPress={() => handleRemoveAttachment(index)}
+                          >
+                            <X size={14} color="#ffffff" />
+                          </TouchableOpacity>
+                          <Text
+                            style={styles.attachmentFileName}
+                            numberOfLines={1}
+                          >
+                            {file.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
                   </View>
                 )}
               </View>
@@ -1307,6 +1459,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  collapsibleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
   countBadge: {
     backgroundColor: '#0078d4',
     borderRadius: 10,
@@ -1319,28 +1476,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   collapsibleContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },
-  // Toggle Row Styles
-  toggleRow: {
+  // 2-Column Toggle Grid Styles
+  toggleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  toggleGridItem: {
+    width: '50%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    paddingVertical: 10,
+    paddingRight: 12,
   },
   toggleLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: 8,
   },
   toggleLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#374151',
+    flexShrink: 1,
   },
   toggleLabelLocked: {
     fontWeight: '600',
@@ -1356,32 +1520,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  attachmentButton: {
+  attachmentButtons: {
     flexDirection: 'row',
+    gap: 8,
+  },
+  attachmentIconButton: {
+    padding: 8,
+  },
+  attachmentsContainer: {
+    marginTop: 12,
+  },
+  attachmentsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  attachmentsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  attachmentThumbnailWrapper: {
+    width: 80,
     alignItems: 'center',
     gap: 4,
-    padding: 4,
   },
-  attachmentButtonText: {
-    fontSize: 14,
-    color: '#0078d4',
-    fontWeight: '500',
-  },
-  attachmentsList: {
-    marginTop: 8,
-    gap: 6,
-  },
-  attachmentItem: {
-    flexDirection: 'row',
+  removeAttachmentButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
   },
-  attachmentName: {
-    fontSize: 14,
+  attachmentFileName: {
+    fontSize: 10,
+    textAlign: 'center',
+    width: '100%',
     color: '#374151',
   },
   // Actions
