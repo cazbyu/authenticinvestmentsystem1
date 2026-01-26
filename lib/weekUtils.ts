@@ -1,42 +1,8 @@
-// lib/weekUtils.ts
-import { parseLocalDate } from './dateUtils';
-
 /**
- * Calculate the number of days available in a week
- * For partial weeks (first/last week of a timeline), this may be less than 7
+ * Week Utilities for Action Effort Modal
+ * Handles partial week calculations and availability
  */
-export function calculateDaysInWeek(weekStart: string, weekEnd: string): number {
-  const start = parseLocalDate(weekStart);
-  const end = parseLocalDate(weekEnd);
-  
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    return 7; // Default to full week if dates are invalid
-  }
-  
-  // Calculate difference in days (inclusive, so add 1)
-  const diffTime = end.getTime() - start.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  
-  // Clamp between 1 and 7
-  return Math.max(1, Math.min(7, diffDays));
-}
 
-/**
- * Get the effective target days for a week, capping at available days
- * Example: User selects "Daily" (7) but week only has 3 days → returns 3
- */
-export function getEffectiveTargetDays(
-  selectedTargetDays: number,
-  weekStart: string,
-  weekEnd: string
-): number {
-  const availableDays = calculateDaysInWeek(weekStart, weekEnd);
-  return Math.min(selectedTargetDays, availableDays);
-}
-
-/**
- * Process cycle weeks to include available days information
- */
 export interface ProcessedWeek {
   week_number: number;
   start_date: string;
@@ -45,15 +11,82 @@ export interface ProcessedWeek {
   is_partial: boolean;
 }
 
+/**
+ * Calculate the number of days in a week based on start and end dates
+ * Only used for custom timelines where weeks might be partial
+ */
+export function calculateDaysInWeek(weekStart: string, weekEnd: string): number {
+  const start = new Date(weekStart + 'T00:00:00');
+  const end = new Date(weekEnd + 'T23:59:59');
+  
+  // Calculate difference in days (inclusive of both start and end)
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  
+  // Clamp to 1-7 days
+  return Math.max(1, Math.min(7, diffDays));
+}
+
+/**
+ * Get effective target days based on selected frequency and available days in the week
+ * Only applies capping for partial weeks
+ */
+export function getEffectiveTargetDays(
+  selectedTargetDays: number,
+  weekStart: string,
+  weekEnd: string,
+  isPartialWeek: boolean
+): number {
+  if (!isPartialWeek) {
+    return selectedTargetDays;
+  }
+  
+  const availableDays = calculateDaysInWeek(weekStart, weekEnd);
+  return Math.min(selectedTargetDays, availableDays);
+}
+
+/**
+ * Process weeks and calculate availability for each
+ * 
+ * @param cycleWeeks - Array of weeks from the timeline
+ * @param timelineSource - 'global' or 'custom' - global timelines always have full weeks
+ * @returns Array of processed weeks with availability info
+ */
 export function processWeeksWithAvailability(
-  cycleWeeks: Array<{ week_number: number; start_date: string; end_date: string }>
+  cycleWeeks: Array<{ week_number: number; start_date: string; end_date: string }>,
+  timelineSource: 'global' | 'custom' = 'global'
 ): ProcessedWeek[] {
-  return cycleWeeks.map(week => {
-    const availableDays = calculateDaysInWeek(week.start_date, week.end_date);
+  // Global 12-week cycles always have full 7-day weeks
+  if (timelineSource === 'global') {
+    return cycleWeeks.map(week => ({
+      week_number: week.week_number,
+      start_date: week.start_date,
+      end_date: week.end_date,
+      available_days: 7,
+      is_partial: false,
+    }));
+  }
+
+  // For custom timelines, check first and last weeks for partial days
+  return cycleWeeks.map((week, index) => {
+    const isFirstWeek = index === 0;
+    const isLastWeek = index === cycleWeeks.length - 1;
+    
+    // Only first and last weeks of custom timelines can be partial
+    let available_days = 7;
+    let is_partial = false;
+    
+    if (isFirstWeek || isLastWeek) {
+      available_days = calculateDaysInWeek(week.start_date, week.end_date);
+      is_partial = available_days < 7;
+    }
+    
     return {
-      ...week,
-      available_days: availableDays,
-      is_partial: availableDays < 7,
+      week_number: week.week_number,
+      start_date: week.start_date,
+      end_date: week.end_date,
+      available_days,
+      is_partial,
     };
   });
 }
