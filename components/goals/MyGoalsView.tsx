@@ -627,8 +627,7 @@ goalTypeBadgeText: {
   fontSize: 11,
   fontWeight: '600',
 },
-  
-  annualGoalTitle: {
+annualGoalTitle: {
     fontSize: 18,
     fontWeight: '700',
   },
