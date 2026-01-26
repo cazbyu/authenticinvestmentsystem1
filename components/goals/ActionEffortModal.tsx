@@ -136,7 +136,7 @@ if (cycleWeeks && cycleWeeks.length > 0) {
   setProcessedWeeks([]);
 }
     }
-  }, [visible, goal, mode, initialData, cycleWeeks]);
+  }, [visible, goal, mode, initialData, cycleWeeks, timeline]);
 
   const fetchData = async () => {
     setLoading(true);
