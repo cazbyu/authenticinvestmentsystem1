@@ -470,6 +470,25 @@ export function GoalDetailView({
     onClose();
   };
 
+  // Calculate time elapsed percentage for timeline
+  const calculateTimeElapsed = useCallback((timelineData: Timeline | null): number => {
+    if (!timelineData?.start_date || !timelineData?.end_date) return 0;
+
+    const start = new Date(timelineData.start_date).getTime();
+    const end = new Date(timelineData.end_date).getTime();
+    const now = Date.now();
+
+    if (now <= start) return 0;
+    if (now >= end) return 100;
+
+    return Math.round(((now - start) / (end - start)) * 100);
+  }, []);
+
+  const timeElapsedPercent = useMemo(() =>
+    calculateTimeElapsed(timeline),
+    [timeline, calculateTimeElapsed]
+  );
+
   // Prepare goal object for ActionEffortModal with proper typing
   const goalForModal = useMemo(() => {
     return {
@@ -1171,7 +1190,7 @@ export function GoalDetailView({
 
         <TouchableOpacity
           style={[
-            styles.addButton, 
+            styles.addActionButton,
             { backgroundColor: colors.primary },
             (loadingTimeline || !!timelineError) && styles.addButtonDisabled
           ]}
@@ -1183,13 +1202,34 @@ export function GoalDetailView({
           ) : (
             <>
               <Plus size={20} color="#ffffff" />
-              <Text style={styles.addButtonText}>Add Action</Text>
+              <Text style={styles.addActionButtonText}>Add Action</Text>
             </>
           )}
         </TouchableOpacity>
 
         {timelineError && currentGoal.goal_type !== '1y' && (
           <Text style={styles.timelineErrorText}>{timelineError}</Text>
+        )}
+
+        {timeline && currentGoal.goal_type !== '1y' && (
+          <View style={[styles.timelineFooter, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
+            <Text style={[styles.timelineFooterName, { color: colors.textSecondary }]}>
+              {timeline.title || 'Timeline'}
+            </Text>
+            <View style={styles.timelineFooterProgress}>
+              <View style={[styles.timelineFooterBar, { backgroundColor: colors.border }]}>
+                <View
+                  style={[
+                    styles.timelineFooterFill,
+                    { backgroundColor: colors.primary, width: `${timeElapsedPercent}%` },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.timelineFooterPercent, { color: colors.textSecondary }]}>
+                {timeElapsedPercent}%
+              </Text>
+            </View>
+          </View>
         )}
       </View>
     );
@@ -1972,19 +2012,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 32,
   },
-  addButton: {
+  addActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: 12,
+    marginHorizontal: 16,
     marginTop: 16,
+    marginBottom: 24,
   },
   addButtonDisabled: {
     opacity: 0.6,
   },
-  addButtonText: {
+  addActionButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
@@ -1995,6 +2038,40 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  timelineFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    marginTop: 0,
+  },
+  timelineFooterName: {
+    fontSize: 14,
+    flex: 1,
+  },
+  timelineFooterProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timelineFooterBar: {
+    width: 100,
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  timelineFooterFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  timelineFooterPercent: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 36,
+    textAlign: 'right',
   },
   timeRangeSelector: {
     flexDirection: 'row',
