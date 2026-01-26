@@ -11,13 +11,20 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Image,
+  Linking,
 } from 'react-native';
 import { X, ChevronDown, ChevronUp, Trash2, Paperclip } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
-import { uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
+import { 
+  uploadNoteAttachment, 
+  saveNoteAttachmentMetadata, 
+  fetchAttachmentsForNotes,
+  NoteAttachment 
+} from '@/lib/noteAttachmentUtils';
 import * as DocumentPicker from 'expo-document-picker';
 
 // Interfaces
@@ -42,6 +49,7 @@ interface Note {
   content?: string;
   note_text?: string;
   created_at: string;
+  attachments?: NoteAttachment[];
 }
 
 interface GoalData {
@@ -67,7 +75,7 @@ interface EditGoalModalProps {
   visible: boolean;
   onClose: () => void;
   onUpdate: () => void;
-  goal: GoalData;
+  goal: GoalData | null;
   deleteGoal: (goalId: string, goalType: '12week' | 'custom') => Promise<void>;
 }
 
@@ -80,9 +88,9 @@ export function EditGoalModal({
 }: EditGoalModalProps) {
   const { colors } = useTheme();
   
-  // Form state
-  const [title, setTitle] = useState(goal.title);
-  const [description, setDescription] = useState(goal.description || '');
+  // Form state - use empty defaults, will be set in useEffect
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [newNoteText, setNewNoteText] = useState('');
   const [newNoteAttachments, setNewNoteAttachments] = useState<SelectedFile[]>([]);
   
@@ -107,19 +115,10 @@ export function EditGoalModal({
   const [rolesExpanded, setRolesExpanded] = useState(false);
   const [keyRelationshipsExpanded, setKeyRelationshipsExpanded] = useState(false);
 
-  // Reset and load data when modal opens
-  useEffect(() => {
-    if (visible) {
-      console.log('[EditGoalModal] Modal opened for goal:', goal.id, goal.title);
-      setTitle(goal.title);
-      setDescription(goal.description || '');
-      setNewNoteText('');
-      setNewNoteAttachments([]);
-      loadData();
-    }
-  }, [visible, goal.id]);
-
-  const loadData = async () => {
+  // Load data function using useCallback
+  const loadData = useCallback(async () => {
+    if (!goal) return;
+    
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
@@ -209,8 +208,17 @@ export function EditGoalModal({
           .in('id', noteIds)
           .order('created_at', { ascending: false });
         
-        setPreviousNotes(notesData || []);
-        console.log('[EditGoalModal] Previous notes:', notesData?.length || 0);
+        // Fetch attachments for all notes
+        const notesWithAttachments: Note[] = notesData || [];
+        if (notesWithAttachments.length > 0) {
+          const attachmentsMap = await fetchAttachmentsForNotes(noteIds);
+          notesWithAttachments.forEach(note => {
+            note.attachments = attachmentsMap.get(note.id) || [];
+          });
+        }
+        
+        setPreviousNotes(notesWithAttachments);
+        console.log('[EditGoalModal] Previous notes with attachments:', notesWithAttachments.length);
       } else {
         setPreviousNotes([]);
       }
@@ -226,7 +234,24 @@ export function EditGoalModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [goal?.id, goal?.goal_type]);
+
+  // Reset and load data when modal opens
+  useEffect(() => {
+    if (visible && goal) {
+      console.log('[EditGoalModal] Modal opened for goal:', goal.id, goal.title);
+      setTitle(goal.title || '');
+      setDescription(goal.description || '');
+      setNewNoteText('');
+      setNewNoteAttachments([]);
+      loadData();
+    }
+  }, [visible, goal?.id, loadData]);
+
+  // Early return if no goal - MUST be after all hooks
+  if (!goal) {
+    return null;
+  }
 
   // Toggle handlers
   const toggleRole = (roleId: string) => {
@@ -702,6 +727,45 @@ export function EditGoalModal({
                     <Text style={[styles.previousNoteText, { color: colors.text }]}>
                       {note.content || note.note_text}
                     </Text>
+                    
+                    {/* Show previous attachments */}
+                    {note.attachments && note.attachments.length > 0 && (
+                      <View style={styles.previousAttachments}>
+                        {note.attachments.map((attachment) => {
+                          const isImage = attachment.file_type?.startsWith('image/');
+                          return (
+                            <TouchableOpacity
+                              key={attachment.id}
+                              style={styles.previousAttachmentItem}
+                              onPress={() => {
+                                if (attachment.public_url) {
+                                  Linking.openURL(attachment.public_url);
+                                }
+                              }}
+                            >
+                              {isImage && attachment.public_url ? (
+                                <Image
+                                  source={{ uri: attachment.public_url }}
+                                  style={styles.attachmentThumbnail}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <View style={[styles.attachmentDocIcon, { backgroundColor: colors.border }]}>
+                                  <Paperclip size={14} color={colors.textSecondary} />
+                                </View>
+                              )}
+                              <Text 
+                                style={[styles.previousAttachmentName, { color: colors.primary }]}
+                                numberOfLines={1}
+                              >
+                                {attachment.file_name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                    
                     <Text style={[styles.previousNoteDate, { color: colors.textSecondary }]}>
                       {formatLocalDate(note.created_at)}
                     </Text>
@@ -712,7 +776,21 @@ export function EditGoalModal({
 
             {/* Add New Note Section */}
             <View style={styles.newNoteSection}>
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Add New Note</Text>
+              <View style={styles.noteSectionHeader}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Add New Note</Text>
+                <TouchableOpacity
+                  onPress={handlePickAttachment}
+                  style={styles.attachmentIconButton}
+                >
+                  <Paperclip size={20} color={colors.primary} />
+                  {newNoteAttachments.length > 0 && (
+                    <View style={[styles.attachmentBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.attachmentBadgeText}>{newNoteAttachments.length}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+              
               <TextInput
                 style={[styles.input, styles.textArea, { color: colors.text, borderColor: colors.border }]}
                 value={newNoteText}
@@ -722,17 +800,6 @@ export function EditGoalModal({
                 multiline
                 numberOfLines={4}
               />
-
-              {/* Attachment Button */}
-              <TouchableOpacity
-                style={[styles.attachmentButton, { borderColor: colors.border }]}
-                onPress={handlePickAttachment}
-              >
-                <Paperclip size={18} color={colors.primary} />
-                <Text style={[styles.attachmentButtonText, { color: colors.primary }]}>
-                  Add Attachment
-                </Text>
-              </TouchableOpacity>
 
               {/* Attachment Preview */}
               {newNoteAttachments.length > 0 && (
@@ -947,6 +1014,31 @@ const styles = StyleSheet.create({
   newNoteSection: {
     marginTop: 24,
   },
+  noteSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  attachmentIconButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  attachmentBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   attachmentButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -961,6 +1053,38 @@ const styles = StyleSheet.create({
   attachmentButtonText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  previousAttachments: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  previousAttachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderRadius: 4,
+  },
+  attachmentThumbnail: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+  },
+  attachmentDocIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previousAttachmentName: {
+    fontSize: 12,
+    maxWidth: 120,
   },
   attachmentsPreview: {
     marginTop: 12,
