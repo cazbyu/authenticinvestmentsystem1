@@ -348,6 +348,16 @@ export function GoalDetailView({
       setRecurringActions(result.recurringActions);
       setOneTimeActions(result.oneTimeActions);
 
+      console.log('[GoalDetailView] One-time actions:', {
+        count: result.oneTimeActions.length,
+        actions: result.oneTimeActions.map(a => ({
+          id: a.id,
+          title: a.title,
+          status: a.status,
+          due_date: a.due_date
+        }))
+      });
+
       // Fetch week-specific recurring actions if we have timeline info
       if (timeline && cycleWeeks.length > 0) {
         const weekResult = await fetchGoalActionsForWeek(
