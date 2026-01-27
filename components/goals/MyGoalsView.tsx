@@ -440,24 +440,42 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
   };
 
   const getAllGoalsSorted = (): UnifiedGoal[] => {
+    // Priority: 12-week (1) → Custom (2) → Annual (3)
+    const getTypePriority = (goalType: string): number => {
+      switch (goalType) {
+        case '12week': return 1;
+        case 'custom': return 2;
+        case '1y': return 3;
+        default: return 4;
+      }
+    };
+
     const allGoals = [
-      ...annualGoals.map(g => ({
-        ...g,
-        sortDate: g.year_target_date || '2099-12-31'
-      })),
       ...cycleGoals.map(g => ({
         ...g,
+        sortPriority: getTypePriority(g.goal_type),
         sortDate: g.end_date || '2099-12-31'
       })),
       ...customGoals.map(g => ({
         ...g,
+        sortPriority: getTypePriority(g.goal_type),
         sortDate: g.end_date || '2099-12-31'
-      }))
+      })),
+      ...annualGoals.map(g => ({
+        ...g,
+        sortPriority: getTypePriority(g.goal_type),
+        sortDate: g.year_target_date || '2099-12-31'
+      })),
     ];
 
-    return allGoals.sort((a, b) =>
-      new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime()
-    );
+    return allGoals.sort((a, b) => {
+      // First sort by type priority (12-week → Custom → Annual)
+      if (a.sortPriority !== b.sortPriority) {
+        return a.sortPriority - b.sortPriority;
+      }
+      // Then by end date (soonest first)
+      return new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime();
+    });
   };
 
   if (loading) {
