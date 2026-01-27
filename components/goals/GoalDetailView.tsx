@@ -1447,7 +1447,7 @@ const scheduledDays = hasSpecificDays
 };
 
   // Handle toggle for week-filtered actions
-  *const handleToggleDayForWeek = async (actionId: string, dayIndex: number) => {
+  const handleToggleDayForWeek = async (actionId: string, dayIndex: number) => {
   try {
     const week = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
     if (!week) {
@@ -1455,22 +1455,23 @@ const scheduledDays = hasSpecificDays
       return;
     }
 
-    // FIX: Parse date without timezone issues
-    // week.start_date is like "2026-01-25" - parse as local date
+    // Parse week start date as LOCAL date (not UTC)
     const [year, month, day] = week.start_date.split('-').map(Number);
     const weekStartDate = new Date(year, month - 1, day); // month is 0-indexed
     
-    // Get what day of week the timeline week starts on
-    const weekStartDayOfWeek = weekStartDate.getDay(); // 0=Sun, 1=Mon, etc.
+    // Get what day of week the timeline week starts on (0=Sun, 6=Sat)
+    const weekStartDayOfWeek = weekStartDate.getDay();
     
-    // dayIndex is 0=Sun, 1=Mon, 2=Tue based on our UI labels
-    // Calculate how many days from week start to reach the tapped day
-    let daysToAdd = dayIndex - weekStartDayOfWeek;
-    if (daysToAdd < 0) daysToAdd += 7; // Handle wrap-around
+    // dayIndex is the UI column: 0=Sun, 1=Mon, 2=Tue, etc.
+    // We need to find how many days from weekStartDate to reach that day
     
-    const targetDate = new Date(weekStartDate);
-    targetDate.setDate(weekStartDate.getDate() + daysToAdd);
-
+    // Example: weekStart is Saturday (6), user taps Sunday (0)
+    // daysToAdd = (0 - 6 + 7) % 7 = 1 ✓
+    // Example: weekStart is Saturday (6), user taps Tuesday (2)  
+    // daysToAdd = (2 - 6 + 7) % 7 = 3 ✓
+    const daysToAdd = (dayIndex - weekStartDayOfWeek + 7) % 7;
+    
+    const targetDate = new Date(year, month - 1, day + daysToAdd);
     const dateString = formatLocalDate(targetDate);
 
     const action = weekFilteredActions.find(a => a.id === actionId);
