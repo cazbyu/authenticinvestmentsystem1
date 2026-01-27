@@ -22,6 +22,7 @@ import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUti
 import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
 import { fetchGoalActionsForWeek, TaskWithLogs } from '@/hooks/fetchGoalActionsForWeek';
 import { useGoals, Timeline } from '@/hooks/useGoals';
+import { GoalJournalView } from './GoalJournalView';
 
 interface GoalDetailViewProps {
   goal: UnifiedGoal;
