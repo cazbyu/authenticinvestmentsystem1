@@ -1459,15 +1459,17 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
       }
 
       if (formData.selectedGoalIds.length > 0 && parentType === 'task') {
-        const goalJoins = formData.selectedGoalIds.map(twelve_wk_goal_id => ({
-          parent_id: mainRecordId,
-          parent_type: parentType,
-          goal_type: 'twelve_wk_goal',
-          twelve_wk_goal_id,
-          user_id: user.id,
-        }));
-        joinPromises.push(supabase.from('0008-ap-universal-goals-join').insert(goalJoins));
-      }
+  const selectedGoal = formData.selectedGoal;
+  const goalJoins = formData.selectedGoalIds.map(goalId => ({
+    parent_id: mainRecordId,
+    parent_type: parentType,
+    goal_type: selectedGoal?.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
+    twelve_wk_goal_id: selectedGoal?.goal_type === '12week' ? goalId : null,
+    custom_goal_id: selectedGoal?.goal_type === 'custom' ? goalId : null,
+    user_id: user.id,
+  }));
+  joinPromises.push(supabase.from('0008-ap-universal-goals-join').insert(goalJoins));
+}
 
       if (formData.isDelegated && formData.selectedDelegateId && parentType === 'task') {
         const delegateJoin = {
