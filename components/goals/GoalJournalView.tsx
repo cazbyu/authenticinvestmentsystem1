@@ -1,7 +1,8 @@
 // components/goals/GoalJournalView.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { Check, Calendar, Lightbulb, Flower2, AlertTriangle, FileText } from 'lucide-react-native';
+import { Check, Calendar } from 'lucide-react-native';
+import { Image } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { useTheme } from '@/contexts/ThemeContext';
