@@ -898,11 +898,12 @@ export function LifeCompass({
 
 <View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 10 }} pointerEvents="none">
   <CardinalIcons
-    activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
-    size={responsiveSize}
-    onCardinalPress={handleCardinalPress}
-    contentCounts={domainContentCounts}
-  />
+  activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
+  hoveredCardinal={hoveredCardinal}
+  size={responsiveSize}
+  onCardinalPress={handleCardinalPress}
+  contentCounts={domainContentCounts}
+/>
 </View>
 
 <View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 11 }} pointerEvents="none">
