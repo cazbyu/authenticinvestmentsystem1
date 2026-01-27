@@ -1219,21 +1219,21 @@ useEffect(() => {
           </View>
         )}
 
-        {/* Show simple Edit button when week nav is hidden (1y goals or non-Act tabs) */}
-        {(!showWeekNav || activeTab !== 'act') && currentGoal.progress !== undefined && (
-          <View style={styles.bannerRight}>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={handleEditGoalPress}
-            >
-              <Edit3 size={16} color={colors.primary} />
-              <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit</Text>
-            </TouchableOpacity>
-            <Text style={[styles.progressPercentage, { color: colors.text }]}>
-              {cumulativeProgress}%
-            </Text>
-          </View>
-        )}
+        {/* Show simple Edit button only on Act tab for 1y goals */}
+{(!showWeekNav && activeTab === 'act') && currentGoal.progress !== undefined && (
+  <View style={styles.bannerRight}>
+    <TouchableOpacity
+      style={styles.editButton}
+      onPress={handleEditGoalPress}
+    >
+      <Edit3 size={16} color={colors.primary} />
+      <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit</Text>
+    </TouchableOpacity>
+    <Text style={[styles.progressPercentage, { color: colors.text }]}>
+      {cumulativeProgress}%
+    </Text>
+  </View>
+)}
 
         {currentGoal.progress !== undefined && (
           <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
