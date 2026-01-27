@@ -2121,7 +2121,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 0,  // Reduced from 16 to bring banner closer to header
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   bannerTop: {
     flexDirection: 'row',
