@@ -1466,7 +1466,18 @@ const scheduledDays = hasSpecificDays
     const action = weekFilteredActions.find(a => a.id === actionId);
     if (!action) return;
 
+    // DEBUG: Log what we're working with
+    console.log('[DEBUG handleToggleDayForWeek]', {
+      dayIndex,
+      dayLabel: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayIndex],
+      weekStart: week.start_date,
+      calculatedDateString: dateString,
+      existingLogs: action.logs?.map(l => l.measured_on),
+    });
+
     const isCurrentlyCompleted = action.logs?.some(log => log.measured_on === dateString) || false;
+    
+    console.log('[DEBUG] isCurrentlyCompleted:', isCurrentlyCompleted);
 
     // OPTIMISTIC UPDATE: Update local state immediately for instant feedback
     setWeekFilteredActions(prev => prev.map(a => {
