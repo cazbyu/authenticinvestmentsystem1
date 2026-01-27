@@ -86,14 +86,18 @@ export default function CardinalIcons({
           const isHovered = hoveredCardinal === key;
 
           return (
-            <G key={key} transform={`translate(${pos.x}, ${pos.y})`}>
+            <G 
+              key={key} 
+              transform={`translate(${pos.x}, ${pos.y})`}
+              opacity={isActive || isHovered ? 1 : 0}
+            >
               <Circle
                 cx={0}
                 cy={0}
                 r={24}
-                fill={isActive || isHovered ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.6)'}
+                fill="rgba(255, 255, 255, 0.9)"
                 stroke={config.color}
-                strokeWidth={isActive || isHovered ? 2.5 : 1.5}
+                strokeWidth={2.5}
               />
             </G>
           );
