@@ -434,11 +434,9 @@ useEffect(() => {
     if (!user) {
       throw new Error('Not authenticated');
     }
-
     if (currentlyCompleted) {
       await handleActionUncompletion(supabase, actionId, dateString);
     } else {
-      // Find the action from weekFilteredActions (has correct weeklyTarget)
       const action = weekFilteredActions.find(a => a.id === actionId) 
         || recurringActions.find(a => a.id === actionId);
       
@@ -452,13 +450,11 @@ useEffect(() => {
       );
     }
     
-    // DON'T refresh here - optimistic update already handled the UI
-    // Just notify parent that something changed (for score updates etc)
-    onGoalUpdated();
+    // TEMPORARILY DISABLED FOR TESTING
+    // onGoalUpdated();
     
   } catch (error) {
     console.error('[GoalDetailView] Error toggling completion:', error);
-    // On error, DO refresh to get correct state
     setRefreshTrigger(prev => prev + 1);
     Alert.alert('Error', 'Failed to update completion status');
   }
