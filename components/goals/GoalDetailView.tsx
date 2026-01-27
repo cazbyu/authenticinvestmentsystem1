@@ -1351,7 +1351,11 @@ const scheduledDays = hasSpecificDays
     ? getScheduledDaysFromRRule(action.recurrence_rule || '')
     : [0, 1, 2, 3, 4, 5, 6]; // All days available for preset frequencies
   
-  const completedDays = action.logs?.map(log => new Date(log.measured_on).getDay()) || [];
+  const completedDays = action.logs?.map(log => {
+  // Parse as local date to avoid timezone shift
+  const [y, m, d] = log.measured_on.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay();
+}) || [];
   const targetDays = action.weeklyTarget || 1;
   const completionCount = action.weeklyActual || 0;
   const progressPercent = targetDays > 0 ? Math.min(Math.round((completionCount / targetDays) * 100), 100) : 0;
