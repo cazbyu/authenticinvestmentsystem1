@@ -1352,10 +1352,13 @@ const scheduledDays = hasSpecificDays
     : [0, 1, 2, 3, 4, 5, 6]; // All days available for preset frequencies
   
   const completedDays = action.logs?.map(log => {
+  console.log('[DEBUG completedDays] log.measured_on:', log.measured_on);
   // Parse as local date to avoid timezone shift
   const [y, m, d] = log.measured_on.split('-').map(Number);
   return new Date(y, m - 1, d).getDay();
 }) || [];
+
+console.log('[DEBUG] completedDays array:', completedDays);
   const targetDays = action.weeklyTarget || 1;
   const completionCount = action.weeklyActual || 0;
   const progressPercent = targetDays > 0 ? Math.min(Math.round((completionCount / targetDays) * 100), 100) : 0;
