@@ -20,6 +20,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
+import { fetchGoalActionsForWeek, TaskWithLogs } from '@/hooks/fetchGoalActionsForWeek';
 import { useGoals, Timeline } from '@/hooks/useGoals';
 
 interface GoalDetailViewProps {
@@ -80,6 +81,8 @@ export function GoalDetailView({
   const [loading, setLoading] = useState(true);
   const [recurringActions, setRecurringActions] = useState<RecurringActionResult[]>([]);
   const [oneTimeActions, setOneTimeActions] = useState<OneTimeActionResult[]>([]);
+  // Week-specific actions from fetchGoalActionsForWeek (has correct weeklyTarget)
+  const [weekFilteredActions, setWeekFilteredActions] = useState<TaskWithLogs[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Timeline and weeks state for ActionEffortModal
@@ -334,14 +337,41 @@ export function GoalDetailView({
     } else if (activeTab === 'analytics') {
       fetchAnalytics();
     }
-  }, [currentGoal.id, activeTab, refreshTrigger, timeRange]);
+  }, [currentGoal.id, activeTab, refreshTrigger, timeRange, displayedWeekNumber, timeline, cycleWeeks]);
 
   const fetchActions = async () => {
     setLoading(true);
     try {
+      // Fetch ALL actions for the goal (needed for one-time/boost actions)
       const result = await fetchGoalActions(currentGoal.id, currentGoal.goal_type);
       setRecurringActions(result.recurringActions);
       setOneTimeActions(result.oneTimeActions);
+
+      // Fetch week-specific recurring actions if we have timeline info
+      if (timeline && cycleWeeks.length > 0) {
+        const weekResult = await fetchGoalActionsForWeek(
+          [currentGoal.id],
+          displayedWeekNumber,
+          { id: timeline.id, source: timeline.source },
+          cycleWeeks
+        );
+
+        const actionsForGoal = weekResult[currentGoal.id] || [];
+        setWeekFilteredActions(actionsForGoal);
+
+        console.log('[GoalDetailView] Week-filtered actions:', {
+          weekNumber: displayedWeekNumber,
+          count: actionsForGoal.length,
+          actions: actionsForGoal.map(a => ({
+            title: a.title,
+            target: a.weeklyTarget,
+            actual: a.weeklyActual,
+            selectedWeeks: a.selectedWeeks
+          }))
+        });
+      } else {
+        setWeekFilteredActions([]);
+      }
     } catch (error) {
       console.error('[GoalDetailView] Error fetching goal actions:', error);
       Alert.alert('Error', 'Failed to load actions for this goal');
@@ -1165,14 +1195,19 @@ export function GoalDetailView({
   };
 
   const getScheduledDaysFromRRule = (rrule: string): number[] => {
-    if (!rrule) return [];
+    if (!rrule) return [0, 1, 2, 3, 4, 5, 6]; // All days available if no rule
 
     const dayMap: Record<string, number> = {
       SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6
     };
 
     const byDayMatch = rrule.match(/BYDAY=([^;]+)/);
-    if (!byDayMatch) return [];
+
+    // If no BYDAY specified, ALL days are available
+    // This happens when user selects preset frequency like "5 days" (any 5 days)
+    if (!byDayMatch) {
+      return [0, 1, 2, 3, 4, 5, 6]; // All days available
+    }
 
     const days = byDayMatch[1].split(',');
     return days.map(day => dayMap[day]).filter(d => d !== undefined);
@@ -1251,6 +1286,95 @@ export function GoalDetailView({
     );
   };
 
+  // Render card using TaskWithLogs from fetchGoalActionsForWeek (has correct weeklyTarget)
+  const renderWeekFilteredActionCard = (action: TaskWithLogs) => {
+    const scheduledDays = getScheduledDaysFromRRule(action.recurrence_rule || '');
+    const completedDays = action.logs?.map(log => new Date(log.measured_on).getDay()) || [];
+    const targetDays = action.weeklyTarget || 1;
+    const completionCount = action.weeklyActual || 0;
+    const progressPercent = targetDays > 0 ? Math.min(Math.round((completionCount / targetDays) * 100), 100) : 0;
+
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    return (
+      <View key={action.id} style={[styles.liCard, { backgroundColor: colors.surface }]}>
+        <View style={styles.liHeader}>
+          <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
+          <TouchableOpacity onPress={() => Alert.alert('Edit Action', `Edit "${action.title}" - Coming soon`)}>
+            <Text style={[styles.liEditLink, { color: colors.primary }]}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.liProgressContainer}>
+          <View style={[styles.liProgressBar, { backgroundColor: colors.border }]}>
+            <View style={[styles.liProgressFill, { backgroundColor: colors.primary, width: `${progressPercent}%` }]} />
+          </View>
+          <Text style={[styles.liProgressText, { color: colors.text }]}>{progressPercent}%</Text>
+        </View>
+
+        <View style={styles.liDaysRow}>
+          <View style={styles.liDaysContainer}>
+            {dayLabels.map((label, index) => {
+              const isAvailable = scheduledDays.includes(index);
+              const isCompleted = completedDays.includes(index);
+
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.liDayColumn}
+                  onPress={() => isAvailable && handleToggleDayForWeek(action.id, index)}
+                  disabled={!isAvailable}
+                >
+                  <Text style={[styles.liDayLabel, { color: colors.textSecondary }]}>{label}</Text>
+                  <View style={[
+                    styles.liBubble,
+                    { borderColor: colors.border },
+                    isAvailable && !isCompleted && styles.liBubbleScheduled,
+                    isCompleted && [styles.liBubbleCompleted, { backgroundColor: colors.primary, borderColor: colors.primary }],
+                    !isAvailable && [styles.liBubbleDisabled, { backgroundColor: colors.border + '40' }],
+                  ]}>
+                    {isCompleted && <View style={styles.liBubbleFill} />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.liCount, { color: colors.textSecondary }]}>
+            {completionCount}/{targetDays}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Handle toggle for week-filtered actions
+  const handleToggleDayForWeek = async (actionId: string, dayIndex: number) => {
+    try {
+      const week = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
+      if (!week) {
+        console.error('[GoalDetailView] Week not found:', displayedWeekNumber);
+        return;
+      }
+
+      // Calculate target date: week start + day offset
+      const weekStart = new Date(week.start_date);
+      const targetDate = new Date(weekStart);
+      targetDate.setDate(weekStart.getDate() + dayIndex);
+      targetDate.setHours(0, 0, 0, 0);
+
+      const dateString = formatLocalDate(targetDate);
+
+      const action = weekFilteredActions.find(a => a.id === actionId);
+      const isCurrentlyCompleted = action?.logs?.some(log => log.measured_on === dateString) || false;
+
+      await handleToggleCompletion(actionId, dateString, isCurrentlyCompleted);
+    } catch (error) {
+      console.error('[GoalDetailView] Error toggling day:', error);
+      Alert.alert('Error', 'Failed to toggle completion');
+    }
+  };
+
   const handleToggleDay = async (actionId: string, dayIndex: number) => {
     try {
       const today = new Date();
@@ -1289,7 +1413,7 @@ export function GoalDetailView({
 
     return (
       <View style={styles.tabContent}>
-        {recurringActions.length > 0 && (
+        {weekFilteredActions.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               RECURRING ACTIONS
@@ -1298,7 +1422,7 @@ export function GoalDetailView({
               Leading Indicators • Tap circles to mark completion
             </Text>
 
-            {recurringActions.map(action => renderLeadingIndicatorCard(action))}
+            {weekFilteredActions.map(action => renderWeekFilteredActionCard(action))}
           </View>
         )}
 
@@ -1353,7 +1477,7 @@ export function GoalDetailView({
           </View>
         )}
 
-        {recurringActions.length === 0 && oneTimeActions.length === 0 && (
+        {weekFilteredActions.length === 0 && oneTimeActions.length === 0 && (
           <View style={styles.emptyState}>
             <Target size={64} color={colors.textSecondary} style={styles.emptyIcon} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Actions Yet</Text>
