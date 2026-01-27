@@ -204,9 +204,11 @@ function CardinalIconWithLabel({
         ]}
         pointerEvents="none"
       >
-        <Text style={[styles.labelText, { color }]}>
-          {label}
-        </Text>
+        <View style={styles.labelBox}>
+          <Text style={[styles.labelText, { color }]}>
+            {label}
+          </Text>
+        </View>
       </Animated.View>
     </>
   );
