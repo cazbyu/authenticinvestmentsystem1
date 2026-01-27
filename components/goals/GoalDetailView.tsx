@@ -1774,59 +1774,17 @@ console.log('[DEBUG] completedDays array:', completedDays);
   };
 
   const renderJournalTab = () => {
-    // Safe date formatter - handles string dates from database
-    const safeFormatDate = (dateValue: string | Date | null | undefined): string => {
-      if (!dateValue) return 'Unknown date';
-      const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
-      if (isNaN(date.getTime())) return 'Invalid date';
-      return formatLocalDate(date);
-    };
-
-    if (journalLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Loading journal...
-          </Text>
-        </View>
-      );
-    }
+    if (!currentGoal) return null;
 
     return (
-      <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabScrollContent}>
-        {journalNotes.length === 0 ? (
-          <View style={styles.emptyState}>
-            <BookOpen size={64} color={colors.textSecondary} style={styles.emptyIcon} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Journal Entries</Text>
-            <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
-              Complete tasks and add reflections linked to this goal to see them here
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.journalList}>
-            {journalNotes.map(entry => (
-              <TouchableOpacity
-                key={entry.id}
-                style={[styles.journalEntry, { backgroundColor: colors.surface }]}
-                onPress={() => handleJournalEntryPress(entry)}
-              >
-                <View style={[styles.journalIcon, getIconStyle(entry.entry_type)]}>
-                  {getEntryIcon(entry.entry_type)}
-                </View>
-                <View style={styles.journalContent}>
-                  <Text style={[styles.journalTitle, { color: colors.text }]} numberOfLines={1}>
-                    {entry.note_text}
-                  </Text>
-                  <Text style={[styles.journalDate, { color: colors.textSecondary }]}>
-                    {safeFormatDate(entry.created_at)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+      <View style={styles.tabContent}>
+        <GoalJournalView
+          goalId={currentGoal.id}
+          goalType={currentGoal.goal_type}
+          goalStartDate={currentGoal.start_date}
+          goalEndDate={currentGoal.end_date}
+        />
+      </View>
     );
   };
 
