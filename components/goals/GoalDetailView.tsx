@@ -1277,7 +1277,11 @@ useEffect(() => {
   };
 
   const renderLeadingIndicatorCard = (action: RecurringActionResult) => {
-    const scheduledDays = getScheduledDaysFromRRule(action.recurrence_rule);
+    // Check if this is a custom schedule (has specific BYDAY) vs preset frequency
+const hasSpecificDays = action.recurrence_rule?.includes('BYDAY=');
+const scheduledDays = hasSpecificDays 
+  ? getScheduledDaysFromRRule(action.recurrence_rule || '')
+  : [0, 1, 2, 3, 4, 5, 6]; // All days available for preset frequencies
     const completedDays = getCompletedDaysForWeek(action);
     const targetDays = action.weeklyTarget || 1;
     const completionCount = action.weeklyActual || 0;
