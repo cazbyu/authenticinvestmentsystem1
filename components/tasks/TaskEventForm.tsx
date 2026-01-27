@@ -1331,6 +1331,18 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         is_important: formData.isImportant,
         is_twelve_week_goal: formData.isGoal,
         is_deposit_idea: initialData?.is_deposit_idea || false,
+
+        // Direct goal FK for easier querying
+        goal_12wk_id: formData.selectedGoalIds.length > 0 && availableGoals.find(g => g.id === formData.selectedGoalIds[0])?.goal_type === '12week'
+          ? formData.selectedGoalIds[0]
+          : null,
+        parent_goal_id: formData.selectedGoalIds.length > 0 && availableGoals.find(g => g.id === formData.selectedGoalIds[0])?.goal_type === 'custom'
+          ? formData.selectedGoalIds[0]
+          : null,
+        parent_goal_type: formData.selectedGoalIds.length > 0 && availableGoals.find(g => g.id === formData.selectedGoalIds[0])?.goal_type === 'custom'
+          ? 'custom_goal'
+          : null,
+
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
         // Parent relationship for follow-through items
@@ -1360,6 +1372,19 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
       };
 
       const sanitizedPayload = sanitizeTimestamps(taskPayload);
+
+      // Log goal FK assignments for debugging
+      if (formData.selectedGoalIds.length > 0) {
+        const firstGoal = availableGoals.find(g => g.id === formData.selectedGoalIds[0]);
+        console.log('[TaskEventForm] Goal FK assignment:', {
+          selectedGoalId: formData.selectedGoalIds[0],
+          goalType: firstGoal?.goal_type,
+          goal_12wk_id: sanitizedPayload.goal_12wk_id,
+          parent_goal_id: sanitizedPayload.parent_goal_id,
+          parent_goal_type: sanitizedPayload.parent_goal_type
+        });
+      }
+
       console.log('[TaskEventForm] Complete task payload:', JSON.stringify(sanitizedPayload, null, 2));
 
       if (mode === 'edit' && initialData?.id) {
