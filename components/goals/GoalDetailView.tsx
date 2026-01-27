@@ -1235,16 +1235,16 @@ useEffect(() => {
   </View>
 )}
 
-        {currentGoal.progress !== undefined && (
-          <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
-            <View
-              style={[
-                styles.progressBarFill,
-                { backgroundColor: colors.primary, width: `${currentGoal.progress}%` },
-              ]}
-            />
-          </View>
-        )}
+        {currentGoal.progress !== undefined && activeTab === 'act' && (
+  <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
+    <View
+      style={[
+        styles.progressBarFill,
+        { backgroundColor: colors.primary, width: `${currentGoal.progress}%` },
+      ]}
+    />
+  </View>
+)}
 
         {currentGoal.parent_goal_title && (
           <TouchableOpacity style={styles.parentGoalLink} activeOpacity={0.7}>
