@@ -1447,7 +1447,7 @@ const scheduledDays = hasSpecificDays
 };
 
   // Handle toggle for week-filtered actions
-  const handleToggleDayForWeek = async (actionId: string, dayIndex: number) => {
+  *const handleToggleDayForWeek = async (actionId: string, dayIndex: number) => {
   try {
     const week = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
     if (!week) {
@@ -1455,22 +1455,34 @@ const scheduledDays = hasSpecificDays
       return;
     }
 
-    // Calculate target date: week start + day offset
-    const weekStart = new Date(week.start_date);
-    const targetDate = new Date(weekStart);
-    targetDate.setDate(weekStart.getDate() + dayIndex);
-    targetDate.setHours(0, 0, 0, 0);
+    // FIX: Parse date without timezone issues
+    // week.start_date is like "2026-01-25" - parse as local date
+    const [year, month, day] = week.start_date.split('-').map(Number);
+    const weekStartDate = new Date(year, month - 1, day); // month is 0-indexed
+    
+    // Get what day of week the timeline week starts on
+    const weekStartDayOfWeek = weekStartDate.getDay(); // 0=Sun, 1=Mon, etc.
+    
+    // dayIndex is 0=Sun, 1=Mon, 2=Tue based on our UI labels
+    // Calculate how many days from week start to reach the tapped day
+    let daysToAdd = dayIndex - weekStartDayOfWeek;
+    if (daysToAdd < 0) daysToAdd += 7; // Handle wrap-around
+    
+    const targetDate = new Date(weekStartDate);
+    targetDate.setDate(weekStartDate.getDate() + daysToAdd);
 
     const dateString = formatLocalDate(targetDate);
 
     const action = weekFilteredActions.find(a => a.id === actionId);
     if (!action) return;
 
-    // DEBUG: Log what we're working with
+    // DEBUG
     console.log('[DEBUG handleToggleDayForWeek]', {
       dayIndex,
       dayLabel: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayIndex],
       weekStart: week.start_date,
+      weekStartDayOfWeek,
+      daysToAdd,
       calculatedDateString: dateString,
       existingLogs: action.logs?.map(l => l.measured_on),
     });
@@ -1479,7 +1491,7 @@ const scheduledDays = hasSpecificDays
     
     console.log('[DEBUG] isCurrentlyCompleted:', isCurrentlyCompleted);
 
-    // OPTIMISTIC UPDATE: Update local state immediately for instant feedback
+    // OPTIMISTIC UPDATE
     setWeekFilteredActions(prev => prev.map(a => {
       if (a.id !== actionId) return a;
       
@@ -1487,11 +1499,9 @@ const scheduledDays = hasSpecificDays
       let newWeeklyActual = a.weeklyActual || 0;
       
       if (isCurrentlyCompleted) {
-        // Remove the log for this date
         newLogs = newLogs.filter(log => log.measured_on !== dateString);
         newWeeklyActual = Math.max(0, newWeeklyActual - 1);
       } else {
-        // Add a log for this date
         newLogs.push({ measured_on: dateString } as any);
         newWeeklyActual = newWeeklyActual + 1;
       }
@@ -1503,12 +1513,11 @@ const scheduledDays = hasSpecificDays
       };
     }));
 
-    // Perform actual database update in background
+    // Database update
     await handleToggleCompletion(actionId, dateString, isCurrentlyCompleted);
     
   } catch (error) {
     console.error('[GoalDetailView] Error toggling day:', error);
-    // Revert on error by refreshing
     setRefreshTrigger(prev => prev + 1);
     Alert.alert('Error', 'Failed to toggle completion');
   }
