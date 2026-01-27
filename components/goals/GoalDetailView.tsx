@@ -1213,8 +1213,8 @@ useEffect(() => {
               </TouchableOpacity>
 
               <Text style={[styles.totalProgress, { color: colors.text }]}>
-                Total {cumulativeProgress}%
-              </Text>
+  Total {weeklyCompletionPercent}%
+</Text>
             </View>
           </View>
         )}
