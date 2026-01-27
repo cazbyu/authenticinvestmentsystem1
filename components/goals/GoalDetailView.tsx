@@ -93,6 +93,7 @@ export function GoalDetailView({
 
   // ActionEffortModal state
   const [showActionEffortModal, setShowActionEffortModal] = useState(false);
+  const [editingAction, setEditingAction] = useState<TaskWithLogs | null>(null);
 
   // EditGoalModal state
   const [showEditGoalModal, setShowEditGoalModal] = useState(false);
@@ -482,8 +483,15 @@ export function GoalDetailView({
 
   const handleActionEffortModalClose = async () => {
     setShowActionEffortModal(false);
+    setEditingAction(null);
     setRefreshTrigger(prev => prev + 1);
     onGoalUpdated();
+  };
+
+  const handleEditAction = (action: TaskWithLogs) => {
+    console.log('[GoalDetailView] Edit action:', action.id, action.title);
+    setEditingAction(action);
+    setShowActionEffortModal(true);
   };
 
   // Handle Edit Goal Modal
@@ -1220,7 +1228,7 @@ export function GoalDetailView({
     }) || [];
   };
 
-  const handleEditAction = (action: RecurringActionResult) => {
+  const handleEditLeadingIndicator = (action: RecurringActionResult) => {
     // TODO: Open ActionEffortModal in edit mode
     Alert.alert('Edit Action', `Edit "${action.title}" - Coming soon`);
   };
@@ -1238,7 +1246,7 @@ export function GoalDetailView({
       <View key={action.id} style={[styles.liCard, { backgroundColor: colors.surface }]}>
         <View style={styles.liHeader}>
           <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
-          <TouchableOpacity onPress={() => handleEditAction(action)}>
+          <TouchableOpacity onPress={() => handleEditLeadingIndicator(action)}>
             <Text style={[styles.liEditLink, { color: colors.primary }]}>Edit</Text>
           </TouchableOpacity>
         </View>
@@ -1300,7 +1308,7 @@ export function GoalDetailView({
       <View key={action.id} style={[styles.liCard, { backgroundColor: colors.surface }]}>
         <View style={styles.liHeader}>
           <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
-          <TouchableOpacity onPress={() => Alert.alert('Edit Action', `Edit "${action.title}" - Coming soon`)}>
+          <TouchableOpacity onPress={() => handleEditAction(action)}>
             <Text style={[styles.liEditLink, { color: colors.primary }]}>Edit</Text>
           </TouchableOpacity>
         </View>
@@ -1831,16 +1839,37 @@ export function GoalDetailView({
         {renderContent()}
       </ScrollView>
 
-      {/* ActionEffortModal - Full featured modal for adding actions */}
-      <ActionEffortModal
-        visible={showActionEffortModal}
-        onClose={handleActionEffortModalClose}
-        goal={goalForModal}
-        cycleWeeks={cycleWeeks}
-        timeline={timeline}
-        createTaskWithWeekPlan={createTaskWithWeekPlan}
-        mode="create"
-      />
+      {/* ActionEffortModal - Full featured modal for adding/editing actions */}
+      {showActionEffortModal && !editingAction && (
+        <ActionEffortModal
+          visible={showActionEffortModal}
+          onClose={handleActionEffortModalClose}
+          goal={goalForModal}
+          cycleWeeks={cycleWeeks}
+          timeline={timeline}
+          createTaskWithWeekPlan={createTaskWithWeekPlan}
+          mode="create"
+        />
+      )}
+
+      {/* ActionEffortModal for editing */}
+      {showActionEffortModal && editingAction && (
+        <ActionEffortModal
+          visible={showActionEffortModal}
+          onClose={handleActionEffortModalClose}
+          task={{
+            id: editingAction.id,
+            title: editingAction.title,
+            recurrence_rule: editingAction.recurrence_rule,
+          }}
+          goalId={currentGoal.id}
+          goalType={currentGoal.goal_type}
+          timelineId={timeline?.id}
+          timelineSource={timeline?.source}
+          cycleWeeks={cycleWeeks}
+          mode="edit"
+        />
+      )}
 
       {/* EditGoalModal - For editing goal details */}
       {goalForEditModal && (
