@@ -2345,33 +2345,39 @@ const styles = StyleSheet.create({
     width: 36,
   },
   liDayLabel: {
-    fontSize: 10,
-    marginBottom: 4,
-  },
-  liBubble: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  liBubbleScheduled: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#f59e0b',
-  },
-  liBubbleCompleted: {
-    borderWidth: 2,
-  },
-  liBubbleDisabled: {
-    opacity: 0.5,
-  },
-  liBubbleFill: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#ffffff',
-  },
+  fontSize: 12,
+  marginBottom: 4,
+  fontWeight: '500',
+},
+liBubble: {
+  width: 30,
+  height: 30,
+  borderRadius: 15,
+  borderWidth: 2,
+  borderColor: '#374151',
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: 'transparent',
+},
+liBubbleScheduled: {
+  backgroundColor: '#fef3c7',
+  borderColor: '#f59e0b',
+},
+liBubbleCompleted: {
+  backgroundColor: '#dcfce7',
+  borderColor: '#22c55e',
+},
+liBubbleMissed: {
+  backgroundColor: '#fee2e2',
+  borderColor: '#ef4444',
+},
+liBubbleDisabled: {
+  opacity: 0.3,
+  borderColor: '#d1d5db',
+},
+liBubbleFill: {
+  // No longer used - we use icons now
+},
   liCount: {
     fontSize: 14,
     fontWeight: '600',
