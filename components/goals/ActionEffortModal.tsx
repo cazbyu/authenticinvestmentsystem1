@@ -632,6 +632,15 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         ...(mode === 'edit' && initialData ? { id: initialData.id } : {}),
       };
 
+      console.log('[ActionEffortModal] Saving task with goal link:', {
+        mode,
+        goal_id: goal?.id,
+        goal_title: goal?.title,
+        goal_type: goal?.goal_type,
+        twelve_wk_goal_id: taskData.twelve_wk_goal_id,
+        custom_goal_id: taskData.custom_goal_id
+      });
+
       if (recurrenceType === 'custom' && !isAnytime) {
         taskData.start_time = formatTimeForDB(startTimeHours, startTimeMinutes);
         taskData.end_time = formatTimeForDB(endTimeHours, endTimeMinutes);
