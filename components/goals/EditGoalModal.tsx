@@ -155,7 +155,7 @@ export function EditGoalModal({
 
       // Determine parent_type based on goal type
       // 12-week goals use 'goal', custom goals use 'custom_goal'
-      const parentType = goal.goal_type === '12week' ? 'goal' : 'custom_goal';
+      const parentType = goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
 
       // Fetch current role associations from universal-roles-join
       const { data: roleJoins, error: roleErr } = await supabase
