@@ -2117,12 +2117,14 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   goalBanner: {
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 0,  // Reduced from 16 to bring banner closer to header
-    borderRadius: 12,
-    marginBottom: 2,
-  },
+  paddingHorizontal: 16,
+  paddingBottom: 16,
+  paddingTop: 8,  // Reduced top padding
+  marginHorizontal: 16,
+  marginTop: 0,   // Remove top margin
+  borderRadius: 12,
+  marginBottom: 8,
+},
   bannerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
