@@ -553,22 +553,22 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   };
 
   const generateRecurrenceRule = () => {
+    // ONLY use BYDAY when user explicitly selects "Custom" and picks specific days
     if (recurrenceType === 'custom' && selectedCustomDays.length > 0) {
       const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
       const byDays = selectedCustomDays.map(dayIndex => dayNames[dayIndex]).join(',');
       return `RRULE:FREQ=WEEKLY;BYDAY=${byDays}`;
-    } else if (recurrenceType === 'daily') {
-      return 'RRULE:FREQ=DAILY';
-    } else {
-      const days = parseInt(recurrenceType.replace('days', '').replace('day', ''));
-      if (days === 7) {
-        return 'RRULE:FREQ=DAILY';
-      } else {
-        const weekdays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-        const byDays = weekdays.slice(0, days).join(',');
-        return `RRULE:FREQ=WEEKLY;BYDAY=${byDays}`;
-      }
     }
+
+    // For "daily" (7 days), use FREQ=DAILY
+    if (recurrenceType === 'daily') {
+      return 'RRULE:FREQ=DAILY';
+    }
+
+    // For preset frequencies (1-6 days), use FREQ=WEEKLY WITHOUT BYDAY
+    // This means "X times per week on ANY days user chooses"
+    // The target_days in week_plan table controls the count
+    return 'RRULE:FREQ=WEEKLY';
   };
 
   const handleSave = async () => {
