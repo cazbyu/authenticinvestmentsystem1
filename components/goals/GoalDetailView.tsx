@@ -1773,7 +1773,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
     Alert.alert('Entry Details', entry.note_text);
   };
 
-  *const renderJournalTab = () => {
+  const renderJournalTab = () => {
     // Safe date formatter - handles string dates from database
     const safeFormatDate = (dateValue: string | Date | null | undefined): string => {
       if (!dateValue) return 'Unknown date';
