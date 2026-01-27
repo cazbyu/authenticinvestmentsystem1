@@ -919,11 +919,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   };
 
   const handleGoalPick = async (id: string) => {
-    const base = availableGoals.find(g => g.id === id);
-    if (!base) return;
+  const base = availableGoals.find(g => g.id === id);
+  if (!base) return;
 
-    setFormData(prev => ({ ...prev, selectedGoal: base }));
-  };
+  setFormData(prev => ({ 
+    ...prev, 
+    selectedGoal: base,
+    selectedGoalIds: [id]  // ADD THIS LINE - populate the array too
+  }));
+};
 
   const defaultEventTimes = () => {
     // Start ~ now (rounded to next 15 minutes), end 1 hour later
