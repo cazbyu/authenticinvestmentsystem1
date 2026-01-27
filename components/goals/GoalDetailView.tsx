@@ -423,40 +423,46 @@ useEffect(() => {
   };
 
   const handleToggleCompletion = async (
-    actionId: string,
-    dateString: string,
-    currentlyCompleted: boolean
-  ) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('Not authenticated');
-      }
-
-      if (currentlyCompleted) {
-        await handleActionUncompletion(supabase, actionId, dateString);
-      } else {
-        const action = recurringActions.find(a => a.id === actionId);
-        
-        await handleActionCompletion(
-          supabase,
-          user.id,
-          actionId,
-          dateString,
-          timeline,
-          action?.weeklyTarget
-        );
-      }
-      
-      setRefreshTrigger(prev => prev + 1);
-      onGoalUpdated();
-    } catch (error) {
-      console.error('[GoalDetailView] Error toggling completion:', error);
-      Alert.alert('Error', 'Failed to update completion status');
+  actionId: string,
+  dateString: string,
+  currentlyCompleted: boolean
+) => {
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('Not authenticated');
     }
-  };
+
+    if (currentlyCompleted) {
+      await handleActionUncompletion(supabase, actionId, dateString);
+    } else {
+      // Find the action from weekFilteredActions (has correct weeklyTarget)
+      const action = weekFilteredActions.find(a => a.id === actionId) 
+        || recurringActions.find(a => a.id === actionId);
+      
+      await handleActionCompletion(
+        supabase,
+        user.id,
+        actionId,
+        dateString,
+        timeline,
+        action?.weeklyTarget
+      );
+    }
+    
+    // DON'T refresh here - optimistic update already handled the UI
+    // Just notify parent that something changed (for score updates etc)
+    onGoalUpdated();
+    
+  } catch (error) {
+    console.error('[GoalDetailView] Error toggling completion:', error);
+    // On error, DO refresh to get correct state
+    setRefreshTrigger(prev => prev + 1);
+    Alert.alert('Error', 'Failed to update completion status');
+  }
+};
 
   const handleToggleBoostTask = async (task: OneTimeActionResult) => {
     try {
