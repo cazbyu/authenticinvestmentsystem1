@@ -1,101 +1,319 @@
-# STEP 3: Boost Actions Section - COMPLETE ✓
+# Step 3 Complete: Fixed Custom Goal Date Range in MyGoalsView ✓
 
-## Implementation Summary
+## Overview
+Successfully updated `components/goals/MyGoalsView.tsx` to display the correct date range for custom goals in the Goal Bank list. Custom goals now show their timeline's start/end dates instead of the goal's direct dates.
 
-### What Was Changed
+---
 
-1. **Updated fetchGoalActions.ts**
-   - ✅ Modified query to fetch ALL one-time tasks (not just completed ones)
-   - ✅ Changed filter from `eq('status', 'completed')` to `neq('status', 'cancelled')`
-   - ✅ Updated ordering to `due_date` ascending (nulls last)
+## The Problem (Before)
 
-2. **Added Boost Actions Section UI**
-   - ✅ Replaced old "ONE-TIME ACTIONS" section with new "BOOST ACTIONS"
-   - ✅ New subtitle: "One-time tasks linked to this goal"
-   - ✅ Interactive checkbox UI with Square/CheckSquare icons
-
-3. **Implemented Toggle Completion Handler**
-   - ✅ Added `handleToggleBoostTask()` function
-   - ✅ Updates task status between 'pending' and 'completed'
-   - ✅ Sets/clears `completed_at` timestamp
-   - ✅ Triggers refresh after toggle
-
-### New Layout
-
-```
-BOOST ACTIONS
-One-time tasks linked to this goal
-
-┌─────────────────────────────────────────┐
-│ ☐ Complete practice exam    Due: Today │
-│ ☑ Email professor          Completed   │
-└─────────────────────────────────────────┘
+### Old Behavior:
+When displaying custom goals in the Goal Bank list, the code used:
+```tsx
+start_date: goal.start_date,
+end_date: goal.end_date,
 ```
 
-### Key Features
+This caused:
+- ❌ Custom goals showed wrong/missing date ranges
+- ❌ Timeline dates weren't being used
+- ❌ Goal card subtitle was empty or incorrect
 
-✅ **Checkbox Interaction**
-   - Empty square (☐) = Pending task
-   - Filled square (☑) = Completed task
-   - Tap to toggle status
+### Why This Was Wrong:
+For custom goals, the date range should come from the **custom_timeline** table, not the goal itself. The goal's `start_date` and `end_date` might be null or outdated, but the timeline has the correct dates.
 
-✅ **Status Display**
-   - Completed tasks show strikethrough text
-   - Shows "Completed" label for finished tasks
-   - Shows "Due: [date]" for pending tasks with due dates
-   - Shows "No due date" for tasks without due dates
+---
 
-✅ **Data Flow**
-   - Fetches all non-cancelled one-time tasks linked to goal
-   - Includes both pending and completed tasks
-   - Orders by due_date ascending
+## The Solution (After)
 
-### Code Changes
-
-#### fetchGoalActions.ts (lines 291-300)
-- Changed query to include both pending and completed tasks
-- Filter: `neq('status', 'cancelled')` instead of `eq('status', 'completed')`
-- Order by: `due_date` ascending
-
-#### GoalDetailView.tsx
-
-**New Imports:**
-- Added `Square` and `CheckSquare` icons from lucide-react-native
-
-**New Handler (lines 366-409):**
-```typescript
-handleToggleBoostTask(task: OneTimeActionResult)
-  - Toggles between pending ↔ completed
-  - Updates completed_at timestamp
-  - Refreshes view
+### New Behavior:
+Custom goals now use the timeline's dates first, with fallback:
+```tsx
+start_date: goal.timeline?.start_date || goal.start_date,
+end_date: goal.timeline?.end_date || goal.end_date,
 ```
 
-**Updated UI (lines 1111-1160):**
-- Section title: "BOOST ACTIONS"
-- Subtitle: "One-time tasks linked to this goal"
-- Interactive checkbox list with TouchableOpacity
-- Conditional rendering based on completion status
+This ensures:
+- ✅ Timeline dates are used as primary source
+- ✅ Fallback to goal dates if timeline dates missing
+- ✅ Date range displays correctly on goal cards
+- ✅ Consistent with how 12-week goals work
 
-**New Styles (lines 1925-1957):**
-- boostList: Container with gap
-- boostItem: Card with padding and shadow
-- boostCheckbox: Icon container
-- boostContent: Text content area
-- boostTitle: Task title with optional strikethrough
-- boostTitleCompleted: Strikethrough style
-- boostDue: Due date / status text
+---
 
-### Verification Checklist
+## Changes Applied
 
-✅ Boost Actions section appears below Recurring Actions
-✅ Shows one-time tasks linked to this goal (both pending and completed)
-✅ Checkbox toggles completion status
-✅ Completed tasks show strikethrough text
-✅ Completed tasks show "Completed" label
-✅ Pending tasks show due date or "No due date"
-✅ Tapping checkbox updates database and refreshes UI
-✅ Build completes without errors
+### 3a. Fixed Custom Goals Mapping ✓
+**Lines 271-272:** Updated date assignment to prioritize timeline dates
 
-## Status: COMPLETE ✓
+**Before:**
+```tsx
+start_date: goal.start_date,
+end_date: goal.end_date,
+```
 
-All requirements for Step 3 have been implemented successfully.
+**After:**
+```tsx
+start_date: goal.timeline?.start_date || goal.start_date,
+end_date: goal.timeline?.end_date || goal.end_date,
+```
+
+---
+
+## How It Works Now
+
+### Data Flow for Custom Goals:
+
+1. **Database Query:**
+   ```sql
+   SELECT 
+     goal.*,
+     timeline.start_date as timeline_start_date,
+     timeline.end_date as timeline_end_date
+   FROM custom_goals goal
+   LEFT JOIN custom_timelines timeline ON goal.custom_timeline_id = timeline.id
+   ```
+
+2. **Mapping Logic:**
+   ```tsx
+   // First try to use timeline dates (most accurate)
+   start_date: goal.timeline?.start_date
+   // If timeline dates missing, fallback to goal dates
+   || goal.start_date
+   ```
+
+3. **Result:**
+   - Timeline dates are preferred (they're always correct)
+   - Goal dates used only as fallback (rare case)
+   - Date range displays on goal card
+
+---
+
+## Visual Impact
+
+### Before (Missing Date Range):
+```
+Goal Card in Goal Bank:
+┌─────────────────────────────────┐
+│ Complete Thesis                 │
+│ [No date range shown]           │
+│ Week 4 of 12                    │
+│ ████████████░░░░░░░░  33%       │
+└─────────────────────────────────┘
+```
+
+### After (Correct Date Range):
+```
+Goal Card in Goal Bank:
+┌─────────────────────────────────┐
+│ Complete Thesis                 │
+│ 1 Jan - 31 Mar 2026             │
+│ Week 4 of 12                    │
+│ ████████████░░░░░░░░  33%       │
+└─────────────────────────────────┘
+```
+
+---
+
+## Why Timeline Dates Are Preferred
+
+### Custom Timeline Table:
+```sql
+CREATE TABLE custom_timelines (
+  id UUID PRIMARY KEY,
+  title TEXT NOT NULL,
+  start_date DATE NOT NULL,  -- Always set
+  end_date DATE NOT NULL,    -- Always set
+  ...
+);
+```
+
+### Custom Goals Table:
+```sql
+CREATE TABLE custom_goals (
+  id UUID PRIMARY KEY,
+  title TEXT NOT NULL,
+  custom_timeline_id UUID REFERENCES custom_timelines(id),
+  start_date DATE,  -- May be NULL
+  end_date DATE,    -- May be NULL
+  ...
+);
+```
+
+**Key Point:**
+- Timeline dates are **required** (NOT NULL)
+- Goal dates are **optional** (may be NULL)
+- Therefore, timeline dates are more reliable
+
+---
+
+## Consistency Across Goal Types
+
+Now all goal types get dates from their timeline:
+
+| Goal Type | Date Source |
+|---|---|
+| 12-week | `user_global_timelines.start_date/end_date` |
+| Annual | `user_global_timelines.start_date/end_date` |
+| Custom | `custom_timelines.start_date/end_date` ✓ (fixed) |
+
+---
+
+## Technical Details
+
+### Where This Matters:
+
+**MyGoalsView.tsx - Goal Card Rendering:**
+```tsx
+const GoalProgressCard = ({ goal }) => {
+  // Uses goal.start_date and goal.end_date
+  const dateRange = formatDateRange(goal.start_date, goal.end_date);
+  
+  return (
+    <View>
+      <Text>{goal.title}</Text>
+      <Text>{dateRange}</Text>  {/* Now shows correct range! */}
+    </View>
+  );
+};
+```
+
+### Data Structure After Mapping:
+```tsx
+{
+  id: '...',
+  title: 'Complete Thesis',
+  goal_type: 'custom',
+  timeline_id: '...',
+  timeline_name: 'Spring Semester 2026',
+  start_date: '2026-01-01',  // From timeline
+  end_date: '2026-03-31',    // From timeline
+  current_week: 4,
+  total_weeks: 12,
+  ...
+}
+```
+
+---
+
+## Build Status
+
+✅ Build completed successfully with no errors
+
+---
+
+## File Modified
+
+**File:** `components/goals/MyGoalsView.tsx`
+
+**Lines Changed:** 271-272 (2 lines)
+
+**Section:** Custom goals mapping
+
+---
+
+## Testing Checklist
+
+To verify this works:
+
+- [ ] Open Goal Bank (Goals tab)
+- [ ] View a custom goal card
+- [ ] Verify date range appears below title
+- [ ] Verify date range matches the custom timeline's dates
+- [ ] Compare with 12-week/annual goals - format should be consistent
+- [ ] Check console for any errors
+
+### Database Verification:
+```sql
+-- Check custom goal has timeline dates
+SELECT 
+  g.title as goal_title,
+  g.start_date as goal_date,
+  t.start_date as timeline_date,
+  t.title as timeline_title
+FROM custom_goals g
+LEFT JOIN custom_timelines t ON g.custom_timeline_id = t.id
+WHERE g.id = 'your-goal-id';
+```
+
+Expected result:
+- `timeline_date` should have a value
+- Goal card should show this date
+
+---
+
+## Edge Cases Handled
+
+### 1. Timeline Missing (Orphaned Goal):
+```tsx
+start_date: goal.timeline?.start_date || goal.start_date
+```
+If `goal.timeline` is null (timeline was deleted), falls back to `goal.start_date`.
+
+### 2. Timeline Dates Missing:
+```tsx
+start_date: goal.timeline?.start_date || goal.start_date
+```
+If timeline exists but `start_date` is null (shouldn't happen), falls back to `goal.start_date`.
+
+### 3. Both Missing:
+```tsx
+start_date: goal.timeline?.start_date || goal.start_date
+```
+If both are null, `start_date` will be null. The date formatter should handle this gracefully (show "No dates" or similar).
+
+---
+
+## Related Code
+
+### Date Range Formatting (Used by Goal Cards):
+```tsx
+const formatDateRange = (startDate: string, endDate: string): string => {
+  if (!startDate || !endDate) return '';
+  
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  // Format: "1 Jan - 31 Mar 2026"
+  return `${formatDate(start)} - ${formatDate(end)}`;
+};
+```
+
+### Impact on Other Components:
+This fix only affects `MyGoalsView.tsx`. Other components that use custom goals should already be getting the correct data from the same source.
+
+---
+
+## Why This Fix Was Needed
+
+### User Story:
+> As a user with custom goals,
+> I want to see the correct date range on my goal cards,
+> So I know when my timeline starts and ends.
+
+### Before This Fix:
+- User creates custom timeline "Spring Semester" (Jan 1 - Mar 31)
+- User creates custom goal "Complete Thesis" linked to this timeline
+- Goal card shows no date range or wrong dates
+- User confused about when goal is due
+
+### After This Fix:
+- Same scenario
+- Goal card shows "1 Jan - 31 Mar 2026"
+- User has clear visibility of timeline dates
+- Consistent with 12-week/annual goals
+
+---
+
+## Summary
+
+Step 3 was a simple but important fix to ensure custom goals display their timeline's date range correctly in the Goal Bank list. 
+
+**Key Change:** Use `goal.timeline?.start_date` and `goal.timeline?.end_date` as the primary source, with fallback to the goal's direct dates.
+
+This provides:
+- Accurate date display for custom goals
+- Consistency across all goal types
+- Better user experience in Goal Bank view
+
+Ready for Step 4.

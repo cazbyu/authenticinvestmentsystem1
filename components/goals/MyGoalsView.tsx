@@ -268,8 +268,8 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
   timeline_name: goal.timeline?.title,
   timeline_source: 'custom' as const,
   custom_timeline_id: goal.custom_timeline_id,  // ADD THIS
-  start_date: goal.start_date,
-  end_date: goal.end_date,
+  start_date: goal.timeline?.start_date || goal.start_date,
+  end_date: goal.timeline?.end_date || goal.end_date,
   current_week: weekInfo.current,
   total_weeks: weekInfo.total,
   roles: rolesMap.get(goal.id) || [],
