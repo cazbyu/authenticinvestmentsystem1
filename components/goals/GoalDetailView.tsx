@@ -1446,30 +1446,60 @@ const scheduledDays = hasSpecificDays
 
   // Handle toggle for week-filtered actions
   const handleToggleDayForWeek = async (actionId: string, dayIndex: number) => {
-    try {
-      const week = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
-      if (!week) {
-        console.error('[GoalDetailView] Week not found:', displayedWeekNumber);
-        return;
-      }
-
-      // Calculate target date: week start + day offset
-      const weekStart = new Date(week.start_date);
-      const targetDate = new Date(weekStart);
-      targetDate.setDate(weekStart.getDate() + dayIndex);
-      targetDate.setHours(0, 0, 0, 0);
-
-      const dateString = formatLocalDate(targetDate);
-
-      const action = weekFilteredActions.find(a => a.id === actionId);
-      const isCurrentlyCompleted = action?.logs?.some(log => log.measured_on === dateString) || false;
-
-      await handleToggleCompletion(actionId, dateString, isCurrentlyCompleted);
-    } catch (error) {
-      console.error('[GoalDetailView] Error toggling day:', error);
-      Alert.alert('Error', 'Failed to toggle completion');
+  try {
+    const week = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
+    if (!week) {
+      console.error('[GoalDetailView] Week not found:', displayedWeekNumber);
+      return;
     }
-  };
+
+    // Calculate target date: week start + day offset
+    const weekStart = new Date(week.start_date);
+    const targetDate = new Date(weekStart);
+    targetDate.setDate(weekStart.getDate() + dayIndex);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const dateString = formatLocalDate(targetDate);
+
+    const action = weekFilteredActions.find(a => a.id === actionId);
+    if (!action) return;
+
+    const isCurrentlyCompleted = action.logs?.some(log => log.measured_on === dateString) || false;
+
+    // OPTIMISTIC UPDATE: Update local state immediately for instant feedback
+    setWeekFilteredActions(prev => prev.map(a => {
+      if (a.id !== actionId) return a;
+      
+      let newLogs = [...(a.logs || [])];
+      let newWeeklyActual = a.weeklyActual || 0;
+      
+      if (isCurrentlyCompleted) {
+        // Remove the log for this date
+        newLogs = newLogs.filter(log => log.measured_on !== dateString);
+        newWeeklyActual = Math.max(0, newWeeklyActual - 1);
+      } else {
+        // Add a log for this date
+        newLogs.push({ measured_on: dateString } as any);
+        newWeeklyActual = newWeeklyActual + 1;
+      }
+      
+      return {
+        ...a,
+        logs: newLogs,
+        weeklyActual: newWeeklyActual,
+      };
+    }));
+
+    // Perform actual database update in background
+    await handleToggleCompletion(actionId, dateString, isCurrentlyCompleted);
+    
+  } catch (error) {
+    console.error('[GoalDetailView] Error toggling day:', error);
+    // Revert on error by refreshing
+    setRefreshTrigger(prev => prev + 1);
+    Alert.alert('Error', 'Failed to toggle completion');
+  }
+};
 
   const handleToggleDay = async (actionId: string, dayIndex: number) => {
     try {
