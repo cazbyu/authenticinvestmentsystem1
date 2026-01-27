@@ -1337,15 +1337,15 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
         is_deposit_idea: initialData?.is_deposit_idea || false,
 
         // Direct goal FK for easier querying
-        goal_12wk_id: formData.selectedGoalIds.length > 0 && availableGoals.find(g => g.id === formData.selectedGoalIds[0])?.goal_type === '12week'
-          ? formData.selectedGoalIds[0]
-          : null,
-        parent_goal_id: formData.selectedGoalIds.length > 0 && availableGoals.find(g => g.id === formData.selectedGoalIds[0])?.goal_type === 'custom'
-          ? formData.selectedGoalIds[0]
-          : null,
-        parent_goal_type: formData.selectedGoalIds.length > 0 && availableGoals.find(g => g.id === formData.selectedGoalIds[0])?.goal_type === 'custom'
-          ? 'custom_goal'
-          : null,
+goal_12wk_id: formData.selectedGoal?.goal_type === '12week'
+  ? formData.selectedGoal.id
+  : null,
+parent_goal_id: formData.selectedGoal?.goal_type === 'custom'
+  ? formData.selectedGoal.id
+  : null,
+parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
+  ? 'custom_goal'
+  : null,
 
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
