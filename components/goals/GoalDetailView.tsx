@@ -151,6 +151,26 @@ export function GoalDetailView({
     };
   }, [currentGoal.current_week]);
 
+  // Calculate the date range for a given week number
+  const getWeekDateRange = useCallback((weekNumber: number): string => {
+    if (cycleWeeks.length === 0) return '';
+
+    const week = cycleWeeks.find(w => w.week_number === weekNumber);
+    if (!week) return '';
+
+    const start = new Date(week.start_date);
+    const end = new Date(week.end_date);
+
+    const formatDay = (d: Date) => d.getDate();
+    const formatMonth = (d: Date) => d.toLocaleDateString('en-US', { month: 'short' });
+
+    // Format: "25 - 31 Jan" (no year)
+    if (start.getMonth() === end.getMonth()) {
+      return `${formatDay(start)} - ${formatDay(end)} ${formatMonth(end)}`;
+    } else {
+      return `${formatDay(start)} ${formatMonth(start)} - ${formatDay(end)} ${formatMonth(end)}`;
+    }
+  }, [cycleWeeks]);
 
   // Fetch timeline and weeks for the goal
   const fetchTimelineAndWeeks = useCallback(async () => {
@@ -1066,14 +1086,6 @@ export function GoalDetailView({
 
     return (
       <View style={[styles.goalBanner, { backgroundColor: colors.surface }]}>
-        <View style={styles.bannerTop}>
-          <View style={[styles.timelineBadge, { backgroundColor: colors.primary + '20' }]}>
-            <Text style={[styles.timelineBadgeText, { color: colors.primary }]}>
-              {getTimelineBadge()}
-            </Text>
-          </View>
-        </View>
-
         {showWeekNav && (
           <View style={[styles.weekNavRow, { borderBottomColor: colors.border }]}>
             <View style={styles.weekNavLeft}>
@@ -1085,9 +1097,14 @@ export function GoalDetailView({
                 <ChevronLeft size={20} color={displayedWeekNumber <= 1 ? colors.textSecondary : colors.text} />
               </TouchableOpacity>
 
-              <Text style={[styles.weekNavText, { color: colors.text }]}>
-                Week {displayedWeekNumber} of {totalWeeks}
-              </Text>
+              <View style={styles.weekNavCenter}>
+                <Text style={[styles.weekNavText, { color: colors.text }]}>
+                  Week {displayedWeekNumber} of {totalWeeks}
+                </Text>
+                <Text style={[styles.weekNavDateRange, { color: colors.textSecondary }]}>
+                  {getWeekDateRange(displayedWeekNumber)}
+                </Text>
+              </View>
 
               <TouchableOpacity
                 onPress={handleNextWeek}
@@ -1168,6 +1185,11 @@ export function GoalDetailView({
     }) || [];
   };
 
+  const handleEditAction = (action: RecurringActionResult) => {
+    // TODO: Open ActionEffortModal in edit mode
+    Alert.alert('Edit Action', `Edit "${action.title}" - Coming soon`);
+  };
+
   const renderLeadingIndicatorCard = (action: RecurringActionResult) => {
     const scheduledDays = getScheduledDaysFromRRule(action.recurrence_rule);
     const completedDays = getCompletedDaysForWeek(action);
@@ -1179,7 +1201,12 @@ export function GoalDetailView({
 
     return (
       <View key={action.id} style={[styles.liCard, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
+        <View style={styles.liHeader}>
+          <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
+          <TouchableOpacity onPress={() => handleEditAction(action)}>
+            <Text style={[styles.liEditLink, { color: colors.primary }]}>Edit</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.liProgressContainer}>
           <View style={[styles.liProgressBar, { backgroundColor: colors.border }]}>
@@ -1220,21 +1247,6 @@ export function GoalDetailView({
             {completionCount}/{targetDays}
           </Text>
         </View>
-
-        {(action.roles?.length > 0 || action.domains?.length > 0) && (
-          <View style={styles.liChips}>
-            {action.roles?.map(role => (
-              <View key={role.id} style={[styles.chip, { backgroundColor: role.color || colors.border }]}>
-                <Text style={[styles.chipText, { color: colors.text }]}>{role.label}</Text>
-              </View>
-            ))}
-            {action.domains?.map(domain => (
-              <View key={domain.id} style={[styles.chip, { backgroundColor: colors.border }]}>
-                <Text style={[styles.chipText, { color: colors.text }]}>{domain.name}</Text>
-              </View>
-            ))}
-          </View>
-        )}
       </View>
     );
   };
@@ -1984,9 +1996,16 @@ const styles = StyleSheet.create({
   weekNavArrowDisabled: {
     opacity: 0.4,
   },
+  weekNavCenter: {
+    alignItems: 'center',
+  },
   weekNavText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  weekNavDateRange: {
+    fontSize: 12,
+    marginTop: 2,
   },
   editLink: {
     fontSize: 14,
@@ -2049,10 +2068,20 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  liHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   liTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 12,
+    flex: 1,
+  },
+  liEditLink: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   liProgressContainer: {
     flexDirection: 'row',
