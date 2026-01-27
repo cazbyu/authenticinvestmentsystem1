@@ -236,4 +236,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
+  labelBox: {
+    backgroundColor: 'rgba(50, 50, 50, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
 });
