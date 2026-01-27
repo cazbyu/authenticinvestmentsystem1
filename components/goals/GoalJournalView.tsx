@@ -411,24 +411,48 @@ export function GoalJournalView({
   // Get icon for entry type
   const getEntryIcon = (entry: GoalJournalEntry) => {
     if (entry.type === 'task') {
-      return <Check size={16} color="#ffffff" />;
+      return <Check size={18} color="#3b82f6" strokeWidth={3} />;
     }
     if (entry.type === 'event') {
-      return <Calendar size={16} color="#ffffff" />;
+      return <Calendar size={18} color="#10b981" />;
     }
     if (entry.type === 'depositIdea') {
-      return <Lightbulb size={16} color="#ffffff" />;
+      return (
+        <Image
+          source={require('@/assets/images/deposit-idea.png')}
+          style={{ width: 22, height: 22 }}
+          resizeMode="contain"
+        />
+      );
     }
     if (entry.type === 'reflection') {
       if (entry.source_data?.daily_rose) {
-        return <Flower2 size={16} color="#ffffff" />;
+        return (
+          <Image
+            source={require('@/assets/images/rose-81.png')}
+            style={{ width: 22, height: 22 }}
+            resizeMode="contain"
+          />
+        );
       }
       if (entry.source_data?.daily_thorn) {
-        return <AlertTriangle size={16} color="#ffffff" />;
+        return (
+          <Image
+            source={require('@/assets/images/thorn-81.png')}
+            style={{ width: 22, height: 22 }}
+            resizeMode="contain"
+          />
+        );
       }
-      return <FileText size={16} color="#ffffff" />;
+      return (
+        <Image
+          source={require('@/assets/images/reflections-72.png')}
+          style={{ width: 22, height: 22 }}
+          resizeMode="contain"
+        />
+      );
     }
-    return <Check size={16} color="#ffffff" />;
+    return <Check size={18} color="#3b82f6" strokeWidth={3} />;
   };
 
   // Get icon background color
