@@ -411,16 +411,16 @@ export function GoalJournalView({
   // Get icon for entry type
   const getEntryIcon = (entry: GoalJournalEntry) => {
     if (entry.type === 'task') {
-      return <Check size={18} color="#3b82f6" strokeWidth={3} />;
+      return <CheckSquare size={20} color="#3b82f6" />;
     }
     if (entry.type === 'event') {
-      return <Calendar size={18} color="#10b981" />;
+      return <Calendar size={20} color="#f59e0b" />;
     }
     if (entry.type === 'depositIdea') {
       return (
         <Image
           source={require('@/assets/images/deposit-idea.png')}
-          style={{ width: 22, height: 22 }}
+          style={{ width: 24, height: 24 }}
           resizeMode="contain"
         />
       );
@@ -430,7 +430,7 @@ export function GoalJournalView({
         return (
           <Image
             source={require('@/assets/images/rose-81.png')}
-            style={{ width: 22, height: 22 }}
+            style={{ width: 24, height: 24 }}
             resizeMode="contain"
           />
         );
@@ -439,7 +439,7 @@ export function GoalJournalView({
         return (
           <Image
             source={require('@/assets/images/thorn-81.png')}
-            style={{ width: 22, height: 22 }}
+            style={{ width: 24, height: 24 }}
             resizeMode="contain"
           />
         );
@@ -447,12 +447,12 @@ export function GoalJournalView({
       return (
         <Image
           source={require('@/assets/images/reflections-72.png')}
-          style={{ width: 22, height: 22 }}
+          style={{ width: 24, height: 24 }}
           resizeMode="contain"
         />
       );
     }
-    return <Check size={18} color="#3b82f6" strokeWidth={3} />;
+    return <CheckSquare size={20} color="#3b82f6" />;
   };
 
   // Get icon background color (light backgrounds to match Take Action modal style)
