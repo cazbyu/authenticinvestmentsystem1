@@ -455,17 +455,17 @@ export function GoalJournalView({
     return <Check size={18} color="#3b82f6" strokeWidth={3} />;
   };
 
-  // Get icon background color
+  // Get icon background color (light backgrounds to match Take Action modal style)
   const getIconBgColor = (entry: GoalJournalEntry): string => {
-    if (entry.type === 'task') return '#3b82f6'; // blue
-    if (entry.type === 'event') return '#10b981'; // green
-    if (entry.type === 'depositIdea') return '#f59e0b'; // amber
+    if (entry.type === 'task') return '#dbeafe'; // light blue
+    if (entry.type === 'event') return '#d1fae5'; // light green
+    if (entry.type === 'depositIdea') return '#fef3c7'; // light yellow
     if (entry.type === 'reflection') {
-      if (entry.source_data?.daily_rose) return '#ec4899'; // pink
-      if (entry.source_data?.daily_thorn) return '#ef4444'; // red
-      return '#8b5cf6'; // purple
+      if (entry.source_data?.daily_rose) return '#fce7f3'; // light pink
+      if (entry.source_data?.daily_thorn) return '#d1fae5'; // light green (cactus)
+      return '#f3e8ff'; // light purple
     }
-    return '#6b7280'; // gray
+    return '#f3f4f6'; // light gray
   };
 
   const groupedEntries = groupEntriesByDate(entries);
