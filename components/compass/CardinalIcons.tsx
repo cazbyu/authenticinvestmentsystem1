@@ -205,7 +205,7 @@ function CardinalIconWithLabel({
         pointerEvents="none"
       >
         <View style={styles.labelBox}>
-          <Text style={[styles.labelText}>
+          <Text style={styles.labelText}>
             {label}
           </Text>
         </View>
