@@ -122,6 +122,17 @@ export function GoalDetailView({
   // Week navigation state
   const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(goal.current_week || 1);
 
+ // Calculate weekly completion percentage from weekFilteredActions
+const weeklyCompletionPercent = useMemo(() => {
+  if (weekFilteredActions.length === 0) return 0;
+  
+  const totalCompleted = weekFilteredActions.reduce((sum, action) => sum + (action.weeklyActual || 0), 0);
+  const totalTarget = weekFilteredActions.reduce((sum, action) => sum + (action.weeklyTarget || 0), 0);
+  
+  if (totalTarget === 0) return 0;
+  return Math.round((totalCompleted / totalTarget) * 100);
+}, [weekFilteredActions]); 
+
   // Update displayedWeekNumber when goal changes or cycleWeeks loads
 useEffect(() => {
   // If current_week is provided, use it
