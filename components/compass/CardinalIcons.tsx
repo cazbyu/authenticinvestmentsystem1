@@ -45,10 +45,10 @@ const CARDINAL_POSITIONS = {
 
 // Label offsets from icon center (push labels outward from compass)
 const LABEL_OFFSETS = {
-  north: { x: 0, y: -20 },
-  east: { x: 20, y: 0 },
-  south: { x: 0, y: 20 },
-  west: { x: -20, y: 0 },
+  north: { x: 0, y: -38 },
+  east: { x: 0, y: -38 },
+  south: { x: 0, y: -38 },
+  west: { x: 0, y: -38 },
 };
 
 export default function CardinalIcons({
