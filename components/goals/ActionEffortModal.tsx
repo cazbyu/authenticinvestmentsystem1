@@ -267,41 +267,48 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setNotes('');
     setAttachedFiles([]);
 
-    // Parse recurrence rule to set frequency
-    if (initialData.recurrence_rule) {
-      const rule = initialData.recurrence_rule;
-      console.log('[ActionEffortModal] Parsing recurrence rule:', rule);
+    // Parse frequency - prioritize weeklyTarget for preset frequencies
+// (weeklyTarget is the source of truth for "X days per week" selections)
+if (initialData.weeklyTarget !== undefined && initialData.weeklyTarget > 0) {
+  const target = initialData.weeklyTarget;
+  console.log('[ActionEffortModal] Setting frequency from weeklyTarget:', target);
+  
+  if (target >= 7) {
+    setRecurrenceType('daily');
+  } else if (target === 6) {
+    setRecurrenceType('6days');
+  } else if (target === 5) {
+    setRecurrenceType('5days');
+  } else if (target === 4) {
+    setRecurrenceType('4days');
+  } else if (target === 3) {
+    setRecurrenceType('3days');
+  } else if (target === 2) {
+    setRecurrenceType('2days');
+  } else if (target === 1) {
+    setRecurrenceType('1day');
+  }
+}
 
-      if (rule.includes('FREQ=DAILY')) {
-        setRecurrenceType('daily');
-      } else if (rule.includes('FREQ=WEEKLY') && rule.includes('BYDAY=')) {
-        const byDayMatch = rule.match(/BYDAY=([^;]+)/);
-        if (byDayMatch) {
-          const days = byDayMatch[1].split(',');
-          const dayMap: Record<string, number> = { 'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6 };
-          const selectedDays = days.map(day => dayMap[day]).filter(d => d !== undefined);
+// Check for custom day selection (BYDAY in recurrence rule)
+if (initialData.recurrence_rule) {
+  const rule = initialData.recurrence_rule;
+  console.log('[ActionEffortModal] Parsing recurrence rule:', rule);
 
-          if (selectedDays.length === 7) {
-            setRecurrenceType('daily');
-          } else if (selectedDays.length === 6 && !selectedDays.includes(0)) {
-            setRecurrenceType('6days');
-          } else if (selectedDays.length === 5 && selectedDays.every(d => d >= 1 && d <= 5)) {
-            setRecurrenceType('5days');
-          } else if (selectedDays.length === 4) {
-            setRecurrenceType('4days');
-          } else if (selectedDays.length === 3) {
-            setRecurrenceType('3days');
-          } else if (selectedDays.length === 2) {
-            setRecurrenceType('2days');
-          } else if (selectedDays.length === 1) {
-            setRecurrenceType('1day');
-          } else {
-            setRecurrenceType('custom');
-            setSelectedCustomDays(selectedDays);
-          }
-        }
-      }
+  // Only override to custom if BYDAY specifies exact days
+  if (rule.includes('BYDAY=')) {
+    const byDayMatch = rule.match(/BYDAY=([^;]+)/);
+    if (byDayMatch) {
+      const days = byDayMatch[1].split(',');
+      const dayMap: Record<string, number> = { 'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6 };
+      const selectedDays = days.map(day => dayMap[day]).filter(d => d !== undefined);
+      
+      // Custom means user picked specific days, not just "any X days"
+      setRecurrenceType('custom');
+      setSelectedCustomDays(selectedDays);
     }
+  }
+}
 
     // Load time data if present
     if (initialData.start_time) {
