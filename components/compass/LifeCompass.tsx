@@ -919,31 +919,35 @@ export function LifeCompass({
 {/* All touch targets - rendered last so they're on top */}
 <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
   {/* Cardinal touch targets */}
-  {(['north', 'east', 'south', 'west'] as const).map((cardinal) => {
-    const positions = {
-      north: { x: 144, y: 28 },
-      east: { x: 260, y: 144 },
-      south: { x: 144, y: 260 },
-      west: { x: 28, y: 144 },
-    };
-    const pos = positions[cardinal];
-    const scale = responsiveSize / 288;
-    
-    return (
-      <Pressable
-        key={cardinal}
-        onPress={() => handleCardinalPress(cardinal)}
-        style={{
-          position: 'absolute',
-          left: pos.x * scale - 24,
-          top: pos.y * scale - 24,
-          width: 48,
-          height: 48,
-          borderRadius: 24,
-        }}
-      />
-    );
-  })}
+{(['north', 'east', 'south', 'west'] as const).map((cardinal) => {
+  const positions = {
+    north: { x: 144, y: 28 },
+    east: { x: 260, y: 144 },
+    south: { x: 144, y: 260 },
+    west: { x: 28, y: 144 },
+  };
+  const pos = positions[cardinal];
+  const scale = responsiveSize / 288;
+  
+  return (
+    <Pressable
+      key={cardinal}
+      onPress={() => handleCardinalPress(cardinal)}
+      onPressIn={() => setHoveredCardinal(cardinal)}
+      onPressOut={() => setHoveredCardinal(null)}
+      onHoverIn={() => setHoveredCardinal(cardinal)}
+      onHoverOut={() => setHoveredCardinal(null)}
+      style={{
+        position: 'absolute',
+        left: pos.x * scale - 24,
+        top: pos.y * scale - 24,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+      }}
+    />
+  );
+})}
   
   {/* Hub touch target */}
   <Pressable
