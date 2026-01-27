@@ -122,10 +122,41 @@ export function GoalDetailView({
   // Week navigation state
   const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(goal.current_week || 1);
 
-  // Update displayedWeekNumber when goal changes
-  useEffect(() => {
-    setDisplayedWeekNumber(currentGoal.current_week || 1);
-  }, [currentGoal.current_week]);
+  // Update displayedWeekNumber when goal changes or cycleWeeks loads
+useEffect(() => {
+  // If current_week is provided, use it
+  if (currentGoal.current_week) {
+    setDisplayedWeekNumber(currentGoal.current_week);
+    return;
+  }
+
+  // Otherwise calculate from cycleWeeks
+  if (cycleWeeks.length > 0) {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    const currentWeekData = cycleWeeks.find(
+      week => week.start_date && week.end_date &&
+              todayStr >= week.start_date && todayStr <= week.end_date
+    );
+
+    if (currentWeekData) {
+      setDisplayedWeekNumber(currentWeekData.week_number);
+    } else {
+      // Fallback: if today is past the end, use last week; if before start, use first week
+      const lastWeek = cycleWeeks[cycleWeeks.length - 1];
+      const firstWeek = cycleWeeks[0];
+      
+      if (todayStr > lastWeek.end_date) {
+        setDisplayedWeekNumber(lastWeek.week_number);
+      } else if (todayStr < firstWeek.start_date) {
+        setDisplayedWeekNumber(firstWeek.week_number);
+      } else {
+        setDisplayedWeekNumber(1);
+      }
+    }
+  }
+}, [currentGoal.current_week, cycleWeeks]);
 
   // Update currentGoal when goal prop changes
   useEffect(() => {
