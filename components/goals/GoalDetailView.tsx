@@ -1906,23 +1906,23 @@ useEffect(() => {
       )}
 
       {/* ActionEffortModal for editing */}
-      {showActionEffortModal && editingAction && (
-        <ActionEffortModal
-          visible={showActionEffortModal}
-          onClose={handleActionEffortModalClose}
-          task={{
-            id: editingAction.id,
-            title: editingAction.title,
-            recurrence_rule: editingAction.recurrence_rule,
-          }}
-          goalId={currentGoal.id}
-          goalType={currentGoal.goal_type}
-          timelineId={timeline?.id}
-          timelineSource={timeline?.source}
-          cycleWeeks={cycleWeeks}
-          mode="edit"
-        />
-      )}
+{showActionEffortModal && editingAction && (
+  <ActionEffortModal
+    visible={showActionEffortModal}
+    onClose={handleActionEffortModalClose}
+    goal={goalForModal}
+    cycleWeeks={cycleWeeks}
+    timeline={timeline}
+    createTaskWithWeekPlan={createTaskWithWeekPlan}
+    initialData={{
+      id: editingAction.id,
+      title: editingAction.title,
+      recurrence_rule: editingAction.recurrence_rule,
+      selectedWeeks: editingAction.selectedWeeks || [],
+    }}
+    mode="edit"
+  />
+)}
 
       {/* EditGoalModal - For editing goal details */}
       {goalForEditModal && (
