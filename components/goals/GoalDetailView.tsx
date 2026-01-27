@@ -2036,7 +2036,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 48,
-    paddingBottom: 16,
+    paddingBottom: 8,
     paddingHorizontal: 16,
   },
   headerTop: {
@@ -2119,7 +2119,7 @@ const styles = StyleSheet.create({
   goalBanner: {
     padding: 16,
     marginHorizontal: 16,
-    marginTop: 8,  // Reduced from 16 to bring banner closer to header
+    marginTop: 0,  // Reduced from 16 to bring banner closer to header
     borderRadius: 12,
     marginBottom: 8,
   },
