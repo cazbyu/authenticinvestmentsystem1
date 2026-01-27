@@ -168,10 +168,10 @@ function CardinalIconWithLabel({
 
   // Determine label text alignment based on position
   const labelStyle = {
-    north: { textAlign: 'center' as const, top: position.y * scale + labelOffset.y - 8, left: position.x * scale - 30, width: 60 },
-    east: { textAlign: 'left' as const, top: position.y * scale - 6, left: position.x * scale + labelOffset.x + 12 },
-    south: { textAlign: 'center' as const, top: position.y * scale + labelOffset.y + 12, left: position.x * scale - 30, width: 60 },
-    west: { textAlign: 'right' as const, top: position.y * scale - 6, right: (288 * scale) - (position.x * scale) + Math.abs(labelOffset.x) + 12 },
+    north: { top: position.y * scale + labelOffset.y, left: position.x * scale - 30, width: 60, alignItems: 'center' as const },
+    east: { top: position.y * scale + labelOffset.y, left: position.x * scale - 30, width: 60, alignItems: 'center' as const },
+    south: { top: position.y * scale + labelOffset.y, left: position.x * scale - 30, width: 60, alignItems: 'center' as const },
+    west: { top: position.y * scale + labelOffset.y, left: position.x * scale - 30, width: 60, alignItems: 'center' as const },
   };
 
   return (
