@@ -1124,7 +1124,8 @@ export function GoalDetailView({
 
     return (
       <View style={[styles.goalBanner, { backgroundColor: colors.surface }]}>
-        {showWeekNav && (
+        {/* Week Navigation - Only show on Act tab */}
+        {showWeekNav && activeTab === 'act' && (
           <View style={[styles.weekNavRow, { borderBottomColor: colors.border }]}>
             <View style={styles.weekNavLeft}>
               <TouchableOpacity
@@ -1165,7 +1166,8 @@ export function GoalDetailView({
           </View>
         )}
 
-        {!showWeekNav && currentGoal.progress !== undefined && (
+        {/* Show simple Edit button when week nav is hidden (1y goals or non-Act tabs) */}
+        {(!showWeekNav || activeTab !== 'act') && currentGoal.progress !== undefined && (
           <View style={styles.bannerRight}>
             <TouchableOpacity
               style={styles.editButton}
