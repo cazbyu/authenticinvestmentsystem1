@@ -1447,7 +1447,9 @@ export function GoalDetailView({
             <View style={styles.boostList}>
               {oneTimeActions.map(task => {
                 const isCompleted = task.status === 'completed';
-                const formattedDueDate = task.due_date ? formatLocalDate(task.due_date) : null;
+                const formattedDueDate = task.due_date
+                  ? formatLocalDate(task.due_date instanceof Date ? task.due_date : new Date(task.due_date))
+                  : null;
 
                 return (
                   <TouchableOpacity
@@ -1615,6 +1617,14 @@ export function GoalDetailView({
   };
 
   const renderJournalTab = () => {
+    // Safe date formatter - handles string dates from database
+    const safeFormatDate = (dateValue: string | Date | null | undefined): string => {
+      if (!dateValue) return 'Unknown date';
+      const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      return formatLocalDate(date);
+    };
+
     if (journalLoading) {
       return (
         <View style={styles.loadingContainer}>
@@ -1652,7 +1662,7 @@ export function GoalDetailView({
                     {entry.note_text}
                   </Text>
                   <Text style={[styles.journalDate, { color: colors.textSecondary }]}>
-                    {formatLocalDate(entry.created_at)}
+                    {safeFormatDate(entry.created_at)}
                   </Text>
                 </View>
               </TouchableOpacity>
