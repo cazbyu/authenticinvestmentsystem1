@@ -332,7 +332,7 @@ export function EditGoalModal({
       // Determine table based on goal type
       const tableName = goal.goal_type === '12week' ? '0008-ap-goals-12wk' : '0008-ap-goals-custom';
       // Parent type for universal join tables: 'goal' for 12-week, 'custom_goal' for custom
-      const parentType = goal.goal_type === '12week' ? 'goal' : 'custom_goal';
+      const parentType = goal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal';
 
       // 1. Update the goal itself
       const { error: updateError } = await supabase
