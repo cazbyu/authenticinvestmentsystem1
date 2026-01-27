@@ -235,6 +235,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0.5,
+    color: '#ffffff',
   },
   labelBox: {
     backgroundColor: 'rgba(50, 50, 50, 0.85)',
