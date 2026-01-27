@@ -450,8 +450,7 @@ useEffect(() => {
       );
     }
     
-    // TEMPORARILY DISABLED FOR TESTING
-    // onGoalUpdated();
+    onGoalUpdated();
     
   } catch (error) {
     console.error('[GoalDetailView] Error toggling completion:', error);
