@@ -120,7 +120,7 @@ export function GoalDetailView({
   const [timeRange, setTimeRange] = useState<TimeRange>('12W');
 
   // Week navigation state
-  const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(1);
+  const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(goal.current_week || 1);
 
   // Update displayedWeekNumber when goal changes
   useEffect(() => {
