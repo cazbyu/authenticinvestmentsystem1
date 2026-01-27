@@ -1322,7 +1322,7 @@ const scheduledDays = hasSpecificDays
                   <View style={[
                     styles.liBubble,
                     { borderColor: colors.border },
-                    isScheduled && styles.liBubbleScheduled,
+                    hasSpecificDays && isScheduled && !isCompleted && styles.liBubbleScheduled,
                     isCompleted && [styles.liBubbleCompleted, { backgroundColor: colors.primary, borderColor: colors.primary }],
                     !isScheduled && [styles.liBubbleDisabled, { backgroundColor: colors.border + '40' }],
                   ]}>
