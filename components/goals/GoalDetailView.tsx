@@ -1343,69 +1343,106 @@ const scheduledDays = hasSpecificDays
 
   // Render card using TaskWithLogs from fetchGoalActionsForWeek (has correct weeklyTarget)
   const renderWeekFilteredActionCard = (action: TaskWithLogs) => {
-    // Check if this is a custom schedule (has specific BYDAY) vs preset frequency
-const hasSpecificDays = action.recurrence_rule?.includes('BYDAY=');
-const scheduledDays = hasSpecificDays 
-  ? getScheduledDaysFromRRule(action.recurrence_rule || '')
-  : [0, 1, 2, 3, 4, 5, 6]; // All days available for preset frequencies
-    const completedDays = action.logs?.map(log => new Date(log.measured_on).getDay()) || [];
-    const targetDays = action.weeklyTarget || 1;
-    const completionCount = action.weeklyActual || 0;
-    const progressPercent = targetDays > 0 ? Math.min(Math.round((completionCount / targetDays) * 100), 100) : 0;
+  // Check if this is a custom schedule (has specific BYDAY) vs preset frequency
+  const hasSpecificDays = action.recurrence_rule?.includes('BYDAY=');
+  const scheduledDays = hasSpecificDays 
+    ? getScheduledDaysFromRRule(action.recurrence_rule || '')
+    : [0, 1, 2, 3, 4, 5, 6]; // All days available for preset frequencies
+  
+  const completedDays = action.logs?.map(log => new Date(log.measured_on).getDay()) || [];
+  const targetDays = action.weeklyTarget || 1;
+  const completionCount = action.weeklyActual || 0;
+  const progressPercent = targetDays > 0 ? Math.min(Math.round((completionCount / targetDays) * 100), 100) : 0;
 
-    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    return (
-      <View key={action.id} style={[styles.liCard, { backgroundColor: colors.surface }]}>
-        <View style={styles.liHeader}>
-          <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
-          <TouchableOpacity onPress={() => handleEditAction(action)}>
-            <Text style={[styles.liEditLink, { color: colors.primary }]}>Edit</Text>
-          </TouchableOpacity>
-        </View>
+  // Get today's day index and the week being displayed
+  const today = new Date();
+  const todayDayIndex = today.getDay();
+  
+  // Determine if we're viewing the current week
+  const currentWeekData = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
+  const isCurrentWeek = currentWeekData && (() => {
+    const todayStr = formatLocalDate(today);
+    return todayStr >= currentWeekData.start_date && todayStr <= currentWeekData.end_date;
+  })();
+  
+  // For past weeks, all days are "past". For future weeks, no days are "past"
+  const isPastWeek = currentWeekData && formatLocalDate(today) > currentWeekData.end_date;
+  const isFutureWeek = currentWeekData && formatLocalDate(today) < currentWeekData.start_date;
 
-        <View style={styles.liProgressContainer}>
-          <View style={[styles.liProgressBar, { backgroundColor: colors.border }]}>
-            <View style={[styles.liProgressFill, { backgroundColor: colors.primary, width: `${progressPercent}%` }]} />
-          </View>
-          <Text style={[styles.liProgressText, { color: colors.text }]}>{progressPercent}%</Text>
-        </View>
-
-        <View style={styles.liDaysRow}>
-          <View style={styles.liDaysContainer}>
-            {dayLabels.map((label, index) => {
-              const isAvailable = scheduledDays.includes(index);
-              const isCompleted = completedDays.includes(index);
-
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.liDayColumn}
-                  onPress={() => isAvailable && handleToggleDayForWeek(action.id, index)}
-                  disabled={!isAvailable}
-                >
-                  <Text style={[styles.liDayLabel, { color: colors.textSecondary }]}>{label}</Text>
-                  <View style={[
-                    styles.liBubble,
-                    { borderColor: colors.border },
-                    hasSpecificDays && isAvailable && !isCompleted && styles.liBubbleScheduled,
-                    isCompleted && [styles.liBubbleCompleted, { backgroundColor: colors.primary, borderColor: colors.primary }],
-                    !isAvailable && [styles.liBubbleDisabled, { backgroundColor: colors.border + '40' }],
-                  ]}>
-                    {isCompleted && <View style={styles.liBubbleFill} />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <Text style={[styles.liCount, { color: colors.textSecondary }]}>
-            {completionCount}/{targetDays}
-          </Text>
-        </View>
+  return (
+    <View key={action.id} style={[styles.liCard, { backgroundColor: colors.surface }]}>
+      <View style={styles.liHeader}>
+        <Text style={[styles.liTitle, { color: colors.text }]}>{action.title}</Text>
+        <TouchableOpacity onPress={() => handleEditAction(action)}>
+          <Text style={[styles.liEditLink, { color: colors.primary }]}>Edit</Text>
+        </TouchableOpacity>
       </View>
-    );
-  };
+
+      <View style={styles.liProgressContainer}>
+        <View style={[styles.liProgressBar, { backgroundColor: colors.border }]}>
+          <View style={[styles.liProgressFill, { backgroundColor: colors.primary, width: `${progressPercent}%` }]} />
+        </View>
+        <Text style={[styles.liProgressText, { color: colors.text }]}>{progressPercent}%</Text>
+      </View>
+
+      <View style={styles.liDaysRow}>
+        <View style={styles.liDaysContainer}>
+          {dayLabels.map((label, index) => {
+            const isAvailable = scheduledDays.includes(index);
+            const isCompleted = completedDays.includes(index);
+            
+            // Determine if this day is in the past (for current week only)
+            let isPastDay = false;
+            if (isPastWeek) {
+              isPastDay = true; // All days in past weeks are past
+            } else if (isCurrentWeek) {
+              isPastDay = index < todayDayIndex; // Days before today
+            }
+            // Future weeks: no days are past
+            
+            const isMissed = isPastDay && !isCompleted && isAvailable;
+
+            return (
+              <TouchableOpacity
+                key={index}
+                style={styles.liDayColumn}
+                onPress={() => isAvailable && handleToggleDayForWeek(action.id, index)}
+                disabled={!isAvailable}
+                activeOpacity={0.6}
+              >
+                <Text style={[styles.liDayLabel, { color: colors.text }]}>{label}</Text>
+                <View style={[
+                  styles.liBubble,
+                  // Completed state - green
+                  isCompleted && styles.liBubbleCompleted,
+                  // Missed state - red (past, available, not completed)
+                  isMissed && styles.liBubbleMissed,
+                  // Custom scheduled days get yellow (only if not completed/missed)
+                  hasSpecificDays && isAvailable && !isCompleted && !isMissed && styles.liBubbleScheduled,
+                  // Disabled state
+                  !isAvailable && styles.liBubbleDisabled,
+                ]}>
+                  {isCompleted && (
+                    <Check size={16} color="#22c55e" strokeWidth={3} />
+                  )}
+                  {isMissed && (
+                    <X size={16} color="#ef4444" strokeWidth={3} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.liCount, { color: colors.textSecondary }]}>
+          {completionCount}/{targetDays}
+        </Text>
+      </View>
+    </View>
+  );
+};
 
   // Handle toggle for week-filtered actions
   const handleToggleDayForWeek = async (actionId: string, dayIndex: number) => {
