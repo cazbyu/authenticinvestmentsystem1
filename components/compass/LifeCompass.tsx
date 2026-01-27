@@ -158,6 +158,7 @@ export function LifeCompass({
   }>({});
 
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
+  const [hoveredCardinal, setHoveredCardinal] = useState<'north' | 'east' | 'south' | 'west' | null>(null);
   const [sparkSequenceIndex, setSparkSequenceIndex] = useState(0);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
   const [sparkQuestions, setSparkQuestions] = useState<Record<string, { id: string; text: string }>>({
