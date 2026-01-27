@@ -1914,11 +1914,20 @@ useEffect(() => {
     cycleWeeks={cycleWeeks}
     timeline={timeline}
     createTaskWithWeekPlan={createTaskWithWeekPlan}
+    onDelete={async (actionId: string) => {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .update({ deleted_at: toLocalISOString(new Date()) })
+        .eq('id', actionId);
+      if (error) throw error;
+    }}
     initialData={{
       id: editingAction.id,
       title: editingAction.title,
       recurrence_rule: editingAction.recurrence_rule,
       selectedWeeks: editingAction.selectedWeeks || [],
+      weeklyTarget: editingAction.weeklyTarget,
     }}
     mode="edit"
   />
