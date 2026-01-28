@@ -1313,25 +1313,22 @@ export default function Roles() {
   // Render custom header
   const renderRoleBankHeader = () => {
     if (activeMainTab === 'manageRoles') {
-      // Manage Roles view header
+      // Manage Roles view header - uses UniversalHeader + sub-header with back
       return (
-        <View style={[styles.customHeader, { backgroundColor: colors.primary }]}>
-          <View style={styles.customHeaderTop}>
-            <TouchableOpacity
-              style={styles.customBackButton}
-              onPress={hideManageRolesView}
-            >
-              <Text style={styles.customBackButtonText}>←</Text>
-            </TouchableOpacity>
-            <View style={styles.customHeaderCenter}>
-              <Text style={styles.customHeaderTitle}>Manage Roles</Text>
-            </View>
-            <View style={styles.customScoreContainer}>
-              <Text style={styles.customScoreLabel}>Authentic Score</Text>
-              <Text style={styles.customScoreValue}>{authenticScore}</Text>
+        <>
+          <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
+          <View style={styles.roleBankSubHeader}>
+            <View style={styles.roleBankSubHeaderWithBack}>
+              <TouchableOpacity
+                style={styles.roleBankBackButton}
+                onPress={hideManageRolesView}
+              >
+                <Text style={styles.roleBankBackButtonText}>←</Text>
+              </TouchableOpacity>
+              <Text style={styles.roleBankSubHeaderTitle}>Manage Roles</Text>
             </View>
           </View>
-        </View>
+        </>
       );
     }
 
