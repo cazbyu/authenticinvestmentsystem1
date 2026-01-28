@@ -35,6 +35,7 @@ import { goalsReducer, initialGoalsState, type Timeline, type TimelineWeek } fro
 export default function Goals() {
   const { authenticScore, refreshScore } = useAuthenticScore();
   const { colors } = useTheme();
+  const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
   // Use reducer for core business logic state
