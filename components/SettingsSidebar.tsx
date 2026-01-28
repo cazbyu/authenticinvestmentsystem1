@@ -23,6 +23,11 @@ import {
   LogOut,
   ChevronRight,
   Compass,
+  Clock,
+  MessageCircle,
+  Lightbulb,
+  Info,
+  Mail,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
