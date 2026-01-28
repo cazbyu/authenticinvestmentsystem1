@@ -1313,19 +1313,36 @@ export default function Roles() {
   // Render custom header
   const renderRoleBankHeader = () => {
     if (activeMainTab === 'manageRoles') {
-      // Manage Roles view header - uses UniversalHeader + sub-header with back
+      // Manage Roles view header - uses same tabs as main view with Manage active
       return (
         <>
           <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
           <View style={styles.roleBankSubHeader}>
-            <View style={styles.roleBankSubHeaderWithBack}>
+            <View style={styles.roleBankTabsRow}>
               <TouchableOpacity
-                style={styles.roleBankBackButton}
-                onPress={hideManageRolesView}
+                style={[styles.roleBankTab]}
+                onPress={() => setActiveMainTab('roles')}
               >
-                <Text style={styles.roleBankBackButtonText}>←</Text>
+                <Text style={[styles.roleBankTabText]}>
+                  Roles
+                </Text>
               </TouchableOpacity>
-              <Text style={styles.roleBankSubHeaderTitle}>Manage Roles</Text>
+              <TouchableOpacity
+                style={[styles.roleBankTab, styles.roleBankTabKRs]}
+                onPress={() => setActiveMainTab('keyrelationships')}
+              >
+                <Text style={[styles.roleBankTabText]}>
+                  KRs
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.roleBankTab, styles.roleBankTabActive]}
+                onPress={() => {}} 
+              >
+                <Text style={[styles.roleBankTabText, styles.roleBankTabTextActive]}>
+                  Manage
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </>
