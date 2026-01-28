@@ -31,6 +31,9 @@ import { shouldShowRitual } from '@/lib/ritualUtils';
 import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
+import { Compass } from 'lucide-react-native';
+
+type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
@@ -1071,6 +1074,59 @@ export default function Dashboard() {
     { value: 'delegated', label: 'Delegated' },
   ];
 
+// Sub-header tabs component for Dashboard
+const renderDashboardTabs = () => (
+  <View style={styles.subHeaderContainer}>
+    <View style={styles.tabsRow}>
+      <TouchableOpacity
+        style={[styles.subTab, activeTab === 'home' && styles.subTabActive]}
+        onPress={() => setActiveTab('home')}
+        accessibilityLabel="Compass tab"
+        accessibilityRole="tab"
+        accessibilityState={{ selected: activeTab === 'home' }}
+      >
+        <Compass size={16} color={activeTab === 'home' ? '#0078d4' : '#ffffff'} />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.subTab, activeTab === 'reflect' && styles.subTabActive]}
+        onPress={() => setActiveTab('reflect')}
+        accessibilityLabel="Reflect tab"
+        accessibilityRole="tab"
+        accessibilityState={{ selected: activeTab === 'reflect' }}
+      >
+        <Text style={[styles.subTabText, activeTab === 'reflect' && styles.subTabTextActive]}>
+          Reflect
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.subTab, activeTab === 'act' && styles.subTabActive]}
+        onPress={() => setActiveTab('act')}
+        accessibilityLabel="Act tab"
+        accessibilityRole="tab"
+        accessibilityState={{ selected: activeTab === 'act' }}
+      >
+        <Text style={[styles.subTabText, activeTab === 'act' && styles.subTabTextActive]}>
+          Act
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.subTab, activeTab === 'journal' && styles.subTabActive]}
+        onPress={() => setActiveTab('journal')}
+        accessibilityLabel="Journal tab"
+        accessibilityRole="tab"
+        accessibilityState={{ selected: activeTab === 'journal' }}
+      >
+        <Text style={[styles.subTabText, activeTab === 'journal' && styles.subTabTextActive]}>
+          Journal
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+);
+  
   return (
     <SafeAreaView style={styles.container}>
       <DashboardTabbedHeader
