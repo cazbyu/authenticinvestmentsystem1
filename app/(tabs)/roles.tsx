@@ -99,6 +99,7 @@ export default function Roles() {
   const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
+  const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const fetchAbortController = useRef<AbortController | null>(null);
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
   const previousRoleIdRef = useRef<string | null>(null);
