@@ -2479,4 +2479,38 @@ const styles = StyleSheet.create({
   krItemEditButton: {
     padding: 8,
   },
+  // Role Bank Sub-Header Styles
+  roleBankSubHeader: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  roleBankTabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 20,
+    padding: 3,
+    alignSelf: 'flex-start',
+  },
+  roleBankTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleBankTabActive: {
+    backgroundColor: '#0078d4',
+  },
+  roleBankTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  roleBankTabTextActive: {
+    color: '#ffffff',
+  },
 });
