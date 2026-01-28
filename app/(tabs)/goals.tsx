@@ -1451,6 +1451,7 @@ export default function Goals() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
       <GoalBankTabbedHeader
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -1460,7 +1461,8 @@ export default function Goals() {
         timelineTitle={selectedTimeline?.title}
         daysRemaining={timelineDaysLeft?.days_left}
         cycleProgressPercentage={timelineDaysLeft?.pct_elapsed}
-        backgroundColor={colors.primary}
+        backgroundColor="#f8fafc"
+        isSubHeader={true}
       />
 
       {renderMainContent()}
