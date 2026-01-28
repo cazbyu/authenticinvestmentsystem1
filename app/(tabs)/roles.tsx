@@ -1344,7 +1344,7 @@ export default function Roles() {
               style={styles.customBackButton}
               onPress={() => setSelectedKR(null)}
             >
-              <Text style={styles.customBackButtonText}>← Back to Role</Text>
+              <Text style={styles.customBackButtonText}>←</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedKR.name}</Text>
