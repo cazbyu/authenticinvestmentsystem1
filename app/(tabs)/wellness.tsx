@@ -823,51 +823,31 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       );
     }
 
-    // Main Wellness Bank header with tabs
+    // Main Wellness Bank header with UniversalHeader + sub-header tabs
     return (
-      <View style={[styles.customHeader, { backgroundColor: colors.primary }]}>
-        <View style={styles.customHeaderTop}>
-          <TouchableOpacity
-            style={styles.customMenuButton}
-            onPress={() => {
-              if (Platform.OS === 'web') {
-                setIsWebMenuVisible(true);
-              } else if (typeof navigation.openDrawer === 'function') {
-                navigation.openDrawer();
-              }
-            }}
-          >
-            <Menu size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <View style={styles.customHeaderCenter}>
-            <Text style={styles.customHeaderTitle}>Wellness Bank</Text>
-          </View>
-          <View style={styles.customScoreContainer}>
-            <Text style={styles.customScoreLabel}>Authentic Score</Text>
-            <Text style={styles.customScoreValue}>{authenticScore}</Text>
-          </View>
-        </View>
-        <View style={styles.customHeaderBottom}>
-          <View style={styles.customMainToggleGroup}>
+      <>
+        <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
+        <View style={styles.wellnessSubHeader}>
+          <View style={styles.wellnessTabsRow}>
             <TouchableOpacity
-              style={[styles.customToggleButton, activeMainTab === 'domains' && styles.customActiveToggle]}
+              style={[styles.wellnessTab, activeMainTab === 'domains' && styles.wellnessTabActive]}
               onPress={() => setActiveMainTab('domains')}
             >
-              <Text style={[styles.customToggleText, activeMainTab === 'domains' && [styles.customActiveToggleText, { color: colors.primary }]]}>
-                Domains
+              <Text style={[styles.wellnessTabText, activeMainTab === 'domains' && styles.wellnessTabTextActive]}>
+                Zones
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.customToggleButton, activeMainTab === 'balance' && styles.customActiveToggle]}
+              style={[styles.wellnessTab, activeMainTab === 'balance' && styles.wellnessTabActive]}
               onPress={() => setActiveMainTab('balance')}
             >
-              <Text style={[styles.customToggleText, activeMainTab === 'balance' && [styles.customActiveToggleText, { color: colors.primary }]]}>
-                Balance Scores
+              <Text style={[styles.wellnessTabText, activeMainTab === 'balance' && styles.wellnessTabTextActive]}>
+                Balance
               </Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </>
     );
   };
 
