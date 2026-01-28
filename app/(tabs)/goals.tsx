@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Modal, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Header } from '@/components/Header';
+import { UniversalHeader } from '@/components/UniversalHeader';
+import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 const CreateGoalModal = lazy(() => import('@/components/goals/CreateGoalModal').then(m => ({ default: m.CreateGoalModal })));
 const EditGoalModal = lazy(() => import('@/components/goals/EditGoalModal').then(m => ({ default: m.EditGoalModal })));
