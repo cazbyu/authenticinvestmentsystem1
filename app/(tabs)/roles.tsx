@@ -1430,61 +1430,39 @@ export default function Roles() {
       );
     }
 
-    // Main Role Bank header with tabs
+    // Main Role Bank header with UniversalHeader + sub-header tabs
     return (
-      <View style={[styles.customHeader, { backgroundColor: colors.primary }]}>
-        <View style={styles.customHeaderTop}>
-          <TouchableOpacity
-            style={styles.customMenuButton}
-            onPress={() => {
-              if (Platform.OS === 'web') {
-                setIsWebMenuVisible(true);
-              } else if (typeof navigation.openDrawer === 'function') {
-                navigation.openDrawer();
-              }
-            }}
-          >
-            <Menu size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <View style={styles.customHeaderCenter}>
-            <Text style={styles.customHeaderTitle}>Role Bank</Text>
-          </View>
-          <View style={styles.customScoreContainer}>
-            <Text style={styles.customScoreLabel}>Authentic Score</Text>
-            <Text style={styles.customScoreValue}>{authenticScore}</Text>
-          </View>
-        </View>
-        <View style={styles.customHeaderBottom}>
-          <View style={styles.customMainTabsContainer}>
-            <View style={styles.customMainToggleGroup}>
-              <TouchableOpacity
-                style={[styles.customToggleButton, activeMainTab === 'roles' && styles.customActiveToggle]}
-                onPress={() => setActiveMainTab('roles')}
-              >
-                <Text style={[styles.customToggleText, activeMainTab === 'roles' && [styles.customActiveToggleText, { color: colors.primary }]]}>
-                  Roles
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.customToggleButton]}
-                onPress={showManageRolesView}
-              >
-                <Text style={[styles.customToggleText]}>
-                  Manage Roles
-                </Text>
-              </TouchableOpacity>
-            </View>
+      <>
+        <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
+        <View style={styles.roleBankSubHeader}>
+          <View style={styles.roleBankTabsRow}>
             <TouchableOpacity
-              style={[styles.customSingleButton, activeMainTab === 'keyrelationships' && styles.customActiveSingleButton]}
+              style={[styles.roleBankTab, activeMainTab === 'roles' && styles.roleBankTabActive]}
+              onPress={() => setActiveMainTab('roles')}
+            >
+              <Text style={[styles.roleBankTabText, activeMainTab === 'roles' && styles.roleBankTabTextActive]}>
+                Roles
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.roleBankTab]}
+              onPress={showManageRolesView}
+            >
+              <Text style={[styles.roleBankTabText]}>
+                Manage
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.roleBankTab, activeMainTab === 'keyrelationships' && styles.roleBankTabActive]}
               onPress={() => setActiveMainTab('keyrelationships')}
             >
-              <Text style={[styles.customSingleButtonText, activeMainTab === 'keyrelationships' && [styles.customActiveSingleButtonText, { color: colors.primary }]]}>
+              <Text style={[styles.roleBankTabText, activeMainTab === 'keyrelationships' && styles.roleBankTabTextActive]}>
                 Key Relationships
               </Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </>
     );
   };
 
