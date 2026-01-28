@@ -1639,4 +1639,35 @@ const styles = StyleSheet.create({
       fontSize: 14,
       fontWeight: '600',
     },
+    subHeaderContainer: {
+      backgroundColor: '#0078d4',
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+    },
+    tabsRow: {
+      flexDirection: 'row',
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      borderRadius: 16,
+      padding: 2,
+      alignSelf: 'flex-start',
+    },
+    subTab: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: 70,
+    },
+    subTabActive: {
+      backgroundColor: '#ffffff',
+    },
+    subTabText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#ffffff',
+    },
+    subTabTextActive: {
+      color: '#0078d4',
+    },
 });
