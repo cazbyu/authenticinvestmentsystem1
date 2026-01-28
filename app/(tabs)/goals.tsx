@@ -1688,6 +1688,12 @@ export default function Goals() {
         </SafeAreaView>
       </Modal>
 
+{/* Settings Sidebar */}
+      <SettingsSidebar
+        visible={settingsSidebarVisible}
+        onClose={() => setSettingsSidebarVisible(false)}
+      />
+      
       {/* Goal Detail View Modal */}
       {selectedGoalForDetail && (
         <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
