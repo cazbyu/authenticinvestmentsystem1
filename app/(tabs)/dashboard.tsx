@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [editingReflection, setEditingReflection] = useState<any>(null);
   const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
+  const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
 
   
