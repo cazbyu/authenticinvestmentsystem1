@@ -790,7 +790,7 @@ export default function Wellness() {
               style={styles.customBackButton}
               onPress={() => setSelectedDomain(null)}
             >
-              <Text style={styles.customBackButtonText}>← Wellness Bank</Text>
+              <Text style={styles.customBackButtonText}>←</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedDomain.name}</Text>
