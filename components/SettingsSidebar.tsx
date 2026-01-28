@@ -127,15 +127,25 @@ export function SettingsSidebar({ visible, onClose }: SettingsSidebarProps) {
   };
 
   const menuItems = [
+    // Main Navigation
     { icon: Compass, label: 'Dashboard', route: '/(tabs)/dashboard' },
     { icon: Users, label: 'Role Bank', route: '/(tabs)/roles' },
     { icon: Heart, label: 'Wellness Bank', route: '/(tabs)/wellness' },
     { icon: Target, label: 'Goal Bank', route: '/(tabs)/goals' },
     { type: 'divider' },
+    // Tools & Views
     { icon: Calendar, label: 'Calendar', route: '/calendar' },
     { icon: BookOpen, label: 'Reflections', route: '/reflections' },
+    { icon: Clock, label: 'Follow Up', route: '/follow-up' },
     { type: 'divider' },
+    // Coaching
+    { icon: MessageCircle, label: 'Coach Chat', route: '/coach-chat' },
+    { type: 'divider' },
+    // Settings & Support
     { icon: Settings, label: 'Settings', route: '/settings' },
+    { icon: Lightbulb, label: 'Suggestions', route: '/suggestions' },
+    { icon: Info, label: 'About', route: '/about' },
+    { icon: Mail, label: 'Contact', route: '/contact' },
     { icon: HelpCircle, label: 'Help & Support', route: '/help' },
   ];
 
