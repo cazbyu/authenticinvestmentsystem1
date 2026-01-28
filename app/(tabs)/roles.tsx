@@ -1392,7 +1392,7 @@ export default function Roles() {
               style={styles.customBackButton}
               onPress={() => setSelectedRole(null)}
             >
-              <Text style={styles.customBackButtonText}>← Role Bank</Text>
+              <Text style={styles.customBackButtonText}>←</Text>
             </TouchableOpacity>
             <View style={styles.customHeaderCenter}>
               <Text style={styles.customHeaderTitle}>{selectedRole.label}</Text>
