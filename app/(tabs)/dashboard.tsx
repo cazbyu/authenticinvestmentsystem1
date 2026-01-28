@@ -1535,6 +1535,11 @@ const renderDashboardTabs = () => (
         existingDelegates={delegates}
         userId={userId}
       />
+    {/* Settings Sidebar */}
+      <SettingsSidebar
+        visible={settingsSidebarVisible}
+        onClose={() => setSettingsSidebarVisible(false)}
+      />
     </SafeAreaView>
   );
 }
