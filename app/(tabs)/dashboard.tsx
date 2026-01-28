@@ -1129,11 +1129,11 @@ const renderDashboardTabs = () => (
   
   return (
     <SafeAreaView style={styles.container}>
-      <DashboardTabbedHeader
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        authenticScore={authenticScore}
-      />
+      {/* Universal Header */}
+      <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
+      
+      {/* Dashboard Sub-Header Tabs */}
+      {renderDashboardTabs()}
 
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
         {activeTab !== 'home' && (
