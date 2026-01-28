@@ -1306,4 +1306,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  // Wellness Bank Sub-Header Styles
+  wellnessSubHeader: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  wellnessTabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 20,
+    padding: 3,
+    alignSelf: 'flex-start',
+  },
+  wellnessTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wellnessTabActive: {
+    backgroundColor: '#0078d4',
+  },
+  wellnessTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  wellnessTabTextActive: {
+    color: '#ffffff',
+  },
 });
