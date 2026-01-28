@@ -34,44 +34,38 @@ export function GoalBankTabbedHeader({
   const router = useRouter();
   const { colors } = useTheme();
 
-  // When used as sub-header, use light gray background
-  const headerBgColor = isSubHeader ? '#f8fafc' : (backgroundColor || colors.primary);
-  const textColor = isSubHeader ? '#1f2937' : '#ffffff';
-  const secondaryTextColor = isSubHeader ? '#6b7280' : 'rgba(255, 255, 255, 0.8)';
-  const borderColor = isSubHeader ? '#e5e7eb' : 'rgba(255, 255, 255, 0.2)';
-
   // If showing back button (timeline selected), show timeline info header
   if (showBackButton) {
     return (
-      <View style={[styles.subHeaderContainer, { backgroundColor: headerBgColor, borderBottomColor: borderColor }]}>
+      <View style={styles.subHeaderContainer}>
         <View style={styles.timelineHeaderRow}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={onBackPress}
-            accessibilityLabel="Go back to timeline selector"
+            accessibilityLabel="Go back to goals list"
             accessibilityRole="button"
           >
             <ChevronLeft size={20} color="#0078d4" />
-            <Text style={styles.backButtonText}>My Goals</Text>
+            <Text style={styles.backButtonText}>Goals</Text>
           </TouchableOpacity>
         </View>
         
         {timelineTitle && (
           <View style={styles.timelineInfoRow}>
-            <Text style={[styles.timelineTitle, { color: textColor }]} numberOfLines={1}>
+            <Text style={styles.timelineTitle} numberOfLines={1}>
               {timelineTitle}
             </Text>
             {(daysRemaining !== undefined || cycleProgressPercentage !== undefined) && (
               <View style={styles.timelineMetrics}>
                 {daysRemaining !== undefined && (
-                  <Text style={[styles.timelineMetric, { color: secondaryTextColor }]}>
+                  <Text style={styles.timelineMetric}>
                     {daysRemaining} days left
                   </Text>
                 )}
                 {cycleProgressPercentage !== undefined && (
                   <>
-                    <Text style={[styles.timelineMetricSeparator, { color: secondaryTextColor }]}>•</Text>
-                    <Text style={[styles.timelineMetric, { color: secondaryTextColor }]}>
+                    <Text style={styles.timelineMetricSeparator}>•</Text>
+                    <Text style={styles.timelineMetric}>
                       {Math.round(cycleProgressPercentage)}% complete
                     </Text>
                   </>
@@ -84,9 +78,9 @@ export function GoalBankTabbedHeader({
     );
   }
 
-  // Main view with tabs (sub-header style)
+  // Main view with tabs (sub-header style matching other banks)
   return (
-    <View style={[styles.subHeaderContainer, { backgroundColor: headerBgColor, borderBottomColor: borderColor }]}>
+    <View style={styles.subHeaderContainer}>
       <View style={styles.tabsRow}>
         <TouchableOpacity
           style={[
@@ -94,7 +88,7 @@ export function GoalBankTabbedHeader({
             activeTab === 'goals' && styles.tabActive,
           ]}
           onPress={() => onTabChange('goals')}
-          accessibilityLabel="My Goals tab"
+          accessibilityLabel="Goals tab"
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'goals' }}
         >
@@ -114,7 +108,7 @@ export function GoalBankTabbedHeader({
             activeTab === 'manage-timelines' && styles.tabActive,
           ]}
           onPress={() => onTabChange('manage-timelines')}
-          accessibilityLabel="Manage Timelines tab"
+          accessibilityLabel="Manage tab"
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'manage-timelines' }}
         >
@@ -133,7 +127,7 @@ export function GoalBankTabbedHeader({
 }
 
 const styles = StyleSheet.create({
-  // Sub-header styles (light gray background)
+  // Sub-header container (light gray background)
   subHeaderContainer: {
     backgroundColor: '#f8fafc',
     paddingHorizontal: 16,
@@ -142,6 +136,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
+  // Tabs row
   tabsRow: {
     flexDirection: 'row',
     backgroundColor: '#e5e7eb',
@@ -167,7 +162,7 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#ffffff',
   },
-  // Timeline selected header
+  // Timeline selected header (back button view)
   timelineHeaderRow: {
     marginBottom: 8,
   },
