@@ -10,7 +10,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useNorthStarVisit } from '@/hooks/useNorthStarVisit';
+import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
 
 interface NorthStarBadgeProps {
   size?: number;

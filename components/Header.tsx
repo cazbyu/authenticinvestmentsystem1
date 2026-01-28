@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -6,6 +6,8 @@ import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { Menu, ArrowUpDown, ChevronLeft, CreditCard as Edit } from 'lucide-react-native';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { NorthStarBadge } from '@/components/navigation/NorthStarBadge';
+import { MissionCardOverlay } from '@/components/northStar/MissionCardOverlay';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -48,6 +50,7 @@ export function Header({
   const canGoBack = router.canGoBack();
   const { authenticScore: contextAuthenticScore } = useAuthenticScore();
   const { colors } = useTheme();
+  const [showMissionCard, setShowMissionCard] = useState(false);
 
   // Use prop if provided (for role/domain-specific scores), otherwise use context
   const displayScore = propAuthenticScore ?? contextAuthenticScore;
@@ -87,10 +90,17 @@ export function Header({
             </TouchableOpacity>
           )}
         </View>
-        
-        <View style={styles.scoreContainer}>
-          <Text style={styles.scoreLabel}>Authentic Total Score</Text>
-          <Text style={styles.scoreValue}>{displayScore}</Text>
+
+        <View style={styles.headerRight}>
+          <NorthStarBadge
+            size={20}
+            onPress={() => setShowMissionCard(true)}
+          />
+
+          <View style={styles.scoreContainer}>
+            <Text style={styles.scoreLabel}>Authentic Total Score</Text>
+            <Text style={styles.scoreValue}>{displayScore}</Text>
+          </View>
         </View>
         
         {/* Cycle Progress Section */}
@@ -229,6 +239,11 @@ export function Header({
           )}
         </View>
       )}
+
+      <MissionCardOverlay
+        visible={showMissionCard}
+        onClose={() => setShowMissionCard(false)}
+      />
     </View>
   );
 }
@@ -275,6 +290,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 12,
     padding: 4,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   scoreContainer: {
     alignItems: 'flex-end',

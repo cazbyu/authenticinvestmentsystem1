@@ -16,7 +16,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useNorthStarData } from '@/hooks/useNorthStarData';
 import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
-import { DraggableFab } from '@/components/ui/DraggableFab';
+import { DraggableFab } from '@/components/DraggableFab';
 
 // Tab type
 type NorthStarTab = 'actions' | 'ideas' | 'journal' | 'analytics';
