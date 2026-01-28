@@ -9,7 +9,7 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
-import { NorthStarIcon } from '@/components/compass/CustomIcons';
+import { NorthStarIcon } from '@/components/icons/CustomIcons';
 
 interface NorthStarBadgeProps {
   size?: number;
