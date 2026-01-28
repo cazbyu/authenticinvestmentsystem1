@@ -1445,19 +1445,19 @@ export default function Roles() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.roleBankTab, activeMainTab === 'keyrelationships' && styles.roleBankTabActive]}
+              onPress={() => setActiveMainTab('keyrelationships')}
+            >
+              <Text style={[styles.roleBankTabText, activeMainTab === 'keyrelationships' && styles.roleBankTabTextActive]}>
+                KRs
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.roleBankTab]}
               onPress={showManageRolesView}
             >
               <Text style={[styles.roleBankTabText]}>
                 Manage
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.roleBankTab, activeMainTab === 'keyrelationships' && styles.roleBankTabActive]}
-              onPress={() => setActiveMainTab('keyrelationships')}
-            >
-              <Text style={[styles.roleBankTabText, activeMainTab === 'keyrelationships' && styles.roleBankTabTextActive]}>
-                Key Relationships
               </Text>
             </TouchableOpacity>
           </View>
