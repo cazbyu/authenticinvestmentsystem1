@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Menu, Compass } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useTheme } from '@/contexts/ThemeContext';
+import { NorthStarBadge } from '@/components/navigation/NorthStarBadge';
+import { MissionCardOverlay } from '@/components/northStar/MissionCardOverlay';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
@@ -22,6 +24,7 @@ export function DashboardTabbedHeader({
 }: DashboardTabbedHeaderProps) {
   const navigation = useNavigation<DrawerNavigation>();
   const { colors } = useTheme();
+  const [showMissionCard, setShowMissionCard] = useState(false);
 
   const handleMenuPress = () => {
     navigation.openDrawer();
@@ -42,9 +45,16 @@ export function DashboardTabbedHeader({
           <Text style={styles.pageTitle}>Dashboard</Text>
         </View>
 
-        <View style={styles.scoreContainer}>
-          <Text style={styles.scoreLabel}>Authentic Score</Text>
-          <Text style={styles.scoreValue}>{authenticScore}</Text>
+        {/* NorthStar Badge + Score Container */}
+        <View style={styles.headerRight}>
+          <NorthStarBadge
+            size={20}
+            onPress={() => setShowMissionCard(true)}
+          />
+          <View style={styles.scoreContainer}>
+            <Text style={styles.scoreLabel}>Authentic Score</Text>
+            <Text style={styles.scoreValue}>{authenticScore}</Text>
+          </View>
         </View>
       </View>
 
@@ -125,6 +135,12 @@ export function DashboardTabbedHeader({
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Mission Card Overlay */}
+      <MissionCardOverlay
+        visible={showMissionCard}
+        onClose={() => setShowMissionCard(false)}
+      />
     </View>
   );
 }
@@ -160,6 +176,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   scoreContainer: {
     alignItems: 'flex-end',
