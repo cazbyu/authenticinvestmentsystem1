@@ -84,6 +84,13 @@ const CARDINAL_TO_ANGLE = {
   west: 270,
 };
 
+const CARDINAL_ROUTES = {
+  north: '/north-star',
+  east: '/wellness',
+  south: '/goals',
+  west: '/roles',
+} as const;
+
 function normalizeAngle(angle: number): number {
   let normalized = angle % 360;
   if (normalized < 0) normalized += 360;
@@ -445,32 +452,59 @@ export function LifeCompass({
   }, [currentHistoryId]);
 
   const handleCardinalPress = useCallback((cardinal: 'north' | 'east' | 'south' | 'west') => {
-    if (compassState.isSpinning || compassState.showQuestionModal) return;
+    if (compassState.isSpinning) return;
 
-    const question = sparkQuestions[cardinal];
-
-    // Record that we're showing this question
-    if (question?.id) {
-      recordQuestionShown(question.id, cardinal);
+    // If in Spark Mode and showing question modal, handle differently
+    if (compassState.mode === 'spark' && compassState.showQuestionModal) {
+      return;
     }
 
-    // Find the index of this cardinal in the sequence
-    const cardinalIndex = CARDINALS_SEQUENCE.indexOf(cardinal);
+    // If in Morning Spark ritual, show question
+    if (contextMode === 'morning_spark') {
+      const question = sparkQuestions[cardinal];
 
-    setCompassState(prev => ({
-      ...prev,
-      smallSpindleAngle: CARDINAL_TO_ANGLE[cardinal],
-      currentCardinal: cardinal,
-      showQuestionModal: true,
-      sequenceStep: cardinalIndex,
-    }));
+      // Record that we're showing this question
+      if (question?.id) {
+        recordQuestionShown(question.id, cardinal);
+      }
 
-    setSparkSequenceIndex(cardinalIndex);
+      // Find the index of this cardinal in the sequence
+      const cardinalIndex = CARDINALS_SEQUENCE.indexOf(cardinal);
 
+      setCompassState(prev => ({
+        ...prev,
+        smallSpindleAngle: CARDINAL_TO_ANGLE[cardinal],
+        currentCardinal: cardinal,
+        showQuestionModal: true,
+        sequenceStep: cardinalIndex,
+      }));
+
+      setSparkSequenceIndex(cardinalIndex);
+
+      if (Platform.OS !== 'web' && Haptics) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      return;
+    }
+
+    // Default navigation mode - navigate to the appropriate Bank
     if (Platform.OS !== 'web' && Haptics) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-  }, [compassState.isSpinning, compassState.showQuestionModal, sparkQuestions, recordQuestionShown]);
+
+    // Navigate to the corresponding page
+    const route = CARDINAL_ROUTES[cardinal];
+    router.push(route as any);
+
+  }, [
+    compassState.isSpinning,
+    compassState.mode,
+    compassState.showQuestionModal,
+    contextMode,
+    sparkQuestions,
+    recordQuestionShown,
+    router,
+  ]);
 
   const handleGoldSpindleSnap = useCallback((direction: 0 | 90 | 180 | 270) => {
     const zone = ANGLE_TO_ZONE[direction];

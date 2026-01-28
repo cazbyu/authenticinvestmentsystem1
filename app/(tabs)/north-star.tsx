@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useNorthStarData } from '@/hooks/useNorthStarData';
-import { useNorthStarVisit } from '@/hooks/useNorthStarVisit';
+import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
 import { DraggableFab } from '@/components/ui/DraggableFab';
 
 // Tab type
