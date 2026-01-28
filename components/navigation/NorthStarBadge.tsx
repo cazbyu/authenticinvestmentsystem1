@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -9,8 +9,7 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
+import { NorthStarIcon } from '@/components/compass/CustomIcons';
 
 interface NorthStarBadgeProps {
   size?: number;
@@ -23,7 +22,24 @@ export function NorthStarBadge({
   onPress,
   color = '#C9A227', // Gold color
 }: NorthStarBadgeProps) {
-  const { shouldPulse, isLoading } = useNorthStarVisit();
+  
+  // Try to use the hook, but provide fallback if it fails
+  let shouldPulse = false;
+  let isLoading = false;
+  
+  try {
+    // Attempt to import and use the hook
+    const { useNorthStarVisit } = require('@/hooks/NorthStarVisits');
+    const visitState = useNorthStarVisit();
+    shouldPulse = visitState?.shouldPulse ?? false;
+    isLoading = visitState?.isLoading ?? false;
+  } catch (error) {
+    // Hook not available - default to showing the badge without pulse
+    console.log('NorthStarVisit hook not available, showing static badge');
+    shouldPulse = false;
+    isLoading = false;
+  }
+
   const pulseScale = useSharedValue(1);
   const pulseOpacity = useSharedValue(0.6);
 
@@ -35,7 +51,7 @@ export function NorthStarBadge({
           withTiming(1.3, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
           withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
         ),
-        -1, // Infinite repeat
+        -1,
         false
       );
       
@@ -48,7 +64,6 @@ export function NorthStarBadge({
         false
       );
     } else {
-      // Stop animation
       cancelAnimation(pulseScale);
       cancelAnimation(pulseOpacity);
       pulseScale.value = 1;
@@ -64,10 +79,6 @@ export function NorthStarBadge({
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
     opacity: pulseOpacity.value,
-  }));
-
-  const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: shouldPulse ? 1.05 : 1 }],
   }));
 
   return (
@@ -88,14 +99,12 @@ export function NorthStarBadge({
         }]} />
       )}
       
-      {/* Star icon */}
-      <Animated.View style={iconStyle}>
-        <Ionicons 
-          name="star" 
-          size={size} 
-          color={shouldPulse ? color : '#9CA3AF'} 
-        />
-      </Animated.View>
+      {/* Custom NorthStar Icon - YOUR icon from CustomIcons */}
+      <NorthStarIcon 
+        size={size} 
+        color={shouldPulse ? color : '#FFFFFF'}  // Gold when pulsing, white otherwise
+        strokeWidth={3}
+      />
       
       {/* Small dot indicator when pulsing */}
       {shouldPulse && (
@@ -110,7 +119,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
+    padding: 4,
   },
   pulseRing: {
     position: 'absolute',
@@ -118,10 +127,12 @@ const styles = StyleSheet.create({
   },
   indicatorDot: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 0,
+    right: 0,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 });
+
+components/compass/CustomIcons.tsx
