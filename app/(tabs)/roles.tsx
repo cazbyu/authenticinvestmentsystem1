@@ -1442,7 +1442,7 @@ export default function Roles() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.roleBankTab, activeMainTab === 'keyrelationships' && styles.roleBankTabActive]}
+              style={[styles.roleBankTab, styles.roleBankTabKRs, activeMainTab === 'keyrelationships' && styles.roleBankTabActive]}
               onPress={() => setActiveMainTab('keyrelationships')}
             >
               <Text style={[styles.roleBankTabText, activeMainTab === 'keyrelationships' && styles.roleBankTabTextActive]}>
