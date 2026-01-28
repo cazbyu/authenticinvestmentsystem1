@@ -12,7 +12,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
-import { useNorthStarVisit } from '@/hooks/useNorthStarVisit';
+import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
 import { useRouter } from 'expo-router';
 
 interface MissionCardOverlayProps {
