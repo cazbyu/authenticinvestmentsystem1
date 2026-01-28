@@ -1,15 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { useTheme } from '@/contexts/ThemeContext';
 
 export type GoalBankTab = 'goals' | 'manage-timelines';
 
 interface GoalBankTabbedHeaderProps {
   activeTab: GoalBankTab;
   onTabChange: (tab: GoalBankTab) => void;
-  authenticScore: number;
+  authenticScore?: number;
   showBackButton?: boolean;
   onBackPress?: () => void;
   timelineTitle?: string;
@@ -22,49 +20,38 @@ interface GoalBankTabbedHeaderProps {
 export function GoalBankTabbedHeader({
   activeTab,
   onTabChange,
-  authenticScore,
   showBackButton,
   onBackPress,
   timelineTitle,
   daysRemaining,
   cycleProgressPercentage,
-  backgroundColor,
-  isSubHeader = false,
 }: GoalBankTabbedHeaderProps) {
-  const router = useRouter();
-  const { colors } = useTheme();
-
-  // If showing back button (timeline selected), show timeline info header
+  
+  // Timeline selected - show back button and timeline info
   if (showBackButton) {
     return (
-      <View style={styles.subHeaderContainer}>
-        <View style={styles.timelineHeaderRow}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={onBackPress}
-            accessibilityLabel="Go back to goals list"
-            accessibilityRole="button"
-          >
-            <ChevronLeft size={20} color="#0078d4" />
-            <Text style={styles.backButtonText}>Goals</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.container}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={onBackPress}
+        >
+          <ChevronLeft size={20} color="#0078d4" />
+          <Text style={styles.backButtonText}>Goals</Text>
+        </TouchableOpacity>
         
         {timelineTitle && (
-          <View style={styles.timelineInfoRow}>
+          <View style={styles.timelineInfo}>
             <Text style={styles.timelineTitle} numberOfLines={1}>
               {timelineTitle}
             </Text>
             {(daysRemaining !== undefined || cycleProgressPercentage !== undefined) && (
               <View style={styles.timelineMetrics}>
                 {daysRemaining !== undefined && (
-                  <Text style={styles.timelineMetric}>
-                    {daysRemaining} days left
-                  </Text>
+                  <Text style={styles.timelineMetric}>{daysRemaining} days left</Text>
                 )}
                 {cycleProgressPercentage !== undefined && (
                   <>
-                    <Text style={styles.timelineMetricSeparator}>•</Text>
+                    <Text style={styles.metricSeparator}>•</Text>
                     <Text style={styles.timelineMetric}>
                       {Math.round(cycleProgressPercentage)}% complete
                     </Text>
@@ -78,46 +65,24 @@ export function GoalBankTabbedHeader({
     );
   }
 
-  // Main view with tabs (sub-header style matching other banks)
+  // Main view - show tabs
   return (
-    <View style={styles.subHeaderContainer}>
+    <View style={styles.container}>
       <View style={styles.tabsRow}>
         <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'goals' && styles.tabActive,
-          ]}
+          style={[styles.tab, activeTab === 'goals' && styles.tabActive]}
           onPress={() => onTabChange('goals')}
-          accessibilityLabel="Goals tab"
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'goals' }}
         >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'goals' && styles.tabTextActive,
-            ]}
-          >
+          <Text style={[styles.tabText, activeTab === 'goals' && styles.tabTextActive]}>
             Goals
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === 'manage-timelines' && styles.tabActive,
-          ]}
+          style={[styles.tab, activeTab === 'manage-timelines' && styles.tabActive]}
           onPress={() => onTabChange('manage-timelines')}
-          accessibilityLabel="Manage tab"
-          accessibilityRole="tab"
-          accessibilityState={{ selected: activeTab === 'manage-timelines' }}
         >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'manage-timelines' && styles.tabTextActive,
-            ]}
-          >
+          <Text style={[styles.tabText, activeTab === 'manage-timelines' && styles.tabTextActive]}>
             Manage
           </Text>
         </TouchableOpacity>
@@ -127,8 +92,7 @@ export function GoalBankTabbedHeader({
 }
 
 const styles = StyleSheet.create({
-  // Sub-header container (light gray background)
-  subHeaderContainer: {
+  container: {
     backgroundColor: '#f8fafc',
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -136,7 +100,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
-  // Tabs row
   tabsRow: {
     flexDirection: 'row',
     backgroundColor: '#e5e7eb',
@@ -148,8 +111,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   tabActive: {
     backgroundColor: '#0078d4',
@@ -162,21 +123,18 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#ffffff',
   },
-  // Timeline selected header (back button view)
-  timelineHeaderRow: {
-    marginBottom: 8,
-  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginBottom: 8,
   },
   backButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#0078d4',
   },
-  timelineInfoRow: {
+  timelineInfo: {
     gap: 4,
   },
   timelineTitle: {
@@ -193,7 +151,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
-  timelineMetricSeparator: {
+  metricSeparator: {
     fontSize: 12,
     color: '#9ca3af',
   },
