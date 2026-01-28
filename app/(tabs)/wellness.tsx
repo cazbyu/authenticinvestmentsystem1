@@ -55,7 +55,8 @@ export default function Wellness() {
   // Main tab navigation state
   const [activeMainTab, setActiveMainTab] = useState<'domains' | 'balance'>('domains');
   const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
-
+const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
+  
   // Modal states
   const [taskFormVisible, setTaskFormVisible] = useState(false);
   const [taskDetailVisible, setTaskDetailVisible] = useState(false);
