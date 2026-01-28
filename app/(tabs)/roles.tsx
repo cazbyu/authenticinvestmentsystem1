@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toLocalISOString } from '@/lib/dateUtils';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Header } from '@/components/Header';
+import { UniversalHeader } from '@/components/UniversalHeader';
+import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { DraggableFab } from '@/components/DraggableFab';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
