@@ -9,7 +9,7 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
-import { NorthStarIcon } from '@/components/icons/CustomIcons';
+import Svg, { Polygon } from 'react-native-svg';
 
 interface NorthStarBadgeProps {
   size?: number;
@@ -17,10 +17,25 @@ interface NorthStarBadgeProps {
   color?: string;
 }
 
+// Inline NorthStarIcon - no external import needed
+function NorthStarIcon({ size = 24, color = '#231f20', strokeWidth = 3 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 144 144">
+      <Polygon
+        points="118.48 66.57 84.6 61.35 95.89 42.68 77.22 53.97 77.22 53.97 72 15.89 66.78 53.97 66.78 53.97 48.11 42.68 59.4 61.35 25.52 66.57 59.4 71.79 48.11 90.46 66.78 79.17 66.78 79.17 72 141.89 77.22 79.17 77.22 79.17 95.89 90.46 84.6 71.79 118.48 66.57"
+        fill="none"
+        stroke={color}
+        strokeMiterlimit={10}
+        strokeWidth={strokeWidth}
+      />
+    </Svg>
+  );
+}
+
 export function NorthStarBadge({ 
   size = 24, 
   onPress,
-  color = '#C9A227', // Gold color
+  color = '#C9A227',
 }: NorthStarBadgeProps) {
   
   // Try to use the hook, but provide fallback if it fails
@@ -28,14 +43,12 @@ export function NorthStarBadge({
   let isLoading = false;
   
   try {
-    // Attempt to import and use the hook
     const { useNorthStarVisit } = require('@/hooks/NorthStarVisits');
     const visitState = useNorthStarVisit();
     shouldPulse = visitState?.shouldPulse ?? false;
     isLoading = visitState?.isLoading ?? false;
   } catch (error) {
     // Hook not available - default to showing the badge without pulse
-    console.log('NorthStarVisit hook not available, showing static badge');
     shouldPulse = false;
     isLoading = false;
   }
@@ -45,7 +58,6 @@ export function NorthStarBadge({
 
   useEffect(() => {
     if (shouldPulse && !isLoading) {
-      // Create pulsing animation
       pulseScale.value = withRepeat(
         withSequence(
           withTiming(1.3, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
@@ -99,10 +111,10 @@ export function NorthStarBadge({
         }]} />
       )}
       
-      {/* Custom NorthStar Icon - YOUR icon from CustomIcons */}
+      {/* NorthStar Icon - inline SVG */}
       <NorthStarIcon 
         size={size} 
-        color={shouldPulse ? color : '#FFFFFF'}  // Gold when pulsing, white otherwise
+        color={shouldPulse ? color : '#FFFFFF'}
         strokeWidth={3}
       />
       
@@ -134,5 +146,3 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 });
-
-components/compass/CustomIcons.tsx
