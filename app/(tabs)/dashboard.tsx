@@ -21,7 +21,6 @@ import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { DashboardTabbedHeader, DashboardTab } from '@/components/dashboard/DashboardTabbedHeader';
 import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
@@ -30,6 +29,8 @@ import { CompassView } from '@/components/compass/CompassView';
 import { router, useFocusEffect } from 'expo-router';
 import { shouldShowRitual } from '@/lib/ritualUtils';
 import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
+import { UniversalHeader } from '@/components/UniversalHeader';
+import { SettingsSidebar } from '@/components/SettingsSidebar';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
