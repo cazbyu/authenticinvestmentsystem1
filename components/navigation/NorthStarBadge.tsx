@@ -9,27 +9,12 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
-import Svg, { Polygon } from 'react-native-svg';
+import { NorthStarIcon } from '@/components/icons/CustomIcons';
 
 interface NorthStarBadgeProps {
   size?: number;
   onPress: () => void;
   color?: string;
-}
-
-// Inline NorthStarIcon - no external import needed
-function NorthStarIcon({ size = 24, color = '#231f20', strokeWidth = 3 }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 144 144">
-      <Polygon
-        points="118.48 66.57 84.6 61.35 95.89 42.68 77.22 53.97 77.22 53.97 72 15.89 66.78 53.97 66.78 53.97 48.11 42.68 59.4 61.35 25.52 66.57 59.4 71.79 48.11 90.46 66.78 79.17 66.78 79.17 72 141.89 77.22 79.17 77.22 79.17 95.89 90.46 84.6 71.79 118.48 66.57"
-        fill="none"
-        stroke={color}
-        strokeMiterlimit={10}
-        strokeWidth={strokeWidth}
-      />
-    </Svg>
-  );
 }
 
 export function NorthStarBadge({ 
@@ -48,7 +33,6 @@ export function NorthStarBadge({
     shouldPulse = visitState?.shouldPulse ?? false;
     isLoading = visitState?.isLoading ?? false;
   } catch (error) {
-    // Hook not available - default to showing the badge without pulse
     shouldPulse = false;
     isLoading = false;
   }
@@ -111,7 +95,7 @@ export function NorthStarBadge({
         }]} />
       )}
       
-      {/* NorthStar Icon - inline SVG */}
+      {/* NorthStar Icon */}
       <NorthStarIcon 
         size={size} 
         color={shouldPulse ? color : '#FFFFFF'}
