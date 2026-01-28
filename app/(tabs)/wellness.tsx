@@ -1098,6 +1098,12 @@ export default function Wellness() {
         visible={isWebMenuVisible}
         onClose={() => setIsWebMenuVisible(false)}
       />
+
+      {/* Settings Sidebar */}
+      <SettingsSidebar
+        visible={settingsSidebarVisible}
+        onClose={() => setSettingsSidebarVisible(false)}
+      />
     </SafeAreaView>
   );
 }
