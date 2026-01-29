@@ -159,23 +159,46 @@ export function CoachsCornerTab({ relationships, hasCoach, onRefresh }: CoachsCo
     );
   }
 
-  if (enrichedRelationships.length === 0) {
+  if (!hasCoach || enrichedRelationships.length === 0) {
     return (
       <View style={styles.container}>
         <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
-          <Users size={48} color={colors.textSecondary} />
+          <Users size={48} color="#B91C1C" />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            No Coaches Yet
+            Coach's Corner
           </Text>
           <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            Connect with a coach to get personalized guidance and accountability on your journey.
+            A coach can help you stay accountable, provide guidance, and support you on your journey toward living authentically.
           </Text>
+          
+          {/* Sample coaching benefits */}
+          <View style={styles.benefitsList}>
+            <View style={styles.benefitItem}>
+              <MessageCircle size={16} color="#B91C1C" />
+              <Text style={[styles.benefitText, { color: colors.text }]}>
+                Direct messaging with your coach
+              </Text>
+            </View>
+            <View style={styles.benefitItem}>
+              <Calendar size={16} color="#B91C1C" />
+              <Text style={[styles.benefitText, { color: colors.text }]}>
+                Schedule regular check-ins
+              </Text>
+            </View>
+            <View style={styles.benefitItem}>
+              <Shield size={16} color="#B91C1C" />
+              <Text style={[styles.benefitText, { color: colors.text }]}>
+                You control what your coach can see
+              </Text>
+            </View>
+          </View>
+
           <TouchableOpacity
             onPress={handleInviteCoach}
             style={styles.inviteButton}
           >
             <Plus size={18} color="#ffffff" />
-            <Text style={styles.inviteButtonText}>Invite a Coach</Text>
+            <Text style={styles.inviteButtonText}>Connect with a Coach</Text>
           </TouchableOpacity>
         </View>
       </View>
