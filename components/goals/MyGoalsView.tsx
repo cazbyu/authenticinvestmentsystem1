@@ -118,7 +118,6 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
         setCurrentCycleWeek(0);
         return;
       }
-      }
 
       const [
   { data: rolesData },
