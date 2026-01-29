@@ -423,6 +423,24 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
 
+  // Benefits List (No Coach State)
+  benefitsList: {
+    width: '100%',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  benefitItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+  },
+  benefitText: {
+    fontSize: 14,
+    flex: 1,
+  },
+
   // Hero Card (Head Coach)
   heroCard: {
     borderRadius: 12,
