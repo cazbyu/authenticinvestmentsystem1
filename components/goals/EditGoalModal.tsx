@@ -379,6 +379,21 @@ export function EditGoalModal({
       if (updateError) throw updateError;
       console.log('[EditGoalModal] Goal updated successfully');
 
+      // Update parent goal link
+      const { error: parentError } = await supabase
+        .from(tableName)
+        .update({
+          parent_goal_id: selectedParentGoalId,
+          parent_goal_type: selectedParentGoalId ? '1y' : null,
+        })
+        .eq('id', goal.id);
+
+      if (parentError) {
+        console.error('[EditGoalModal] Error updating parent goal:', parentError);
+      } else {
+        console.log('[EditGoalModal] Parent goal updated:', selectedParentGoalId);
+      }
+
       // 2. Sync role associations via universal-roles-join
       const { data: currentRoleJoins } = await supabase
         .from('0008-ap-universal-roles-join')
