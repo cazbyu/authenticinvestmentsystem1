@@ -181,12 +181,16 @@ if (parentGoalIds.length > 0) {
         }
       });
 
-      const parentGoalsMap = new Map<string, any>();
-      (parentGoalsData || []).forEach((item: any) => {
-        if (item.twelve_wk_goal_id && item.one_yr_goal) {
-          parentGoalsMap.set(item.twelve_wk_goal_id, item.one_yr_goal);
-        }
-      });
+      // ✅ CORRECT: Build parent goals map using parent_goal_id from 12-week goals
+const parentGoalsMap = new Map<string, any>();
+twelveWeekGoals.forEach((goal: any) => {
+  if (goal.parent_goal_id) {
+    const parentGoal = parentGoalsData.find(p => p.id === goal.parent_goal_id);
+    if (parentGoal) {
+      parentGoalsMap.set(goal.id, parentGoal);
+    }
+  }
+});
 
       const annual: UnifiedGoal[] = oneYearGoals.map((goal: any) => {
         const childCount = twelveWeekGoals.filter((g: any) =>
