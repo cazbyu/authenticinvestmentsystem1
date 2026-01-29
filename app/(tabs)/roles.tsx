@@ -56,6 +56,7 @@ interface KeyRelationship {
 export default function Roles() {
   const navigation = useNavigation<DrawerNavigation>();
   const { authenticScore, refreshScoreForRole } = useAuthenticScore();
+const { headerColor } = useHeaderColor();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
