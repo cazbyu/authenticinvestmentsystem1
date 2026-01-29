@@ -1081,7 +1081,7 @@ const renderDashboardTabs = () => (
   <View style={styles.subHeaderContainer}>
     <View style={styles.tabsRow}>
       <TouchableOpacity
-        style={[styles.subTab, activeTab === 'home' && styles.subTabActive]}
+        style={[styles.subTab, activeTab === 'home' && { backgroundColor: headerColor }]}
         onPress={() => setActiveTab('home')}
         accessibilityLabel="Compass tab"
         accessibilityRole="tab"
