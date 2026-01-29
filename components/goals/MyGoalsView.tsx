@@ -476,7 +476,7 @@ twelveWeekGoals.forEach((goal: any) => {
     );
   }
 
-  const hasAnyGoals = annualGoals.length > 0 || cycleGoals.length > 0 || customGoals.length > 0;
+  const hasAnyGoals = cycleGoals.length > 0 || customGoals.length > 0;
 
   return (
     <ScrollView
