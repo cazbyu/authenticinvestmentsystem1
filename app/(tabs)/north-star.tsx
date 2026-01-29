@@ -75,15 +75,10 @@ const { headerColor } = useHeaderColor();
     },
   ], []);
 
-  // Filter tabs based on conditions
+  // All tabs are always visible - Coach's Corner shows different content based on hasCoach
   const visibleTabs = useMemo(() => {
-    return allTabs.filter(tab => {
-      if (tab.conditional && tab.key === 'coach') {
-        return hasCoach;
-      }
-      return true;
-    });
-  }, [allTabs, hasCoach]);
+    return allTabs;
+  }, [allTabs]);
 
   // Check for active coach relationships
   const checkCoachRelationships = useCallback(async () => {
@@ -147,12 +142,13 @@ const { headerColor } = useHeaderColor();
       case 'vision':
         return <MyVisionTab onRefresh={handleRefresh} />;
       case 'coach':
-        return hasCoach ? (
+        return (
           <CoachsCornerTab 
-            relationships={coachRelationships} 
+            relationships={coachRelationships}
+            hasCoach={hasCoach}
             onRefresh={handleRefresh} 
           />
-        ) : null;
+        );
       case 'sparks':
         return <SparkLibraryTab onRefresh={handleRefresh} />;
       default:
