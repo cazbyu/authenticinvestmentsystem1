@@ -43,6 +43,7 @@ interface Domain {
 export default function Wellness() {
   const navigation = useNavigation<DrawerNavigation>();
   const { authenticScore, refreshScoreForDomain } = useAuthenticScore();
+const { headerColor } = useHeaderColor();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
