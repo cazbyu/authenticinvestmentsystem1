@@ -163,6 +163,12 @@ export function CreateGoalModal({
       } else {
         resetForm();
       }
+      
+      // Auto-select first global timeline after reset (if available)
+      const globalTimelines = allTimelines.filter(t => t.source === 'global');
+      if (globalTimelines.length > 0) {
+        setSelectedGlobalTimelineId(globalTimelines[0].id);
+      }
     }
   }, [visible, selectedTimeline, allTimelines, cachedRoles, cachedDomains, cachedKeyRelationships, cachedOneYearGoals]);
 
