@@ -1,5 +1,4 @@
 import { Tabs } from 'expo-router';
-import { useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
@@ -12,7 +11,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={() => ({
         headerShown: false,
         tabBarActiveTintColor: headerColor,
         tabBarInactiveTintColor: colors.textSecondary,
@@ -28,7 +27,7 @@ export default function TabLayout() {
           fontSize: 12,
           fontWeight: '500',
         },
-      }}
+      })}
       screenListeners={{
         tabPress: (e) => {
           const tabName = e.target?.split('-')[0];
