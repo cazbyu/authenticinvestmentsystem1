@@ -31,7 +31,7 @@ import { shouldShowRitual } from '@/lib/ritualUtils';
 import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
-import { Compass } from 'lucide-react-native';
+import { CompassIcon } from '@/components/icons/CustomIcons';
 
 type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
@@ -1085,7 +1085,7 @@ const renderDashboardTabs = () => (
         accessibilityRole="tab"
         accessibilityState={{ selected: activeTab === 'home' }}
       >
-        <Compass size={16} color={activeTab === 'home' ? '#ffffff' : '#6b7280'} />
+        <CompassIcon size={16} color={activeTab === 'home' ? '#ffffff' : '#6b7280'} />
       </TouchableOpacity>
 
       <TouchableOpacity
