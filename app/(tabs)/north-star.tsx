@@ -16,10 +16,10 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 
-// Tab Components (to be built out)
-import { MyVisionTab } from '@/components/north-star/MyVisionTab';
-import { CoachsCornerTab } from '@/components/north-star/CoachsCornerTab';
-import { SparkLibraryTab } from '@/components/north-star/SparkLibraryTab';
+// To (matching your existing folder):
+import { MyVisionTab } from '@/components/northStar/MyVisionTab';
+import { CoachsCornerTab } from '@/components/northStar/CoachsCornerTab';
+import { SparkLibraryTab } from '@/components/northStar/SparkLibraryTab';
 
 // Types
 type TabKey = 'vision' | 'coach' | 'sparks';
