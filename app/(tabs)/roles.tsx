@@ -33,6 +33,7 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { RoleCard } from '@/components/roles/RoleCard';
 import { getRoleStatistics, RoleStatistics } from '@/lib/roleStatistics';
+import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
 
