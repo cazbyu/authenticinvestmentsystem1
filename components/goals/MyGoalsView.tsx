@@ -420,13 +420,12 @@ twelveWeekGoals.forEach((goal: any) => {
   };
 
   const getAllGoalsSorted = (): UnifiedGoal[] => {
-    // Priority: 12-week (1) → Custom (2) → Annual (3)
+    // Priority: 12-week (1) → Custom (2)
     const getTypePriority = (goalType: string): number => {
       switch (goalType) {
         case '12week': return 1;
         case 'custom': return 2;
-        case '1y': return 3;
-        default: return 4;
+        default: return 3;
       }
     };
 
@@ -441,15 +440,10 @@ twelveWeekGoals.forEach((goal: any) => {
         sortPriority: getTypePriority(g.goal_type),
         sortDate: g.end_date || '2099-12-31'
       })),
-      ...annualGoals.map(g => ({
-        ...g,
-        sortPriority: getTypePriority(g.goal_type),
-        sortDate: g.year_target_date || '2099-12-31'
-      })),
     ];
 
     return allGoals.sort((a, b) => {
-      // First sort by type priority (12-week → Custom → Annual)
+      // First sort by type priority (12-week → Custom)
       if (a.sortPriority !== b.sortPriority) {
         return a.sortPriority - b.sortPriority;
       }
