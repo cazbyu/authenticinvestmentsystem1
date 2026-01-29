@@ -1469,8 +1469,9 @@ const { headerColor } = useHeaderColor();
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.roleBankTab]}
-              onPress={showManageRolesView}
+              <TouchableOpacity
+          style={[styles.roleBankTab, activeMainTab === 'manageRoles' && { backgroundColor: headerColor }]}
+          onPress={showManageRolesView}
             >
               <Text style={[styles.roleBankTabText]}>
                 Manage
