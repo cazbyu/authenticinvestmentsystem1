@@ -260,7 +260,6 @@ twelveWeekGoals.forEach((goal: any) => {
 
       });
 
-      setAnnualGoals(annual);
       setCycleGoals(cycle);
       setCustomGoals(custom);
       setActiveTimelineName(timelineName);
