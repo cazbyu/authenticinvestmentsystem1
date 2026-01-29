@@ -1085,7 +1085,9 @@ const renderDashboardTabs = () => (
         accessibilityRole="tab"
         accessibilityState={{ selected: activeTab === 'home' }}
       >
-        <CompassIcon size={24} color={activeTab === 'home' ? '#ffffff' : '#6b7280'} />
+        <View style={{ marginVertical: -4 }}>
+  <CompassIcon size={24} color={activeTab === 'home' ? '#ffffff' : '#6b7280'} />
+</View>
       </TouchableOpacity>
 
       <TouchableOpacity
