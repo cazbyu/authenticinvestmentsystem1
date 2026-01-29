@@ -184,29 +184,7 @@ twelveWeekGoals.forEach((goal: any) => {
   }
 });
 
-      const annual: UnifiedGoal[] = oneYearGoals.map((goal: any) => {
-        const childCount = twelveWeekGoals.filter((g: any) =>
-          parentGoalsMap.get(g.id)?.id === goal.id
-        ).length || 0;
-
-        return {
-          id: goal.id,
-          title: goal.title,
-          description: goal.description,
-          goal_type: '1y' as const,
-          status: goal.status,
-          year_target_date: goal.year_target_date,
-          child_goal_count: childCount,
-          roles: rolesMap.get(goal.id) || [],
-          domains: domainsMap.get(goal.id) || [],
-        };
-      }).filter((goal: UnifiedGoal) => {
-        if (!goal.year_target_date) return true;
-        const targetYear = new Date(goal.year_target_date).getFullYear();
-        return targetYear === currentYear || targetYear === nextYear;
-      });
-
-      let activeTimeline = timelineResult.data as any;
+      let activeTimeline
       let timelineName = '';
       let cycleWeek = 0;
 
