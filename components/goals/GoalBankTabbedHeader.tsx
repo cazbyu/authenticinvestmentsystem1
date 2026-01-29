@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
+import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 export type GoalBankTab = 'goals' | 'manage-timelines';
 
