@@ -198,6 +198,33 @@ export function EditGoalModal({
       setSelectedKeyRelationshipIds(currentKeyRelIds);
       console.log('[EditGoalModal] Current key relationships:', currentKeyRelIds);
 
+// Fetch available 1-year goals for parent selection
+      const { data: oneYearGoalsData } = await supabase
+        .from('0008-ap-goals-1y')
+        .select('id, title, year_target_date')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('title');
+      
+      setOneYearGoals(oneYearGoalsData || []);
+      console.log('[EditGoalModal] Available 1-year goals:', oneYearGoalsData?.length || 0);
+
+      // Fetch current parent_goal_id from the goal
+      const goalTable = goal.goal_type === '12week' ? '0008-ap-goals-12wk' : '0008-ap-goals-custom';
+      const { data: goalData } = await supabase
+        .from(goalTable)
+        .select('parent_goal_id')
+        .eq('id', goal.id)
+        .single();
+      
+      if (goalData?.parent_goal_id) {
+        setSelectedParentGoalId(goalData.parent_goal_id);
+        setParentGoalExpanded(true);
+        console.log('[EditGoalModal] Current parent goal:', goalData.parent_goal_id);
+      } else {
+        setSelectedParentGoalId(null);
+      }
+      
       // Fetch existing notes for this goal (using same parentType)
       const { data: noteJoins } = await supabase
         .from('0008-ap-universal-notes-join')
