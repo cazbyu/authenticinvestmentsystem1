@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthenticScoreProvider } from '@/contexts/AuthenticScoreContext';
 import { TabResetProvider } from '@/contexts/TabResetContext';
 import { MorningSparkProvider } from '@/contexts/MorningSparkContext';
+import { HeaderColorProvider } from '@/contexts/HeaderColorContext';
 import React from 'react';
 
 console.log('[App] _layout.tsx (fallback) loaded');
