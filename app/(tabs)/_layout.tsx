@@ -1,5 +1,4 @@
 import { Tabs } from 'expo-router';
-import { Compass } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { NorthStarIcon, WellnessIcon, GoalIcon, RoleIcon } from '@/components/icons/CustomIcons';
@@ -29,52 +28,71 @@ export default function TabLayout() {
       }}
       screenListeners={{
         tabPress: (e) => {
-          // Extract the tab name from the event target
-          // The target format is typically "dashboard-tab-0", "roles-tab-0", etc.
           const tabName = e.target?.split('-')[0];
-
           console.log('[TabLayout] Tab pressed:', tabName, 'Full target:', e.target);
-
-          // Call the reset handler for the pressed tab
           if (tabName) {
             resetTab(tabName);
           }
         },
       }}>
+      
+      {/* North Star - First tab */}
       <Tabs.Screen
-        name="dashboard"
+        name="north-star"
         options={{
-          title: 'Compass',
+          title: 'North',
           tabBarIcon: ({ size, color }) => (
-            <Compass size={size} color={color} />
+            <NorthStarIcon size={size} color={color} />
           ),
         }}
       />
+
+      {/* Role Bank */}
       <Tabs.Screen
         name="roles"
         options={{
-          title: 'Role Bank',
+          title: 'Roles',
           tabBarIcon: ({ size, color }) => (
             <RoleIcon size={size} color={color} />
           ),
         }}
       />
+
+      {/* Wellness Bank */}
       <Tabs.Screen
         name="wellness"
         options={{
-          title: 'Wellness Bank',
+          title: 'Wellness',
           tabBarIcon: ({ size, color }) => (
             <WellnessIcon size={size} color={color} />
           ),
         }}
       />
+
+      {/* Goal Bank */}
       <Tabs.Screen
         name="goals"
         options={{
-          title: 'Goal Bank',
+          title: 'Goals',
           tabBarIcon: ({ size, color }) => (
             <GoalIcon size={size} color={color} />
           ),
+        }}
+      />
+
+      {/* Dashboard - Hidden from tab bar but still accessible via header compass */}
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          href: null, // This hides it from the tab bar
+        }}
+      />
+
+      {/* Index redirect - Hidden */}
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
