@@ -1,6 +1,3 @@
-// North Star Landing Page Components
-// Export all tab components for the North Star page
-
-export { MyVisionTab } from './MyVisionTab';
-export { CoachsCornerTab } from './CoachsCornerTab';
-export { SparkLibraryTab } from './SparkLibraryTab';
+import { Redirect } from 'expo-router';
+import { getSupabaseClient } from '@/lib/supabase';
+// ... rest of the session checking code you showed
