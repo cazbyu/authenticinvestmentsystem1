@@ -504,11 +504,11 @@ twelveWeekGoals.forEach((goal: any) => {
         </View>
       )}
 
-      {hasAnyGoals && cycleGoals.length === 0 && annualGoals.length > 0 && (
+      {hasAnyGoals && cycleGoals.length === 0 && (
         <View style={[styles.promptCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.promptTitle, { color: colors.text }]}>Join a 12-Week Cycle</Text>
           <Text style={[styles.promptMessage, { color: colors.textSecondary }]}>
-            Join the current 12-week cycle to start breaking down your annual goals into actionable quarterly targets
+            Join the current 12-week cycle to start tracking your goals with weekly actions
           </Text>
         </View>
       )}
