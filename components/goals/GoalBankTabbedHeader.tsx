@@ -72,7 +72,7 @@ export function GoalBankTabbedHeader({
     <View style={styles.container}>
       <View style={styles.tabsRow}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'goals' && styles.tabActive]}
+          style={[styles.tab, activeTab === 'goals' && { backgroundColor: headerColor }]}
           onPress={() => onTabChange('goals')}
         >
           <Text style={[styles.tabText, activeTab === 'goals' && styles.tabTextActive]}>
