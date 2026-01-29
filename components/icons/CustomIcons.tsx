@@ -8,25 +8,23 @@ interface IconProps {
 }
 
 // Compass icon from compass.svg - circle with diamond pointer
-export function CompassIcon({ size = 24, color = '#000000', strokeWidth = 4 }: IconProps) {
-  // Original viewBox is 0 0 2000 2000, scaling stroke proportionally
-  const scaledStrokeWidth = (strokeWidth / 24) * 80.65; // Scale based on original 80.65px stroke
-  
+// Normalized to 144x144 viewBox to match other icons
+export function CompassIcon({ size = 24, color = '#000000', strokeWidth = 6 }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 2000 2000">
+    <Svg width={size} height={size} viewBox="0 0 144 144">
       {/* Outer circle */}
       <Circle
-        cx="1000"
-        cy="1000"
-        r="722.75"
+        cx="72"
+        cy="72"
+        r="52"
         fill="none"
         stroke={color}
         strokeMiterlimit={10}
-        strokeWidth={scaledStrokeWidth}
+        strokeWidth={strokeWidth}
       />
       {/* Diamond pointer with center circle cutout */}
       <Path
-        d="M1353.56,623.34l-488.88,222.89c-8.27,3.76-15,10.51-18.74,18.79l-221.9,489.91c-6.4,14.15,6.96,27.51,21.12,21.12l489.79-221.93c8.32-3.78,15.11-10.58,18.86-18.91l220.92-490.83c6.37-14.17-7.04-27.5-21.17-21.05ZM1000,1082.54c-45.58,0-82.54-36.95-82.54-82.54s36.96-82.54,82.54-82.54,82.54,36.96,82.54,82.54-36.95,82.54-82.54,82.54Z"
+        d="M97.46,44.88L62.27,60.92c-.6.27-1.08.76-1.35,1.35L44.88,97.46c-.46,1.02.5,1.98,1.52,1.52l35.26-15.98c.6-.27,1.09-.76,1.36-1.36l15.91-35.33c.46-1.02-.51-1.98-1.52-1.51ZM72,77.94c-3.28,0-5.94-2.66-5.94-5.94s2.66-5.94,5.94-5.94,5.94,2.66,5.94,5.94-2.66,5.94-5.94,5.94Z"
         fill={color}
       />
     </Svg>
