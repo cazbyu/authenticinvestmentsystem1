@@ -1453,7 +1453,7 @@ const { headerColor } = useHeaderColor();
         <View style={styles.roleBankSubHeader}>
           <View style={styles.roleBankTabsRow}>
             <TouchableOpacity
-              style={[styles.roleBankTab, activeMainTab === 'roles' && styles.roleBankTabActive]}
+              style={[styles.roleBankTab, activeMainTab === 'roles' && { backgroundColor: headerColor }]}
               onPress={() => setActiveMainTab('roles')}
             >
               <Text style={[styles.roleBankTabText, activeMainTab === 'roles' && styles.roleBankTabTextActive]}>
@@ -1461,7 +1461,7 @@ const { headerColor } = useHeaderColor();
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.roleBankTab, styles.roleBankTabKRs, activeMainTab === 'keyrelationships' && styles.roleBankTabActive]}
+              style={[styles.roleBankTab, styles.roleBankTabKRs, activeMainTab === 'keyrelationships' && { backgroundColor: headerColor }]}
               onPress={() => setActiveMainTab('keyrelationships')}
             >
               <Text style={[styles.roleBankTabText, activeMainTab === 'keyrelationships' && styles.roleBankTabTextActive]}>
