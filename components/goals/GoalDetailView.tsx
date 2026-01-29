@@ -641,17 +641,65 @@ useEffect(() => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const goalJoinColumn = currentGoal.goal_type === '1y'
-        ? 'one_yr_goal_id'
-        : currentGoal.goal_type === '12week'
-        ? 'twelve_wk_goal_id'
-        : 'custom_goal_id';
+      // Annual goals (1y) don't have direct links in universal-goals-join
+// They aggregate from their child 12-week goals
+if (currentGoal.goal_type === '1y') {
+  // For annual goals, find child 12-week goals first, then their linked ideas
+  const { data: childGoals, error: childError } = await supabase
+    .from('0008-ap-goals-12wk')
+    .select('id')
+    .eq('parent_goal_id', currentGoal.id)
+    .is('deleted_at', null);
 
-      const { data: goalJoins, error: joinError } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('parent_id')
-        .eq(goalJoinColumn, currentGoal.id)
-        .eq('parent_type', 'deposit_idea');
+  if (childError || !childGoals || childGoals.length === 0) {
+    setIdeas([]);
+    return;
+  }
+
+  const childGoalIds = childGoals.map(g => g.id);
+  
+  const { data: goalJoins, error: joinError } = await supabase
+    .from('0008-ap-universal-goals-join')
+    .select('parent_id')
+    .in('twelve_wk_goal_id', childGoalIds)
+    .eq('parent_type', 'deposit_idea');
+
+  if (joinError) throw joinError;
+
+  const ideaIds = goalJoins?.map(j => j.parent_id).filter(Boolean) || [];
+
+  if (ideaIds.length === 0) {
+    setIdeas([]);
+    return;
+  }
+
+  // Continue with existing idea fetching logic using ideaIds...
+  const { data: ideasData, error: ideasError } = await supabase
+    .from('0008-ap-deposit-ideas')
+    .select('*')
+    .in('id', ideaIds)
+    .eq('is_active', true)
+    .eq('archived', false)
+    .is('activated_task_id', null)
+    .order('created_at', { ascending: false });
+
+  if (ideasError) throw ideasError;
+
+  // ... rest of enrichment logic stays the same
+} else {
+  // Original logic for 12week and custom goals
+  const goalJoinColumn = currentGoal.goal_type === '12week'
+    ? 'twelve_wk_goal_id'
+    : 'custom_goal_id';
+
+  const { data: goalJoins, error: joinError } = await supabase
+    .from('0008-ap-universal-goals-join')
+    .select('parent_id')
+    .eq(goalJoinColumn, currentGoal.id)
+    .eq('parent_type', 'deposit_idea');
+
+  // ... rest of original logic
+}
 
       if (joinError) throw joinError;
 
