@@ -1,46 +1,45 @@
 import { Stack } from 'expo-router';
-import { TouchableOpacity, Platform } from 'react-native';
-import { Menu } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
-import { DrawerNavigationProp } from '@react-navigation/drawer';
+import { View, StyleSheet } from 'react-native';
+import { UniversalHeader } from '@/components/UniversalHeader';
+import { useState } from 'react';
+import SettingsDrawer from '@/components/SettingsDrawer';
 
 export default function NorthStarLayout() {
-  const navigation = useNavigation<DrawerNavigationProp<any>>();
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#ed1c24' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen
-        name="index"
-        options={{
-          title: 'North Star',
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => {
-                if (typeof navigation.openDrawer === 'function') {
-                  navigation.openDrawer();
-                }
-              }}
-              style={{
-                marginLeft: Platform.OS === 'web' ? 16 : 8,
-                padding: 8,
-              }}
-            >
-              <Menu size={24} color="#fff" />
-            </TouchableOpacity>
-          ),
+    <View style={styles.container}>
+      {/* Universal Header - red background with profile, north star, score */}
+      <View style={styles.headerContainer}>
+        <UniversalHeader onOpenSettings={() => setSettingsVisible(true)} />
+      </View>
+
+      {/* Page Content */}
+      <Stack
+        screenOptions={{
+          headerShown: false, // Hide default header, we're using UniversalHeader
+          contentStyle: { backgroundColor: '#fff' },
         }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="spark-library" />
+      </Stack>
+
+      {/* Settings Drawer */}
+      <SettingsDrawer 
+        visible={settingsVisible} 
+        onClose={() => setSettingsVisible(false)} 
       />
-      <Stack.Screen
-        name="spark-library"
-        options={{ title: 'Spark Library' }}
-      />
-    </Stack>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#B91C1C', // Red background for status bar area
+  },
+  headerContainer: {
+    backgroundColor: '#B91C1C',
+  },
+});
