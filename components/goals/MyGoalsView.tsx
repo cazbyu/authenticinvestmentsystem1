@@ -67,8 +67,6 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
 
       const [twelveWeekResult, customResult, timelineResult] = await Promise.all([
         supabase
-
-        supabase
           .from('0008-ap-goals-12wk')
           .select(`
             *,
