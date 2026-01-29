@@ -8,13 +8,13 @@ import { NorthStarIcon, WellnessIcon, GoalIcon, RoleIcon } from '@/components/ic
 export default function TabLayout() {
   const { colors } = useTheme();
   const { resetTab } = useTabReset();
-  const { setActiveTab } = useHeaderColor();
+  const { setActiveTab, headerColor } = useHeaderColor();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: headerColor,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
           backgroundColor: colors.surface,
@@ -35,12 +35,10 @@ export default function TabLayout() {
           console.log('[TabLayout] Tab pressed:', tabName, 'Full target:', e.target);
           if (tabName) {
             resetTab(tabName);
-            // Update header color based on tab
             setActiveTab(tabName);
           }
         },
         focus: (e) => {
-          // Also update on focus (for programmatic navigation)
           const routeName = e.target?.split('-')[0];
           if (routeName) {
             setActiveTab(routeName);
@@ -96,7 +94,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          href: null, // This hides it from the tab bar
+          href: null,
         }}
       />
 
