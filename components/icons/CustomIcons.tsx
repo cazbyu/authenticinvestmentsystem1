@@ -7,6 +7,107 @@ interface IconProps {
   strokeWidth?: number;
 }
 
+export function CompassIcon({ size = 24, color = '#231f20', strokeWidth = 6 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 144 144">
+      <Circle
+        cx="72"
+        cy="72"
+        r="62.93"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Line
+        x1="72"
+        y1="9.07"
+        x2="72"
+        y2="26.49"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Line
+        x1="72"
+        y1="117.51"
+        x2="72"
+        y2="134.93"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Line
+        x1="134.93"
+        y1="72"
+        x2="117.51"
+        y2="72"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Line
+        x1="26.49"
+        y1="72"
+        x2="9.07"
+        y2="72"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Polygon
+        points="72 34.98 83.44 60.56 109.02 72 83.44 83.44 72 109.02 60.56 83.44 34.98 72 60.56 60.56 72 34.98"
+        fill="none"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Polygon
+        points="72 53.46 78.54 65.46 72 53.46"
+        fill={color}
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Polygon
+        points="78.54 65.46 90.54 72 78.54 65.46"
+        fill={color}
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Polygon
+        points="72 90.54 65.46 78.54 72 90.54"
+        fill={color}
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+      <Polygon
+        points="65.46 78.54 53.46 72 65.46 78.54"
+        fill={color}
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      />
+    </Svg>
+  );
+}
+
 export function NorthStarIcon({ size = 24, color = '#231f20', strokeWidth = 4 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 144 144">
