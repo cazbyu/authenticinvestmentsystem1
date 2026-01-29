@@ -832,7 +832,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         <View style={styles.wellnessSubHeader}>
           <View style={styles.wellnessTabsRow}>
             <TouchableOpacity
-              style={[styles.wellnessTab, activeMainTab === 'domains' && styles.wellnessTabActive]}
+              style={[styles.wellnessTab, activeMainTab === 'domains' && { backgroundColor: headerColor }]}
               onPress={() => setActiveMainTab('domains')}
             >
               <Text style={[styles.wellnessTabText, activeMainTab === 'domains' && styles.wellnessTabTextActive]}>
