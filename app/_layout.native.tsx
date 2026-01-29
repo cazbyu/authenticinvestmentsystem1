@@ -22,6 +22,7 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthenticScoreProvider>
         <TabResetProvider>
+          <HeaderColorProvider>
           <MorningSparkProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
             <Drawer
@@ -53,6 +54,7 @@ export default function RootLayout() {
             <StatusBar style="auto" />
           </GestureHandlerRootView>
           </MorningSparkProvider>
+            <HeaderColorProvider>
         </TabResetProvider>
       </AuthenticScoreProvider>
     </ThemeProvider>
