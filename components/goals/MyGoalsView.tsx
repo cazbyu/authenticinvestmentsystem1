@@ -344,11 +344,7 @@ twelveWeekGoals.forEach((goal: any) => {
     >
       {goal.title}
     </Text>
-    {goal.goal_type === '1y' && (
-      <View style={[styles.goalTypeBadge, { backgroundColor: '#dcfce7' }]}>
-        <Text style={[styles.goalTypeBadgeText, { color: '#166534' }]}>Annual Goal</Text>
-      </View>
-    )}
+    
     {goal.goal_type === '12week' && (
       <View style={[styles.goalTypeBadge, { backgroundColor: '#dbeafe' }]}>
         <Text style={[styles.goalTypeBadgeText, { color: '#1e40af' }]}>12 Week Goal</Text>
