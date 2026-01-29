@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { 
   FileText, 
@@ -54,7 +53,7 @@ interface MyVisionTabProps {
 
 export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { colors } = useTheme();
   
   // State
   const [loading, setLoading] = useState(true);
@@ -126,7 +125,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             .eq('parent_goal_type', '1y')
             .order('start_date', { ascending: false });
 
-          // Fetch Custom campaigns (once parent linking is added)
+          // Fetch Custom campaigns (if parent linking exists)
           const { data: customCampaigns } = await supabase
             .from('0008-ap-goals-custom')
             .select('id, title, status, progress, start_date, end_date')
@@ -189,7 +188,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
   }, [router]);
 
   const handleAddGoal = useCallback(() => {
-    router.push('/goals?action=create&type=1y');
+    router.push('/goals/create-1y-goal');
   }, [router]);
 
   // Get status color
@@ -209,7 +208,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color="#B91C1C" />
       </View>
     );
   }
@@ -220,20 +219,20 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
   return (
     <View style={styles.container}>
       {/* Mission Statement Card */}
-      <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <FileText size={20} color="#0078d4" />
-            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
               Mission Statement
             </Text>
           </View>
           <TouchableOpacity 
             onPress={handleEditMission}
-            style={[styles.editButton, { backgroundColor: theme.colors.background }]}
+            style={[styles.editButton, { backgroundColor: colors.background }]}
           >
-            <Edit3 size={14} color={theme.colors.textSecondary} />
-            <Text style={[styles.editButtonText, { color: theme.colors.textSecondary }]}>
+            <Edit3 size={14} color={colors.textSecondary} />
+            <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
               Edit
             </Text>
           </TouchableOpacity>
@@ -241,19 +240,19 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
         {hasMission ? (
           <Text 
-            style={[styles.cardContent, { color: theme.colors.text }]} 
+            style={[styles.cardContent, { color: colors.text }]} 
             numberOfLines={6}
           >
             {northStarData.mission_statement}
           </Text>
         ) : (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
               Define your personal mission statement — your core purpose, values, and the impact you want to make.
             </Text>
             <TouchableOpacity 
               onPress={handleEditMission}
-              style={[styles.getStartedButton, { backgroundColor: theme.colors.primary }]}
+              style={styles.getStartedButton}
             >
               <Text style={styles.getStartedButtonText}>Get Started</Text>
             </TouchableOpacity>
@@ -262,20 +261,20 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
       </View>
 
       {/* 5-Year Vision Card */}
-      <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <TrendingUp size={20} color="#16a34a" />
-            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
               5-Year Vision
             </Text>
           </View>
           <TouchableOpacity 
             onPress={handleEditVision}
-            style={[styles.editButton, { backgroundColor: theme.colors.background }]}
+            style={[styles.editButton, { backgroundColor: colors.background }]}
           >
-            <Edit3 size={14} color={theme.colors.textSecondary} />
-            <Text style={[styles.editButtonText, { color: theme.colors.textSecondary }]}>
+            <Edit3 size={14} color={colors.textSecondary} />
+            <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
               Edit
             </Text>
           </TouchableOpacity>
@@ -283,19 +282,19 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
         {hasVision ? (
           <Text 
-            style={[styles.cardContent, { color: theme.colors.text }]} 
+            style={[styles.cardContent, { color: colors.text }]} 
             numberOfLines={6}
           >
             {northStarData.five_year_vision}
           </Text>
         ) : (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
               Paint a vivid picture of where you want to be in 5 years across personal growth, career, relationships, and lifestyle.
             </Text>
             <TouchableOpacity 
               onPress={handleEditVision}
-              style={[styles.getStartedButton, { backgroundColor: theme.colors.primary }]}
+              style={styles.getStartedButton}
             >
               <Text style={styles.getStartedButtonText}>Get Started</Text>
             </TouchableOpacity>
@@ -304,26 +303,26 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
       </View>
 
       {/* 1-Year Goals Section */}
-      <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <Target size={20} color="#8b5cf6" />
-            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
               1-Year Goals
             </Text>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity 
               onPress={handleAddGoal}
-              style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
+              style={styles.addButton}
             >
               <Plus size={16} color="#ffffff" />
             </TouchableOpacity>
             <TouchableOpacity 
               onPress={handleManageGoals}
-              style={[styles.editButton, { backgroundColor: theme.colors.background }]}
+              style={[styles.editButton, { backgroundColor: colors.background }]}
             >
-              <Text style={[styles.editButtonText, { color: theme.colors.textSecondary }]}>
+              <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
                 Manage
               </Text>
             </TouchableOpacity>
@@ -344,26 +343,26 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                     onPress={() => hasCampaigns && toggleGoalExpansion(goal.id)}
                     activeOpacity={hasCampaigns ? 0.7 : 1}
                   >
-                    <View style={[styles.goalNumber, { backgroundColor: '#8b5cf6' }]}>
+                    <View style={styles.goalNumber}>
                       <Text style={styles.goalNumberText}>{index + 1}</Text>
                     </View>
                     
                     <View style={styles.goalInfo}>
                       <Text 
-                        style={[styles.goalTitle, { color: theme.colors.text }]}
+                        style={[styles.goalTitle, { color: colors.text }]}
                         numberOfLines={2}
                       >
                         {goal.title}
                       </Text>
                       
                       {hasCampaigns && (
-                        <Text style={[styles.campaignCount, { color: theme.colors.textSecondary }]}>
+                        <Text style={[styles.campaignCount, { color: colors.textSecondary }]}>
                           {completedCampaigns}/{goal.campaigns.length} campaigns
                         </Text>
                       )}
                       
                       {goal.year_target_date && (
-                        <Text style={[styles.targetDate, { color: theme.colors.textSecondary }]}>
+                        <Text style={[styles.targetDate, { color: colors.textSecondary }]}>
                           Target: {new Date(goal.year_target_date).toLocaleDateString('en-US', {
                             month: 'short',
                             year: 'numeric'
@@ -375,9 +374,9 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                     {hasCampaigns && (
                       <View style={styles.expandIcon}>
                         {isExpanded ? (
-                          <ChevronDown size={20} color={theme.colors.textSecondary} />
+                          <ChevronDown size={20} color={colors.textSecondary} />
                         ) : (
-                          <ChevronRight size={20} color={theme.colors.textSecondary} />
+                          <ChevronRight size={20} color={colors.textSecondary} />
                         )}
                       </View>
                     )}
@@ -391,7 +390,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                           key={campaign.id} 
                           style={[
                             styles.campaignItem,
-                            { backgroundColor: theme.colors.background }
+                            { backgroundColor: colors.background }
                           ]}
                         >
                           <View 
@@ -419,7 +418,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                           </View>
                           
                           <Text 
-                            style={[styles.campaignTitle, { color: theme.colors.text }]}
+                            style={[styles.campaignTitle, { color: colors.text }]}
                             numberOfLines={1}
                           >
                             {campaign.title}
@@ -429,7 +428,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                             <View 
                               style={[
                                 styles.progressBar,
-                                { backgroundColor: theme.colors.border }
+                                { backgroundColor: colors.border }
                               ]}
                             >
                               <View 
@@ -442,7 +441,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                                 ]}
                               />
                             </View>
-                            <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
+                            <Text style={[styles.progressText, { color: colors.textSecondary }]}>
                               {campaign.progress || 0}%
                             </Text>
                           </View>
@@ -456,12 +455,12 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
           </View>
         ) : (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
               Set your top goals for the year that bridge your 5-year vision to daily actions.
             </Text>
             <TouchableOpacity 
               onPress={handleAddGoal}
-              style={[styles.getStartedButton, { backgroundColor: theme.colors.primary }]}
+              style={styles.getStartedButton}
             >
               <Text style={styles.getStartedButtonText}>Add Your First Goal</Text>
             </TouchableOpacity>
@@ -530,6 +529,7 @@ const styles = StyleSheet.create({
   addButton: {
     padding: 6,
     borderRadius: 6,
+    backgroundColor: '#8b5cf6',
   },
   cardContent: {
     fontSize: 14,
@@ -551,6 +551,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
+    backgroundColor: '#B91C1C',
   },
   getStartedButtonText: {
     fontSize: 14,
@@ -576,6 +577,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
+    backgroundColor: '#8b5cf6',
     justifyContent: 'center',
     alignItems: 'center',
   },
