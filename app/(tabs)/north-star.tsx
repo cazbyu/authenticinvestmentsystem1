@@ -43,6 +43,7 @@ export default function NorthStarPage() {
   const router = useRouter();
   const { colors } = useTheme();
   const { recordVisit } = useNorthStarVisit();
+const { headerColor } = useHeaderColor();
   
   // State
   const [activeTab, setActiveTab] = useState<TabKey>('vision');
