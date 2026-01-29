@@ -7,113 +7,39 @@ interface IconProps {
   strokeWidth?: number;
 }
 
-export function CompassIcon({ size = 24, color = '#231f20', strokeWidth = 6 }: IconProps) {
+// Compass icon from compass.svg - circle with diamond pointer
+export function CompassIcon({ size = 24, color = '#000000', strokeWidth = 4 }: IconProps) {
+  // Original viewBox is 0 0 2000 2000, scaling stroke proportionally
+  const scaledStrokeWidth = (strokeWidth / 24) * 80.65; // Scale based on original 80.65px stroke
+  
   return (
-    <Svg width={size} height={size} viewBox="0 0 144 144">
+    <Svg width={size} height={size} viewBox="0 0 2000 2000">
+      {/* Outer circle */}
       <Circle
-        cx="72"
-        cy="72"
-        r="62.93"
+        cx="1000"
+        cy="1000"
+        r="722.75"
         fill="none"
         stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
+        strokeMiterlimit={10}
+        strokeWidth={scaledStrokeWidth}
       />
-      <Line
-        x1="72"
-        y1="9.07"
-        x2="72"
-        y2="26.49"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Line
-        x1="72"
-        y1="117.51"
-        x2="72"
-        y2="134.93"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Line
-        x1="134.93"
-        y1="72"
-        x2="117.51"
-        y2="72"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Line
-        x1="26.49"
-        y1="72"
-        x2="9.07"
-        y2="72"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Polygon
-        points="72 34.98 83.44 60.56 109.02 72 83.44 83.44 72 109.02 60.56 83.44 34.98 72 60.56 60.56 72 34.98"
-        fill="none"
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Polygon
-        points="72 53.46 78.54 65.46 72 53.46"
+      {/* Diamond pointer with center circle cutout */}
+      <Path
+        d="M1353.56,623.34l-488.88,222.89c-8.27,3.76-15,10.51-18.74,18.79l-221.9,489.91c-6.4,14.15,6.96,27.51,21.12,21.12l489.79-221.93c8.32-3.78,15.11-10.58,18.86-18.91l220.92-490.83c6.37-14.17-7.04-27.5-21.17-21.05ZM1000,1082.54c-45.58,0-82.54-36.95-82.54-82.54s36.96-82.54,82.54-82.54,82.54,36.96,82.54,82.54-36.95,82.54-82.54,82.54Z"
         fill={color}
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Polygon
-        points="78.54 65.46 90.54 72 78.54 65.46"
-        fill={color}
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Polygon
-        points="72 90.54 65.46 78.54 72 90.54"
-        fill={color}
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-      <Polygon
-        points="65.46 78.54 53.46 72 65.46 78.54"
-        fill={color}
-        stroke={color}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
       />
     </Svg>
   );
 }
 
+// North Star icon from North_Star.svg - 8-pointed star with elongated bottom
 export function NorthStarIcon({ size = 24, color = '#231f20', strokeWidth = 4 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 144 144">
       <Polygon
-        points="118.48 66.57 84.6 61.35 95.89 42.68 77.22 53.97 77.22 53.97 72 15.89 66.78 53.97 66.78 53.97 48.11 42.68 59.4 61.35 25.52 66.57 59.4 71.79 48.11 90.46 66.78 79.17 66.78 79.17 72 141.89 77.22 79.17 77.22 79.17 95.89 90.46 84.6 71.79 118.48 66.57"
-        fill="none"
+        points="118.5 66.6 84.6 61.3 95.9 42.7 77.2 54 77.2 54 72 15.9 66.8 54 66.8 54 48.1 42.7 59.4 61.3 25.5 66.6 59.4 71.8 48.1 90.5 66.8 79.2 66.8 79.2 72 141.9 77.2 79.2 77.2 79.2 95.9 90.5 84.6 71.8 118.5 66.6"
+        fill={color}
         stroke={color}
         strokeMiterlimit={10}
         strokeWidth={strokeWidth}
