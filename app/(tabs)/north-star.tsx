@@ -20,6 +20,7 @@ import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { MyVisionTab } from '@/components/northStar/MyVisionTab';
 import { CoachsCornerTab } from '@/components/northStar/CoachsCornerTab';
 import { SparkLibraryTab } from '@/components/northStar/SparkLibraryTab';
+import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 // Types
 type TabKey = 'vision' | 'coach' | 'sparks';
