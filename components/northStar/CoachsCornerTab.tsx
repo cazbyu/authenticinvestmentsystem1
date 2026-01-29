@@ -42,10 +42,11 @@ interface CoachRelationship {
 
 interface CoachsCornerTabProps {
   relationships: CoachRelationship[];
+  hasCoach: boolean;
   onRefresh?: () => void;
 }
 
-export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabProps) {
+export function CoachsCornerTab({ relationships, hasCoach, onRefresh }: CoachsCornerTabProps) {
   const router = useRouter();
   const { colors } = useTheme();
   
