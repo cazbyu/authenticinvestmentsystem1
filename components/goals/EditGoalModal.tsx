@@ -105,6 +105,11 @@ export function EditGoalModal({
   const [availableKeyRelationships, setAvailableKeyRelationships] = useState<KeyRelationship[]>([]);
   const [previousNotes, setPreviousNotes] = useState<Note[]>([]);
   
+  // Parent goal state
+  const [oneYearGoals, setOneYearGoals] = useState<Array<{ id: string; title: string; year_target_date: string }>>([]);
+  const [selectedParentGoalId, setSelectedParentGoalId] = useState<string | null>(null);
+  const [parentGoalExpanded, setParentGoalExpanded] = useState(false);
+  
   // UI state
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
