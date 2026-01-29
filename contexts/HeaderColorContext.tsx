@@ -7,7 +7,7 @@ export const TAB_COLORS = {
   'wellness': '#39b54a',      // Green - East/Wellness
   'goals': '#0066b3',         // Blue - South/Goals
   'roles': '#752e87',         // Purple - West/Roles
-  'dashboard': '#ffd400',     // Gold - Center/Dashboard
+  'dashboard': '#d4a500',     // Darker Gold - Center/Dashboard (was #ffd400)
   'default': '#0078d4',       // Default blue (fallback)
 } as const;
 
