@@ -1063,11 +1063,19 @@ useEffect(() => {
               if (taskError) throw taskError;
 
               // Link the task to this goal
-              const goalJoinColumn = currentGoal.goal_type === '1y'
-                ? 'one_yr_goal_id'
-                : currentGoal.goal_type === '12week'
-                ? 'twelve_wk_goal_id'
-                : 'custom_goal_id';
+              // Cannot add ideas directly to annual goals
+      if (currentGoal.goal_type === '1y') {
+        Alert.alert(
+          'Cannot Add Idea Here',
+          'Ideas should be added to specific 12-week goals that support this annual goal.'
+        );
+        setIdeasLoading(false);
+        return;
+      }
+
+      const goalJoinColumn = currentGoal.goal_type === '12week'
+        ? 'twelve_wk_goal_id'
+        : 'custom_goal_id';
 
               const { error: joinError } = await supabase
                 .from('0008-ap-universal-goals-join')
