@@ -81,7 +81,7 @@ export function GoalBankTabbedHeader({
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'manage-timelines' && styles.tabActive]}
+          style={[styles.tab, activeTab === 'manage-timelines' && { backgroundColor: headerColor }]}
           onPress={() => onTabChange('manage-timelines')}
         >
           <Text style={[styles.tabText, activeTab === 'manage-timelines' && styles.tabTextActive]}>
