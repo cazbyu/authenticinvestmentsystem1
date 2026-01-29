@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { RoleIcon } from '@/components/icons/RoleIcon';
 
 interface Role {
   id: string;
@@ -7,6 +8,7 @@ interface Role {
   category?: string;
   image_path?: string;
   color?: string;
+  icon?: string;  // Add icon field
 }
 
 interface RoleCardProps {
@@ -27,10 +29,12 @@ export function RoleCard({ role, onPress, imageUrl }: RoleCardProps) {
           {imageUrl ? (
             <Image source={{ uri: imageUrl }} style={styles.roleImage} />
           ) : (
-            <View style={[styles.roleImagePlaceholder, { backgroundColor: role.color || '#0078d4' }]}>
-              <Text style={styles.roleImagePlaceholderText}>
-                {role.label.charAt(0).toUpperCase()}
-              </Text>
+            <View style={[styles.roleIconContainer, { backgroundColor: role.color || '#0078d4' }]}>
+              <RoleIcon 
+                name={role.icon || role.label} 
+                color="#ffffff" 
+                size={32} 
+              />
             </View>
           )}
           <Text style={styles.title}>{role.label}</Text>
@@ -68,18 +72,13 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     marginBottom: 12,
   },
-  roleImagePlaceholder: {
+  roleIconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
-  },
-  roleImagePlaceholderText: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#ffffff',
   },
   title: {
     fontSize: 14,
