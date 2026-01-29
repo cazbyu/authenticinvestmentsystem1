@@ -1,11 +1,14 @@
 import { Tabs } from 'expo-router';
+import { useEffect } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
+import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { NorthStarIcon, WellnessIcon, GoalIcon, RoleIcon } from '@/components/icons/CustomIcons';
 
 export default function TabLayout() {
   const { colors } = useTheme();
   const { resetTab } = useTabReset();
+  const { setActiveTab } = useHeaderColor();
 
   return (
     <Tabs
@@ -14,13 +17,13 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
-  backgroundColor: colors.surface,
-  borderTopWidth: 1,
-  borderTopColor: colors.border,
-  height: 85,
-  paddingBottom: 25,
-  paddingTop: 8,
-},
+          backgroundColor: colors.surface,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          height: 85,
+          paddingBottom: 25,
+          paddingTop: 8,
+        },
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '500',
@@ -32,6 +35,15 @@ export default function TabLayout() {
           console.log('[TabLayout] Tab pressed:', tabName, 'Full target:', e.target);
           if (tabName) {
             resetTab(tabName);
+            // Update header color based on tab
+            setActiveTab(tabName);
+          }
+        },
+        focus: (e) => {
+          // Also update on focus (for programmatic navigation)
+          const routeName = e.target?.split('-')[0];
+          if (routeName) {
+            setActiveTab(routeName);
           }
         },
       }}>
