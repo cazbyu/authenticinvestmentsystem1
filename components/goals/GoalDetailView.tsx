@@ -755,17 +755,42 @@ useEffect(() => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const goalJoinColumn = currentGoal.goal_type === '1y'
-        ? 'one_yr_goal_id'
-        : currentGoal.goal_type === '12week'
-        ? 'twelve_wk_goal_id'
-        : 'custom_goal_id';
+      let goalJoins: any[] | null = null;
+      let joinError: any = null;
 
-      // Get all items linked to this goal
-      const { data: goalJoins, error: joinError } = await supabase
-        .from('0008-ap-universal-goals-join')
-        .select('parent_id, parent_type')
-        .eq(goalJoinColumn, currentGoal.id);
+      // Annual goals aggregate from child 12-week goals
+      if (currentGoal.goal_type === '1y') {
+        const { data: childGoals, error: childError } = await supabase
+          .from('0008-ap-goals-12wk')
+          .select('id')
+          .eq('parent_goal_id', currentGoal.id)
+          .is('deleted_at', null);
+
+        if (childError) throw childError;
+
+        if (childGoals && childGoals.length > 0) {
+          const childGoalIds = childGoals.map(g => g.id);
+          const result = await supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, parent_type')
+            .in('twelve_wk_goal_id', childGoalIds);
+          goalJoins = result.data;
+          joinError = result.error;
+        } else {
+          goalJoins = [];
+        }
+      } else {
+        const goalJoinColumn = currentGoal.goal_type === '12week'
+          ? 'twelve_wk_goal_id'
+          : 'custom_goal_id';
+
+        const result = await supabase
+          .from('0008-ap-universal-goals-join')
+          .select('parent_id, parent_type')
+          .eq(goalJoinColumn, currentGoal.id);
+        goalJoins = result.data;
+        joinError = result.error;
+      }
 
       if (joinError) throw joinError;
 
