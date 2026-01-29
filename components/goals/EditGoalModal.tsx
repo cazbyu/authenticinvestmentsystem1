@@ -1280,6 +1280,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+
+parentGoalContainer: {
+    paddingVertical: 12,
+  },
+  parentGoalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  parentGoalOptionSelected: {
+    backgroundColor: 'rgba(0, 120, 212, 0.1)',
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  parentGoalContent: {
+    flex: 1,
+  },
+  parentGoalLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  parentGoalSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  
 });
 
 export default EditGoalModal;
