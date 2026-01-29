@@ -50,7 +50,7 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [annualGoals, setAnnualGoals] = useState<UnifiedGoal[]>([]);
+  // Annual goals removed - now only shown in North Star
   const [cycleGoals, setCycleGoals] = useState<UnifiedGoal[]>([]);
   const [customGoals, setCustomGoals] = useState<UnifiedGoal[]>([]);
   const [activeTimelineName, setActiveTimelineName] = useState<string>('');
