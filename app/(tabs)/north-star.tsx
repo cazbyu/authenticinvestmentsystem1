@@ -195,7 +195,7 @@ const { headerColor } = useHeaderColor();
                 key={tab.key}
                 style={[
                   styles.subTab,
-                  isActive && styles.subTabActive,
+                  isActive && { backgroundColor: headerColor },
                 ]}
                 onPress={() => handleTabChange(tab.key)}
                 activeOpacity={0.7}
