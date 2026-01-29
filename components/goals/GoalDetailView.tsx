@@ -955,11 +955,15 @@ useEffect(() => {
 
       if (ideaError) throw ideaError;
 
-      const goalJoinColumn = currentGoal.goal_type === '1y'
-        ? 'one_yr_goal_id'
-        : currentGoal.goal_type === '12week'
-        ? 'twelve_wk_goal_id'
-        : 'custom_goal_id';
+      // Cannot link tasks directly to annual goals
+              if (currentGoal.goal_type === '1y') {
+                Alert.alert('Error', 'Cannot activate ideas for annual goals directly.');
+                return;
+              }
+
+              const goalJoinColumn = currentGoal.goal_type === '12week'
+                ? 'twelve_wk_goal_id'
+                : 'custom_goal_id';
 
       const { error: joinError } = await supabase
         .from('0008-ap-universal-goals-join')
