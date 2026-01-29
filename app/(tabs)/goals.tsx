@@ -31,6 +31,7 @@ import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { goalsReducer, initialGoalsState, type Timeline, type TimelineWeek } from '@/reducers/goalsReducer';
+import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 export default function Goals() {
   const { authenticScore, refreshScore } = useAuthenticScore();
