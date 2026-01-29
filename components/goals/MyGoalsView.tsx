@@ -114,13 +114,12 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
       ];
 
       if (allGoalIds.length === 0) {
-        setAnnualGoals([]);
         setCycleGoals([]);
         setCustomGoals([]);
         setActiveTimelineName('');
         setCurrentCycleWeek(0);
-        setCurrentWeekDates(getCurrentWeekDates());
         return;
+      }
       }
 
       const [
