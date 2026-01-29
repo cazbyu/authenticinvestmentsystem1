@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { User } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
-import { NorthStarIcon } from '@/components/icons/CustomIcons';
-import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
+import { CompassIcon } from '@/components/icons/CustomIcons';
 import { MissionCardOverlay } from '@/components/northStar/MissionCardOverlay';
 import Animated, {
   useSharedValue,
@@ -22,51 +21,20 @@ interface UniversalHeaderProps {
 
 export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { colors } = useTheme();
   const { authenticScore } = useAuthenticScore();
   const [showMissionCard, setShowMissionCard] = useState(false);
   
-  // NorthStar visit tracking for pulse animation
-  let shouldPulse = false;
-  try {
-    const visitData = useNorthStarVisit();
-    shouldPulse = visitData?.shouldPulse ?? false;
-  } catch (error) {
-    // Hook not available, default to no pulse
-  }
+  // Check if user is on Dashboard (compass page)
+  const isOnDashboard = pathname === '/' || pathname === '/dashboard' || pathname === '/(tabs)/dashboard' || pathname === '/(tabs)';
 
-  // NorthStar pulse animation
-  const northStarOpacity = useSharedValue(1);
-  const northStarScale = useSharedValue(1);
+  // Compass pulse animation (when user taps while already on dashboard)
+  const compassScale = useSharedValue(1);
 
   // Score pulse animation (triggers on score change)
   const scoreScale = useSharedValue(1);
   const prevScoreRef = React.useRef(authenticScore);
-
-  useEffect(() => {
-    if (shouldPulse) {
-      // Gentle pulse for NorthStar when not visited in 24 hours
-      northStarOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.5, { duration: 1500 }),
-          withTiming(1, { duration: 1500 })
-        ),
-        -1,
-        true
-      );
-      northStarScale.value = withRepeat(
-        withSequence(
-          withTiming(1.1, { duration: 1500 }),
-          withTiming(1, { duration: 1500 })
-        ),
-        -1,
-        true
-      );
-    } else {
-      northStarOpacity.value = withTiming(1);
-      northStarScale.value = withTiming(1);
-    }
-  }, [shouldPulse]);
 
   // Pulse score when it changes
   useEffect(() => {
@@ -79,9 +47,8 @@ export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
     }
   }, [authenticScore]);
 
-  const northStarAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: northStarOpacity.value,
-    transform: [{ scale: northStarScale.value }],
+  const compassAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: compassScale.value }],
   }));
 
   const scoreAnimatedStyle = useAnimatedStyle(() => ({
@@ -92,8 +59,17 @@ export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
     onOpenSettings();
   };
 
-  const handleNorthStarPress = () => {
-    router.push('/north-star');
+  const handleCompassPress = () => {
+    if (isOnDashboard) {
+      // Already on dashboard - show pulse animation
+      compassScale.value = withSequence(
+        withSpring(1.3, { damping: 8 }),
+        withSpring(1, { damping: 8 })
+      );
+    } else {
+      // Navigate to dashboard
+      router.push('/dashboard');
+    }
   };
 
   const handleScorePress = () => {
@@ -114,20 +90,19 @@ export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
         </View>
       </TouchableOpacity>
 
-      {/* Center: NorthStar */}
+      {/* Center: Compass */}
       <TouchableOpacity
-        style={styles.northStarButton}
-        onPress={handleNorthStarPress}
-        accessibilityLabel="View North Star"
+        style={styles.compassButton}
+        onPress={handleCompassPress}
+        accessibilityLabel="Go to Dashboard"
         accessibilityRole="button"
       >
-        <Animated.View style={northStarAnimatedStyle}>
-          <NorthStarIcon
+        <Animated.View style={compassAnimatedStyle}>
+          <CompassIcon
             size={32}
-            color={shouldPulse ? '#C9A227' : '#ffffff'}
+            color="#ffffff"
           />
         </Animated.View>
-        {shouldPulse && <View style={styles.pulseIndicator} />}
       </TouchableOpacity>
 
       {/* Right: Authentic Score */}
@@ -174,18 +149,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  northStarButton: {
+  compassButton: {
     padding: 4,
     position: 'relative',
-  },
-  pulseIndicator: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ef4444',
   },
   scoreButton: {
     padding: 4,
