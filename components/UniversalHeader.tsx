@@ -2,16 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { User } from 'lucide-react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { CompassIcon } from '@/components/icons/CustomIcons';
 import { MissionCardOverlay } from '@/components/northStar/MissionCardOverlay';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withRepeat,
   withSequence,
-  withTiming,
   withSpring,
 } from 'react-native-reanimated';
 
@@ -22,12 +20,19 @@ interface UniversalHeaderProps {
 export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { colors } = useTheme();
+  const { headerColor, setActiveTab } = useHeaderColor();
   const { authenticScore } = useAuthenticScore();
   const [showMissionCard, setShowMissionCard] = useState(false);
   
   // Check if user is on Dashboard (compass page)
   const isOnDashboard = pathname === '/' || pathname === '/dashboard' || pathname === '/(tabs)/dashboard' || pathname === '/(tabs)';
+
+  // Set dashboard color when on dashboard
+  useEffect(() => {
+    if (isOnDashboard) {
+      setActiveTab('dashboard');
+    }
+  }, [isOnDashboard, setActiveTab]);
 
   // Compass pulse animation (when user taps while already on dashboard)
   const compassScale = useSharedValue(1);
@@ -67,7 +72,8 @@ export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
         withSpring(1, { damping: 8 })
       );
     } else {
-      // Navigate to dashboard
+      // Navigate to dashboard and set color
+      setActiveTab('dashboard');
       router.push('/dashboard');
     }
   };
@@ -77,7 +83,7 @@ export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.primary }]}>
+    <View style={[styles.container, { backgroundColor: headerColor }]}>
       {/* Left: Profile */}
       <TouchableOpacity
         style={styles.profileButton}
@@ -86,7 +92,7 @@ export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
         accessibilityRole="button"
       >
         <View style={styles.profileCircle}>
-          <User size={20} color={colors.primary} />
+          <User size={20} color={headerColor} />
         </View>
       </TouchableOpacity>
 
