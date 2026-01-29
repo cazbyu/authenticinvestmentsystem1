@@ -136,10 +136,43 @@ export async function fetchGoalActions(
     });
 
     // Determine the correct column name for the goal join
-    const goalJoinColumn =
-      goalType === '1y' ? 'one_yr_goal_id' :
-      goalType === '12week' ? 'twelve_wk_goal_id' :
-      'custom_goal_id';
+    // Annual goals (1y) aggregate from child 12-week goals
+    // They don't have direct task links in universal-goals-join
+    if (goalType === '1y') {
+      // For annual goals, find child 12-week goals and aggregate their actions
+      const { data: childGoals, error: childError } = await supabase
+        .from('0008-ap-goals-12wk')
+        .select('id')
+        .eq('parent_goal_id', goalId)
+        .is('deleted_at', null);
+
+      if (childError) {
+        console.error('[fetchGoalActions] Error fetching child goals:', childError);
+        return { recurringActions: [], oneTimeActions: [] };
+      }
+
+      if (!childGoals || childGoals.length === 0) {
+        console.log('[fetchGoalActions] No child goals found for annual goal');
+        return { recurringActions: [], oneTimeActions: [] };
+      }
+
+      // Aggregate actions from all child goals
+      let allRecurring: RecurringActionResult[] = [];
+      let allOneTime: OneTimeActionResult[] = [];
+
+      for (const childGoal of childGoals) {
+        const childResult = await fetchGoalActions(childGoal.id, '12week', weekStart, weekEnd);
+        allRecurring = [...allRecurring, ...childResult.recurringActions];
+        allOneTime = [...allOneTime, ...childResult.oneTimeActions];
+      }
+
+      return {
+        recurringActions: allRecurring,
+        oneTimeActions: allOneTime,
+      };
+    }
+
+    const goalJoinColumn = goalType === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
 
     // ============================================
     // STEP 1: Fetch Recurring Actions (Leading Indicators)
