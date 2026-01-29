@@ -65,14 +65,8 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
       const currentYear = new Date().getFullYear();
       const nextYear = currentYear + 1;
 
-      const [oneYearResult, twelveWeekResult, customResult, timelineResult] = await Promise.all([
+      const [twelveWeekResult, customResult, timelineResult] = await Promise.all([
         supabase
-          .from('0008-ap-goals-1y')
-          .select('*')
-          .eq('user_id', user.id)
-          .neq('status', 'cancelled')
-          .neq('status', 'archived')
-          .order('year_target_date', { ascending: true }),
 
         supabase
           .from('0008-ap-goals-12wk')
@@ -111,12 +105,10 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
           .single(),
       ]);
 
-      const oneYearGoals = oneYearResult.data || [];
       const twelveWeekGoals = twelveWeekResult.data || [];
       const customGoals = customResult.data || [];
 
       const allGoalIds = [
-        ...oneYearGoals.map(g => g.id),
         ...twelveWeekGoals.map(g => g.id),
         ...customGoals.map(g => g.id),
       ];
