@@ -721,6 +721,63 @@ export function EditGoalModal({
               />
             </View>
 
+{/* Contributing To (Parent Goal) Section */}
+            {oneYearGoals.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  'Contributing To',
+                  selectedParentGoalId ? 1 : 0,
+                  parentGoalExpanded,
+                  () => setParentGoalExpanded(!parentGoalExpanded)
+                )}
+                {parentGoalExpanded && (
+                  <View style={styles.parentGoalContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.parentGoalOption,
+                        !selectedParentGoalId && styles.parentGoalOptionSelected,
+                      ]}
+                      onPress={() => setSelectedParentGoalId(null)}
+                    >
+                      <View style={[styles.radio, { borderColor: colors.primary }]}>
+                        {!selectedParentGoalId && (
+                          <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />
+                        )}
+                      </View>
+                      <Text style={[styles.parentGoalLabel, { color: colors.text }]}>
+                        None (standalone goal)
+                      </Text>
+                    </TouchableOpacity>
+
+                    {oneYearGoals.map(yearGoal => (
+                      <TouchableOpacity
+                        key={yearGoal.id}
+                        style={[
+                          styles.parentGoalOption,
+                          selectedParentGoalId === yearGoal.id && styles.parentGoalOptionSelected,
+                        ]}
+                        onPress={() => setSelectedParentGoalId(yearGoal.id)}
+                      >
+                        <View style={[styles.radio, { borderColor: colors.primary }]}>
+                          {selectedParentGoalId === yearGoal.id && (
+                            <View style={[styles.radioInner, { backgroundColor: colors.primary }]} />
+                          )}
+                        </View>
+                        <View style={styles.parentGoalContent}>
+                          <Text style={[styles.parentGoalLabel, { color: colors.text }]}>
+                            {yearGoal.title}
+                          </Text>
+                          <Text style={[styles.parentGoalSubtext, { color: colors.textSecondary }]}>
+                            Target: {new Date(yearGoal.year_target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+            
             {/* Wellness Zones Section */}
             {renderSectionHeader(
               'Wellness Zones',
