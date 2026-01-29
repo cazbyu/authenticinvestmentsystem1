@@ -180,7 +180,7 @@ twelveWeekGoals.forEach((goal: any) => {
   }
 });
 
-      let activeTimeline
+      let activeTimeline = timelineResult.data as any;
       let timelineName = '';
       let cycleWeek = 0;
 
