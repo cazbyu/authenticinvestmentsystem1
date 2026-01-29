@@ -8,10 +8,13 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
+import { UniversalHeader } from '@/components/UniversalHeader';
+import { SettingsSidebar } from '@/components/SettingsSidebar';
 
 // Tab Components
 import { MyVisionTab } from '@/components/northStar/MyVisionTab';
@@ -46,6 +49,7 @@ export default function NorthStarPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasCoach, setHasCoach] = useState(false);
   const [coachRelationships, setCoachRelationships] = useState<CoachRelationship[]>([]);
+  const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
   // Record visit on mount
   useEffect(() => {
@@ -157,46 +161,55 @@ export default function NorthStarPage() {
   // Loading state
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={styles.container}>
+        <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
             Loading...
           </Text>
         </View>
-      </View>
+        <SettingsSidebar
+          visible={settingsSidebarVisible}
+          onClose={() => setSettingsSidebarVisible(false)}
+        />
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={styles.container}>
+      {/* Universal Header - same as Dashboard */}
+      <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
+
       {/* Tab Bar - Simple text tabs like Dashboard */}
-      <View style={[styles.tabBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        {visibleTabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[
-                styles.tabButton,
-                isActive && [styles.tabButtonActive, { borderBottomColor: colors.primary }],
-              ]}
-              onPress={() => handleTabChange(tab.key)}
-              activeOpacity={0.7}
-            >
-              <Text
+      <View style={styles.subHeaderContainer}>
+        <View style={styles.tabsRow}>
+          {visibleTabs.map((tab) => {
+            const isActive = activeTab === tab.key;
+            
+            return (
+              <TouchableOpacity
+                key={tab.key}
                 style={[
-                  styles.tabText,
-                  { color: isActive ? colors.primary : colors.textSecondary },
-                  isActive && styles.tabTextActive,
+                  styles.subTab,
+                  isActive && styles.subTabActive,
                 ]}
+                onPress={() => handleTabChange(tab.key)}
+                activeOpacity={0.7}
               >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Text
+                  style={[
+                    styles.subTabText,
+                    isActive && styles.subTabTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       {/* Content Area */}
@@ -214,13 +227,20 @@ export default function NorthStarPage() {
       >
         {renderTabContent()}
       </ScrollView>
-    </View>
+
+      {/* Settings Sidebar - same as Dashboard */}
+      <SettingsSidebar
+        visible={settingsSidebarVisible}
+        onClose={() => setSettingsSidebarVisible(false)}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f8fafc',
   },
   loadingContainer: {
     flex: 1,
@@ -232,28 +252,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // Tab Bar - matching Dashboard style
-  tabBar: {
-    flexDirection: 'row',
+  // Sub-header tabs - matching Dashboard style exactly
+  subHeaderContainer: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    paddingHorizontal: 8,
+    borderBottomColor: '#e5e7eb',
   },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
+  tabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 20,
+    padding: 3,
+    alignSelf: 'flex-start',
+  },
+  subTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 17,
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    justifyContent: 'center',
+    minWidth: 70,
   },
-  tabButtonActive: {
-    borderBottomWidth: 2,
+  subTabActive: {
+    backgroundColor: '#0078d4',
   },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  tabTextActive: {
+  subTabText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#6b7280',
+  },
+  subTabTextActive: {
+    color: '#ffffff',
   },
 
   // Content
