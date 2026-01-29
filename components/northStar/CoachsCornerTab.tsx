@@ -13,8 +13,6 @@ import {
   MessageCircle, 
   Calendar,
   Shield,
-  Eye,
-  EyeOff,
   ChevronRight,
   Plus,
   Star,
@@ -49,7 +47,7 @@ interface CoachsCornerTabProps {
 
 export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabProps) {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { colors } = useTheme();
   
   // State
   const [loading, setLoading] = useState(true);
@@ -155,7 +153,7 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color="#B91C1C" />
       </View>
     );
   }
@@ -163,17 +161,17 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
   if (enrichedRelationships.length === 0) {
     return (
       <View style={styles.container}>
-        <View style={[styles.emptyCard, { backgroundColor: theme.colors.surface }]}>
-          <Users size={48} color={theme.colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
+        <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+          <Users size={48} color={colors.textSecondary} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
             No Coaches Yet
           </Text>
-          <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             Connect with a coach to get personalized guidance and accountability on your journey.
           </Text>
           <TouchableOpacity
             onPress={handleInviteCoach}
-            style={[styles.inviteButton, { backgroundColor: theme.colors.primary }]}
+            style={styles.inviteButton}
           >
             <Plus size={18} color="#ffffff" />
             <Text style={styles.inviteButtonText}>Invite a Coach</Text>
@@ -187,7 +185,7 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
     <View style={styles.container}>
       {/* Head Coach Hero Card */}
       {headCoach && (
-        <View style={[styles.heroCard, { backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.heroCard, { backgroundColor: colors.card }]}>
           <View style={styles.heroHeader}>
             <Crown size={20} color="#f59e0b" />
             <Text style={[styles.heroLabel, { color: '#f59e0b' }]}>Head Coach</Text>
@@ -213,18 +211,18 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
             </View>
 
             <View style={styles.heroInfo}>
-              <Text style={[styles.heroName, { color: theme.colors.text }]}>
+              <Text style={[styles.heroName, { color: colors.text }]}>
                 {headCoach.coach_profile?.full_name || 'Your Coach'}
               </Text>
               {headCoach.coach_role && (
-                <Text style={[styles.heroRole, { color: theme.colors.textSecondary }]}>
+                <Text style={[styles.heroRole, { color: colors.textSecondary }]}>
                   {headCoach.coach_role}
                 </Text>
               )}
               {headCoach.next_meeting_date && (
                 <View style={styles.nextMeeting}>
-                  <Calendar size={14} color={theme.colors.primary} />
-                  <Text style={[styles.nextMeetingText, { color: theme.colors.primary }]}>
+                  <Calendar size={14} color="#B91C1C" />
+                  <Text style={[styles.nextMeetingText, { color: '#B91C1C' }]}>
                     Next: {formatNextMeeting(headCoach.next_meeting_date)}
                   </Text>
                 </View>
@@ -233,10 +231,10 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
           </View>
 
           {/* Glass Wall Permissions */}
-          <View style={[styles.permissionsRow, { borderTopColor: theme.colors.border }]}>
+          <View style={[styles.permissionsRow, { borderTopColor: colors.border }]}>
             <View style={styles.permissionItem}>
-              <Shield size={14} color={theme.colors.textSecondary} />
-              <Text style={[styles.permissionLabel, { color: theme.colors.textSecondary }]}>
+              <Shield size={14} color={colors.textSecondary} />
+              <Text style={[styles.permissionLabel, { color: colors.textSecondary }]}>
                 Visibility:
               </Text>
               {headCoach.can_view_score && (
@@ -259,7 +257,7 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
               onPress={() => handleManagePermissions(headCoach.id)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={[styles.editPermissions, { color: theme.colors.primary }]}>
+              <Text style={[styles.editPermissions, { color: '#B91C1C' }]}>
                 Edit
               </Text>
             </TouchableOpacity>
@@ -268,18 +266,18 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
           {/* Action Buttons */}
           <View style={styles.heroActions}>
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+              style={styles.actionButton}
               onPress={() => handleMessageCoach(headCoach.coach_id)}
             >
               <MessageCircle size={18} color="#ffffff" />
               <Text style={styles.actionButtonText}>Message</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonSecondary, { borderColor: theme.colors.border }]}
+              style={[styles.actionButtonSecondary, { borderColor: colors.border }]}
               onPress={() => handleScheduleMeeting(headCoach.coach_id)}
             >
-              <Calendar size={18} color={theme.colors.text} />
-              <Text style={[styles.actionButtonTextSecondary, { color: theme.colors.text }]}>
+              <Calendar size={18} color={colors.text} />
+              <Text style={[styles.actionButtonTextSecondary, { color: colors.text }]}>
                 Schedule
               </Text>
             </TouchableOpacity>
@@ -289,13 +287,13 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
 
       {/* Coaching Staff Section */}
       {coachingStaff.length > 0 && (
-        <View style={[styles.staffSection, { backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.staffSection, { backgroundColor: colors.card }]}>
           <View style={styles.staffHeader}>
-            <Users size={18} color={theme.colors.textSecondary} />
-            <Text style={[styles.staffTitle, { color: theme.colors.text }]}>
+            <Users size={18} color={colors.textSecondary} />
+            <Text style={[styles.staffTitle, { color: colors.text }]}>
               Coaching Staff
             </Text>
-            <Text style={[styles.staffCount, { color: theme.colors.textSecondary }]}>
+            <Text style={[styles.staffCount, { color: colors.textSecondary }]}>
               ({coachingStaff.length})
             </Text>
           </View>
@@ -304,7 +302,7 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
             {coachingStaff.map((coach) => (
               <TouchableOpacity
                 key={coach.id}
-                style={[styles.staffCard, { borderColor: theme.colors.border }]}
+                style={[styles.staffCard, { borderColor: colors.border }]}
                 onPress={() => handleViewCoachProfile(coach.coach_id)}
                 activeOpacity={0.7}
               >
@@ -315,7 +313,7 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
                       style={styles.staffAvatarImage}
                     />
                   ) : (
-                    <View style={[styles.staffAvatarFallback, { backgroundColor: theme.colors.primary }]}>
+                    <View style={[styles.staffAvatarFallback, { backgroundColor: '#B91C1C' }]}>
                       <Text style={styles.staffAvatarInitials}>
                         {getInitials(coach.coach_profile?.full_name)}
                       </Text>
@@ -324,17 +322,17 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
                 </View>
 
                 <View style={styles.staffInfo}>
-                  <Text style={[styles.staffName, { color: theme.colors.text }]}>
+                  <Text style={[styles.staffName, { color: colors.text }]}>
                     {coach.coach_profile?.full_name || 'Coach'}
                   </Text>
                   {coach.coach_role && (
-                    <Text style={[styles.staffRole, { color: theme.colors.textSecondary }]}>
+                    <Text style={[styles.staffRole, { color: colors.textSecondary }]}>
                       {coach.coach_role}
                     </Text>
                   )}
                 </View>
 
-                <ChevronRight size={20} color={theme.colors.textSecondary} />
+                <ChevronRight size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>
@@ -343,12 +341,12 @@ export function CoachsCornerTab({ relationships, onRefresh }: CoachsCornerTabPro
 
       {/* Invite More Coaches */}
       <TouchableOpacity
-        style={[styles.inviteCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+        style={[styles.inviteCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         onPress={handleInviteCoach}
         activeOpacity={0.7}
       >
-        <Plus size={20} color={theme.colors.primary} />
-        <Text style={[styles.inviteCardText, { color: theme.colors.primary }]}>
+        <Plus size={20} color="#B91C1C" />
+        <Text style={[styles.inviteCardText, { color: '#B91C1C' }]}>
           Invite Another Coach
         </Text>
       </TouchableOpacity>
@@ -393,6 +391,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 8,
+    backgroundColor: '#B91C1C',
   },
   inviteButtonText: {
     fontSize: 15,
@@ -527,8 +526,16 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: 8,
+    backgroundColor: '#B91C1C',
   },
   actionButtonSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
     backgroundColor: 'transparent',
     borderWidth: 1,
   },
