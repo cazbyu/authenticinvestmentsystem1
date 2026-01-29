@@ -132,26 +132,34 @@ export function MyGoalsView({ onGoalPress, refreshTrigger }: MyGoalsViewProps) {
       }
 
       const [
-        { data: rolesData },
-        { data: domainsData },
-        { data: parentGoalsData }
-      ] = await Promise.all([
-        supabase
-          .from('0008-ap-universal-roles-join')
-          .select('parent_id, role:0008-ap-roles(id, label, color)')
-          .in('parent_id', allGoalIds)
-          .in('parent_type', ['one_yr_goal', 'twelve_wk_goal', 'custom_goal']),
-        supabase
-          .from('0008-ap-universal-domains-join')
-          .select('parent_id, domain:0008-ap-domains(id, name)')
-          .in('parent_id', allGoalIds)
-          .in('parent_type', ['one_yr_goal', 'twelve_wk_goal', 'custom_goal']),
-        supabase
-          .from('0008-ap-universal-goals-join')
-          .select('twelve_wk_goal_id, one_yr_goal:0008-ap-goals-1y(id, title)')
-          .in('twelve_wk_goal_id', twelveWeekGoals.map(g => g.id))
-          .eq('goal_type', 'twelve_wk_goal'),
-      ]);
+  { data: rolesData },
+  { data: domainsData },
+] = await Promise.all([
+  supabase
+    .from('0008-ap-universal-roles-join')
+    .select('parent_id, role:0008-ap-roles(id, label, color)')
+    .in('parent_id', allGoalIds)
+    .in('parent_type', ['one_yr_goal', 'twelve_wk_goal', 'custom_goal']),
+  supabase
+    .from('0008-ap-universal-domains-join')
+    .select('parent_id, domain:0008-ap-domains(id, name)')
+    .in('parent_id', allGoalIds)
+    .in('parent_type', ['one_yr_goal', 'twelve_wk_goal', 'custom_goal']),
+]);
+
+// ✅ CORRECT: Fetch parent goals using parent_goal_id directly from 12-week goals table
+const twelveWeekGoalIds = twelveWeekGoals.map(g => g.id);
+const goalsWithParentIds = twelveWeekGoals.filter(g => g.parent_goal_id);
+const parentGoalIds = [...new Set(goalsWithParentIds.map(g => g.parent_goal_id).filter(Boolean))];
+
+let parentGoalsData: Array<{ id: string; title: string }> = [];
+if (parentGoalIds.length > 0) {
+  const { data: parentGoals } = await supabase
+    .from('0008-ap-goals-1y')
+    .select('id, title')
+    .in('id', parentGoalIds);
+  parentGoalsData = parentGoals || [];
+}
 
       const rolesMap = new Map<string, any[]>();
       (rolesData || []).forEach((item: any) => {
