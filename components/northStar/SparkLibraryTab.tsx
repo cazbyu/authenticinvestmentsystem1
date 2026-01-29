@@ -19,7 +19,6 @@ import {
   Star,
   Trash2,
   Edit3,
-  MoreVertical,
   Compass,
   Target,
   Heart,
@@ -66,7 +65,7 @@ interface SparkLibraryTabProps {
 
 export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { colors } = useTheme();
   
   // State
   const [loading, setLoading] = useState(true);
@@ -247,11 +246,11 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
   const getSourceIcon = (sourceType: string) => {
     switch (sourceType) {
       case 'self':
-        return <User size={12} color={theme.colors.textSecondary} />;
+        return <User size={12} color={colors.textSecondary} />;
       case 'coach':
-        return <Users size={12} color={theme.colors.textSecondary} />;
+        return <Users size={12} color={colors.textSecondary} />;
       case 'system':
-        return <Settings size={12} color={theme.colors.textSecondary} />;
+        return <Settings size={12} color={colors.textSecondary} />;
       default:
         return null;
     }
@@ -268,7 +267,7 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
       : (item as PowerQuestion).question_context;
 
     return (
-      <View style={[styles.itemCard, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.itemCard, { backgroundColor: colors.card }]}>
         <View style={styles.itemHeader}>
           <View style={styles.itemBadges}>
             {/* Type Badge */}
@@ -295,9 +294,9 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
 
             {/* Domain Badge */}
             {item.domain && (
-              <View style={[styles.domainBadge, { backgroundColor: theme.colors.background }]}>
+              <View style={[styles.domainBadge, { backgroundColor: colors.background }]}>
                 {getDomainIcon(item.domain)}
-                <Text style={[styles.domainBadgeText, { color: theme.colors.textSecondary }]}>
+                <Text style={[styles.domainBadgeText, { color: colors.textSecondary }]}>
                   {item.domain}
                 </Text>
               </View>
@@ -321,7 +320,7 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
             >
               <Star 
                 size={16} 
-                color={item.is_pinned ? '#f59e0b' : theme.colors.textSecondary}
+                color={item.is_pinned ? '#f59e0b' : colors.textSecondary}
                 fill={item.is_pinned ? '#f59e0b' : 'transparent'}
               />
             </TouchableOpacity>
@@ -330,7 +329,7 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
               style={styles.actionButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Edit3 size={16} color={theme.colors.textSecondary} />
+              <Edit3 size={16} color={colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => handleDeleteItem(item)}
@@ -342,29 +341,29 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
           </View>
         </View>
 
-        <Text style={[styles.itemText, { color: theme.colors.text }]}>
+        <Text style={[styles.itemText, { color: colors.text }]}>
           {isQuote ? `"${text}"` : text}
         </Text>
 
         {subtitle && (
-          <Text style={[styles.itemSubtitle, { color: theme.colors.textSecondary }]}>
+          <Text style={[styles.itemSubtitle, { color: colors.textSecondary }]}>
             {isQuote ? `— ${subtitle}` : subtitle}
           </Text>
         )}
 
         <View style={styles.itemFooter}>
-          <Text style={[styles.timesShown, { color: theme.colors.textSecondary }]}>
+          <Text style={[styles.timesShown, { color: colors.textSecondary }]}>
             Shown {item.times_shown} times
           </Text>
         </View>
       </View>
     );
-  }, [theme, handleTogglePin, handleEditItem, handleDeleteItem, getDomainIcon, getSourceIcon]);
+  }, [colors, handleTogglePin, handleEditItem, handleDeleteItem]);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color="#B91C1C" />
       </View>
     );
   }
@@ -374,14 +373,14 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
       {/* Header Actions */}
       <View style={styles.headerActions}>
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
+          style={styles.addQuoteButton}
           onPress={handleAddQuote}
         >
           <Quote size={16} color="#ffffff" />
           <Text style={styles.addButtonText}>Add Quote</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: '#7c3aed' }]}
+          style={styles.addQuestionButton}
           onPress={handleAddQuestion}
         >
           <HelpCircle size={16} color="#ffffff" />
@@ -391,37 +390,37 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
           style={[
             styles.filterButton, 
             { 
-              backgroundColor: showFilters ? theme.colors.primary : theme.colors.surface,
-              borderColor: theme.colors.border,
+              backgroundColor: showFilters ? '#B91C1C' : colors.card,
+              borderColor: colors.border,
             }
           ]}
           onPress={() => setShowFilters(!showFilters)}
         >
-          <Filter size={18} color={showFilters ? '#ffffff' : theme.colors.text} />
+          <Filter size={18} color={showFilters ? '#ffffff' : colors.text} />
         </TouchableOpacity>
       </View>
 
       {/* Filters */}
       {showFilters && (
-        <View style={[styles.filtersContainer, { backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.filtersContainer, { backgroundColor: colors.card }]}>
           {/* Content Type Filter */}
           <View style={styles.filterRow}>
-            <Text style={[styles.filterLabel, { color: theme.colors.textSecondary }]}>Type:</Text>
+            <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Type:</Text>
             <View style={styles.filterOptions}>
               {(['all', 'quotes', 'questions'] as ContentType[]).map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[
                     styles.filterChip,
-                    contentType === type && { backgroundColor: theme.colors.primary },
-                    { borderColor: theme.colors.border },
+                    contentType === type && styles.filterChipActive,
+                    { borderColor: colors.border },
                   ]}
                   onPress={() => setContentType(type)}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      { color: contentType === type ? '#ffffff' : theme.colors.text },
+                      { color: contentType === type ? '#ffffff' : colors.text },
                     ]}
                   >
                     {type === 'all' ? 'All' : type === 'quotes' ? 'Quotes' : 'Questions'}
@@ -433,22 +432,22 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
 
           {/* Source Filter */}
           <View style={styles.filterRow}>
-            <Text style={[styles.filterLabel, { color: theme.colors.textSecondary }]}>Source:</Text>
+            <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Source:</Text>
             <View style={styles.filterOptions}>
               {(['all', 'self', 'coach', 'system'] as SourceFilter[]).map((source) => (
                 <TouchableOpacity
                   key={source}
                   style={[
                     styles.filterChip,
-                    sourceFilter === source && { backgroundColor: theme.colors.primary },
-                    { borderColor: theme.colors.border },
+                    sourceFilter === source && styles.filterChipActive,
+                    { borderColor: colors.border },
                   ]}
                   onPress={() => setSourceFilter(source)}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      { color: sourceFilter === source ? '#ffffff' : theme.colors.text },
+                      { color: sourceFilter === source ? '#ffffff' : colors.text },
                     ]}
                   >
                     {source === 'all' ? 'All' : source === 'self' ? 'Mine' : source === 'coach' ? 'Coach' : 'System'}
@@ -460,22 +459,22 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
 
           {/* Domain Filter */}
           <View style={styles.filterRow}>
-            <Text style={[styles.filterLabel, { color: theme.colors.textSecondary }]}>Domain:</Text>
+            <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Domain:</Text>
             <View style={styles.filterOptions}>
               {(['all', 'mission', 'wellness', 'goals', 'roles'] as DomainFilter[]).map((domain) => (
                 <TouchableOpacity
                   key={domain}
                   style={[
                     styles.filterChip,
-                    domainFilter === domain && { backgroundColor: theme.colors.primary },
-                    { borderColor: theme.colors.border },
+                    domainFilter === domain && styles.filterChipActive,
+                    { borderColor: colors.border },
                   ]}
                   onPress={() => setDomainFilter(domain)}
                 >
                   <Text
                     style={[
                       styles.filterChipText,
-                      { color: domainFilter === domain ? '#ffffff' : theme.colors.text },
+                      { color: domainFilter === domain ? '#ffffff' : colors.text },
                     ]}
                   >
                     {domain === 'all' ? 'All' : domain.charAt(0).toUpperCase() + domain.slice(1)}
@@ -488,28 +487,27 @@ export function SparkLibraryTab({ onRefresh }: SparkLibraryTabProps) {
       )}
 
       {/* Results Count */}
-      <Text style={[styles.resultsCount, { color: theme.colors.textSecondary }]}>
+      <Text style={[styles.resultsCount, { color: colors.textSecondary }]}>
         {filteredItems.length} {filteredItems.length === 1 ? 'item' : 'items'}
         {(sourceFilter !== 'all' || domainFilter !== 'all' || contentType !== 'all') && ' (filtered)'}
       </Text>
 
       {/* Items List */}
       {filteredItems.length > 0 ? (
-        <FlatList
-          data={filteredItems}
-          renderItem={renderItem}
-          keyExtractor={(item) => `${item.type}-${item.id}`}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={false} // Parent ScrollView handles scrolling
-        />
+        <View style={styles.listContainer}>
+          {filteredItems.map((item) => (
+            <View key={`${item.type}-${item.id}`}>
+              {renderItem({ item })}
+            </View>
+          ))}
+        </View>
       ) : (
-        <View style={[styles.emptyState, { backgroundColor: theme.colors.surface }]}>
-          <Quote size={48} color={theme.colors.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
+        <View style={[styles.emptyState, { backgroundColor: colors.card }]}>
+          <Quote size={48} color={colors.textSecondary} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
             No Sparks Yet
           </Text>
-          <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
             Add inspiring quotes and powerful questions to fuel your morning spark rituals.
           </Text>
         </View>
@@ -535,7 +533,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
-  addButton: {
+  addQuoteButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -543,6 +541,17 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: 8,
+    backgroundColor: '#B91C1C',
+  },
+  addQuestionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#7c3aed',
   },
   addButtonText: {
     fontSize: 13,
@@ -583,6 +592,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
+  filterChipActive: {
+    backgroundColor: '#B91C1C',
+    borderColor: '#B91C1C',
+  },
   filterChipText: {
     fontSize: 12,
     fontWeight: '500',
@@ -595,7 +608,7 @@ const styles = StyleSheet.create({
   },
 
   // List
-  listContent: {
+  listContainer: {
     gap: 12,
   },
 
