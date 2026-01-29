@@ -32,6 +32,7 @@ import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { CompassIcon } from '@/components/icons/CustomIcons';
+import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
