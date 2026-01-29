@@ -99,7 +99,7 @@ export function UniversalHeader({ onOpenSettings }: UniversalHeaderProps) {
       >
         <Animated.View style={compassAnimatedStyle}>
           <CompassIcon
-            size={32}
+            size={40}
             color="#ffffff"
           />
         </Animated.View>
