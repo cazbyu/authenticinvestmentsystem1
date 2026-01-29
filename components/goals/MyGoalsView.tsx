@@ -364,25 +364,7 @@ twelveWeekGoals.forEach((goal: any) => {
 </View>
 
         <View style={styles.goalMeta}>
-          {goal.goal_type === '1y' && (() => {
-            const now = new Date();
-            const startOfYear = new Date(now.getFullYear(), 0, 1);
-            const diffTime = now.getTime() - startOfYear.getTime();
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-            const currentWeek = Math.floor(diffDays / 7) + 1;
-            const dateRange = goal.start_date && goal.end_date
-              ? ` ${formatGoalDateRange(goal.start_date, goal.end_date)}`
-              : '';
-            return (
-              <View style={styles.metaItem}>
-                <Calendar size={14} color={colors.textSecondary} />
-                <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                  Week {currentWeek} of 52{dateRange}
-                </Text>
-              </View>
-            );
-          })()}
-
+          
           {goal.goal_type === '12week' && currentCycleWeek > 0 && (
             <View style={styles.metaItem}>
               <Calendar size={14} color={colors.textSecondary} />
