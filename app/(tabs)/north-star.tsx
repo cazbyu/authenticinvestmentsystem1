@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  useWindowDimensions,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,8 +16,9 @@ import { Compass, Users, Sparkles, ChevronLeft } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
+import { useNorthStarVisit } from '@/hooks/NorthStarVisits';
 
-// To (matching your existing folder):
+// Tab Components - these will be created in components/northStar/
 import { MyVisionTab } from '@/components/northStar/MyVisionTab';
 import { CoachsCornerTab } from '@/components/northStar/CoachsCornerTab';
 import { SparkLibraryTab } from '@/components/northStar/SparkLibraryTab';
@@ -39,11 +41,18 @@ interface CoachRelationship {
   coach_role: string | null;
 }
 
+// Header colors - matching your existing red theme
+const HEADER_COLORS = {
+  background: '#B91C1C',
+  text: '#FFFFFF',
+  accent: '#FEE2E2',
+};
+
 export default function NorthStarPage() {
   const router = useRouter();
-  const { theme } = useTheme();
-  const { width } = useWindowDimensions();
+  const { colors } = useTheme();
   const { score } = useAuthenticScore();
+  const { recordVisit } = useNorthStarVisit();
   
   // State
   const [activeTab, setActiveTab] = useState<TabKey>('vision');
@@ -51,6 +60,11 @@ export default function NorthStarPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasCoach, setHasCoach] = useState(false);
   const [coachRelationships, setCoachRelationships] = useState<CoachRelationship[]>([]);
+
+  // Record visit on mount
+  useEffect(() => {
+    recordVisit('full_page');
+  }, []);
 
   // Tab configuration
   const allTabs: TabConfig[] = useMemo(() => [
@@ -63,7 +77,7 @@ export default function NorthStarPage() {
       key: 'coach',
       label: "Coach's Corner",
       icon: Users,
-      conditional: true, // Only show if hasCoach is true
+      conditional: true,
     },
     {
       key: 'sparks',
@@ -89,7 +103,6 @@ export default function NorthStarPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Query coach-client-meta for active relationships where user is the client
       const { data, error } = await supabase
         .from('0008-ap-coach-client-meta')
         .select(`
@@ -166,10 +179,11 @@ export default function NorthStarPage() {
   // Loading state
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: HEADER_COLORS.background }]}>
+        <StatusBar barStyle="light-content" backgroundColor={HEADER_COLORS.background} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+          <ActivityIndicator size="large" color={HEADER_COLORS.text} />
+          <Text style={[styles.loadingText, { color: HEADER_COLORS.accent }]}>
             Loading North Star...
           </Text>
         </View>
@@ -178,90 +192,94 @@ export default function NorthStarPage() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: HEADER_COLORS.background }]}>
+      <StatusBar barStyle="light-content" backgroundColor={HEADER_COLORS.background} />
+      
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity 
-          onPress={handleBack} 
-          style={styles.backButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ChevronLeft size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-        
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-            North Star
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
-            Your Strategic Foundation
-          </Text>
-        </View>
-
-        {/* Authentic Score Badge */}
-        <View style={[styles.scoreBadge, { backgroundColor: theme.colors.surface }]}>
-          <Text style={[styles.scoreText, { color: theme.colors.primary }]}>
-            {score ?? 0}
-          </Text>
-        </View>
-      </View>
-
-      {/* Tab Bar */}
-      <View style={[styles.tabBar, { backgroundColor: theme.colors.surface }]}>
-        {visibleTabs.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const IconComponent = tab.icon;
+      <View style={[styles.header, { backgroundColor: HEADER_COLORS.background }]}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity 
+            onPress={handleBack} 
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ChevronLeft size={24} color={HEADER_COLORS.text} />
+          </TouchableOpacity>
           
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[
-                styles.tab,
-                isActive && [styles.tabActive, { borderBottomColor: theme.colors.primary }],
-              ]}
-              onPress={() => handleTabChange(tab.key)}
-              activeOpacity={0.7}
-            >
-              <IconComponent 
-                size={20} 
-                color={isActive ? theme.colors.primary : theme.colors.textSecondary} 
-              />
-              <Text
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: HEADER_COLORS.text }]}>
+              North Star
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: HEADER_COLORS.accent }]}>
+              Your Strategic Foundation
+            </Text>
+          </View>
+
+          {/* Authentic Score Badge */}
+          <View style={styles.scoreContainer}>
+            <Text style={[styles.scoreLabel, { color: HEADER_COLORS.accent }]}>Score</Text>
+            <Text style={[styles.scoreValue, { color: HEADER_COLORS.text }]}>{score}</Text>
+          </View>
+        </View>
+
+        {/* Tab Bar */}
+        <View style={styles.tabContainer}>
+          {visibleTabs.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const IconComponent = tab.icon;
+            
+            return (
+              <TouchableOpacity
+                key={tab.key}
                 style={[
-                  styles.tabLabel,
-                  { color: isActive ? theme.colors.primary : theme.colors.textSecondary },
-                  isActive && styles.tabLabelActive,
+                  styles.tabButton,
+                  isActive && styles.tabButtonActive,
                 ]}
-                numberOfLines={1}
+                onPress={() => handleTabChange(tab.key)}
+                activeOpacity={0.7}
               >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <IconComponent 
+                  size={18} 
+                  color={isActive ? HEADER_COLORS.text : HEADER_COLORS.accent} 
+                />
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: isActive ? HEADER_COLORS.text : HEADER_COLORS.accent },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
-      {/* Tab Content */}
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.colors.primary}
-          />
-        }
-      >
-        {renderTabContent()}
-      </ScrollView>
+      {/* Content Area */}
+      <View style={[styles.content, { backgroundColor: colors.background }]}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={HEADER_COLORS.background}
+            />
+          }
+        >
+          {renderTabContent()}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
   },
   loadingContainer: {
@@ -276,17 +294,19 @@ const styles = StyleSheet.create({
   
   // Header
   header: {
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
   },
   backButton: {
     padding: 4,
   },
   headerCenter: {
-    flex: 1,
     alignItems: 'center',
   },
   headerTitle: {
@@ -297,47 +317,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  scoreBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  scoreContainer: {
+    alignItems: 'flex-end',
   },
-  scoreText: {
-    fontSize: 14,
-    fontWeight: '600',
+  scoreLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  scoreValue: {
+    fontSize: 18,
+    fontWeight: '700',
   },
 
   // Tab Bar
-  tabBar: {
+  tabContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
   },
-  tab: {
+  tabButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     gap: 6,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderRadius: 8,
   },
-  tabActive: {
-    borderBottomWidth: 2,
+  tabButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  tabLabelActive: {
+  tabText: {
+    fontSize: 12,
     fontWeight: '600',
   },
 
   // Content
   content: {
     flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -12,
   },
-  contentContainer: {
-    paddingBottom: 32,
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 20,
+    paddingBottom: 100,
   },
 });
