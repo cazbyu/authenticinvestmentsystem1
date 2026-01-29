@@ -641,72 +641,57 @@ useEffect(() => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      let ideaIds: string[] = [];
+
       // Annual goals (1y) don't have direct links in universal-goals-join
-// They aggregate from their child 12-week goals
-if (currentGoal.goal_type === '1y') {
-  // For annual goals, find child 12-week goals first, then their linked ideas
-  const { data: childGoals, error: childError } = await supabase
-    .from('0008-ap-goals-12wk')
-    .select('id')
-    .eq('parent_goal_id', currentGoal.id)
-    .is('deleted_at', null);
+      // They aggregate from their child 12-week goals
+      if (currentGoal.goal_type === '1y') {
+        // For annual goals, find child 12-week goals first, then their linked ideas
+        const { data: childGoals, error: childError } = await supabase
+          .from('0008-ap-goals-12wk')
+          .select('id')
+          .eq('parent_goal_id', currentGoal.id)
+          .is('deleted_at', null);
 
-  if (childError || !childGoals || childGoals.length === 0) {
-    setIdeas([]);
-    return;
-  }
+        if (childError) throw childError;
 
-  const childGoalIds = childGoals.map(g => g.id);
-  
-  const { data: goalJoins, error: joinError } = await supabase
-    .from('0008-ap-universal-goals-join')
-    .select('parent_id')
-    .in('twelve_wk_goal_id', childGoalIds)
-    .eq('parent_type', 'deposit_idea');
+        if (!childGoals || childGoals.length === 0) {
+          setIdeas([]);
+          setIdeasLoading(false);
+          return;
+        }
 
-  if (joinError) throw joinError;
+        const childGoalIds = childGoals.map(g => g.id);
 
-  const ideaIds = goalJoins?.map(j => j.parent_id).filter(Boolean) || [];
+        const { data: goalJoins, error: joinError } = await supabase
+          .from('0008-ap-universal-goals-join')
+          .select('parent_id')
+          .in('twelve_wk_goal_id', childGoalIds)
+          .eq('parent_type', 'deposit_idea');
 
-  if (ideaIds.length === 0) {
-    setIdeas([]);
-    return;
-  }
+        if (joinError) throw joinError;
 
-  // Continue with existing idea fetching logic using ideaIds...
-  const { data: ideasData, error: ideasError } = await supabase
-    .from('0008-ap-deposit-ideas')
-    .select('*')
-    .in('id', ideaIds)
-    .eq('is_active', true)
-    .eq('archived', false)
-    .is('activated_task_id', null)
-    .order('created_at', { ascending: false });
+        ideaIds = goalJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      } else {
+        // Original logic for 12week and custom goals
+        const goalJoinColumn = currentGoal.goal_type === '12week'
+          ? 'twelve_wk_goal_id'
+          : 'custom_goal_id';
 
-  if (ideasError) throw ideasError;
+        const { data: goalJoins, error: joinError } = await supabase
+          .from('0008-ap-universal-goals-join')
+          .select('parent_id')
+          .eq(goalJoinColumn, currentGoal.id)
+          .eq('parent_type', 'deposit_idea');
 
-  // ... rest of enrichment logic stays the same
-} else {
-  // Original logic for 12week and custom goals
-  const goalJoinColumn = currentGoal.goal_type === '12week'
-    ? 'twelve_wk_goal_id'
-    : 'custom_goal_id';
+        if (joinError) throw joinError;
 
-  const { data: goalJoins, error: joinError } = await supabase
-    .from('0008-ap-universal-goals-join')
-    .select('parent_id')
-    .eq(goalJoinColumn, currentGoal.id)
-    .eq('parent_type', 'deposit_idea');
-
-  // ... rest of original logic
-}
-
-      if (joinError) throw joinError;
-
-      const ideaIds = goalJoins?.map(j => j.parent_id).filter(Boolean) || [];
+        ideaIds = goalJoins?.map(j => j.parent_id).filter(Boolean) || [];
+      }
 
       if (ideaIds.length === 0) {
         setIdeas([]);
+        setIdeasLoading(false);
         return;
       }
 
@@ -747,7 +732,7 @@ if (currentGoal.goal_type === '1y') {
 
         return {
           ...idea,
-          title: idea.idea_text || idea.title, // Map idea_text to title for DepositIdeaCard
+          title: idea.idea_text || idea.title,
           roles,
           domains,
           keyRelationships,
@@ -762,7 +747,7 @@ if (currentGoal.goal_type === '1y') {
       setIdeasLoading(false);
     }
   };
-
+  
   const fetchJournalNotes = async () => {
     setJournalLoading(true);
     try {
