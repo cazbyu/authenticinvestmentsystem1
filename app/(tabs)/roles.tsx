@@ -1338,8 +1338,8 @@ const { headerColor } = useHeaderColor();
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.roleBankTab, styles.roleBankTabActive]}
-                onPress={() => {}} 
+              style={[styles.roleBankTab, { backgroundColor: headerColor }]}
+              onPress={() => {}}
               >
                 <Text style={[styles.roleBankTabText, styles.roleBankTabTextActive]}>
                   Manage
