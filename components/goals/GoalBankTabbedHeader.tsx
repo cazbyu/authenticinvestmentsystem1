@@ -27,6 +27,7 @@ export function GoalBankTabbedHeader({
   daysRemaining,
   cycleProgressPercentage,
 }: GoalBankTabbedHeaderProps) {
+  const { headerColor } = useHeaderColor();
   
   // Timeline selected - show back button and timeline info
   if (showBackButton) {
