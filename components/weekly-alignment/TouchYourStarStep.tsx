@@ -162,25 +162,38 @@ const questionStartTime = React.useRef<number>(Date.now());
         setQuestions(missionQuestions);
       }
 
-      // Check for existing responses (user came back)
+      // Load ALL existing responses for synthesis display
       const { data: existingResponses } = await supabase
         .from('0008-ap-question-responses')
-        .select('question_id, response_text')
-        .eq('user_id', userId)
+        .select('question_id, response_text, created_at')
+        .eq('user_id', user.id)
         .eq('domain', 'mission')
-        .eq('context_type', 'onboarding');
+        .eq('context_type', 'onboarding')
+        .order('created_at', { ascending: true });
 
-      if (existingResponses && existingResponses.length > 0 && missionQuestions) {
-        // Restore previous responses
-        const restored: QuestionResponse[] = existingResponses.map(r => {
-          const q = missionQuestions.find(q => q.id === r.question_id);
-          return {
+      if (existingResponses && existingResponses.length > 0) {
+        // Get question texts for the responses
+        const questionIds = existingResponses.map(r => r.question_id);
+        const { data: questionTexts } = await supabase
+          .from('0008-ap-user-power-questions')
+          .select('id, question_text')
+          .in('id', questionIds);
+        
+        const questionMap = new Map(
+          (questionTexts || []).map(q => [q.id, q.question_text])
+        );
+
+        // Deduplicate - keep only most recent response per question
+        const latestResponses = new Map<string, QuestionResponse>();
+        existingResponses.forEach(r => {
+          latestResponses.set(r.question_id, {
             questionId: r.question_id,
-            questionText: q?.question_text || '',
+            questionText: questionMap.get(r.question_id) || '',
             response: r.response_text,
-          };
+          });
         });
-        setResponses(restored);
+        
+        setResponses(Array.from(latestResponses.values()));
       }
 
       // Determine initial state
