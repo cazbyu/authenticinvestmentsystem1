@@ -86,6 +86,23 @@ const questionStartTime = React.useRef<number>(Date.now());
     loadInitialData();
   }, []);
 
+  // Track question shown
+  useEffect(() => {
+    if (flowState === 'guided-questions' && questions.length > 0 && questions[currentQuestionIndex]) {
+      const q = questions[currentQuestionIndex];
+      trackQuestionShown(
+        userId,
+        q.id,
+        q.question_text,
+        'onboarding',
+        currentQuestionIndex + 1,
+        questions.length,
+        'mission'
+      );
+      questionStartTime.current = Date.now();
+    }
+  }, [flowState, currentQuestionIndex, questions, userId]);
+
   async function loadInitialData() {
     try {
       const supabase = getSupabaseClient();
