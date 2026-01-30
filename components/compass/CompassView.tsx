@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 16,
+    paddingTop: 4,
     paddingBottom: 60,
     minHeight: 400,
   },
