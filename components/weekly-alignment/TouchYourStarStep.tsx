@@ -389,35 +389,66 @@ function handleSkipQuestion() {
 }
 
   function generateMissionSuggestions(): string[] {
-    // Generate simple suggestions based on responses
-    // In a real app, this could call an AI API
-    const suggestions: string[] = [];
-    
-    if (responses.length >= 2) {
-      // Extract key themes from responses
-      const allText = responses.map(r => r.response).join(' ').toLowerCase();
-      
-      if (allText.includes('help') || allText.includes('support') || allText.includes('empower')) {
-        suggestions.push('To empower others to discover their potential and create meaningful change in their lives.');
-      }
-      if (allText.includes('teach') || allText.includes('learn') || allText.includes('education')) {
-        suggestions.push('To share knowledge and inspire lifelong learning in everyone I encounter.');
-      }
-      if (allText.includes('build') || allText.includes('create') || allText.includes('opportunity')) {
-        suggestions.push('To build opportunities that transform lives and strengthen communities.');
-      }
-      if (allText.includes('lead') || allText.includes('guide') || allText.includes('inspire')) {
-        suggestions.push('To lead with purpose and inspire others to pursue their highest aspirations.');
-      }
-      
-      // Add a generic option if we don't have enough
-      if (suggestions.length < 2) {
-        suggestions.push('To live with intention and make a positive impact on those around me.');
-        suggestions.push('To use my unique gifts to serve others and leave the world better than I found it.');
-      }
+    if (responses.length < 2) {
+      return [
+        'To live with intention and make a positive impact on those around me.',
+        'To use my unique gifts to serve others and leave the world better than I found it.',
+      ];
     }
-    
-    return suggestions.slice(0, 3);
+
+    const allText = responses.map(r => r.response).join(' ').toLowerCase();
+    const suggestions: string[] = [];
+
+    // Check for specific themes in their responses
+    const hasAfrica = allText.includes('africa');
+    const hasBusiness = allText.includes('business') || allText.includes('entrepreneur');
+    const hasVulnerable = allText.includes('vulnerable') || allText.includes('poverty') || allText.includes('struggling');
+    const hasFamily = allText.includes('family') || allText.includes('families');
+    const hasTeach = allText.includes('teach') || allText.includes('education') || allText.includes('learn');
+    const hasInspire = allText.includes('inspir') || allText.includes('happy') || allText.includes('hope');
+    const hasHelp = allText.includes('help') || allText.includes('support') || allText.includes('empower');
+    const hasCreate = allText.includes('create') || allText.includes('build') || allText.includes('start');
+
+    // Build personalized suggestions based on detected themes
+    if (hasAfrica && hasBusiness) {
+      suggestions.push('To create sustainable business opportunities that empower African entrepreneurs and transform communities.');
+    } else if (hasAfrica) {
+      suggestions.push('To serve and uplift communities across Africa through meaningful work and lasting impact.');
+    }
+
+    if (hasVulnerable && hasHelp) {
+      suggestions.push('To champion the dignity of vulnerable populations by creating pathways to opportunity and self-sufficiency.');
+    } else if (hasVulnerable) {
+      suggestions.push('To be a voice and advocate for those who are often overlooked, bringing hope and tangible support.');
+    }
+
+    if (hasFamily) {
+      suggestions.push('To strengthen families and communities by modeling integrity, love, and purposeful action.');
+    }
+
+    if (hasBusiness && hasCreate && !hasAfrica) {
+      suggestions.push('To build enterprises that create jobs, solve real problems, and generate lasting positive change.');
+    }
+
+    if (hasTeach) {
+      suggestions.push('To educate and equip others with the knowledge and skills they need to thrive.');
+    }
+
+    if (hasInspire && suggestions.length < 3) {
+      suggestions.push('To inspire hope and possibility in every person I encounter.');
+    }
+
+    // If we still don't have enough, add personalized fallbacks
+    if (suggestions.length < 2) {
+      if (hasHelp || hasCreate) {
+        suggestions.push('To use my energy and resources to create opportunities for those who need them most.');
+      }
+      suggestions.push('To live boldly and kindly, leaving every person and place better than I found them.');
+    }
+
+    // Deduplicate and limit to 3
+    const uniqueSuggestions = [...new Set(suggestions)];
+    return uniqueSuggestions.slice(0, 3);
   }
 
   function handleSelectSuggestion(index: number) {
