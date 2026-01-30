@@ -1528,13 +1528,13 @@ const styles = StyleSheet.create({
   editCancelText: {
     fontSize: 15,
   },
-  skipButton: {
+  questionSkipButton: {
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
   },
-  skipButtonText: {
+  questionSkipButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },
