@@ -47,33 +47,32 @@ export function TouchYourStarStep({
     try {
       const supabase = getSupabaseClient();
 
-      // Load mission statement
-      const { data: missionData } = await supabase
-        .from('0008-ap-user-mission-statement')
-        .select('mission_text')
+      // Load all North Star data from single table
+      const { data: northStar } = await supabase
+        .from('0008-ap-north-star')
+        .select('mission_statement, 5yr_vision, core_values, life_motto')
         .eq('user_id', userId)
         .maybeSingle();
 
-      // Load vision statement
-      const { data: visionData } = await supabase
-        .from('0008-ap-user-vision-statement')
-        .select('vision_text')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      // Load values
-      const { data: valuesData } = await supabase
-        .from('0008-ap-user-core-values')
-        .select('id, value, description')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true })
-        .limit(5);
+      // Transform core_values from JSONB array to expected format
+      // core_values is stored as: ["Value 1", "Value 2"] or [{value: "Value 1"}, ...]
+      let formattedValues: Array<{ id: string; value: string; description?: string }> = [];
+      
+      if (northStar?.core_values && Array.isArray(northStar.core_values)) {
+        formattedValues = northStar.core_values.map((v: any, index: number) => {
+          if (typeof v === 'string') {
+            return { id: `value-${index}`, value: v };
+          } else if (typeof v === 'object' && v.value) {
+            return { id: v.id || `value-${index}`, value: v.value, description: v.description };
+          }
+          return { id: `value-${index}`, value: String(v) };
+        });
+      }
 
       setNorthStarData({
-        mission: missionData?.mission_text,
-        vision: visionData?.vision_text,
-        values: valuesData || [],
+        mission: northStar?.mission_statement,
+        vision: northStar?.['5yr_vision'],
+        values: formattedValues,
       });
     } catch (error) {
       console.error('Error loading North Star data:', error);
