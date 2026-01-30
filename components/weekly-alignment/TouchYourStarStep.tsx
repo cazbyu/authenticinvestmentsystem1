@@ -193,7 +193,7 @@ export function TouchYourStarStep({
         await supabase
           .from('0008-ap-north-star')
           .update({ mission_statement: missionText })
-          .eq('user_id', viserId);
+          .eq('user_id', userId);
       } else {
         await supabase
           .from('0008-ap-north-star')
