@@ -33,6 +33,8 @@ import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { CompassIcon } from '@/components/icons/CustomIcons';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
+import { FlashingArrow } from '@/components/compass/FlashingArrow';
+import { useAttentionState } from '@/hooks/useAttentionState';
 
 type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
@@ -1158,16 +1160,23 @@ const renderDashboardTabs = () => (
   <>
     {/* Ritual Icons Row - Left aligned under subheader */}
     <View style={styles.ritualIconsRow}>
-      {showWeeklyAlignment && (
-        <Animated.View style={{ transform: [{ scale: alignmentAnimation }] }}>
-          <TouchableOpacity
-            onPress={() => router.push('/weekly-alignment')}
-            style={[styles.ritualIcon, { backgroundColor: '#D1FAE5' }]}
-            activeOpacity={0.7}
-          >
-            <Text style={{ fontSize: 24 }}>🎯</Text>
-          </TouchableOpacity>
-        </Animated.View>
+      {/* Weekly Alignment - always show if onboarding arrow needed */}
+      {(showWeeklyAlignment || showOnboardingArrow) && (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Animated.View style={{ transform: [{ scale: showWeeklyAlignment ? alignmentAnimation : 1 }] }}>
+            <TouchableOpacity
+              onPress={() => router.push('/weekly-alignment')}
+              style={[
+                styles.ritualIcon, 
+                { backgroundColor: showWeeklyAlignment ? '#D1FAE5' : '#F3F4F6' }
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 24 }}>🎯</Text>
+            </TouchableOpacity>
+          </Animated.View>
+          <FlashingArrow visible={showOnboardingArrow} />
+        </View>
       )}
 
       {showMorningSpark && (
