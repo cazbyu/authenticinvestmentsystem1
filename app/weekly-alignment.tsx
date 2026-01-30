@@ -4,492 +4,414 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
-  ScrollView,
   ActivityIndicator,
-  Animated,
-  Platform,
   Alert,
+  Platform,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, CheckCircle2, Target, TrendingUp, Calendar } from 'lucide-react-native';
+import { ArrowLeft, Trash2, CheckCircle2, Compass } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { hasCompletedWeeklyAlignmentThisWeek, isWeeklyAlignmentWindowOpen, getWeeklyAlignmentPoints, calculateWeekBounds } from '@/lib/ritualUtils';
-import { getUserPreferences } from '@/lib/userPreferences';
+import { toLocalISOString } from '@/lib/dateUtils';
 
-interface WeeklyAlignment {
-  id: string;
-  user_id: string;
-  week_start_date: string;
-  week_end_date: string;
-  keystone_focus: string;
-  execution_score: number | null;
-  keystone_achieved: boolean | null;
-  created_at: string;
+// Step Components
+import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarStep';
+import { WingCheckRolesStep } from '@/components/weekly-alignment/WingCheckRolesStep';
+import { WingCheckWellnessStep } from '@/components/weekly-alignment/WingCheckWellnessStep';
+import { SixCheckStep } from '@/components/weekly-alignment/SixCheckStep';
+import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
+import { StepIndicatorCompact } from '@/components/rituals/StepIndicator';
+
+// Types
+interface WeeklyAlignmentData {
+  // Step 1: Touch Your Star
+  missionReflection?: string;
+  visionAcknowledged?: boolean;
+  valuesAcknowledged?: boolean;
+  
+  // Step 2: Wing Check Roles
+  rolesReviewed?: string[];
+  roleHealthFlags?: Record<string, 'thriving' | 'stable' | 'needs_attention'>;
+  
+  // Step 3: Wing Check Wellness
+  wellnessReviewed?: boolean;
+  zonesChecked?: string[];
+  flaggedWellnessZones?: string[];
+  
+  // Step 4: Six Check Goals
+  goalsReviewed?: string[];
+  laggingGoals?: string[];
+  onTrackGoals?: string[];
+  keyFocusGoal?: string;
+  
+  // Step 5: Tactical Deployment
+  keystoneFocus?: string;
+  committedTasks?: string[];
+  committedEvents?: string[];
+  delegationReminders?: string[];
+  personalCommitment?: string;
 }
 
-interface WeekBounds {
-  weekStart: string;
-  weekEnd: string;
-}
+const STEPS = [
+  { key: 'star', label: 'Touch Your Star', icon: '⭐', color: '#ed1c24' },
+  { key: 'roles', label: 'Wing Check: Roles', icon: '👥', color: '#9370DB' },
+  { key: 'wellness', label: 'Wing Check: Wellness', icon: '🌿', color: '#39b54a' },
+  { key: 'goals', label: 'Six Check: Goals', icon: '🎯', color: '#4169E1' },
+  { key: 'tactical', label: 'Tactical Deployment', icon: '🧭', color: '#FFD700' },
+];
 
 export default function WeeklyAlignmentScreen() {
   const router = useRouter();
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
+  
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [userId, setUserId] = useState<string>('');
+  const [currentStep, setCurrentStep] = useState(0);
+  const [alignmentData, setAlignmentData] = useState<WeeklyAlignmentData>({});
+  const [existingAlignment, setExistingAlignment] = useState<any>(null);
   const [isCompleted, setIsCompleted] = useState(false);
-  const [completedAlignment, setCompletedAlignment] = useState<WeeklyAlignment | null>(null);
-  const [lastWeekAlignment, setLastWeekAlignment] = useState<WeeklyAlignment | null>(null);
-
-  const [keystoneFocus, setKeystoneFocus] = useState('');
-  const [weekBounds, setWeekBounds] = useState<WeekBounds>({ weekStart: '', weekEnd: '' });
-  const [bonusWindow, setBonusWindow] = useState(false);
-  const [points, setPoints] = useState(10);
-  const [userPreferredDay, setUserPreferredDay] = useState<string>('');
-
-  const [scaleAnim] = useState(new Animated.Value(1));
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const [completionAnimation] = useState(new Animated.Value(0));
 
   useEffect(() => {
-    checkCompletionStatus();
+    loadInitialData();
   }, []);
 
-  useEffect(() => {
-    if (isCompleted && completedAlignment) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [isCompleted, completedAlignment]);
-
-  async function getLastWeekBounds(userId: string): Promise<WeekBounds> {
-    const bounds = await calculateWeekBounds(userId);
-    const weekStart = new Date(bounds.weekStart);
-    weekStart.setDate(weekStart.getDate() - 7);
-
-    const weekEnd = new Date(bounds.weekEnd);
-    weekEnd.setDate(weekEnd.getDate() - 7);
-
-    return {
-      weekStart: weekStart.toISOString().split('T')[0],
-      weekEnd: weekEnd.toISOString().split('T')[0],
-    };
-  }
-
-  function capitalizeFirstLetter(str: string): string {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
-
-  function formatWeekRange(startDate: string, endDate: string): string {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
-    const startDay = start.getDate();
-    const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
-    const endDay = end.getDate();
-    const year = end.getFullYear();
-
-    if (startMonth === endMonth) {
-      return `${startMonth} ${startDay}-${endDay}, ${year}`;
-    } else {
-      return `${startMonth} ${startDay} - ${endMonth} ${endDay}, ${year}`;
-    }
-  }
-
-  async function checkCompletionStatus() {
+  async function loadInitialData() {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        Alert.alert('Error', 'You must be logged in to complete Weekly Alignment.');
+        Alert.alert('Error', 'You must be logged in.');
         router.back();
         return;
       }
 
-      const [bounds, prefs] = await Promise.all([
-        calculateWeekBounds(user.id),
-        getUserPreferences(user.id)
-      ]);
+      setUserId(user.id);
 
-      setWeekBounds(bounds);
+      // Check if there's already a weekly alignment for this week
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - dayOfWeek);
+      const weekStart = toLocalISOString(startOfWeek).split('T')[0];
 
-      const inBonusWindow = isWeeklyAlignmentWindowOpen();
-      const alignmentPoints = getWeeklyAlignmentPoints();
+      const { data: existing } = await supabase
+        .from('0008-ap-weekly-alignments')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('week_start', weekStart)
+        .maybeSingle();
 
-      setBonusWindow(inBonusWindow);
-      setPoints(alignmentPoints);
-
-      if (prefs?.weekly_alignment_day) {
-        setUserPreferredDay(capitalizeFirstLetter(prefs.weekly_alignment_day));
-      }
-
-      const completed = await hasCompletedWeeklyAlignmentThisWeek(user.id);
-
-      if (completed) {
-        await fetchCompletedAlignment(user.id, bounds.weekStart);
-        setIsCompleted(true);
-      } else {
-        const lastWeekBounds = await getLastWeekBounds(user.id);
-        await fetchLastWeekAlignment(user.id, lastWeekBounds.weekStart);
+      if (existing) {
+        setExistingAlignment(existing);
+        // Could show a "continue" or "review" mode
       }
     } catch (error) {
-      console.error('Error checking completion status:', error);
-      Alert.alert('Error', 'Failed to load Weekly Alignment. Please try again.');
+      console.error('Error loading initial data:', error);
     } finally {
       setLoading(false);
     }
   }
 
-  async function fetchCompletedAlignment(userId: string, weekStartDate: string) {
-    try {
-      const supabase = getSupabaseClient();
+  function handleStepDataCapture(stepData: Partial<WeeklyAlignmentData>) {
+    setAlignmentData(prev => ({
+      ...prev,
+      ...stepData,
+    }));
+  }
 
-      const { data, error } = await supabase
-        .from('0008-ap-weekly-alignments')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('week_start_date', weekStartDate)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching completed alignment:', error);
-        return;
+  function goToNextStep() {
+    if (currentStep < STEPS.length - 1) {
+      setCurrentStep(prev => prev + 1);
+      
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-
-      if (data) {
-        setCompletedAlignment(data);
-      }
-    } catch (error) {
-      console.error('Exception fetching completed alignment:', error);
     }
   }
 
-  async function fetchLastWeekAlignment(userId: string, lastWeekStartDate: string) {
-    try {
-      const supabase = getSupabaseClient();
-
-      const { data, error } = await supabase
-        .from('0008-ap-weekly-alignments')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('week_start_date', lastWeekStartDate)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching last week alignment:', error);
-        return;
+  function goToPreviousStep() {
+    if (currentStep > 0) {
+      setCurrentStep(prev => prev - 1);
+      
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-
-      if (data) {
-        setLastWeekAlignment(data);
-      }
-    } catch (error) {
-      console.error('Exception fetching last week alignment:', error);
+    } else {
+      // First step - confirm exit
+      Alert.alert(
+        'Exit Weekly Alignment?',
+        'Your progress will not be saved.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Exit', style: 'destructive', onPress: () => router.back() },
+        ]
+      );
     }
   }
 
-  async function handleCommit() {
-    if (!keystoneFocus.trim()) {
-      Alert.alert('Required', 'Please enter your keystone focus for the week.');
-      return;
-    }
-
+  async function handleComplete(contractData: any) {
     try {
-      setSubmitting(true);
-
       const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Calculate week boundaries
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - dayOfWeek);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      
+      const weekStart = toLocalISOString(startOfWeek).split('T')[0];
+      const weekEnd = toLocalISOString(endOfWeek).split('T')[0];
 
-      if (!user) {
-        Alert.alert('Error', 'You must be logged in to commit Weekly Alignment.');
-        return;
+      // Create or update weekly alignment record
+      const alignmentRecord = {
+        user_id: userId,
+        week_start: weekStart,
+        week_end: weekEnd,
+        keystone_focus: contractData.keystone_focus,
+        committed_tasks: contractData.committed_tasks,
+        committed_events: contractData.committed_events,
+        delegation_reminders: contractData.delegation_reminders,
+        personal_commitment: contractData.personal_commitment,
+        
+        // Captured data from steps
+        mission_reflection: alignmentData.missionReflection,
+        role_health_flags: alignmentData.roleHealthFlags,
+        flagged_wellness_zones: alignmentData.flaggedWellnessZones,
+        lagging_goals: alignmentData.laggingGoals,
+        key_focus_goal: alignmentData.keyFocusGoal,
+        
+        signed_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      };
+
+      if (existingAlignment) {
+        await supabase
+          .from('0008-ap-weekly-alignments')
+          .update(alignmentRecord)
+          .eq('id', existingAlignment.id);
+      } else {
+        await supabase
+          .from('0008-ap-weekly-alignments')
+          .insert(alignmentRecord);
       }
 
-      const { data, error } = await supabase
-        .from('0008-ap-weekly-alignments')
-        .insert({
-          user_id: user.id,
-          week_start_date: weekBounds.weekStart,
-          week_end_date: weekBounds.weekEnd,
-          keystone_focus: keystoneFocus.trim(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating weekly alignment:', error);
-        Alert.alert('Error', 'Failed to save Weekly Alignment. Please try again.');
-        return;
-      }
-
-      console.log(`[Weekly Alignment] Awarded ${points} points (Bonus window: ${bonusWindow})`);
+      // Track items created during ritual
+      // (tasks, ideas, reflections would be tracked via 0008-ap-ritual-items)
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 1.2,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      setCompletedAlignment(data);
+      // Show completion animation
       setIsCompleted(true);
+      Animated.spring(completionAnimation, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }).start();
+
+      // Auto redirect after delay
+      setTimeout(() => {
+        router.replace('/(tabs)/dashboard');
+      }, 3000);
+
     } catch (error) {
-      console.error('Exception submitting weekly alignment:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-    } finally {
-      setSubmitting(false);
+      console.error('Error completing weekly alignment:', error);
+      Alert.alert('Error', 'Failed to save your weekly alignment. Please try again.');
     }
+  }
+
+  async function handleDevReset() {
+    Alert.alert(
+      'Reset Weekly Alignment?',
+      'This will delete this week\'s alignment and let you start fresh. (Dev only)',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const supabase = getSupabaseClient();
+              const today = new Date();
+              const dayOfWeek = today.getDay();
+              const startOfWeek = new Date(today);
+              startOfWeek.setDate(today.getDate() - dayOfWeek);
+              const weekStart = toLocalISOString(startOfWeek).split('T')[0];
+              
+              await supabase
+                .from('0008-ap-weekly-alignments')
+                .delete()
+                .eq('user_id', userId)
+                .eq('week_start', weekStart);
+              
+              Alert.alert('Success', 'Weekly Alignment reset!');
+              setCurrentStep(0);
+              setAlignmentData({});
+              setExistingAlignment(null);
+            } catch (error) {
+              console.error('Reset error:', error);
+              Alert.alert('Error', 'Failed to reset. Try again.');
+            }
+          },
+        },
+      ]
+    );
   }
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.text }]}>Loading Weekly Alignment...</Text>
+          <Compass size={48} color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 16 }} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Preparing your weekly alignment...
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (isCompleted && completedAlignment) {
+  // Completion Screen
+  if (isCompleted) {
+    const scale = completionAnimation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.5, 1],
+    });
+
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-            accessible={true}
-            accessibilityLabel="Go back"
-          >
-            <ArrowLeft size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Weekly Alignment</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-          <Animated.View style={[styles.completedCard, { opacity: fadeAnim }]}>
-            <View style={styles.successIconContainer}>
-              <CheckCircle2 size={80} color={colors.primary} />
-            </View>
-
-            <Text style={[styles.completedTitle, { color: colors.text }]}>
-              Committed!
-            </Text>
-
-            <Text style={[styles.weekRange, { color: colors.textSecondary }]}>
-              {formatWeekRange(completedAlignment.week_start_date, completedAlignment.week_end_date)}
-            </Text>
-
-            <View style={[styles.focusCard, { backgroundColor: isDarkMode ? colors.card : '#F9FAFB' }]}>
-              <View style={styles.focusHeader}>
-                <Target size={24} color={colors.primary} />
-                <Text style={[styles.focusLabel, { color: colors.textSecondary }]}>
-                  Your Keystone Focus
-                </Text>
-              </View>
-              <Text style={[styles.focusText, { color: colors.text }]}>
-                {completedAlignment.keystone_focus}
-              </Text>
-            </View>
-
-            {completedAlignment.execution_score !== null && (
-              <View style={[styles.scoreCard, { backgroundColor: isDarkMode ? colors.card : '#F9FAFB' }]}>
-                <TrendingUp size={20} color={colors.primary} />
-                <Text style={[styles.scoreLabel, { color: colors.textSecondary }]}>
-                  Execution Score
-                </Text>
-                <Text style={[styles.scoreValue, { color: colors.text }]}>
-                  {completedAlignment.execution_score}%
-                </Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={[styles.doneButton, { backgroundColor: colors.primary }]}
-              onPress={() => router.push('/(tabs)/dashboard')}
-            >
-              <Text style={styles.doneButtonText}>Return to Dashboard</Text>
-            </TouchableOpacity>
+        <View style={styles.completionContainer}>
+          <Animated.View style={[styles.completionIcon, { transform: [{ scale }] }]}>
+            <CheckCircle2 size={80} color="#10B981" />
           </Animated.View>
-        </ScrollView>
+          
+          <Text style={[styles.completionTitle, { color: colors.text }]}>
+            Weekly Contract Signed! ✨
+          </Text>
+          
+          <Text style={[styles.completionSubtitle, { color: colors.textSecondary }]}>
+            You're aligned and ready to conquer this week.
+          </Text>
+
+          <View style={[styles.completionCard, { backgroundColor: colors.surface, borderColor: '#10B981' }]}>
+            <Text style={[styles.completionKeystoneLabel, { color: colors.textSecondary }]}>
+              Your Keystone Focus:
+            </Text>
+            <Text style={[styles.completionKeystone, { color: colors.text }]}>
+              "{alignmentData.keystoneFocus || 'Make this week count'}"
+            </Text>
+          </View>
+
+          <Text style={[styles.redirectText, { color: colors.textSecondary }]}>
+            Redirecting to dashboard...
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
 
+  const currentStepData = STEPS[currentStep];
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={goToPreviousStep}
           style={styles.backButton}
           accessible={true}
-          accessibilityLabel="Go back"
+          accessibilityLabel={currentStep === 0 ? "Exit" : "Go back"}
         >
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Weekly Alignment</Text>
-        <View style={{ width: 40 }} />
+
+        <View style={styles.headerCenter}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            Weekly Alignment
+          </Text>
+          <StepIndicatorCompact
+            currentStep={currentStep}
+            totalSteps={STEPS.length}
+            activeColor={currentStepData.color}
+          />
+        </View>
+
+        {/* Dev Reset Button */}
+        <TouchableOpacity
+          onPress={handleDevReset}
+          style={styles.resetButton}
+        >
+          <Trash2 size={20} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <View style={styles.weekRangeContainer}>
-          <Calendar size={20} color={colors.textSecondary} />
-          <Text style={[styles.weekRangeText, { color: colors.textSecondary }]}>
-            {formatWeekRange(weekBounds.weekStart, weekBounds.weekEnd)}
-          </Text>
-        </View>
-
-        <View style={[styles.pointsBanner, { backgroundColor: bonusWindow ? '#ECFDF5' : '#F3F4F6' }]}>
-          <View style={styles.pointsBannerContent}>
-            <Text style={{ fontSize: 24, marginRight: 8 }}>
-              {bonusWindow ? '⭐' : '⏰'}
-            </Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.pointsBannerTitle, { color: bonusWindow ? '#10B981' : '#6B7280' }]}>
-                {bonusWindow ? 'Bonus Window Active!' : 'Outside Bonus Window'}
-              </Text>
-              <Text style={[styles.pointsBannerSubtitle, { color: bonusWindow ? '#059669' : '#4B5563' }]}>
-                Complete now for +{points} points
-              </Text>
-            </View>
-          </View>
-          <Text style={[styles.windowInfo, { color: bonusWindow ? '#059669' : '#6B7280' }]}>
-            Bonus window: Friday 12:00 AM - Monday 11:59 PM
-          </Text>
-          {userPreferredDay && (
-            <Text style={[styles.preferenceInfo, { color: colors.textSecondary }]}>
-              Your planning day: {userPreferredDay}
-            </Text>
-          )}
-        </View>
-
-        {lastWeekAlignment ? (
-          <View style={[styles.lastWeekSection, { backgroundColor: isDarkMode ? colors.card : '#F9FAFB' }]}>
-            <Text style={[styles.lastWeekTitle, { color: colors.text }]}>
-              Last Week's Performance
-            </Text>
-
-            <View style={styles.lastWeekContent}>
-              <Text style={[styles.lastWeekLabel, { color: colors.textSecondary }]}>
-                Keystone Focus
-              </Text>
-              <Text style={[styles.lastWeekValue, { color: colors.text }]}>
-                {lastWeekAlignment.keystone_focus}
-              </Text>
-
-              {lastWeekAlignment.execution_score !== null && (
-                <>
-                  <Text style={[styles.lastWeekLabel, { color: colors.textSecondary, marginTop: 12 }]}>
-                    Execution Score
-                  </Text>
-                  <Text style={[styles.lastWeekValue, { color: colors.text }]}>
-                    {lastWeekAlignment.execution_score}%
-                  </Text>
-                </>
-              )}
-
-              {lastWeekAlignment.keystone_achieved !== null && (
-                <>
-                  <Text style={[styles.lastWeekLabel, { color: colors.textSecondary, marginTop: 12 }]}>
-                    Achieved
-                  </Text>
-                  <Text
-                    style={[
-                      styles.lastWeekValue,
-                      { color: lastWeekAlignment.keystone_achieved ? '#10B981' : '#EF4444' },
-                    ]}
-                  >
-                    {lastWeekAlignment.keystone_achieved ? 'Yes' : 'No'}
-                  </Text>
-                </>
-              )}
-            </View>
-          </View>
-        ) : (
-          <View style={[styles.lastWeekSection, { backgroundColor: isDarkMode ? colors.card : '#F9FAFB' }]}>
-            <Text style={[styles.lastWeekTitle, { color: colors.text }]}>
-              Last Week's Performance
-            </Text>
-            <Text style={[styles.noDataText, { color: colors.textSecondary }]}>
-              No data from last week. Let's start fresh!
-            </Text>
-          </View>
+      {/* Step Content */}
+      <View style={styles.stepContent}>
+        {currentStep === 0 && (
+          <TouchYourStarStep
+            userId={userId}
+            colors={colors}
+            onNext={goToNextStep}
+            onDataCapture={(data) => handleStepDataCapture(data)}
+          />
         )}
 
-        <View style={styles.focusSection}>
-          <Text style={[styles.focusHeading, { color: colors.text }]}>
-            What's your ONE keystone focus this week?
-          </Text>
-
-          <TextInput
-            style={[
-              styles.focusInput,
-              {
-                backgroundColor: isDarkMode ? colors.card : '#F9FAFB',
-                color: colors.text,
-                borderColor: colors.primary,
-              },
-            ]}
-            placeholder="e.g., 'No Sugar', 'Sleep 8 Hours', 'Daily Walk', 'Launch Feature'"
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            numberOfLines={3}
-            value={keystoneFocus}
-            onChangeText={setKeystoneFocus}
-            textAlignVertical="top"
+        {currentStep === 1 && (
+          <WingCheckRolesStep
+            userId={userId}
+            colors={colors}
+            onNext={goToNextStep}
+            onBack={goToPreviousStep}
+            onDataCapture={(data) => handleStepDataCapture(data)}
           />
+        )}
 
-          <View style={styles.examplesContainer}>
-            <Text style={[styles.exampleText, { color: colors.textSecondary }]}>
-              One word or habit
-            </Text>
-            <Text style={[styles.exampleText, { color: colors.textSecondary }]}>
-              The constraint that unlocks everything else
-            </Text>
-          </View>
-        </View>
+        {currentStep === 2 && (
+          <WingCheckWellnessStep
+            userId={userId}
+            colors={colors}
+            onNext={goToNextStep}
+            onBack={goToPreviousStep}
+            onDataCapture={(data) => handleStepDataCapture(data)}
+          />
+        )}
 
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <TouchableOpacity
-            style={[
-              styles.commitButton,
-              { backgroundColor: colors.primary },
-              submitting && styles.commitButtonDisabled,
-            ]}
-            onPress={handleCommit}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Target size={20} color="#FFFFFF" />
-                <Text style={styles.commitButtonText}>Commit to the Week</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </Animated.View>
-      </ScrollView>
+        {currentStep === 3 && (
+          <SixCheckStep
+            userId={userId}
+            colors={colors}
+            onNext={goToNextStep}
+            onBack={goToPreviousStep}
+            onDataCapture={(data) => handleStepDataCapture(data)}
+          />
+        )}
+
+        {currentStep === 4 && (
+          <TacticalDeploymentStep
+            userId={userId}
+            colors={colors}
+            onComplete={handleComplete}
+            onBack={goToPreviousStep}
+            capturedData={{
+              missionReflection: alignmentData.missionReflection,
+              roleHealthFlags: alignmentData.roleHealthFlags,
+              flaggedWellnessZones: alignmentData.flaggedWellnessZones,
+              laggingGoals: alignmentData.laggingGoals,
+              keyFocusGoal: alignmentData.keyFocusGoal,
+            }}
+          />
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -502,10 +424,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 40,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -517,186 +441,65 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    width: 44,
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 8,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  content: {
+  resetButton: {
+    padding: 8,
+    width: 44,
+    alignItems: 'flex-end',
+  },
+  stepContent: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 16,
-  },
-  weekRangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  completionContainer: {
+    flex: 1,
     justifyContent: 'center',
-    gap: 8,
-    marginBottom: 24,
-  },
-  weekRangeText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  lastWeekSection: {
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 24,
-  },
-  lastWeekTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  lastWeekContent: {
-    gap: 4,
-  },
-  lastWeekLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  lastWeekValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  noDataText: {
-    fontSize: 15,
-    fontStyle: 'italic',
-  },
-  focusSection: {
-    marginBottom: 24,
-  },
-  focusHeading: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 16,
-    lineHeight: 32,
-  },
-  focusInput: {
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 18,
-    minHeight: 100,
-    fontWeight: '500',
-  },
-  examplesContainer: {
-    marginTop: 12,
-    gap: 4,
-  },
-  exampleText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  commitButton: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 12,
-    gap: 8,
+    padding: 32,
   },
-  commitButtonDisabled: {
-    opacity: 0.6,
-  },
-  commitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  completedCard: {
-    alignItems: 'center',
-  },
-  successIconContainer: {
+  completionIcon: {
     marginBottom: 24,
   },
-  completedTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    marginBottom: 8,
+  completionTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
   },
-  weekRange: {
+  completionSubtitle: {
     fontSize: 16,
+    textAlign: 'center',
     marginBottom: 32,
   },
-  focusCard: {
-    width: '100%',
+  completionCard: {
     padding: 24,
     borderRadius: 16,
-    marginBottom: 20,
-  },
-  focusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  focusLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  focusText: {
-    fontSize: 22,
-    fontWeight: '700',
-    lineHeight: 30,
-  },
-  scoreCard: {
+    borderWidth: 2,
     width: '100%',
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 20,
-    borderRadius: 12,
     marginBottom: 32,
   },
-  scoreLabel: {
+  completionKeystoneLabel: {
     fontSize: 14,
-    fontWeight: '600',
-  },
-  scoreValue: {
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  doneButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-  },
-  doneButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  pointsBanner: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-  },
-  pointsBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: 8,
   },
-  pointsBannerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  pointsBannerSubtitle: {
-    fontSize: 14,
+  completionKeystone: {
+    fontSize: 18,
     fontWeight: '600',
-    marginTop: 2,
-  },
-  windowInfo: {
-    fontSize: 13,
-    marginTop: 4,
+    textAlign: 'center',
     fontStyle: 'italic',
   },
-  preferenceInfo: {
-    fontSize: 13,
-    marginTop: 4,
+  redirectText: {
+    fontSize: 14,
+    fontStyle: 'italic',
   },
 });
