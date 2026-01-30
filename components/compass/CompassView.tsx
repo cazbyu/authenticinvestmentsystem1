@@ -40,7 +40,7 @@ export function CompassView() {
       <AspirationalQuote /> 
       <View style={styles.compassWrapper}>
         <LifeCompass
-          size={320}
+          size={304}
           onTaskFormOpen={handleTaskFormOpen}
           onJournalFormOpen={handleJournalFormOpen}
         />
@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 1,
-    paddingBottom: 10,
-    minHeight: 400,
+    paddingTop: 0,
+    paddingBottom: 20,
+    minHeight: 350,
   },
 });
