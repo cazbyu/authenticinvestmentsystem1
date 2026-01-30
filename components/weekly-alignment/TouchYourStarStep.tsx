@@ -91,6 +91,7 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   }, []);
 
   // Track question shown
+  // Track question shown
   useEffect(() => {
     if (flowState === 'guided-questions' && questions.length > 0 && questions[currentQuestionIndex]) {
       const q = questions[currentQuestionIndex];
@@ -106,6 +107,20 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
       questionStartTime.current = Date.now();
     }
   }, [flowState, currentQuestionIndex, questions, userId]);
+
+  // Generate AI suggestions when entering synthesis
+  useEffect(() => {
+    if (flowState === 'synthesis' && responses.length > 0 && aiSuggestions.length === 0) {
+      setLoadingSuggestions(true);
+      generateAIMissionSuggestions()
+        .then(suggestions => {
+          setAiSuggestions(suggestions);
+        })
+        .finally(() => {
+          setLoadingSuggestions(false);
+        });
+    }
+  }, [flowState]);
 
   async function loadInitialData() {
     try {
