@@ -38,6 +38,7 @@ interface Domain {
   id: string;
   name: string;
   description?: string;
+  icon?: string;
 }
 
 export default function Wellness() {
