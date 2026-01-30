@@ -37,7 +37,7 @@ export function CompassView() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* <AspirationalQuote /> */}
+      <AspirationalQuote /> 
       <View style={styles.compassWrapper}>
         <LifeCompass
           size={320}
