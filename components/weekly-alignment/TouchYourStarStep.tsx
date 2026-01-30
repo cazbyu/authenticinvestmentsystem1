@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
-import { Star, ChevronRight, Sparkles } from 'lucide-react-native';
+import { ChevronRight, Sparkles } from 'lucide-react-native';
+import { MiniCompass } from '@/components/compass/MiniCompass';
 import { getSupabaseClient } from '@/lib/supabase';
 
 interface TouchYourStarStepProps {
