@@ -1616,6 +1616,36 @@ const styles = StyleSheet.create({
       color: 'white',
       fontSize: 18,
       fontWeight: 'bold',
+
+ritualIconsRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 12,
+  paddingHorizontal: 16,
+  paddingVertical: 12,
+},
+ritualIcon: {
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  alignItems: 'center',
+  justifyContent: 'center',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.15,
+  shadowRadius: 2,
+  elevation: 2,
+},
+devResetLink: {
+  marginLeft: 'auto',
+  padding: 8,
+},
+devResetLinkText: {
+  fontSize: 12,
+  color: '#9CA3AF',
+  textDecorationLine: 'underline',
+},
+      
     },
     devResetButton: {
       marginTop: 8,
