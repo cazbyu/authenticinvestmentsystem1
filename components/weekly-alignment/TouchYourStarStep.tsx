@@ -948,7 +948,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
 
   // Synthesis Screen
   if (flowState === 'synthesis') {
-    const suggestions = generateMissionSuggestions();
+   const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateMissionSuggestions();
 
     return (
       <KeyboardAvoidingView
