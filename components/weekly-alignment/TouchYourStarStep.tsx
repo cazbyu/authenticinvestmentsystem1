@@ -494,11 +494,13 @@ const questionStartTime = React.useRef<number>(Date.now());
 
             <TouchableOpacity
               style={[styles.editOption, { borderColor: colors.border }]}
-              onPress={() => {
+              onPress={async () => {
                 setShowEditOptions(false);
                 setCurrentQuestionIndex(0);
-                setResponses([]);
                 setCurrentAnswer('');
+                
+                // Reload to get NEW questions (excluding answered ones)
+                await loadInitialData();
                 setFlowState('guided-questions');
               }}
             >
