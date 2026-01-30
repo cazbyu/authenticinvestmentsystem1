@@ -831,6 +831,13 @@ const questionStartTime = React.useRef<number>(Date.now());
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[styles.skipButton, { borderColor: colors.border }]}
+              onPress={handleSkipQuestion}
+            >
+              <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>Skip</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[
                 styles.saveButton,
                 { backgroundColor: currentAnswer.trim() ? '#ed1c24' : '#ccc' },
