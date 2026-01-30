@@ -79,7 +79,8 @@ const styles = StyleSheet.create({
   compassWrapper: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 16,
     paddingBottom: 60,
     minHeight: 400,
   },
