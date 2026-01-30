@@ -1,11 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Heart } from 'lucide-react-native';
+import { WellnessIcon } from '@/components/icons/WellnessIcon';
 
 interface Domain {
   id: string;
   name: string;
   description?: string;
+  icon?: string;
 }
 
 interface DomainCardProps {
@@ -24,7 +25,11 @@ export function DomainCard({ domain, onPress, color }: DomainCardProps) {
       >
         <View style={styles.content}>
           <View style={[styles.iconContainer, { backgroundColor: color + '20' }]}>
-            <Heart size={32} color={color} />
+            <WellnessIcon 
+              name={domain.icon || domain.name} 
+              color={color} 
+              size={32} 
+            />
           </View>
           <Text style={styles.title}>{domain.name}</Text>
         </View>
@@ -36,7 +41,7 @@ export function DomainCard({ domain, onPress, color }: DomainCardProps) {
 const styles = StyleSheet.create({
   cardWrapper: {
     position: 'relative',
-    width: '23%',
+    width: '48%',
     minWidth: 140,
   },
   card: {
