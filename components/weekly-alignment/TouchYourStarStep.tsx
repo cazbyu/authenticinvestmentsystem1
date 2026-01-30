@@ -424,9 +424,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
     }
   }
 
-  function generateMissionSuggestions(): string[] {
-  
-  function generateMissionSuggestions(): string[] {
+    function generateMissionSuggestions(): string[] {
     if (responses.length < 2) {
       return [
         'To live with intention and make a positive impact on those around me.',
