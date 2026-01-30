@@ -1,4 +1,3 @@
-// hooks/useAttentionState.ts
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate } from '@/lib/dateUtils';
