@@ -1154,7 +1154,7 @@ const renderDashboardTabs = () => (
 
         <View style={styles.content} pointerEvents="box-none">
 
-  *{activeTab === 'home' && (
+  {activeTab === 'home' && (
   <>
     {/* Ritual Icons Row - Left aligned under subheader */}
     <View style={styles.ritualIconsRow}>
