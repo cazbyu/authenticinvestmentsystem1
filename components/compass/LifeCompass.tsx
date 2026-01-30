@@ -955,10 +955,11 @@ const checkNeedsAttention = useCallback(async () => {
 </GestureDetector>
 
 
-        <View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }]}>
+         <View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }]}>
           <SpindleGold
             angle={compassState.bigSpindleAngle}
             size={responsiveSize}
+            continuousSpin={needsAttention}
             onSnapComplete={handleGoldSpindleSnap}
           />
         </View>
@@ -968,6 +969,7 @@ const checkNeedsAttention = useCallback(async () => {
             angle={compassState.smallSpindleAngle}
             size={responsiveSize}
             animated={!compassState.isSpinning}
+            continuousSpin={needsAttention}
             onAngleChange={handleSilverSpindleChange}
           />
         </View>
