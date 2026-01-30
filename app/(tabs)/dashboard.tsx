@@ -1598,24 +1598,6 @@ const styles = StyleSheet.create({
     goalsList: {
       gap: 12,
     },
-    ritualButton: {
-      backgroundColor: '#EF4444',
-      padding: 20,
-      borderRadius: 12,
-      alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    ritualButtonText: {
-      color: 'white',
-      fontSize: 18,
-      fontWeight: 'bold',
 
 ritualIconsRow: {
   flexDirection: 'row',
@@ -1646,22 +1628,6 @@ devResetLinkText: {
   textDecorationLine: 'underline',
 },
       
-    },
-    devResetButton: {
-      marginTop: 8,
-      padding: 12,
-      backgroundColor: '#fff',
-      borderRadius: 8,
-      borderWidth: 2,
-      borderColor: '#EF4444',
-      borderStyle: 'dashed',
-      alignItems: 'center',
-    },
-    devResetText: {
-      color: '#EF4444',
-      fontSize: 14,
-      fontWeight: '600',
-    },
     subHeaderContainer: {
       backgroundColor: '#f8fafc',
       paddingHorizontal: 16,
