@@ -282,6 +282,29 @@ const questionStartTime = React.useRef<number>(Date.now());
     }
   }
 
+function handleSkipQuestion() {
+    const currentQuestion = questions[currentQuestionIndex];
+    const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
+    
+    // Track the skip
+    trackQuestionSkipped(
+      userId,
+      currentQuestion.id,
+      currentQuestion.question_text,
+      'onboarding',
+      timeSpent,
+      'mission'
+    );
+    
+    // Move to next question or synthesis
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setCurrentAnswer('');
+    } else {
+      setFlowState('synthesis');
+    }
+  }
+  
   function handleNextQuestion() {
   if (!currentAnswer.trim()) return;
 
