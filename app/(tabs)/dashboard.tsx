@@ -40,7 +40,7 @@ type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
-const { headerColor } = useHeaderColor();
+const { showOnboardingArrow } = useAttentionState();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('home');
