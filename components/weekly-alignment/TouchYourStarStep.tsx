@@ -392,6 +392,25 @@ function handleSkipQuestion() {
   onNext();
 }
 
+async function generateAIMissionSuggestions(): Promise<string[]> {
+    try {
+      const supabase = getSupabaseClient();
+      
+      const { data, error } = await supabase.functions.invoke('generate-mission', {
+        body: { responses },
+      });
+
+      if (error) throw error;
+      
+      return data.suggestions || [];
+    } catch (error) {
+      console.error('AI generation failed, using fallback:', error);
+      return generateMissionSuggestions();
+    }
+  }
+
+  function generateMissionSuggestions(): string[] {
+  
   function generateMissionSuggestions(): string[] {
     if (responses.length < 2) {
       return [
