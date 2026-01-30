@@ -60,8 +60,8 @@ export function AspirationalQuote() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 20,
-    paddingBottom: 24,
+    paddingTop: 8,
+    paddingBottom: 8,
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
