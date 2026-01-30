@@ -1604,7 +1604,8 @@ ritualIconsRow: {
   alignItems: 'center',
   gap: 12,
   paddingHorizontal: 16,
-  paddingVertical: 12,
+  paddingTop: 8,
+  paddingBottom: 0,
 },
 ritualIcon: {
   width: 44,
