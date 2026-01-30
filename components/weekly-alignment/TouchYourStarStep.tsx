@@ -119,12 +119,19 @@ export function TouchYourStarStep({
     >
       {/* Header Section */}
       <View style={styles.headerSection}>
-        <View style={[styles.iconCircle, { backgroundColor: '#ed1c2420' }]}>
-          <Star size={40} color="#ed1c24" fill="#ed1c24" />
+        <View style={styles.headerRow}>
+          <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
+            <MiniCompass size={56} />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>
+              Step 1
+            </Text>
+            <Text style={[styles.stepTitle, { color: colors.text }]}>
+              Touch Your Star
+            </Text>
+          </View>
         </View>
-        <Text style={[styles.stepTitle, { color: colors.text }]}>
-          Touch Your Star
-        </Text>
         <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
           Reconnect with your guiding purpose
         </Text>
