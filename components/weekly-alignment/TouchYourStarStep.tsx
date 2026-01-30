@@ -166,7 +166,7 @@ const questionStartTime = React.useRef<number>(Date.now());
       const { data: existingResponses } = await supabase
         .from('0008-ap-question-responses')
         .select('question_id, response_text, created_at')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('domain', 'mission')
         .eq('context_type', 'onboarding')
         .order('created_at', { ascending: true });
