@@ -73,6 +73,10 @@ export function TouchYourStarStep({
   // Edit WA questions
   const [showEditOptions, setShowEditOptions] = useState(false);
 const questionStartTime = React.useRef<number>(Date.now());
+
+  //AI support
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   
   // Synthesis state
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
