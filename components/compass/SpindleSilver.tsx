@@ -4,8 +4,10 @@ import Animated, {
   useSharedValue,
   useAnimatedProps,
   withTiming,
+  withRepeat,
   Easing,
   runOnJS,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import Svg, { G, Path, Polygon } from 'react-native-svg';
 
@@ -15,11 +17,13 @@ interface SpindleSilverProps {
   angle: number;
   size?: number;
   animated?: boolean;
+  continuousSpin?: boolean;
   onAngleChange?: (angle: number) => void;
 }
 
 const SILVER_COLOR = '#A8A9AD';
 const ANIMATION_DURATION = 300;
+const SPIN_DURATION = 6000; // 6 seconds per full rotation (slower than gold)
 const DEFAULT_ANGLE = 0;
 
 const normalizeAngle = (angle: number): number => {
@@ -29,12 +33,9 @@ const normalizeAngle = (angle: number): number => {
 const calculateShortestPath = (current: number, target: number): number => {
   const currentNormalized = normalizeAngle(current);
   const targetNormalized = normalizeAngle(target);
-
   let diff = targetNormalized - currentNormalized;
-
   if (diff > 180) diff -= 360;
   if (diff < -180) diff += 360;
-
   return current + diff;
 };
 
@@ -42,33 +43,55 @@ export default function SpindleSilver({
   angle,
   size = 288,
   animated = true,
+  continuousSpin = false,
   onAngleChange
 }: SpindleSilverProps) {
   const rotation = useSharedValue(DEFAULT_ANGLE);
 
   useEffect(() => {
-    const targetAngle = calculateShortestPath(rotation.value, angle);
-
-    if (animated) {
-      rotation.value = withTiming(
-        targetAngle,
-        {
-          duration: ANIMATION_DURATION,
-          easing: Easing.out(Easing.cubic),
-        },
-        (finished) => {
-          if (finished && onAngleChange) {
-            runOnJS(onAngleChange)(normalizeAngle(targetAngle));
-          }
-        }
+    if (continuousSpin) {
+      // Continuous counter-clockwise spin
+      rotation.value = withRepeat(
+        withTiming(rotation.value - 360, {
+          duration: SPIN_DURATION,
+          easing: Easing.linear,
+        }),
+        -1, // Infinite repeats
+        false // Don't reverse
       );
     } else {
-      rotation.value = targetAngle;
-      if (onAngleChange) {
-        onAngleChange(normalizeAngle(targetAngle));
+      // Stop any continuous animation
+      cancelAnimation(rotation);
+      
+      const targetAngle = calculateShortestPath(rotation.value, angle);
+      
+      if (animated) {
+        rotation.value = withTiming(
+          targetAngle,
+          {
+            duration: ANIMATION_DURATION,
+            easing: Easing.out(Easing.cubic),
+          },
+          (finished) => {
+            if (finished && onAngleChange) {
+              runOnJS(onAngleChange)(normalizeAngle(targetAngle));
+            }
+          }
+        );
+      } else {
+        rotation.value = targetAngle;
+        if (onAngleChange) {
+          onAngleChange(normalizeAngle(targetAngle));
+        }
       }
     }
-  }, [angle, animated, onAngleChange]);
+
+    return () => {
+      if (continuousSpin) {
+        cancelAnimation(rotation);
+      }
+    };
+  }, [angle, animated, continuousSpin, onAngleChange]);
 
   const animatedProps = useAnimatedProps(() => {
     // Add 180 offset because the SVG path is drawn pointing South
