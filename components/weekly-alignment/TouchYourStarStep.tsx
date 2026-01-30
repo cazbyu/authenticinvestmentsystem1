@@ -134,14 +134,29 @@ const questionStartTime = React.useRef<number>(Date.now());
       };
       setNorthStarData(data);
 
-      // Load mission questions for onboarding
-      const { data: missionQuestions } = await supabase
+      // Get questions user has already answered
+      const { data: answeredQuestions } = await supabase
+        .from('0008-ap-question-responses')
+        .select('question_id')
+        .eq('user_id', user.id)
+        .eq('domain', 'mission');
+      
+      const answeredIds = (answeredQuestions || []).map(q => q.question_id);
+
+      // Load mission questions NOT already answered
+      let questionsQuery = supabase
         .from('0008-ap-user-power-questions')
         .select('id, question_text, question_context')
         .eq('domain', 'mission')
         .eq('show_in_onboarding', true)
-        .eq('is_active', true)
-        .limit(4);
+        .eq('is_active', true);
+      
+      // Exclude already answered questions
+      if (answeredIds.length > 0) {
+        questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
+      }
+      
+      const { data: missionQuestions } = await questionsQuery.limit(4);
 
       if (missionQuestions && missionQuestions.length > 0) {
         setQuestions(missionQuestions);
