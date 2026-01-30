@@ -27,6 +27,7 @@ import CardinalIcons from './CardinalIcons';
 import SparkQuestionModal from './SparkQuestionModal';
 import { injectPromptVariables } from '@/lib/promptInjection';
 import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
+import { useAttentionState } from '@/hooks/useAttentionState';
 
 interface LifeCompassProps {
   size?: number;
