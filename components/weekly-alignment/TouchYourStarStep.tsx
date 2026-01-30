@@ -279,19 +279,34 @@ const questionStartTime = React.useRef<number>(Date.now());
   }
 
   function handleSaveAndComeBack() {
-    // Save current answer if there is one
-    if (currentAnswer.trim() && questions[currentQuestionIndex]) {
-      saveResponse(questions[currentQuestionIndex].id, currentAnswer.trim());
-    }
-    
-    // Capture partial progress and continue
-    onDataCapture({
-      missionReflection: undefined,
-      visionAcknowledged: false,
-      valuesAcknowledged: false,
-    });
-    onNext();
+  const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
+  
+  // Track as skipped if they had a current question
+  if (questions[currentQuestionIndex]) {
+    const q = questions[currentQuestionIndex];
+    trackQuestionSkipped(
+      userId,
+      q.id,
+      q.question_text,
+      'onboarding',
+      timeSpent,
+      'mission'
+    );
   }
+  
+  // Save current answer if there is one
+  if (currentAnswer.trim() && questions[currentQuestionIndex]) {
+    saveResponse(questions[currentQuestionIndex].id, currentAnswer.trim());
+  }
+  
+  // Capture partial progress and continue
+  onDataCapture({
+    missionReflection: undefined,
+    visionAcknowledged: false,
+    valuesAcknowledged: false,
+  });
+  onNext();
+}
 
   function generateMissionSuggestions(): string[] {
     // Generate simple suggestions based on responses
@@ -1293,6 +1308,60 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+
+// Card header row with edit
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  editLink: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Edit Modal
+  editModal: {
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  editModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  editOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 12,
+  },
+  editOptionText: {
+    flex: 1,
+  },
+  editOptionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  editOptionDesc: {
+    fontSize: 13,
+  },
+  editCancelButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  editCancelText: {
+    fontSize: 15,
+  },
+  
 });
 
 export default TouchYourStarStep;
