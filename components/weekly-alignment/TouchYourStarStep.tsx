@@ -300,9 +300,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   stepTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
-    marginBottom: 8,
   },
   stepSubtitle: {
     fontSize: 16,
