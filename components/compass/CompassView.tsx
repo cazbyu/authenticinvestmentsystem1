@@ -40,7 +40,7 @@ export function CompassView() {
       <AspirationalQuote /> 
       <View style={styles.compassWrapper}>
         <LifeCompass
-          size={298}
+          size={300}
           onTaskFormOpen={handleTaskFormOpen}
           onJournalFormOpen={handleJournalFormOpen}
         />
