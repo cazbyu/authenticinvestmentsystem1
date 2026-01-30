@@ -619,7 +619,11 @@ const questionStartTime = React.useRef<number>(Date.now());
 
             <TouchableOpacity
               style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-              onPress={() => setFlowState('guided-questions')}
+              onPress={async () => {
+                // Reload to ensure we have fresh unanswered questions
+                await loadInitialData();
+                setFlowState('guided-questions');
+              }}
               activeOpacity={0.8}
             >
               <Lightbulb size={20} color="#FFFFFF" />
