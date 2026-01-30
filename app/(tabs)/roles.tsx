@@ -43,6 +43,7 @@ interface Role {
   category?: string;
   image_path?: string;
   color?: string;
+  icon?: string;
 }
 
 interface KeyRelationship {
