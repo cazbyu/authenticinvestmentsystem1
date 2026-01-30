@@ -1154,38 +1154,44 @@ const renderDashboardTabs = () => (
 
         <View style={styles.content} pointerEvents="box-none">
 
-  {activeTab === 'home' && (
+  *{activeTab === 'home' && (
   <>
     {/* Ritual Icons Row - Left aligned under subheader */}
     <View style={styles.ritualIconsRow}>
+      {showWeeklyAlignment && (
+        <Animated.View style={{ transform: [{ scale: alignmentAnimation }] }}>
+          <TouchableOpacity
+            onPress={() => router.push('/weekly-alignment')}
+            style={[styles.ritualIcon, { backgroundColor: '#D1FAE5' }]}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 24 }}>🎯</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {showMorningSpark && (
-        <TouchableOpacity
-          onPress={() => router.push('/morning-spark')}
-          style={[styles.ritualIcon, { backgroundColor: '#FEE2E2' }]}
-          activeOpacity={0.7}
-        >
-          <Text style={{ fontSize: 24 }}>🔥</Text>
-        </TouchableOpacity>
+        <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
+          <TouchableOpacity
+            onPress={() => router.push('/morning-spark')}
+            style={[styles.ritualIcon, { backgroundColor: '#FEE2E2' }]}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 24 }}>🔥</Text>
+          </TouchableOpacity>
+        </Animated.View>
       )}
 
       {showEveningReview && (
-        <TouchableOpacity
-          onPress={() => router.push('/evening-review')}
-          style={[styles.ritualIcon, { backgroundColor: '#EDE9FE' }]}
-          activeOpacity={0.7}
-        >
-          <Text style={{ fontSize: 24 }}>🌙</Text>
-        </TouchableOpacity>
-      )}
-
-      {showWeeklyAlignment && (
-        <TouchableOpacity
-          onPress={() => router.push('/weekly-alignment')}
-          style={[styles.ritualIcon, { backgroundColor: '#D1FAE5' }]}
-          activeOpacity={0.7}
-        >
-          <Text style={{ fontSize: 24 }}>🎯</Text>
-        </TouchableOpacity>
+        <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
+          <TouchableOpacity
+            onPress={() => router.push('/evening-review')}
+            style={[styles.ritualIcon, { backgroundColor: '#EDE9FE' }]}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 24 }}>🌙</Text>
+          </TouchableOpacity>
+        </Animated.View>
       )}
 
       {/* Dev Reset - small text link */}
