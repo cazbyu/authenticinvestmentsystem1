@@ -172,8 +172,8 @@ export default function WeeklyAlignmentScreen() {
       // Create or update weekly alignment record
       const alignmentRecord = {
         user_id: userId,
-        week_start: weekStart,
-        week_end: weekEnd,
+        week_start_date: weekStart,
+        week_end_date: weekEnd,
         keystone_focus: contractData.keystone_focus,
         committed_tasks: contractData.committed_tasks,
         committed_events: contractData.committed_events,
