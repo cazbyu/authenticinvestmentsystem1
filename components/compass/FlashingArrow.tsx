@@ -1,4 +1,3 @@
-// components/compass/FlashingArrow.tsx
 import React, { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, {
@@ -26,11 +25,11 @@ export function FlashingArrow({ visible }: FlashingArrowProps) {
           withTiming(0.3, { duration: 400, easing: Easing.inOut(Easing.ease) }),
           withTiming(1, { duration: 400, easing: Easing.inOut(Easing.ease) })
         ),
-        -1, // infinite
+        -1,
         false
       );
 
-      // Subtle bounce/nudge animation pointing left
+      // Subtle bounce pointing left
       translateX.value = withRepeat(
         withSequence(
           withTiming(-4, { duration: 300, easing: Easing.inOut(Easing.ease) }),
