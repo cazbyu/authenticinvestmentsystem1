@@ -103,7 +103,7 @@ export default function WeeklyAlignmentScreen() {
         .from('0008-ap-weekly-alignments')
         .select('*')
         .eq('user_id', user.id)
-        .eq('week_start', weekStart)
+        .eq('week_start_date', weekStart)
         .maybeSingle();
 
       if (existing) {
@@ -251,7 +251,7 @@ export default function WeeklyAlignmentScreen() {
                 .from('0008-ap-weekly-alignments')
                 .delete()
                 .eq('user_id', userId)
-                .eq('week_start', weekStart);
+                .eq('week_start_date', weekStart)
               
               Alert.alert('Success', 'Weekly Alignment reset!');
               setCurrentStep(0);
