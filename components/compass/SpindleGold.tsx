@@ -4,8 +4,10 @@ import Animated, {
   useSharedValue,
   useAnimatedProps,
   withTiming,
+  withRepeat,
   Easing,
   runOnJS,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import Svg, { G, Path, Polygon } from 'react-native-svg';
 
@@ -14,22 +16,22 @@ const AnimatedG = Animated.createAnimatedComponent(G);
 interface SpindleGoldProps {
   angle: number;
   size?: number;
+  continuousSpin?: boolean;
   onSnapComplete?: (direction: 0 | 90 | 180 | 270) => void;
 }
 
 const GOLD_COLOR = '#C9A227';
 const ANIMATION_DURATION = 300;
+const SPIN_DURATION = 4000; // 4 seconds per full rotation
 const CARDINAL_DIRECTIONS = [0, 90, 180, 270] as const;
 
 const snapToCardinal = (angle: number): 0 | 90 | 180 | 270 => {
   const normalized = ((angle % 360) + 360) % 360;
-
   const distances = CARDINAL_DIRECTIONS.map(cardinal => {
     const diff = Math.abs(normalized - cardinal);
     const altDiff = 360 - diff;
     return Math.min(diff, altDiff);
   });
-
   const minIndex = distances.indexOf(Math.min(...distances));
   return CARDINAL_DIRECTIONS[minIndex];
 };
@@ -37,35 +39,53 @@ const snapToCardinal = (angle: number): 0 | 90 | 180 | 270 => {
 export default function SpindleGold({
   angle,
   size = 288,
+  continuousSpin = false,
   onSnapComplete
 }: SpindleGoldProps) {
   const rotation = useSharedValue(0);
-  const scale = size / 288;
 
   useEffect(() => {
-    const targetAngle = snapToCardinal(angle);
-
-    const currentNormalized = ((rotation.value % 360) + 360) % 360;
-    let diff = targetAngle - currentNormalized;
-
-    if (diff > 180) diff -= 360;
-    if (diff < -180) diff += 360;
-
-    const finalRotation = rotation.value + diff;
-
-    rotation.value = withTiming(
-      finalRotation,
-      {
-        duration: ANIMATION_DURATION,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (finished && onSnapComplete) {
-          runOnJS(onSnapComplete)(targetAngle);
+    if (continuousSpin) {
+      // Continuous clockwise spin
+      rotation.value = withRepeat(
+        withTiming(rotation.value + 360, {
+          duration: SPIN_DURATION,
+          easing: Easing.linear,
+        }),
+        -1, // Infinite repeats
+        false // Don't reverse
+      );
+    } else {
+      // Stop any continuous animation and snap to cardinal
+      cancelAnimation(rotation);
+      
+      const targetAngle = snapToCardinal(angle);
+      const currentNormalized = ((rotation.value % 360) + 360) % 360;
+      let diff = targetAngle - currentNormalized;
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      const finalRotation = rotation.value + diff;
+      
+      rotation.value = withTiming(
+        finalRotation,
+        {
+          duration: ANIMATION_DURATION,
+          easing: Easing.out(Easing.cubic),
+        },
+        (finished) => {
+          if (finished && onSnapComplete) {
+            runOnJS(onSnapComplete)(targetAngle);
+          }
         }
+      );
+    }
+
+    return () => {
+      if (continuousSpin) {
+        cancelAnimation(rotation);
       }
-    );
-  }, [angle, onSnapComplete]);
+    };
+  }, [angle, continuousSpin, onSnapComplete]);
 
   const animatedProps = useAnimatedProps(() => {
     return {
