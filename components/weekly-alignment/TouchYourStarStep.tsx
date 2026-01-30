@@ -138,7 +138,7 @@ const questionStartTime = React.useRef<number>(Date.now());
       const { data: answeredQuestions } = await supabase
         .from('0008-ap-question-responses')
         .select('question_id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('domain', 'mission');
       
       const answeredIds = (answeredQuestions || []).map(q => q.question_id);
