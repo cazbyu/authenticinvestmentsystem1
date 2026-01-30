@@ -236,41 +236,53 @@ export default function WeeklyAlignmentScreen() {
   }
 
   async function handleDevReset() {
-    Alert.alert(
-      'Reset Weekly Alignment?',
-      'This will delete this week\'s alignment and let you start fresh. (Dev only)',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const supabase = getSupabaseClient();
-              const today = new Date();
-              const dayOfWeek = today.getDay();
-              const startOfWeek = new Date(today);
-              startOfWeek.setDate(today.getDate() - dayOfWeek);
-              const weekStart = toLocalISOString(startOfWeek).split('T')[0];
-              
-              await supabase
-                .from('0008-ap-weekly-alignments')
-                .delete()
-                .eq('user_id', userId)
-                .eq('week_start_date', weekStart)
-              
-              Alert.alert('Success', 'Weekly Alignment reset!');
-              setCurrentStep(0);
-              setAlignmentData({});
-              setExistingAlignment(null);
-            } catch (error) {
-              console.error('Reset error:', error);
-              Alert.alert('Error', 'Failed to reset. Try again.');
-            }
-          },
-        },
-      ]
-    );
+    const doReset = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - dayOfWeek);
+        const weekStart = toLocalISOString(startOfWeek).split('T')[0];
+        
+        await supabase
+          .from('0008-ap-weekly-alignments')
+          .delete()
+          .eq('user_id', userId)
+          .eq('week_start_date', weekStart);
+        
+        if (Platform.OS === 'web') {
+          window.alert('Weekly Alignment reset!');
+        } else {
+          Alert.alert('Success', 'Weekly Alignment reset!');
+        }
+        setCurrentStep(0);
+        setAlignmentData({});
+        setExistingAlignment(null);
+      } catch (error) {
+        console.error('Reset error:', error);
+        if (Platform.OS === 'web') {
+          window.alert('Failed to reset. Try again.');
+        } else {
+          Alert.alert('Error', 'Failed to reset. Try again.');
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Reset Weekly Alignment?\n\nThis will delete this week\'s alignment and let you start fresh.')) {
+        await doReset();
+      }
+    } else {
+      Alert.alert(
+        'Reset Weekly Alignment?',
+        'This will delete this week\'s alignment and let you start fresh. (Dev only)',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Reset', style: 'destructive', onPress: doReset },
+        ]
+      );
+    }
   }
 
   if (loading) {
