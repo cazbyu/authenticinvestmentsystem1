@@ -14,6 +14,11 @@ import { ChevronRight, ChevronLeft, Edit3, Lightbulb } from 'lucide-react-native
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
+import { 
+  trackQuestionShown, 
+  trackQuestionAnswered, 
+  trackQuestionSkipped 
+} from '@/lib/analytics';
 
 interface TouchYourStarStepProps {
   userId: string;
@@ -64,6 +69,10 @@ export function TouchYourStarStep({
   
   // Direct input state
   const [directMission, setDirectMission] = useState('');
+
+  // Edit WA questions
+  const [showEditOptions, setShowEditOptions] = useState(false);
+const questionStartTime = React.useRef<number>(Date.now());
   
   // Synthesis state
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
