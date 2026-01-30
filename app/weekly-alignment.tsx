@@ -143,14 +143,20 @@ export default function WeeklyAlignmentScreen() {
       }
     } else {
       // First step - confirm exit
-      Alert.alert(
-        'Exit Weekly Alignment?',
-        'Your progress will not be saved.',
-        [
-          { text: 'Stay', style: 'cancel' },
-          { text: 'Exit', style: 'destructive', onPress: () => router.back() },
-        ]
-      );
+      if (Platform.OS === 'web') {
+        if (window.confirm('Exit Weekly Alignment?\n\nYour progress will not be saved.')) {
+          router.back();
+        }
+      } else {
+        Alert.alert(
+          'Exit Weekly Alignment?',
+          'Your progress will not be saved.',
+          [
+            { text: 'Stay', style: 'cancel' },
+            { text: 'Exit', style: 'destructive', onPress: () => router.back() },
+          ]
+        );
+      }
     }
   }
 
