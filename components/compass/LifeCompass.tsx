@@ -166,6 +166,7 @@ export function LifeCompass({
 
   const [focusedDot, setFocusedDot] = useState<number | null>(null);
   const [needsAttention, setNeedsAttention] = useState(false);
+  const [showOnboardingArrow, setShowOnboardingArrow] = useState(false);
   const [hoveredCardinal, setHoveredCardinal] = useState<'north' | 'east' | 'south' | 'west' | null>(null);
   const [sparkSequenceIndex, setSparkSequenceIndex] = useState(0);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
