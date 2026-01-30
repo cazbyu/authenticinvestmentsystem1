@@ -47,8 +47,8 @@ export async function trackTestAction(
 
 // ============ CONTENT ENGAGEMENT ============
 
-type ContentType = 'question' | 'quote' | 'prompt' | 'tip' | 'affirmation';
-type ContentAction = 'shown' | 'answered' | 'skipped' | 'saved' | 'shared' | 'dismissed' | 'expanded' | 'copied';
+type ContentType = 'question' | 'quote' | 'suggestion' | 'link';
+type ContentAction = 'shown' | 'answered' | 'skipped' | 'saved' | 'clicked' | 'copied';
 
 export async function trackContent(
   userId: string,
@@ -67,22 +67,28 @@ export async function trackContent(
     [key: string]: any;
   }
 ) {
-  const supabase = getSupabaseClient();
-  
-  await supabase
-    .from('0008-ap-content-engagement')
-    .insert({
-      user_id: userId,
-      content_type: contentType,
-      content_id: engagementData?.contentId || null,
-      content_text: contentText,
-      context,
-      action,
-      engagement_data: engagementData || {},
-    });
+  try {
+    const supabase = getSupabaseClient();
+    
+    await supabase
+      .from('0008-ap-content-engagement')
+      .insert({
+        user_id: userId,
+        content_type: contentType,
+        content_id: engagementData?.contentId || null,
+        content_text: contentText,
+        context,
+        action,
+        engagement_data: engagementData || {},
+      });
+  } catch (error) {
+    // Silent fail - don't break the app for analytics
+    console.error('Analytics error:', error);
+  }
 }
 
-// Convenience functions
+// ============ QUESTION TRACKING ============
+
 export async function trackQuestionShown(
   userId: string,
   questionId: string,
@@ -122,13 +128,17 @@ export async function trackQuestionSkipped(
   questionId: string,
   questionText: string,
   context: string,
-  timeSpentSeconds: number
+  timeSpentSeconds: number,
+  domain?: string
 ) {
   return trackContent(userId, 'question', questionText, context, 'skipped', {
     contentId: questionId,
     timeSpentSeconds,
+    domain,
   });
 }
+
+// ============ QUOTE TRACKING ============
 
 export async function trackQuoteShown(
   userId: string,
@@ -136,9 +146,7 @@ export async function trackQuoteShown(
   author: string,
   context: string
 ) {
-  return trackContent(userId, 'quote', quoteText, context, 'shown', {
-    author,
-  });
+  return trackContent(userId, 'quote', quoteText, context, 'shown', { author });
 }
 
 export async function trackQuoteSaved(
@@ -147,7 +155,25 @@ export async function trackQuoteSaved(
   author: string,
   context: string
 ) {
-  return trackContent(userId, 'quote', quoteText, context, 'saved', {
-    author,
-  });
+  return trackContent(userId, 'quote', quoteText, context, 'saved', { author });
+}
+
+// ============ LINK TRACKING ============
+
+export async function trackLinkShown(
+  userId: string,
+  linkText: string,
+  url: string,
+  context: string
+) {
+  return trackContent(userId, 'link', linkText, context, 'shown', { url });
+}
+
+export async function trackLinkClicked(
+  userId: string,
+  linkText: string,
+  url: string,
+  context: string
+) {
+  return trackContent(userId, 'link', linkText, context, 'clicked', { url });
 }
