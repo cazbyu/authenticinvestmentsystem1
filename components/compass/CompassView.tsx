@@ -74,7 +74,6 @@ export function CompassView() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    minHeight: 600,
   },
   compassWrapper: {
     flex: 1,
