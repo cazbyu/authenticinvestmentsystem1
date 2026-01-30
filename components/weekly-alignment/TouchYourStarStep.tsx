@@ -387,13 +387,64 @@ const questionStartTime = React.useRef<number>(Date.now());
 
         {/* Mission Card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderRow}>
             <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
+            <TouchableOpacity onPress={() => setShowEditOptions(true)}>
+              <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+            </TouchableOpacity>
           </View>
           <Text style={[styles.statementText, { color: colors.text }]}>
             "{northStarData.mission}"
           </Text>
         </View>
+
+        {/* Edit Options Modal */}
+        {showEditOptions && (
+          <View style={[styles.editModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.editModalTitle, { color: colors.text }]}>
+              How would you like to refine your mission?
+            </Text>
+            
+            <TouchableOpacity
+              style={[styles.editOption, { borderColor: colors.border }]}
+              onPress={() => {
+                setShowEditOptions(false);
+                setDirectMission(northStarData.mission || '');
+                setFlowState('direct-input');
+              }}
+            >
+              <Edit3 size={20} color="#ed1c24" />
+              <View style={styles.editOptionText}>
+                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Edit directly</Text>
+                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>Make changes to your current mission</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.editOption, { borderColor: colors.border }]}
+              onPress={() => {
+                setShowEditOptions(false);
+                setCurrentQuestionIndex(0);
+                setResponses([]);
+                setCurrentAnswer('');
+                setFlowState('guided-questions');
+              }}
+            >
+              <Lightbulb size={20} color="#ed1c24" />
+              <View style={styles.editOptionText}>
+                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Explore with questions</Text>
+                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>Discover deeper clarity through guided reflection</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.editCancelButton}
+              onPress={() => setShowEditOptions(false)}
+            >
+              <Text style={[styles.editCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Vision if exists */}
         {northStarData.vision && (
