@@ -238,30 +238,42 @@ const questionStartTime = React.useRef<number>(Date.now());
   }
 
   function handleNextQuestion() {
-    if (!currentAnswer.trim()) return;
+  if (!currentAnswer.trim()) return;
 
-    const currentQuestion = questions[currentQuestionIndex];
-    
-    // Save response locally
-    const newResponse: QuestionResponse = {
-      questionId: currentQuestion.id,
-      questionText: currentQuestion.question_text,
-      response: currentAnswer.trim(),
-    };
-    
-    setResponses(prev => [...prev, newResponse]);
-    
-    // Save to database
-    saveResponse(currentQuestion.id, currentAnswer.trim());
-    
-    // Move to next question or synthesis
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
-      setCurrentAnswer('');
-    } else {
-      setFlowState('synthesis');
-    }
+  const currentQuestion = questions[currentQuestionIndex];
+  const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
+  
+  // Track the answer
+  trackQuestionAnswered(
+    userId,
+    currentQuestion.id,
+    currentQuestion.question_text,
+    'onboarding',
+    currentAnswer.trim().length,
+    timeSpent,
+    'mission'
+  );
+  
+  // Save response locally
+  const newResponse: QuestionResponse = {
+    questionId: currentQuestion.id,
+    questionText: currentQuestion.question_text,
+    response: currentAnswer.trim(),
+  };
+  
+  setResponses(prev => [...prev, newResponse]);
+  
+  // Save to database
+  saveResponse(currentQuestion.id, currentAnswer.trim());
+  
+  // Move to next question or synthesis
+  if (currentQuestionIndex < questions.length - 1) {
+    setCurrentQuestionIndex(prev => prev + 1);
+    setCurrentAnswer('');
+  } else {
+    setFlowState('synthesis');
   }
+}
 
   function handlePreviousQuestion() {
     if (currentQuestionIndex > 0) {
