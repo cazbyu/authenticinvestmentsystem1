@@ -997,7 +997,14 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
               Based on your answers, here are some mission ideas:
             </Text>
             
-            {suggestions.map((suggestion, index) => (
+            {loadingSuggestions ? (
+              <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                <ActivityIndicator size="small" color="#ed1c24" />
+                <Text style={{ color: colors.textSecondary, marginTop: 12, fontStyle: 'italic' }}>
+                  Crafting personalized suggestions...
+                </Text>
+              </View>
+            ) : suggestions.map((suggestion, index) => (
               <TouchableOpacity
                 key={index}
                 style={[
