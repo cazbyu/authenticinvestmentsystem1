@@ -162,4 +162,52 @@ const styles = StyleSheet.create({
   },
 });
 
+// Compact version for header display
+interface StepIndicatorCompactProps {
+  currentStep: number;
+  totalSteps: number;
+  activeColor?: string;
+}
+
+export function StepIndicatorCompact({
+  currentStep,
+  totalSteps,
+  activeColor = '#0078d4',
+}: StepIndicatorCompactProps) {
+  return (
+    <View style={compactStyles.container}>
+      {Array.from({ length: totalSteps }).map((_, index) => {
+        const isCompleted = index < currentStep;
+        const isCurrent = index === currentStep;
+
+        return (
+          <View
+            key={index}
+            style={[
+              compactStyles.dot,
+              {
+                backgroundColor: isCompleted || isCurrent ? activeColor : '#E5E7EB',
+                width: isCurrent ? 24 : 8,
+                borderRadius: isCurrent ? 4 : 4,
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+const compactStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    height: 8,
+    borderRadius: 4,
+  },
+});
+
 export default StepIndicator;
