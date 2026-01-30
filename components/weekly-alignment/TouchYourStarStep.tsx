@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { ChevronRight, ChevronLeft, Edit3, Lightbulb } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { NorthStarIcon } from '@/components/CustomIcons';
+import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
 
 interface TouchYourStarStepProps {
