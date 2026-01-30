@@ -342,6 +342,46 @@ export function LifeCompass({
     checkDomainContent();
   }, [checkDomainContent]);
 
+const checkNeedsAttention = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check 1: Does user have a mission statement?
+      const { data: northStar } = await supabase
+        .from('0008-ap-north-star')
+        .select('mission_statement')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const hasMission = !!(northStar?.mission_statement && northStar.mission_statement.trim().length > 0);
+
+      // Check 2: Has weekly alignment been done in the last 7 days?
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const { data: recentAlignment } = await supabase
+        .from('0008-ap-weekly-alignments')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('signed_at', sevenDaysAgo.toISOString())
+        .limit(1);
+
+      const hasRecentAlignment = recentAlignment && recentAlignment.length > 0;
+
+      // Needs attention if either is missing
+      setNeedsAttention(!hasMission || !hasRecentAlignment);
+
+    } catch (error) {
+      console.error('Error checking attention status:', error);
+      setNeedsAttention(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkNeedsAttention();
+  }, [checkNeedsAttention]);
+  
   const fetchKeyRelationships = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
