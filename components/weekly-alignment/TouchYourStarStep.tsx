@@ -938,10 +938,13 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
           {/* Input Card */}
           <View style={[styles.inputCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.inputLabel, { color: colors.text }]}>
-              What is your mission?
+              {currentDomain === 'vision' ? 'What is your 5-year vision?' : 'What is your mission?'}
             </Text>
             <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
-              Your mission is the core purpose that drives you. It answers "Why do I exist?" or "What impact do I want to make?"
+              {currentDomain === 'vision'
+                ? 'Your vision is a vivid picture of where you want to be in 5 years. What does success look like?'
+                : 'Your mission is the core purpose that drives you. It answers "Why do I exist?" or "What impact do I want to make?"'
+              }
             </Text>
             
             <TextInput
