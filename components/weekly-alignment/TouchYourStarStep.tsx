@@ -993,7 +993,9 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Text style={styles.saveButtonText}>Save Mission</Text>
+                 <Text style={styles.saveButtonText}>
+                    {currentDomain === 'vision' ? 'Save Vision' : 'Save Mission'}
+                  </Text>
                   <ChevronRight size={20} color="#FFFFFF" />
                 </>
               )}
