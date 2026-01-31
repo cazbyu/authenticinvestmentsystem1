@@ -364,12 +364,14 @@ export default function WeeklyAlignmentScreen() {
           />
         </View>
 
-        {/* Dev Reset Button */}
+        {/* Continue Button */}
         <TouchableOpacity
-          onPress={handleDevReset}
+          onPress={goToNextStep}
           style={styles.resetButton}
+          accessible={true}
+          accessibilityLabel="Continue to next step"
         >
-          <Trash2 size={20} color="#EF4444" />
+          <ChevronRight size={24} color={colors.text} />
         </TouchableOpacity>
       </View>
 
