@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, ChevronRight, CheckCircle2, Compass } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle2, Compass } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
