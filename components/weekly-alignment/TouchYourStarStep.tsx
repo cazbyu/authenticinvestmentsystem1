@@ -44,6 +44,7 @@ interface PowerQuestion {
   question_text: string;
   question_context?: string;
   question_type?: string;
+  display_order?: number;
 }
 
 interface QuestionResponse {
@@ -255,18 +256,20 @@ export function TouchYourStarStep({
     
     const answeredIds = (answeredQuestions || []).map(q => q.question_id);
 
-    // Load questions for domain NOT already answered
+    // Load questions for domain NOT already answered, ordered by display_order
     let questionsQuery = supabase
       .from('0008-ap-user-power-questions')
-      .select('id, question_text, question_context, question_type')
+      .select('id, question_text, question_context, question_type, display_order')
       .eq('domain', domain)
       .eq('show_in_onboarding', true)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
     
     if (answeredIds.length > 0) {
       questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
     }
     
+    // Load up to 4 questions (user answers fewer, can shuffle for variety)
     const { data: domainQuestions } = await questionsQuery.limit(4);
 
     if (domainQuestions && domainQuestions.length > 0) {
