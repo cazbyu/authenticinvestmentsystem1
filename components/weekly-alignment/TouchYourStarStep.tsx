@@ -593,7 +593,10 @@ export function TouchYourStarStep({
     const hasVision = !!northStarData.vision;
     const hasMission = !!northStarData.mission;
     const hasValues = northStarData.values && northStarData.values.length > 0;
-    const hasOne = (hasVision || hasMission) && !(hasVision && hasMission);
+    
+    // Determine what's still needed
+    const completedCount = (hasVision ? 1 : 0) + (hasMission ? 1 : 0) + (hasValues ? 1 : 0);
+    const allComplete = completedCount === 3;
 
     return (
       <ScrollView
@@ -614,54 +617,98 @@ export function TouchYourStarStep({
           </View>
         </View>
 
-        {/* Show existing Vision if they have one */}
-        {hasVision && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR 5-YEAR VISION</Text>
+        {/* Intro Text */}
+        <Text style={[styles.introText, { color: colors.textSecondary }]}>
+          This step helps calibrate your internal compass. Together, we'll define your Mission (your purpose), your Vision (your direction), and the Core Values that keep you on track.
+        </Text>
+
+        {/* Vision Card - Always show */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: hasVision ? colors.border : '#ed1c2440' }]}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR 5-YEAR VISION</Text>
+            {hasVision ? (
               <TouchableOpacity onPress={() => {
                 setCurrentDomain('vision');
                 setShowEditOptions(true);
               }}>
                 <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
               </TouchableOpacity>
-            </View>
+            ) : (
+              <TouchableOpacity onPress={async () => {
+                setCurrentDomain('vision');
+                await loadQuestionsForDomain('vision');
+                setResponses([]);
+                setFlowState('choice');
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Define</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {hasVision ? (
             <Text style={[styles.statementText, { color: colors.text }]}>
               "{northStarData.vision}"
             </Text>
-          </View>
-        )}
+          ) : (
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+              Where do you want to be in 5 years? Your vision paints the picture of your future.
+            </Text>
+          )}
+        </View>
 
-        {/* Show existing Mission if they have one */}
-        {hasMission && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
+        {/* Mission Card - Always show */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: hasMission ? colors.border : '#ed1c2440' }]}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
+            {hasMission ? (
               <TouchableOpacity onPress={() => {
                 setCurrentDomain('mission');
                 setShowEditOptions(true);
               }}>
                 <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
               </TouchableOpacity>
-            </View>
+            ) : (
+              <TouchableOpacity onPress={async () => {
+                setCurrentDomain('mission');
+                await loadQuestionsForDomain('mission');
+                setResponses([]);
+                setFlowState('choice');
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Define</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {hasMission ? (
             <Text style={[styles.statementText, { color: colors.text }]}>
               "{northStarData.mission}"
             </Text>
-          </View>
-        )}
+          ) : (
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+              What is your core purpose? Your mission is the "why" behind everything you do.
+            </Text>
+          )}
+        </View>
 
-        {/* Show existing Core Values if they have them */}
-        {hasValues && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR CORE VALUES</Text>
+        {/* Core Values Card - Always show */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: hasValues ? colors.border : '#ed1c2440' }]}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR CORE VALUES</Text>
+            {hasValues ? (
               <TouchableOpacity onPress={() => {
                 // TODO: Navigate to values editing flow
                 console.log('Edit values');
               }}>
                 <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
               </TouchableOpacity>
-            </View>
+            ) : (
+              <TouchableOpacity onPress={() => {
+                // TODO: Navigate to values creation flow
+                console.log('Define values');
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Define</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {hasValues ? (
             <View style={styles.valuesContainer}>
               {northStarData.values!.map((value) => (
                 <View key={value.id} style={styles.valueTag}>
@@ -669,8 +716,12 @@ export function TouchYourStarStep({
                 </View>
               ))}
             </View>
-          </View>
-        )}
+          ) : (
+            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+              What principles guide your decisions? Your core values keep you anchored when life gets stormy.
+            </Text>
+          )}
+        </View>
 
         {/* Edit Options Modal */}
         {showEditOptions && (
@@ -725,147 +776,41 @@ export function TouchYourStarStep({
           </View>
         )}
 
-        {/* Choice Card - Different content based on what exists */}
+        {/* Progress indicator */}
         {!showEditOptions && (
-          <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
-              <NorthStarIcon size={40} color="#ed1c24" />
-            </View>
-            
-            {/* Title changes based on state */}
-            <Text style={[styles.choiceTitle, { color: colors.text }]}>
-              {hasOne 
-                ? `Ready to define your ${hasVision ? 'Mission' : 'Vision'}?`
-                : (hasVision && hasMission)
-                  ? 'Your North Star is set!'
-                  : 'Where shall we begin?'
-              }
+          <View style={[styles.progressCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
+              North Star Progress
             </Text>
-            
-            {/* Description - Option 2: Internal Compass Approach */}
-            <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
-              {hasOne
-                ? hasVision
-                  ? 'You have a Vision — now let\'s define your Mission (your core purpose) to complete your North Star.'
-                  : 'You have a Mission — now let\'s paint your Vision (where you\'re headed in 5 years) to complete your North Star.'
-                : (hasVision && hasMission)
-                  ? 'You\'ve defined your Mission, Vision, and Core Values. You can refine them anytime using the Edit links above.'
-                  : 'This step helps calibrate your internal compass. Together, we\'ll define your Mission (your purpose), your Vision (your direction), and the Core Values that keep you on track.'
-              }
-            </Text>
-
-            <View style={styles.choiceButtons}>
-              {/* If they have one, show the missing one as primary */}
-              {hasOne ? (
-                <>
-                  <TouchableOpacity
-                    style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-                    onPress={async () => {
-                      const domainToWork = hasVision ? 'mission' : 'vision';
-                      setCurrentDomain(domainToWork);
-                      await loadQuestionsForDomain(domainToWork);
-                      setResponses([]);
-                      setFlowState('choice');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Lightbulb size={20} color="#FFFFFF" />
-                    <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
-                      {hasVision ? 'Define My Mission' : 'Define My Vision'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.choiceButton, { borderColor: colors.border }]}
-                    onPress={() => {
-                      onDataCapture({
-                        missionReflection: northStarData.mission,
-                        visionAcknowledged: !!northStarData.vision,
-                        valuesAcknowledged: hasValues,
-                      });
-                      onNext();
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.choiceButtonText, { color: colors.text }]}>
-                      Continue to Wing Checks
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              ) : (hasVision && hasMission) ? (
-                // Both complete - just show continue
-                <TouchableOpacity
-                  style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-                  onPress={() => {
-                    onDataCapture({
-                      missionReflection: northStarData.mission,
-                      visionAcknowledged: true,
-                      valuesAcknowledged: hasValues,
-                    });
-                    onNext();
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
-                    Continue to Wing Checks
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  {/* Fresh start - show both options */}
-                  <TouchableOpacity
-                    style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-                    onPress={async () => {
-                      setCurrentDomain('vision');
-                      await loadQuestionsForDomain('vision');
-                      setResponses([]);
-                      setFlowState('choice');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Lightbulb size={20} color="#FFFFFF" />
-                    <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
-                      My Vision (5-Year Picture)
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.choiceButton, { borderColor: '#ed1c24' }]}
-                    onPress={async () => {
-                      setCurrentDomain('mission');
-                      await loadQuestionsForDomain('mission');
-                      setResponses([]);
-                      setFlowState('choice');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Edit3 size={20} color="#ed1c24" />
-                    <Text style={[styles.choiceButtonText, { color: '#ed1c24' }]}>
-                      My Mission (Core Purpose)
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
+            <View style={styles.progressDots}>
+              <View style={[styles.progressDot, { backgroundColor: hasVision ? '#ed1c24' : '#e5e7eb' }]} />
+              <View style={[styles.progressDot, { backgroundColor: hasMission ? '#ed1c24' : '#e5e7eb' }]} />
+              <View style={[styles.progressDot, { backgroundColor: hasValues ? '#ed1c24' : '#e5e7eb' }]} />
             </View>
+            <Text style={[styles.progressText, { color: colors.text }]}>
+              {completedCount} of 3 complete
+            </Text>
           </View>
         )}
 
-        {/* Skip for now - only show if not complete */}
-        {!showEditOptions && !(hasVision && hasMission) && (
+        {/* Continue Button */}
+        {!showEditOptions && (
           <TouchableOpacity
-            style={styles.skipButton}
+            style={[styles.continueButton, { backgroundColor: '#ed1c24' }]}
             onPress={() => {
               onDataCapture({
                 missionReflection: northStarData.mission,
-                visionAcknowledged: !!northStarData.vision,
+                visionAcknowledged: hasVision,
                 valuesAcknowledged: hasValues,
               });
               onNext();
             }}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
-              Skip for now
+            <Text style={styles.continueButtonText}>
+              {allComplete ? 'Continue to Wing Checks' : 'Continue for Now'}
             </Text>
+            <ChevronRight size={20} color="#FFFFFF" />
           </TouchableOpacity>
         )}
 
