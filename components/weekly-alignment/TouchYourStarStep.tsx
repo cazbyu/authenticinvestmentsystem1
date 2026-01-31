@@ -822,7 +822,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
                 styles.saveButton,
                 { backgroundColor: directMission.trim() ? '#ed1c24' : '#ccc' },
               ]}
-              onPress={() => directMission.trim() && saveMission(directMission.trim())}
+              onPress={() => directMission.trim() && saveStatement(directMission.trim())}
               disabled={!directMission.trim() || saving}
               activeOpacity={0.8}
             >
