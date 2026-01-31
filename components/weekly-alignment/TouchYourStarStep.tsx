@@ -49,7 +49,7 @@ interface QuestionResponse {
   response: string;
 }
 
-type FlowState = 'loading' | 'choice' | 'direct-input' | 'guided-questions' | 'synthesis' | 'has-mission';
+type FlowState = 'loading' | 'domain-choice' | 'choice' | 'direct-input' | 'guided-questions' | 'synthesis' | 'has-mission';
 
 export function TouchYourStarStep({
   userId,
@@ -60,6 +60,7 @@ export function TouchYourStarStep({
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
   const [northStarData, setNorthStarData] = useState<NorthStarData>({});
+  const [currentDomain, setCurrentDomain] = useState<'mission' | 'vision'>('mission');
   
   // Questions state
   const [questions, setQuestions] = useState<PowerQuestion[]>([]);
