@@ -575,28 +575,51 @@ export default function Dashboard() {
   }, [userId]);
 
   const handleDevResetSpark = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  try {
+    const supabase = getSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const today = formatLocalDate(new Date());
+    const today = formatLocalDate(new Date());
 
-      const { error } = await supabase
-        .from('0008-ap-daily-sparks')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('spark_date', today);
+    // Reset today's spark
+    await supabase
+      .from('0008-ap-daily-sparks')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('spark_date', today);
 
-      if (error) throw error;
+    // Reset North Star data (Mission, Vision, Core Values)
+    await supabase
+      .from('0008-ap-north-star')
+      .update({
+        mission_statement: null,
+        '5yr_vision': null,
+        core_values: null,
+      })
+      .eq('user_id', user.id);
 
-      await checkRitualAvailability();
-      Alert.alert('Success', 'Today\'s spark has been reset and Morning Spark button should now appear');
-    } catch (error) {
-      console.error('Error resetting spark:', error);
-      Alert.alert('Error', 'Failed to reset spark');
-    }
-  };
+    // Clear question responses (for fresh onboarding)
+    await supabase
+      .from('0008-ap-question-responses')
+      .delete()
+      .eq('user_id', user.id);
+
+    // Reset weekly alignment completion for today
+    await supabase
+      .from('0008-ap-ritual-completions')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('ritual_type', 'weekly_alignment')
+      .gte('completed_at', today);
+
+    await checkRitualAvailability();
+    Alert.alert('Dev Reset Complete', 'Spark, North Star (Mission/Vision/Values), and question responses have been cleared. Weekly Alignment should now appear.');
+  } catch (error) {
+    console.error('Error resetting dev data:', error);
+    Alert.alert('Error', 'Failed to reset dev data');
+  }
+};
 
   useEffect(() => {
     checkRitualAvailability();
