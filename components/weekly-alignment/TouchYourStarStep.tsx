@@ -839,7 +839,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
           </View>
           
           <Text style={[styles.choiceTitle, { color: colors.text }]}>
-            Your North Star Awaits
+            {currentDomain === 'vision' ? 'Define Your Vision' : 'Define Your Mission'}
           </Text>
           
           <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
