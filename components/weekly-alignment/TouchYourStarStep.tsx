@@ -592,6 +592,7 @@ export function TouchYourStarStep({
   if (flowState === 'domain-choice') {
     const hasVision = !!northStarData.vision;
     const hasMission = !!northStarData.mission;
+    const hasValues = northStarData.values && northStarData.values.length > 0;
     const hasOne = (hasVision || hasMission) && !(hasVision && hasMission);
 
     return (
@@ -646,6 +647,28 @@ export function TouchYourStarStep({
             <Text style={[styles.statementText, { color: colors.text }]}>
               "{northStarData.mission}"
             </Text>
+          </View>
+        )}
+
+        {/* Show existing Core Values if they have them */}
+        {hasValues && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR CORE VALUES</Text>
+              <TouchableOpacity onPress={() => {
+                // TODO: Navigate to values editing flow
+                console.log('Edit values');
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.valuesContainer}>
+              {northStarData.values!.map((value) => (
+                <View key={value.id} style={styles.valueTag}>
+                  <Text style={[styles.valueText, { color: colors.text }]}>{value.value}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
@@ -713,7 +736,9 @@ export function TouchYourStarStep({
             <Text style={[styles.choiceTitle, { color: colors.text }]}>
               {hasOne 
                 ? `Ready to define your ${hasVision ? 'Mission' : 'Vision'}?`
-                : 'Where shall we begin?'
+                : (hasVision && hasMission)
+                  ? 'Your North Star is set!'
+                  : 'Where shall we begin?'
               }
             </Text>
             
@@ -723,7 +748,9 @@ export function TouchYourStarStep({
                 ? hasVision
                   ? 'You have a Vision — now let\'s define your Mission (your core purpose) to complete your North Star.'
                   : 'You have a Mission — now let\'s paint your Vision (where you\'re headed in 5 years) to complete your North Star.'
-                : 'This step helps calibrate your internal compass. Together, we\'ll define your Mission (your purpose), your Vision (your direction), and the Core Values that keep you on track.'
+                : (hasVision && hasMission)
+                  ? 'You\'ve defined your Mission, Vision, and Core Values. You can refine them anytime using the Edit links above.'
+                  : 'This step helps calibrate your internal compass. Together, we\'ll define your Mission (your purpose), your Vision (your direction), and the Core Values that keep you on track.'
               }
             </Text>
 
@@ -754,7 +781,7 @@ export function TouchYourStarStep({
                       onDataCapture({
                         missionReflection: northStarData.mission,
                         visionAcknowledged: !!northStarData.vision,
-                        valuesAcknowledged: false,
+                        valuesAcknowledged: hasValues,
                       });
                       onNext();
                     }}
@@ -765,6 +792,24 @@ export function TouchYourStarStep({
                     </Text>
                   </TouchableOpacity>
                 </>
+              ) : (hasVision && hasMission) ? (
+                // Both complete - just show continue
+                <TouchableOpacity
+                  style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
+                  onPress={() => {
+                    onDataCapture({
+                      missionReflection: northStarData.mission,
+                      visionAcknowledged: true,
+                      valuesAcknowledged: hasValues,
+                    });
+                    onNext();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
+                    Continue to Wing Checks
+                  </Text>
+                </TouchableOpacity>
               ) : (
                 <>
                   {/* Fresh start - show both options */}
@@ -805,116 +850,24 @@ export function TouchYourStarStep({
           </View>
         )}
 
-        {/* Skip for now */}
-        {!showEditOptions && (
+        {/* Skip for now - only show if not complete */}
+        {!showEditOptions && !(hasVision && hasMission) && (
           <TouchableOpacity
             style={styles.skipButton}
             onPress={() => {
               onDataCapture({
                 missionReflection: northStarData.mission,
                 visionAcknowledged: !!northStarData.vision,
-                valuesAcknowledged: false,
+                valuesAcknowledged: hasValues,
               });
               onNext();
             }}
           >
             <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
-              {hasOne ? 'Skip for now' : 'Skip for now'}
+              Skip for now
             </Text>
           </TouchableOpacity>
         )}
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    );
-  }
-
-  // Offer to work on the other domain
-  if (flowState === 'offer-other-domain') {
-    const justCompleted = currentDomain;
-    const otherDomain = currentDomain === 'vision' ? 'mission' : 'vision';
-    const otherLabel = otherDomain === 'vision' ? 'Vision' : 'Mission';
-    const justCompletedLabel = justCompleted === 'vision' ? 'Vision' : 'Mission';
-    const completedStatement = justCompleted === 'vision' ? northStarData.vision : northStarData.mission;
-
-    return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerRow}>
-            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-              <MiniCompass size={56} />
-            </View>
-            <View style={styles.headerTextContainer}>
-              <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
-              <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Success Message */}
-        <View style={[styles.card, { backgroundColor: '#ed1c2410', borderColor: '#ed1c2430' }]}>
-          <Text style={[styles.successTitle, { color: colors.text }]}>
-            ✨ {justCompletedLabel} Saved!
-          </Text>
-          <Text style={[styles.statementText, { color: colors.text }]}>
-            "{completedStatement}"
-          </Text>
-        </View>
-
-        {/* Offer Other Domain */}
-        <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.choiceTitle, { color: colors.text }]}>
-            Ready for your {otherLabel}?
-          </Text>
-          
-          <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
-            {otherDomain === 'vision'
-              ? 'Your Vision paints a picture of where you want to be in 5 years. It gives your Mission direction.'
-              : 'Your Mission is your core purpose — the "why" behind everything you do.'
-            }
-          </Text>
-
-          <View style={styles.choiceButtons}>
-            <TouchableOpacity
-              style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-              onPress={async () => {
-                setCurrentDomain(otherDomain);
-                await loadQuestionsForDomain(otherDomain);
-                setResponses([]);
-                setAiSuggestions([]);
-                setFlowState('choice');
-              }}
-              activeOpacity={0.8}
-            >
-              <Lightbulb size={20} color="#FFFFFF" />
-              <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
-                Yes, let's define my {otherLabel}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.choiceButton, { borderColor: colors.border }]}
-              onPress={() => {
-                onDataCapture({
-                  missionReflection: northStarData.mission,
-                  visionAcknowledged: !!northStarData.vision,
-                  valuesAcknowledged: true,
-                });
-                onNext();
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.choiceButtonText, { color: colors.text }]}>
-                I'll do this later
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
