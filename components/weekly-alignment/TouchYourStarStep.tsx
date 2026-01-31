@@ -349,7 +349,7 @@ function handleSkipQuestion() {
     'onboarding',
     currentAnswer.trim().length,
     timeSpent,
-    'mission'
+    currentDomain
   );
   
   // Save response locally
