@@ -1274,7 +1274,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
                   : '#ccc',
               },
             ]}
-            onPress={handleSaveFinalMission}
+            onPress={handleSaveFinalStatement}
             disabled={selectedSuggestion === null && !(showCustomInput && customMission.trim()) || saving}
             activeOpacity={0.8}
           >
