@@ -49,7 +49,7 @@ interface QuestionResponse {
   response: string;
 }
 
-type FlowState = 'loading' | 'domain-choice' | 'choice' | 'direct-input' | 'guided-questions' | 'synthesis' | 'has-mission';
+type FlowState = 'loading' | 'domain-choice' | 'choice' | 'direct-input' | 'guided-questions' | 'synthesis' | 'offer-other-domain' | 'has-mission';
 
 export function TouchYourStarStep({
   userId,
@@ -1726,7 +1726,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
 });
 
 export default TouchYourStarStep;
