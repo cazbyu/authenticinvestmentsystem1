@@ -588,8 +588,12 @@ export function TouchYourStarStep({
     );
   }
 
-  // Domain Choice - Mission or Vision first?
+  // Domain Choice - Shows existing statements if any, offers next steps
   if (flowState === 'domain-choice') {
+    const hasVision = !!northStarData.vision;
+    const hasMission = !!northStarData.mission;
+    const hasOne = (hasVision || hasMission) && !(hasVision && hasMission);
+
     return (
       <ScrollView
         style={styles.container}
@@ -609,71 +613,216 @@ export function TouchYourStarStep({
           </View>
         </View>
 
-        {/* Domain Choice Card */}
-        <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
-            <NorthStarIcon size={40} color="#ed1c24" />
-          </View>
-          
-          <Text style={[styles.choiceTitle, { color: colors.text }]}>
-            Where shall we begin?
-          </Text>
-          
-          <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
-            Your North Star has two parts: a Mission (your purpose) and a Vision (where you're headed). Which would you like to explore first?
-          </Text>
-
-          <View style={styles.choiceButtons}>
-            <TouchableOpacity
-              style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-              onPress={async () => {
+        {/* Show existing Vision if they have one */}
+        {hasVision && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR 5-YEAR VISION</Text>
+              <TouchableOpacity onPress={() => {
                 setCurrentDomain('vision');
-                await loadQuestionsForDomain('vision');
-                setResponses([]);
-                setFlowState('choice');
-              }}
-              activeOpacity={0.8}
-            >
-              <Lightbulb size={20} color="#FFFFFF" />
-              <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
-                My Vision (5-Year Picture)
-              </Text>
-            </TouchableOpacity>
+                setShowEditOptions(true);
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.statementText, { color: colors.text }]}>
+              "{northStarData.vision}"
+            </Text>
+          </View>
+        )}
 
-            <TouchableOpacity
-              style={[styles.choiceButton, { borderColor: '#ed1c24' }]}
-              onPress={async () => {
+        {/* Show existing Mission if they have one */}
+        {hasMission && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
+              <TouchableOpacity onPress={() => {
                 setCurrentDomain('mission');
-                await loadQuestionsForDomain('mission');
-                setResponses([]);
-                setFlowState('choice');
+                setShowEditOptions(true);
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.statementText, { color: colors.text }]}>
+              "{northStarData.mission}"
+            </Text>
+          </View>
+        )}
+
+        {/* Edit Options Modal */}
+        {showEditOptions && (
+          <View style={[styles.editModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.editModalTitle, { color: colors.text }]}>
+              How would you like to refine your {currentDomain === 'vision' ? 'vision' : 'mission'}?
+            </Text>
+            
+            <TouchableOpacity
+              style={[styles.editOption, { borderColor: colors.border }]}
+              onPress={() => {
+                setShowEditOptions(false);
+                const currentStatement = currentDomain === 'vision' ? northStarData.vision : northStarData.mission;
+                setDirectMission(currentStatement || '');
+                setFlowState('direct-input');
               }}
-              activeOpacity={0.8}
             >
               <Edit3 size={20} color="#ed1c24" />
-              <Text style={[styles.choiceButtonText, { color: '#ed1c24' }]}>
-                My Mission (Core Purpose)
-              </Text>
+              <View style={styles.editOptionText}>
+                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Edit directly</Text>
+                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>
+                  Make changes to your current {currentDomain === 'vision' ? 'vision' : 'mission'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.editOption, { borderColor: colors.border }]}
+              onPress={async () => {
+                setShowEditOptions(false);
+                setCurrentQuestionIndex(0);
+                setCurrentAnswer('');
+                setResponses([]);
+                setAiSuggestions([]);
+                await loadQuestionsForDomain(currentDomain);
+                setFlowState('guided-questions');
+              }}
+            >
+              <Lightbulb size={20} color="#ed1c24" />
+              <View style={styles.editOptionText}>
+                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Explore with questions</Text>
+                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>Discover deeper clarity through guided reflection</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.editCancelButton}
+              onPress={() => setShowEditOptions(false)}
+            >
+              <Text style={[styles.editCancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        )}
+
+        {/* Choice Card - Different content based on what exists */}
+        {!showEditOptions && (
+          <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
+              <NorthStarIcon size={40} color="#ed1c24" />
+            </View>
+            
+            {/* Title changes based on state */}
+            <Text style={[styles.choiceTitle, { color: colors.text }]}>
+              {hasOne 
+                ? `Ready to define your ${hasVision ? 'Mission' : 'Vision'}?`
+                : 'Where shall we begin?'
+              }
+            </Text>
+            
+            {/* Description - Option 2: Internal Compass Approach */}
+            <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
+              {hasOne
+                ? hasVision
+                  ? 'You have a Vision — now let\'s define your Mission (your core purpose) to complete your North Star.'
+                  : 'You have a Mission — now let\'s paint your Vision (where you\'re headed in 5 years) to complete your North Star.'
+                : 'This step helps calibrate your internal compass. Together, we\'ll define your Mission (your purpose), your Vision (your direction), and the Core Values that keep you on track.'
+              }
+            </Text>
+
+            <View style={styles.choiceButtons}>
+              {/* If they have one, show the missing one as primary */}
+              {hasOne ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
+                    onPress={async () => {
+                      const domainToWork = hasVision ? 'mission' : 'vision';
+                      setCurrentDomain(domainToWork);
+                      await loadQuestionsForDomain(domainToWork);
+                      setResponses([]);
+                      setFlowState('choice');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Lightbulb size={20} color="#FFFFFF" />
+                    <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
+                      {hasVision ? 'Define My Mission' : 'Define My Vision'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.choiceButton, { borderColor: colors.border }]}
+                    onPress={() => {
+                      onDataCapture({
+                        missionReflection: northStarData.mission,
+                        visionAcknowledged: !!northStarData.vision,
+                        valuesAcknowledged: false,
+                      });
+                      onNext();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.choiceButtonText, { color: colors.text }]}>
+                      Continue to Wing Checks
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {/* Fresh start - show both options */}
+                  <TouchableOpacity
+                    style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
+                    onPress={async () => {
+                      setCurrentDomain('vision');
+                      await loadQuestionsForDomain('vision');
+                      setResponses([]);
+                      setFlowState('choice');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Lightbulb size={20} color="#FFFFFF" />
+                    <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
+                      My Vision (5-Year Picture)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.choiceButton, { borderColor: '#ed1c24' }]}
+                    onPress={async () => {
+                      setCurrentDomain('mission');
+                      await loadQuestionsForDomain('mission');
+                      setResponses([]);
+                      setFlowState('choice');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Edit3 size={20} color="#ed1c24" />
+                    <Text style={[styles.choiceButtonText, { color: '#ed1c24' }]}>
+                      My Mission (Core Purpose)
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Skip for now */}
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={() => {
-            onDataCapture({
-              missionReflection: undefined,
-              visionAcknowledged: false,
-              valuesAcknowledged: false,
-            });
-            onNext();
-          }}
-        >
-          <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
-            Skip for now
-          </Text>
-        </TouchableOpacity>
+        {!showEditOptions && (
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={() => {
+              onDataCapture({
+                missionReflection: northStarData.mission,
+                visionAcknowledged: !!northStarData.vision,
+                valuesAcknowledged: false,
+              });
+              onNext();
+            }}
+          >
+            <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
+              {hasOne ? 'Skip for now' : 'Skip for now'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
