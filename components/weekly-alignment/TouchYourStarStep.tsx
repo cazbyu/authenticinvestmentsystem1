@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,9 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
-import { ChevronRight, ChevronLeft, Edit3, Lightbulb, Check, Star } from 'lucide-react-native';
+import { ChevronRight, ChevronLeft, Edit3, Lightbulb, HelpCircle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
@@ -53,23 +54,39 @@ interface QuestionResponse {
   response: string;
 }
 
-// Spark List - The identity options
-const SPARK_LIST = [
-  { id: 'child-of-god', label: 'Child of God', description: 'Created with divine purpose and infinite worth' },
-  { id: 'creator', label: 'Creator', description: 'Bringing new ideas and possibilities into existence' },
-  { id: 'servant', label: 'Servant', description: 'Finding fulfillment through serving others' },
-  { id: 'steward', label: 'Steward', description: 'Caring for and developing what has been entrusted to you' },
-  { id: 'healer', label: 'Healer', description: 'Restoring wholeness to people and situations' },
-  { id: 'teacher', label: 'Teacher', description: 'Guiding others toward knowledge and wisdom' },
-  { id: 'builder', label: 'Builder', description: 'Constructing foundations that last' },
-  { id: 'custom', label: 'Something else...', description: 'Define your own identity' },
+interface SparkListOption {
+  id: string;
+  value: string;
+  label: string;
+  isCustom: boolean;
+}
+
+interface PromptData {
+  id: string;
+  prompt_text: string;
+  prompt_hint?: string;
+  variant_group: string;
+  test_name?: string;
+}
+
+// Default Spark List (fallback if DB not loaded)
+const DEFAULT_SPARK_LIST: SparkListOption[] = [
+  { id: '1', value: 'child-of-god', label: 'Child of God', isCustom: false },
+  { id: '2', value: 'human-being', label: 'Human Being', isCustom: false },
+  { id: '3', value: 'seeker-of-truth', label: 'Seeker of Truth', isCustom: false },
+  { id: '4', value: 'steward', label: 'Steward', isCustom: false },
+  { id: '5', value: 'custom', label: '[custom]', isCustom: true },
 ];
+
+// Default prompt (fallback)
+const DEFAULT_PROMPT = 'Finish this sentence: At my absolute core, before anything else I am a...';
+
+// Confirmation text that fades in after selection
+const CONFIRMATION_TEXT = 'This foundational identity anchors everything else—your Mission (purpose), Vision (direction), and Core Values (guardrails).';
 
 type FlowState = 
   | 'loading'
-  | 'explainer'           // First-time: explain the purpose
   | 'hero-question'       // Select identity from Spark List
-  | 'identity-questions'  // Optional guided questions for identity
   | 'identity-hub'        // Main screen: shows identity, offers Mission/Vision/Values
   | 'choice'              // "I Have One Ready" vs "Guide Me Through"
   | 'direct-input'        // Text input for statement
@@ -93,7 +110,11 @@ export function TouchYourStarStep({
   // Identity state
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const [customIdentity, setCustomIdentity] = useState('');
-  const [identityInsights, setIdentityInsights] = useState('');
+  const [sparkListOptions, setSparkListOptions] = useState<SparkListOption[]>(DEFAULT_SPARK_LIST);
+  
+  // Prompt state (for A/B testing)
+  const [heroPrompt, setHeroPrompt] = useState<PromptData | null>(null);
+  const [promptShownAt, setPromptShownAt] = useState<Date | null>(null);
   
   // Questions state
   const [questions, setQuestions] = useState<PowerQuestion[]>([]);
@@ -104,7 +125,7 @@ export function TouchYourStarStep({
   // Direct input state
   const [directInput, setDirectInput] = useState('');
 
-  // Values-specific state (for entering individual values)
+  // Values-specific state
   const [currentValueName, setCurrentValueName] = useState('');
   const [currentValueCommitment, setCurrentValueCommitment] = useState('');
   const [editingValueIndex, setEditingValueIndex] = useState<number | null>(null);
@@ -113,8 +134,16 @@ export function TouchYourStarStep({
   const [showEditOptions, setShowEditOptions] = useState(false);
   const [editingDomain, setEditingDomain] = useState<DomainType | null>(null);
 
+  // Tooltip state
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  // Animation values
+  const confirmationOpacity = useRef(new Animated.Value(0)).current;
+  const buttonColorAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
   // Question timing
-  const questionStartTime = React.useRef<number>(Date.now());
+  const questionStartTime = useRef<number>(Date.now());
 
   // AI support
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
@@ -129,13 +158,48 @@ export function TouchYourStarStep({
   const [saving, setSaving] = useState(false);
   const [resumePrompt, setResumePrompt] = useState<{ domain: DomainType; hasResponses: boolean } | null>(null);
 
+  // Custom input ref for auto-focus
+  const customInputRef = useRef<TextInput>(null);
+
   useEffect(() => {
     loadInitialData();
   }, []);
 
+  // Animate confirmation text and button when identity selected
+  useEffect(() => {
+    const hasValidSelection = selectedIdentity && (selectedIdentity !== 'custom' || customIdentity.trim());
+    
+    if (hasValidSelection) {
+      Animated.parallel([
+        Animated.timing(confirmationOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(buttonColorAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    } else {
+      confirmationOpacity.setValue(0);
+      buttonColorAnim.setValue(0);
+    }
+  }, [selectedIdentity, customIdentity]);
+
+  // Auto-focus custom input when selected
+  useEffect(() => {
+    if (selectedIdentity === 'custom') {
+      setTimeout(() => {
+        customInputRef.current?.focus();
+      }, 100);
+    }
+  }, [selectedIdentity]);
+
   // Track question shown
   useEffect(() => {
-    if ((flowState === 'guided-questions' || flowState === 'identity-questions') && 
+    if (flowState === 'guided-questions' && 
         questions.length > 0 && questions[currentQuestionIndex]) {
       const q = questions[currentQuestionIndex];
       trackQuestionShown(
@@ -168,6 +232,48 @@ export function TouchYourStarStep({
   async function loadInitialData() {
     try {
       const supabase = getSupabaseClient();
+
+      // Load prompts for A/B testing
+      const { data: prompts } = await supabase
+        .from('0008-ap-question-prompts')
+        .select('id, prompt_text, prompt_hint, variant_group, test_name')
+        .eq('ritual_type', 'weekly_alignment')
+        .eq('step_number', 1)
+        .eq('domain', 'identity')
+        .eq('is_active', true);
+
+      if (prompts && prompts.length > 0) {
+        // For A/B testing: randomly select a variant (or use default 'A')
+        // For now, just use variant A
+        const selectedPrompt = prompts.find(p => p.variant_group === 'A') || prompts[0];
+        setHeroPrompt(selectedPrompt);
+      }
+
+      // Load spark list options
+      const { data: sparkOptions } = await supabase
+        .from('0008-ap-spark-list-options')
+        .select('id, option_value, option_label, is_custom_option')
+        .eq('domain', 'identity')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
+      if (sparkOptions && sparkOptions.length > 0) {
+        setSparkListOptions(sparkOptions.map(opt => ({
+          id: opt.id,
+          value: opt.option_value,
+          label: opt.option_label,
+          isCustom: opt.is_custom_option,
+        })));
+      }
+
+      // Check if user has already answered the identity prompt
+      const { data: existingPromptResponse } = await supabase
+        .from('0008-ap-prompt-responses')
+        .select('id, selected_option')
+        .eq('user_id', userId)
+        .eq('ritual_type', 'weekly_alignment')
+        .eq('step_number', 1)
+        .maybeSingle();
 
       // Load existing North Star data
       const { data: northStar } = await supabase
@@ -202,7 +308,7 @@ export function TouchYourStarStep({
       };
       setNorthStarData(data);
 
-      // Check for partial progress (responses saved but statement not complete)
+      // Check for partial progress
       const { data: existingResponses } = await supabase
         .from('0008-ap-question-responses')
         .select('domain')
@@ -211,11 +317,8 @@ export function TouchYourStarStep({
         .eq('used_in_synthesis', false);
 
       // Determine initial state
-      if (!data.identity) {
-        // No identity yet - start from beginning
-        setFlowState('explainer');
-      } else {
-        // Has identity - go to hub
+      // If user has identity AND has answered the prompt before, skip to hub
+      if (data.identity && existingPromptResponse) {
         setSelectedIdentity(data.identity);
         
         // Check if there's partial progress to resume
@@ -223,7 +326,6 @@ export function TouchYourStarStep({
           const domains = [...new Set(existingResponses.map(r => r.domain))];
           if (domains.length > 0) {
             const resumeDomain = domains[0] as DomainType;
-            // Check if this domain is already complete
             const domainComplete = 
               (resumeDomain === 'mission' && data.mission) ||
               (resumeDomain === 'vision' && data.vision) ||
@@ -236,18 +338,21 @@ export function TouchYourStarStep({
         }
         
         setFlowState('identity-hub');
+      } else {
+        // Show hero question
+        setPromptShownAt(new Date());
+        setFlowState('hero-question');
       }
 
     } catch (error) {
       console.error('Error loading initial data:', error);
-      setFlowState('explainer');
+      setFlowState('hero-question');
     }
   }
 
   async function loadQuestionsForDomain(domain: DomainType | 'identity') {
     const supabase = getSupabaseClient();
     
-    // Get questions user has already answered for this domain
     const { data: answeredQuestions } = await supabase
       .from('0008-ap-question-responses')
       .select('question_id')
@@ -256,7 +361,6 @@ export function TouchYourStarStep({
     
     const answeredIds = (answeredQuestions || []).map(q => q.question_id);
 
-    // Load questions for domain NOT already answered, ordered by display_order
     let questionsQuery = supabase
       .from('0008-ap-user-power-questions')
       .select('id, question_text, question_context, question_type, display_order')
@@ -269,7 +373,6 @@ export function TouchYourStarStep({
       questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
     }
     
-    // Load up to 4 questions (user answers fewer, can shuffle for variety)
     const { data: domainQuestions } = await questionsQuery.limit(4);
 
     if (domainQuestions && domainQuestions.length > 0) {
@@ -339,9 +442,14 @@ export function TouchYourStarStep({
     try {
       const supabase = getSupabaseClient();
       
-      const identityValue = selectedIdentity === 'custom' ? customIdentity : selectedIdentity;
+      const identityValue = selectedIdentity === 'custom' ? customIdentity.trim() : selectedIdentity;
       
-      // Check if north star record exists
+      // Calculate time to answer
+      const timeToAnswer = promptShownAt 
+        ? Math.round((Date.now() - promptShownAt.getTime()) / 1000)
+        : null;
+
+      // Save to north star
       const { data: existing } = await supabase
         .from('0008-ap-north-star')
         .select('id')
@@ -353,7 +461,8 @@ export function TouchYourStarStep({
           .from('0008-ap-north-star')
           .update({ 
             core_identity: identityValue,
-            identity_insights: identityInsights || null,
+            identity_prompt_id: heroPrompt?.id,
+            identity_answered_at: new Date().toISOString(),
           })
           .eq('user_id', userId);
       } else {
@@ -362,7 +471,29 @@ export function TouchYourStarStep({
           .insert({ 
             user_id: userId, 
             core_identity: identityValue,
-            identity_insights: identityInsights || null,
+            identity_prompt_id: heroPrompt?.id,
+            identity_answered_at: new Date().toISOString(),
+          });
+      }
+
+      // Record prompt response for A/B analytics (don't ask again)
+      if (heroPrompt) {
+        await supabase
+          .from('0008-ap-prompt-responses')
+          .upsert({
+            user_id: userId,
+            prompt_id: heroPrompt.id,
+            selected_option: identityValue,
+            response_text: selectedIdentity === 'custom' ? customIdentity.trim() : null,
+            ritual_type: 'weekly_alignment',
+            step_number: 1,
+            variant_group: heroPrompt.variant_group,
+            test_name: heroPrompt.test_name,
+            shown_at: promptShownAt?.toISOString(),
+            answered_at: new Date().toISOString(),
+            time_to_answer_seconds: timeToAnswer,
+          }, {
+            onConflict: 'user_id,prompt_id',
           });
       }
 
@@ -370,10 +501,17 @@ export function TouchYourStarStep({
       setNorthStarData(prev => ({ 
         ...prev, 
         identity: identityValue,
-        identityInsights: identityInsights,
       }));
       
-      setFlowState('identity-hub');
+      // Slide animation to identity hub
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setFlowState('identity-hub');
+        slideAnim.setValue(0);
+      });
 
     } catch (error) {
       console.error('Error saving identity:', error);
@@ -387,7 +525,6 @@ export function TouchYourStarStep({
     try {
       const supabase = getSupabaseClient();
       
-      // Determine which field to update
       const fieldName = currentDomain === 'vision' ? '5yr_vision' : 'mission_statement';
       
       const { data: existing } = await supabase
@@ -407,7 +544,6 @@ export function TouchYourStarStep({
           .insert({ user_id: userId, [fieldName]: statementText });
       }
 
-      // Mark responses as used in synthesis
       if (responses.length > 0) {
         const questionIds = responses.map(r => r.questionId);
         await supabase
@@ -417,14 +553,12 @@ export function TouchYourStarStep({
           .in('question_id', questionIds);
       }
 
-      // Update local state
       if (currentDomain === 'vision') {
         setNorthStarData(prev => ({ ...prev, vision: statementText }));
       } else {
         setNorthStarData(prev => ({ ...prev, mission: statementText }));
       }
       
-      // Reset state for next domain
       resetDomainState();
       setFlowState('identity-hub');
 
@@ -467,7 +601,6 @@ export function TouchYourStarStep({
           .insert({ user_id: userId, core_values: updatedValues });
       }
 
-      // Mark responses as used
       if (responses.length > 0) {
         const questionIds = responses.map(r => r.questionId);
         await supabase
@@ -479,7 +612,6 @@ export function TouchYourStarStep({
 
       setNorthStarData(prev => ({ ...prev, values: updatedValues }));
       
-      // Reset for next value or return to hub
       resetDomainState();
       setEditingValueIndex(null);
       setFlowState('identity-hub');
@@ -538,7 +670,6 @@ export function TouchYourStarStep({
       setCurrentQuestionIndex(prev => prev + 1);
       setCurrentAnswer('');
     } else {
-      // Go to synthesis if we have responses, otherwise back to hub
       if (responses.length > 0) {
         setFlowState('synthesis');
       } else {
@@ -635,8 +766,6 @@ export function TouchYourStarStep({
   }
 
   function generateFallbackSuggestions(): string[] {
-    const identity = northStarData.identity || 'human being';
-    
     if (currentDomain === 'values') {
       return [
         `Integrity: I am committed to speaking truth and keeping promises, even when difficult.`,
@@ -653,25 +782,11 @@ export function TouchYourStarStep({
       ];
     }
 
-    // Mission fallbacks
-    const allText = responses.map(r => r.response).join(' ').toLowerCase();
-    const suggestions: string[] = [];
-
-    if (allText.includes('africa') || allText.includes('business') || allText.includes('entrepreneur')) {
-      suggestions.push(`To create sustainable opportunities that empower communities and transform lives.`);
-    }
-    if (allText.includes('family') || allText.includes('children')) {
-      suggestions.push(`To nurture and guide my family toward lives of purpose and fulfillment.`);
-    }
-    if (allText.includes('teach') || allText.includes('learn') || allText.includes('education')) {
-      suggestions.push(`To educate and equip others with knowledge that opens doors.`);
-    }
-
-    // Always include generic options
-    suggestions.push(`To serve others with wisdom and compassion, making a positive difference wherever I go.`);
-    suggestions.push(`To use my unique gifts to contribute meaningfully to the world around me.`);
-
-    return [...new Set(suggestions)].slice(0, 3);
+    return [
+      `To create sustainable opportunities that empower communities and transform lives.`,
+      `To nurture and guide my family toward lives of purpose and fulfillment.`,
+      `To serve others with wisdom and compassion, making a positive difference wherever I go.`,
+    ];
   }
 
   function handleSelectSuggestion(index: number) {
@@ -696,7 +811,6 @@ export function TouchYourStarStep({
     
     if (finalStatement) {
       if (currentDomain === 'values') {
-        // Parse value suggestion into name and commitment
         const colonIndex = finalStatement.indexOf(':');
         if (colonIndex > 0) {
           const name = finalStatement.substring(0, colonIndex).trim();
@@ -717,7 +831,6 @@ export function TouchYourStarStep({
     setFlowState('choice');
   }
 
-  // Get domain-specific labels and placeholders
   function getDomainConfig(domain: DomainType) {
     const identity = northStarData.identity || 'Steward';
     
@@ -727,7 +840,7 @@ export function TouchYourStarStep({
           title: 'Define Your Mission',
           subtitle: `As a ${identity}, my mission is...`,
           placeholder: 'To...',
-          hint: 'Your mission describes your core purpose - what you do and why. It answers "What contribution do I make?"',
+          hint: 'Your mission describes your core purpose—what you do and why.',
           buttonText: 'My Mission is to...',
         };
       case 'vision':
@@ -735,7 +848,7 @@ export function TouchYourStarStep({
           title: 'Define Your Vision',
           subtitle: `As a ${identity}, in 5 years I envision...`,
           placeholder: 'A world/life where...',
-          hint: 'Your vision paints a picture of your desired future - where you are headed. It answers "What does success look like?"',
+          hint: 'Your vision paints a picture of your desired future—where you are headed.',
           buttonText: 'In 5 years, I envision...',
         };
       case 'values':
@@ -743,7 +856,7 @@ export function TouchYourStarStep({
           title: 'Define Your Core Values',
           subtitle: `As a ${identity}, I am committed to...`,
           placeholder: 'Value Name: I am committed to...',
-          hint: 'Core values are actionable principles that guide your decisions. They answer "What do I stand for?"',
+          hint: 'Core values are actionable principles that guide your decisions.',
           buttonText: 'I am committed to...',
         };
     }
@@ -763,214 +876,177 @@ export function TouchYourStarStep({
     );
   }
 
-  // EXPLAINER SCREEN - First time introduction
-  if (flowState === 'explainer') {
-    return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerRow}>
-            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-              <MiniCompass size={56} />
-            </View>
-            <View style={styles.headerTextContainer}>
-              <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
-              <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Explainer Card */}
-        <View style={[styles.explainerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
-            <NorthStarIcon size={48} color="#ed1c24" />
-          </View>
-          
-          <Text style={[styles.explainerTitle, { color: colors.text }]}>
-            Who Are You at Your Core?
-          </Text>
-          
-          <Text style={[styles.explainerText, { color: colors.textSecondary }]}>
-            Before we define what you do or where you're going, let's step back from all the titles you hold—job, parent, spouse, friend—and answer a deeper question:
-          </Text>
-          
-          <Text style={[styles.explainerQuote, { color: '#ed1c24' }]}>
-            "Who am I when everything else is stripped away?"
-          </Text>
-          
-          <Text style={[styles.explainerText, { color: colors.textSecondary }]}>
-            This foundational identity will anchor everything else—your Mission (purpose), Vision (direction), and Core Values (guidance).
-          </Text>
-        </View>
-
-        {/* Continue Button */}
-        <TouchableOpacity
-          style={[styles.continueButton, { backgroundColor: '#ed1c24' }]}
-          onPress={() => setFlowState('hero-question')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.continueButtonText}>Let's Begin</Text>
-          <ChevronRight size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    );
-  }
-
-  // HERO QUESTION - Select identity from Spark List
+  // HERO QUESTION SCREEN - With animations and refined UI
   if (flowState === 'hero-question') {
+    const isCustomSelected = selectedIdentity === 'custom';
+    const hasValidSelection = selectedIdentity && (selectedIdentity !== 'custom' || customIdentity.trim());
+
     return (
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+        <Animated.View 
+          style={[
+            styles.container,
+            {
+              transform: [{
+                translateX: slideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -400],
+                }),
+              }],
+            },
+          ]}
         >
-          {/* Header */}
-          <View style={styles.headerSection}>
-            <View style={styles.headerRow}>
-              <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-                <MiniCompass size={56} />
-              </View>
-              <View style={styles.headerTextContainer}>
-                <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
-                <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Hero Question */}
-          <View style={[styles.heroQuestionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.heroQuestion, { color: colors.text }]}>
-              When you strip away every title you hold—job, parent, spouse, friend—what is the one title that remains?
-            </Text>
-            
-            <Text style={[styles.heroSubtext, { color: colors.textSecondary }]}>
-              At my core, I am a...
-            </Text>
-
-            {/* Spark List Options */}
-            <View style={styles.sparkList}>
-              {SPARK_LIST.map((spark) => (
-                <TouchableOpacity
-                  key={spark.id}
-                  style={[
-                    styles.sparkOption,
-                    {
-                      backgroundColor: selectedIdentity === spark.id ? '#ed1c2415' : colors.background,
-                      borderColor: selectedIdentity === spark.id ? '#ed1c24' : colors.border,
-                    },
-                  ]}
-                  onPress={() => setSelectedIdentity(spark.id)}
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Header with Tooltip (? icon in top right) */}
+            <View style={styles.headerSection}>
+              <View style={styles.headerRow}>
+                <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
+                  <MiniCompass size={56} />
+                </View>
+                <View style={styles.headerTextContainer}>
+                  <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
+                  <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+                </View>
+                {/* Tooltip Button - ? icon */}
+                <TouchableOpacity 
+                  style={styles.tooltipButton}
+                  onPress={() => setShowTooltip(!showTooltip)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <View style={[
-                    styles.radioCircle,
-                    { borderColor: selectedIdentity === spark.id ? '#ed1c24' : colors.border },
-                  ]}>
-                    {selectedIdentity === spark.id && (
-                      <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
-                    )}
-                  </View>
-                  <View style={styles.sparkOptionText}>
-                    <Text style={[styles.sparkLabel, { color: colors.text }]}>{spark.label}</Text>
-                    <Text style={[styles.sparkDescription, { color: colors.textSecondary }]}>
-                      {spark.description}
-                    </Text>
-                  </View>
+                  <HelpCircle size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
-              ))}
+              </View>
+
+              {/* Tooltip Content */}
+              {showTooltip && (
+                <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.tooltipText, { color: colors.text }]}>
+                    Your North Star is your personal guidance system—the foundation for intentional living. It consists of your Identity (who you are), Mission (your purpose), Vision (your direction), and Core Values (your guardrails).
+                  </Text>
+                </View>
+              )}
             </View>
 
-            {/* Custom Identity Input */}
-            {selectedIdentity === 'custom' && (
-              <TextInput
-                style={[
-                  styles.customIdentityInput,
-                  {
-                    backgroundColor: colors.background,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
-                ]}
-                placeholder="Enter your identity..."
-                placeholderTextColor={colors.textSecondary}
-                value={customIdentity}
-                onChangeText={setCustomIdentity}
-              />
-            )}
-
-            {/* Optional Insights */}
-            {selectedIdentity && (
-              <View style={styles.insightsSection}>
-                <Text style={[styles.insightsLabel, { color: colors.textSecondary }]}>
-                  💭 Optional: Add any reflections, stories, or quotes that color this identity for you
-                </Text>
-                <TextInput
-                  style={[
-                    styles.insightsInput,
-                    {
-                      backgroundColor: colors.background,
-                      color: colors.text,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                  placeholder="Why does this identity resonate with you?"
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  numberOfLines={3}
-                  value={identityInsights}
-                  onChangeText={setIdentityInsights}
-                  textAlignVertical="top"
-                />
+            {/* Hero Question Card */}
+            <View style={[styles.heroQuestionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {/* North Star Icon - 75% smaller (was 48, now 36) */}
+              <View style={[styles.smallNorthStarCircle, { backgroundColor: '#ed1c2420' }]}>
+                <NorthStarIcon size={36} color="#ed1c24" />
               </View>
-            )}
-          </View>
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.backButton, { borderColor: colors.border }]}
-              onPress={() => setFlowState('explainer')}
-            >
-              <ChevronLeft size={20} color={colors.text} />
-              <Text style={[styles.backButtonText, { color: colors.text }]}>Back</Text>
-            </TouchableOpacity>
+              {/* Title Question */}
+              <Text style={[styles.heroTitle, { color: colors.text }]}>
+                Who Are You at Your Core?
+              </Text>
+              
+              {/* Prompt Text (from A/B testing or default) */}
+              <Text style={[styles.heroPromptText, { color: '#ed1c24' }]}>
+                {heroPrompt?.prompt_text || DEFAULT_PROMPT}
+              </Text>
 
+              {/* Spark List - Single line options, compact */}
+              <View style={styles.sparkListCompact}>
+                {sparkListOptions.map((spark) => {
+                  const isSelected = spark.isCustom 
+                    ? selectedIdentity === 'custom'
+                    : selectedIdentity === spark.label;
+                  
+                  return (
+                    <TouchableOpacity
+                      key={spark.id}
+                      style={[
+                        styles.sparkOptionCompact,
+                        {
+                          backgroundColor: isSelected ? '#ed1c2415' : colors.background,
+                          borderColor: isSelected ? '#ed1c24' : colors.border,
+                        },
+                      ]}
+                      onPress={() => {
+                        if (spark.isCustom) {
+                          setSelectedIdentity('custom');
+                        } else {
+                          setSelectedIdentity(spark.label);
+                          setCustomIdentity('');
+                        }
+                      }}
+                    >
+                      <View style={[
+                        styles.radioCircle,
+                        { borderColor: isSelected ? '#ed1c24' : colors.border },
+                      ]}>
+                        {isSelected && (
+                          <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
+                        )}
+                      </View>
+                      
+                      {spark.isCustom ? (
+                        isSelected ? (
+                          <TextInput
+                            ref={customInputRef}
+                            style={[
+                              styles.customInputInline,
+                              { color: colors.text, borderColor: '#ed1c24' },
+                            ]}
+                            placeholder="Enter your identity..."
+                            placeholderTextColor={colors.textSecondary}
+                            value={customIdentity}
+                            onChangeText={setCustomIdentity}
+                            autoCapitalize="words"
+                          />
+                        ) : (
+                          <Text style={[styles.sparkLabelCompact, { color: colors.textSecondary }]}>
+                            Something else...
+                          </Text>
+                        )
+                      ) : (
+                        <Text style={[styles.sparkLabelCompact, { color: colors.text }]}>
+                          {spark.label}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Confirmation Text - Fades in after selection */}
+              <Animated.View style={[styles.confirmationContainer, { opacity: confirmationOpacity }]}>
+                <Text style={[styles.confirmationText, { color: colors.textSecondary }]}>
+                  {CONFIRMATION_TEXT}
+                </Text>
+              </Animated.View>
+            </View>
+
+            {/* Let's Begin Button - Fades from gray to red */}
             <TouchableOpacity
               style={[
-                styles.saveButton,
-                { 
-                  backgroundColor: (selectedIdentity && (selectedIdentity !== 'custom' || customIdentity.trim())) 
-                    ? '#ed1c24' 
-                    : '#ccc' 
-                },
+                styles.continueButton,
+                { backgroundColor: hasValidSelection ? '#ed1c24' : '#cccccc' },
               ]}
               onPress={saveIdentity}
-              disabled={!selectedIdentity || (selectedIdentity === 'custom' && !customIdentity.trim()) || saving}
+              disabled={!hasValidSelection || saving}
               activeOpacity={0.8}
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Text style={styles.saveButtonText}>Save Identity</Text>
+                  <Text style={styles.continueButtonText}>Let's Begin</Text>
                   <ChevronRight size={20} color="#FFFFFF" />
                 </>
               )}
             </TouchableOpacity>
-          </View>
 
-          <View style={{ height: 40 }} />
-        </ScrollView>
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
     );
   }
@@ -1000,7 +1076,23 @@ export function TouchYourStarStep({
               <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
             </View>
+            {/* Tooltip Button */}
+            <TouchableOpacity 
+              style={styles.tooltipButton}
+              onPress={() => setShowTooltip(!showTooltip)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <HelpCircle size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
+
+          {showTooltip && (
+            <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.tooltipText, { color: colors.text }]}>
+                Your North Star guides your decisions and keeps you aligned with what matters most. Complete your Mission, Vision, and Core Values to calibrate your internal compass.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Resume Prompt */}
@@ -1021,9 +1113,7 @@ export function TouchYourStarStep({
               >
                 <Text style={{ color: '#fff', fontWeight: '600' }}>Continue</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setResumePrompt(null)}
-              >
+              <TouchableOpacity onPress={() => setResumePrompt(null)}>
                 <Text style={{ color: '#92400e' }}>Dismiss</Text>
               </TouchableOpacity>
             </View>
@@ -1033,7 +1123,9 @@ export function TouchYourStarStep({
         {/* Identity Card */}
         <View style={[styles.identityCard, { backgroundColor: '#ed1c2410', borderColor: '#ed1c2440' }]}>
           <View style={styles.identityHeader}>
-            <Star size={20} color="#ed1c24" fill="#ed1c24" />
+            <View style={[styles.identityStarIcon, { backgroundColor: '#ed1c24' }]}>
+              <NorthStarIcon size={14} color="#ffffff" />
+            </View>
             <Text style={[styles.identityLabel, { color: '#ed1c24' }]}>MY CORE IDENTITY</Text>
             <TouchableOpacity onPress={() => setFlowState('hero-question')}>
               <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
@@ -1042,11 +1134,6 @@ export function TouchYourStarStep({
           <Text style={[styles.identityText, { color: colors.text }]}>
             As a {identity}:
           </Text>
-          {northStarData.identityInsights && (
-            <Text style={[styles.identityInsightsText, { color: colors.textSecondary }]}>
-              "{northStarData.identityInsights}"
-            </Text>
-          )}
         </View>
 
         {/* Domain Unlock Buttons */}
@@ -1073,7 +1160,7 @@ export function TouchYourStarStep({
               <Text style={[styles.domainUnlockLabel, { color: hasMission ? '#059669' : '#ed1c24' }]}>
                 {hasMission ? '✓ MISSION DEFINED' : 'DEFINE YOUR MISSION'}
               </Text>
-              <Text style={[styles.domainUnlockText, { color: colors.text }]}>
+              <Text style={[styles.domainUnlockText, { color: colors.text }]} numberOfLines={2}>
                 {hasMission ? `"${northStarData.mission}"` : '"My Mission is to..."'}
               </Text>
             </View>
@@ -1102,7 +1189,7 @@ export function TouchYourStarStep({
               <Text style={[styles.domainUnlockLabel, { color: hasVision ? '#059669' : '#ed1c24' }]}>
                 {hasVision ? '✓ VISION DEFINED' : 'DEFINE YOUR VISION'}
               </Text>
-              <Text style={[styles.domainUnlockText, { color: colors.text }]}>
+              <Text style={[styles.domainUnlockText, { color: colors.text }]} numberOfLines={2}>
                 {hasVision ? `"${northStarData.vision}"` : '"In 5 years, I envision..."'}
               </Text>
             </View>
@@ -1166,13 +1253,12 @@ export function TouchYourStarStep({
             
             {editingDomain === 'values' ? (
               <>
-                {/* Show existing values with edit/delete */}
                 {northStarData.values?.map((value, index) => (
                   <View key={index} style={[styles.valueEditRow, { borderColor: colors.border }]}>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.valueEditName, { color: colors.text }]}>{value.name}</Text>
                       {value.commitment && (
-                        <Text style={[styles.valueEditCommitment, { color: colors.textSecondary }]}>
+                        <Text style={[styles.valueEditCommitment, { color: colors.textSecondary }]} numberOfLines={2}>
                           {value.commitment}
                         </Text>
                       )}
@@ -1192,7 +1278,6 @@ export function TouchYourStarStep({
                   </View>
                 ))}
                 
-                {/* Add new value button */}
                 <TouchableOpacity
                   style={[styles.addValueButton, { borderColor: '#ed1c24' }]}
                   onPress={() => {
@@ -1300,7 +1385,7 @@ export function TouchYourStarStep({
     );
   }
 
-  // CHOICE SCREEN - "I Have One Ready" vs "Guide Me Through"
+  // CHOICE SCREEN
   if (flowState === 'choice') {
     const config = getDomainConfig(currentDomain);
 
@@ -1310,7 +1395,6 @@ export function TouchYourStarStep({
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.headerSection}>
           <View style={styles.headerRow}>
             <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
@@ -1323,10 +1407,9 @@ export function TouchYourStarStep({
           </View>
         </View>
 
-        {/* Choice Card */}
         <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
-            <NorthStarIcon size={40} color="#ed1c24" />
+          <View style={[styles.smallNorthStarCircle, { backgroundColor: '#ed1c2420' }]}>
+            <NorthStarIcon size={36} color="#ed1c24" />
           </View>
           
           <Text style={[styles.choiceTitle, { color: colors.text }]}>
@@ -1363,7 +1446,6 @@ export function TouchYourStarStep({
                 if (questions.length > 0) {
                   setFlowState('guided-questions');
                 } else {
-                  // No questions available, go straight to direct input
                   setFlowState('direct-input');
                 }
               }}
@@ -1377,7 +1459,6 @@ export function TouchYourStarStep({
           </View>
         </View>
 
-        {/* Back to Hub */}
         <TouchableOpacity
           style={styles.skipButton}
           onPress={() => {
@@ -1410,7 +1491,6 @@ export function TouchYourStarStep({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
               <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
@@ -1423,7 +1503,6 @@ export function TouchYourStarStep({
             </View>
           </View>
 
-          {/* Input Card */}
           <View style={[styles.inputCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.inputLabel, { color: colors.text }]}>
               {config.title}
@@ -1494,7 +1573,6 @@ export function TouchYourStarStep({
             </Text>
           </View>
 
-          {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.backButton, { borderColor: colors.border }]}
@@ -1563,7 +1641,6 @@ export function TouchYourStarStep({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
               <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
@@ -1576,17 +1653,15 @@ export function TouchYourStarStep({
             </View>
           </View>
 
-          {/* Progress Bar */}
           <View style={styles.progressContainer}>
             <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
               <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: '#ed1c24' }]} />
             </View>
-            <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-              {config.title} - Question {currentQuestionIndex + 1} of {questions.length}
+            <Text style={[styles.progressTextSmall, { color: colors.textSecondary }]}>
+              {config.title} • Question {currentQuestionIndex + 1} of {questions.length}
             </Text>
           </View>
 
-          {/* Question Card */}
           <View style={[styles.questionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.questionText, { color: colors.text }]}>
               {currentQuestion.question_text}
@@ -1617,7 +1692,6 @@ export function TouchYourStarStep({
             />
           </View>
 
-          {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.backButton, { borderColor: colors.border }]}
@@ -1650,7 +1724,6 @@ export function TouchYourStarStep({
             </TouchableOpacity>
           </View>
 
-          {/* Save & Come Back */}
           <TouchableOpacity
             style={styles.comeBackButton}
             onPress={handleSaveAndComeBack}
@@ -1682,7 +1755,6 @@ export function TouchYourStarStep({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
               <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
@@ -1695,7 +1767,6 @@ export function TouchYourStarStep({
             </View>
           </View>
 
-          {/* Your Responses */}
           {responses.length > 0 && (
             <View style={[styles.responsesCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.responsesTitle, { color: colors.text }]}>
@@ -1714,7 +1785,6 @@ export function TouchYourStarStep({
             </View>
           )}
 
-          {/* Suggestions */}
           <View style={[styles.suggestionsCard, { backgroundColor: '#ed1c2408', borderColor: '#ed1c2430' }]}>
             <Text style={[styles.suggestionsTitle, { color: colors.text }]}>
               Based on your answers, here are some {currentDomain} ideas:
@@ -1753,7 +1823,6 @@ export function TouchYourStarStep({
               </TouchableOpacity>
             ))}
 
-            {/* Write My Own Option */}
             <TouchableOpacity
               style={[
                 styles.suggestionOption,
@@ -1780,7 +1849,7 @@ export function TouchYourStarStep({
             {showCustomInput && (
               <TextInput
                 style={[
-                  styles.customInput,
+                  styles.customInputField,
                   {
                     backgroundColor: colors.background,
                     color: colors.text,
@@ -1798,12 +1867,10 @@ export function TouchYourStarStep({
             )}
           </View>
 
-          {/* Reminder */}
           <Text style={[styles.reminderText, { color: colors.textSecondary, textAlign: 'center', marginBottom: 20 }]}>
-            💡 You can refine this anytime. Continued reflection will help you find what resonates.
+            💡 You can refine this anytime.
           </Text>
 
-          {/* Save Button */}
           <TouchableOpacity
             style={[
               styles.continueButton,
@@ -1835,7 +1902,7 @@ export function TouchYourStarStep({
     );
   }
 
-  // VALUE ENTRY SCREEN (for editing individual values)
+  // VALUE ENTRY SCREEN
   if (flowState === 'value-entry') {
     return (
       <KeyboardAvoidingView
@@ -1848,7 +1915,6 @@ export function TouchYourStarStep({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
               <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
@@ -1861,7 +1927,6 @@ export function TouchYourStarStep({
             </View>
           </View>
 
-          {/* Input Card */}
           <View style={[styles.inputCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.inputLabel, { color: colors.text }]}>
               {editingValueIndex !== null ? 'Edit Core Value' : 'Add Core Value'}
@@ -1904,7 +1969,6 @@ export function TouchYourStarStep({
             </Text>
           </View>
 
-          {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.backButton, { borderColor: colors.border }]}
@@ -1960,7 +2024,6 @@ export function TouchYourStarStep({
     );
   }
 
-  // Fallback - go to identity hub
   return null;
 }
 
@@ -1984,7 +2047,7 @@ const styles = StyleSheet.create({
 
   // Header
   headerSection: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   headerRow: {
     flexDirection: 'row',
@@ -2012,114 +2075,121 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Explainer
-  explainerCard: {
-    padding: 28,
-    borderRadius: 16,
+  // Tooltip
+  tooltipButton: {
+    padding: 8,
+  },
+  tooltipContent: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    alignItems: 'center',
-    marginBottom: 24,
   },
-  explainerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  explainerText: {
-    fontSize: 16,
-    lineHeight: 24,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  explainerQuote: {
-    fontSize: 18,
-    fontWeight: '600',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginVertical: 16,
+  tooltipText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 
-  // Hero Question
+  // Hero Question Card
   heroQuestionCard: {
     padding: 24,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 24,
+    alignItems: 'center',
   },
-  heroQuestion: {
-    fontSize: 18,
-    fontWeight: '600',
-    lineHeight: 26,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  heroSubtext: {
-    fontSize: 16,
-    fontWeight: '500',
+  smallNorthStarCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
+  },
+  heroTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
     textAlign: 'center',
   },
-  sparkList: {
-    gap: 10,
+  heroPromptText: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+    paddingHorizontal: 8,
   },
-  sparkOption: {
+
+  // Spark List - Compact single-line options
+  sparkListCompact: {
+    width: '100%',
+    gap: 8,
+  },
+  sparkOptionCompact: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 14,
-    borderRadius: 12,
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
     borderWidth: 1,
     gap: 12,
   },
-  sparkOptionText: {
-    flex: 1,
-  },
-  sparkLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  sparkDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  customIdentityInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    marginTop: 12,
-  },
-  insightsSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  insightsLabel: {
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  insightsInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
+  sparkLabelCompact: {
     fontSize: 15,
-    minHeight: 80,
+    fontWeight: '500',
+  },
+  customInputInline: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+    borderBottomWidth: 1,
   },
 
-  // Identity Hub
+  // Confirmation text container
+  confirmationContainer: {
+    marginTop: 20,
+    paddingHorizontal: 8,
+  },
+  confirmationText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+
+  // Radio button
+  radioCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioFill: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+
+  // Identity Card (Identity Hub)
   identityCard: {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   identityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 8,
+  },
+  identityStarIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   identityLabel: {
     flex: 1,
@@ -2131,16 +2201,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
-  identityInsightsText: {
+  editLink: {
     fontSize: 14,
-    fontStyle: 'italic',
-    marginTop: 8,
+    fontWeight: '600',
   },
 
-  // Domain Unlock Buttons
+  // Domain Unlock Section
   domainUnlockSection: {
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   domainUnlockButton: {
     flexDirection: 'row',
@@ -2160,7 +2229,7 @@ const styles = StyleSheet.create({
   },
   domainUnlockText: {
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   valuesPreview: {
     flexDirection: 'row',
@@ -2205,29 +2274,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
-  // Cards
-  card: {
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cardLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  editLink: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
   // Choice Screen
   choiceCard: {
     padding: 28,
@@ -2236,16 +2282,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  northStarIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
   choiceTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     marginBottom: 8,
     textAlign: 'center',
@@ -2257,10 +2295,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   choiceDescription: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
   },
   choiceButtons: {
     width: '100%',
@@ -2384,7 +2422,7 @@ const styles = StyleSheet.create({
 
   // Progress
   progressContainer: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   progressBar: {
     height: 6,
@@ -2420,6 +2458,9 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 14,
+  },
+  progressTextSmall: {
+    fontSize: 13,
   },
 
   // Question Card
@@ -2513,26 +2554,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 12,
   },
-  radioCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  radioFill: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
   suggestionText: {
     flex: 1,
     fontSize: 15,
     lineHeight: 22,
   },
-  customInput: {
+  customInputField: {
     borderWidth: 1,
     borderRadius: 12,
     padding: 16,
