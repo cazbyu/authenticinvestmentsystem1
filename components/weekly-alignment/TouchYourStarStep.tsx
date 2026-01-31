@@ -843,7 +843,10 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
           </Text>
           
           <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
-            Do you already have a clear Mission, or would you like to explore one together—step by step, using a few guided questions?
+            {currentDomain === 'vision' 
+              ? 'Do you already have a clear 5-year vision, or would you like to explore one together through guided questions?'
+              : 'Do you already have a clear mission, or would you like to explore one together through guided questions?'
+            }
           </Text>
 
           <View style={styles.choiceButtons}>
