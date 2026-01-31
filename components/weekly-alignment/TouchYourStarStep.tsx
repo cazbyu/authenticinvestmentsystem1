@@ -290,20 +290,35 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
       }
 
       // Update local state
+      let updatedNorthStar: NorthStarData;
       if (currentDomain === 'vision') {
-        setNorthStarData(prev => ({ ...prev, vision: statementText }));
+        updatedNorthStar = { ...northStarData, vision: statementText };
       } else {
-        setNorthStarData(prev => ({ ...prev, mission: statementText }));
+        updatedNorthStar = { ...northStarData, mission: statementText };
       }
+      setNorthStarData(updatedNorthStar);
       
-      onDataCapture({
-        missionReflection: currentDomain === 'mission' ? statementText : northStarData.mission,
-        visionAcknowledged: true,
-        valuesAcknowledged: true,
-      });
+      // Clear responses for next domain
+      setResponses([]);
+      setAiSuggestions([]);
+      setSelectedSuggestion(null);
+      setCustomMission('');
+      setShowCustomInput(false);
+      setCurrentQuestionIndex(0);
+      setCurrentAnswer('');
 
-      // Move to next step
-      onNext();
+      // Check if the OTHER domain still needs to be done
+      const otherDomainComplete = currentDomain === 'vision' 
+        ? updatedNorthStar.mission 
+        : updatedNorthStar.vision;
+
+      if (!otherDomainComplete) {
+        // Offer to work on the other domain
+        setFlowState('offer-other-domain');
+      } else {
+        // Both complete - show summary
+        setFlowState('has-mission');
+      }
 
     } catch (error) {
       console.error('Error saving statement:', error);
@@ -400,7 +415,7 @@ function handleSkipQuestion() {
       q.question_text,
       'onboarding',
       timeSpent,
-      'mission'
+      currentDomain
     );
   }
   
