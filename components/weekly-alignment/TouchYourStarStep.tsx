@@ -163,11 +163,11 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
       
       const answeredIds = (answeredQuestions || []).map(q => q.question_id);
 
-      // Load mission questions NOT already answered
+      // Load questions for selected domain NOT already answered
       let questionsQuery = supabase
         .from('0008-ap-user-power-questions')
         .select('id, question_text, question_context')
-        .eq('domain', 'mission')
+        .eq('domain', currentDomain)
         .eq('show_in_onboarding', true)
         .eq('is_active', true);
       
