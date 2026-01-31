@@ -216,11 +216,13 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
         setResponses(Array.from(latestResponses.values()));
       }
 
-      // Determine initial state
-      if (data.mission) {
+      // Determine initial state - start with domain choice
+      if (data.mission && data.vision) {
+        // Both exist - show what they have
         setFlowState('has-mission');
       } else {
-        setFlowState('choice');
+        // Let them choose which to work on
+        setFlowState('domain-choice');
       }
 
     } catch (error) {
