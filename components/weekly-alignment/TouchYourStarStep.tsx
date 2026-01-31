@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { ChevronRight, ChevronLeft, Edit3, Lightbulb } from 'lucide-react-native';
+import { ChevronRight, ChevronLeft, Edit3, Lightbulb, Check, Star } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
@@ -32,15 +32,18 @@ interface TouchYourStarStepProps {
 }
 
 interface NorthStarData {
+  identity?: string;
+  identityInsights?: string;
   mission?: string;
   vision?: string;
-  values?: Array<{ id: string; value: string; description?: string }>;
+  values?: Array<{ id: string; name: string; commitment: string }>;
 }
 
 interface PowerQuestion {
   id: string;
   question_text: string;
   question_context?: string;
+  question_type?: string;
 }
 
 interface QuestionResponse {
@@ -49,7 +52,31 @@ interface QuestionResponse {
   response: string;
 }
 
-type FlowState = 'loading' | 'domain-choice' | 'choice' | 'direct-input' | 'guided-questions' | 'synthesis' | 'offer-other-domain' | 'has-mission';
+// Spark List - The identity options
+const SPARK_LIST = [
+  { id: 'child-of-god', label: 'Child of God', description: 'Created with divine purpose and infinite worth' },
+  { id: 'creator', label: 'Creator', description: 'Bringing new ideas and possibilities into existence' },
+  { id: 'servant', label: 'Servant', description: 'Finding fulfillment through serving others' },
+  { id: 'steward', label: 'Steward', description: 'Caring for and developing what has been entrusted to you' },
+  { id: 'healer', label: 'Healer', description: 'Restoring wholeness to people and situations' },
+  { id: 'teacher', label: 'Teacher', description: 'Guiding others toward knowledge and wisdom' },
+  { id: 'builder', label: 'Builder', description: 'Constructing foundations that last' },
+  { id: 'custom', label: 'Something else...', description: 'Define your own identity' },
+];
+
+type FlowState = 
+  | 'loading'
+  | 'explainer'           // First-time: explain the purpose
+  | 'hero-question'       // Select identity from Spark List
+  | 'identity-questions'  // Optional guided questions for identity
+  | 'identity-hub'        // Main screen: shows identity, offers Mission/Vision/Values
+  | 'choice'              // "I Have One Ready" vs "Guide Me Through"
+  | 'direct-input'        // Text input for statement
+  | 'guided-questions'    // Question flow
+  | 'synthesis'           // AI suggestions
+  | 'value-entry';        // Special: entering a single value
+
+type DomainType = 'mission' | 'vision' | 'values';
 
 export function TouchYourStarStep({
   userId,
@@ -60,7 +87,12 @@ export function TouchYourStarStep({
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
   const [northStarData, setNorthStarData] = useState<NorthStarData>({});
-  const [currentDomain, setCurrentDomain] = useState<'mission' | 'vision'>('mission');
+  const [currentDomain, setCurrentDomain] = useState<DomainType>('mission');
+  
+  // Identity state
+  const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
+  const [customIdentity, setCustomIdentity] = useState('');
+  const [identityInsights, setIdentityInsights] = useState('');
   
   // Questions state
   const [questions, setQuestions] = useState<PowerQuestion[]>([]);
@@ -69,10 +101,18 @@ export function TouchYourStarStep({
   const [currentAnswer, setCurrentAnswer] = useState('');
   
   // Direct input state
-  const [directMission, setDirectMission] = useState('');
+  const [directInput, setDirectInput] = useState('');
 
-  // Edit WA questions
+  // Values-specific state (for entering individual values)
+  const [currentValueName, setCurrentValueName] = useState('');
+  const [currentValueCommitment, setCurrentValueCommitment] = useState('');
+  const [editingValueIndex, setEditingValueIndex] = useState<number | null>(null);
+
+  // Edit state
   const [showEditOptions, setShowEditOptions] = useState(false);
+  const [editingDomain, setEditingDomain] = useState<DomainType | null>(null);
+
+  // Question timing
   const questionStartTime = React.useRef<number>(Date.now());
 
   // AI support
@@ -81,11 +121,12 @@ export function TouchYourStarStep({
   
   // Synthesis state
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
-  const [customMission, setCustomMission] = useState('');
+  const [customStatement, setCustomStatement] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
   
   // UI state
   const [saving, setSaving] = useState(false);
+  const [resumePrompt, setResumePrompt] = useState<{ domain: DomainType; hasResponses: boolean } | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -93,7 +134,8 @@ export function TouchYourStarStep({
 
   // Track question shown
   useEffect(() => {
-    if (flowState === 'guided-questions' && questions.length > 0 && questions[currentQuestionIndex]) {
+    if ((flowState === 'guided-questions' || flowState === 'identity-questions') && 
+        questions.length > 0 && questions[currentQuestionIndex]) {
       const q = questions[currentQuestionIndex];
       trackQuestionShown(
         userId,
@@ -112,7 +154,7 @@ export function TouchYourStarStep({
   useEffect(() => {
     if (flowState === 'synthesis' && responses.length > 0 && aiSuggestions.length === 0) {
       setLoadingSuggestions(true);
-      generateAIMissionSuggestions()
+      generateAISuggestions()
         .then(suggestions => {
           setAiSuggestions(suggestions);
         })
@@ -129,104 +171,142 @@ export function TouchYourStarStep({
       // Load existing North Star data
       const { data: northStar } = await supabase
         .from('0008-ap-north-star')
-        .select('mission_statement, 5yr_vision, core_values')
+        .select('mission_statement, 5yr_vision, core_values, core_identity, identity_insights')
         .eq('user_id', userId)
         .maybeSingle();
 
-      // Transform values
-      let formattedValues: Array<{ id: string; value: string; description?: string }> = [];
+      // Transform values from storage format
+      let formattedValues: Array<{ id: string; name: string; commitment: string }> = [];
       if (northStar?.core_values && Array.isArray(northStar.core_values)) {
         formattedValues = northStar.core_values.map((v: any, index: number) => {
           if (typeof v === 'string') {
-            return { id: `value-${index}`, value: v };
-          } else if (typeof v === 'object' && v.value) {
-            return { id: v.id || `value-${index}`, value: v.value, description: v.description };
+            return { id: `value-${index}`, name: v, commitment: '' };
+          } else if (typeof v === 'object') {
+            return { 
+              id: v.id || `value-${index}`, 
+              name: v.name || v.value || '', 
+              commitment: v.commitment || v.description || '' 
+            };
           }
-          return { id: `value-${index}`, value: String(v) };
+          return { id: `value-${index}`, name: String(v), commitment: '' };
         });
       }
 
       const data: NorthStarData = {
+        identity: northStar?.core_identity,
+        identityInsights: northStar?.identity_insights,
         mission: northStar?.mission_statement,
         vision: northStar?.['5yr_vision'],
         values: formattedValues,
       };
       setNorthStarData(data);
 
-      // Get questions user has already answered for current domain
-      const { data: answeredQuestions } = await supabase
-        .from('0008-ap-question-responses')
-        .select('question_id')
-        .eq('user_id', userId)
-        .eq('domain', currentDomain);
-      
-      const answeredIds = (answeredQuestions || []).map(q => q.question_id);
-
-      // Load questions for selected domain NOT already answered
-      let questionsQuery = supabase
-        .from('0008-ap-user-power-questions')
-        .select('id, question_text, question_context')
-        .eq('domain', currentDomain)
-        .eq('show_in_onboarding', true)
-        .eq('is_active', true);
-      
-      // Exclude already answered questions
-      if (answeredIds.length > 0) {
-        questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
-      }
-      
-      const { data: domainQuestions } = await questionsQuery.limit(4);
-
-      if (domainQuestions && domainQuestions.length > 0) {
-        setQuestions(domainQuestions);
-      }
-
-      // Load ALL existing responses for synthesis display
+      // Check for partial progress (responses saved but statement not complete)
       const { data: existingResponses } = await supabase
         .from('0008-ap-question-responses')
-        .select('question_id, response_text, created_at')
+        .select('domain')
         .eq('user_id', userId)
-        .eq('domain', currentDomain)
         .eq('context_type', 'onboarding')
-        .order('created_at', { ascending: true });
+        .eq('used_in_synthesis', false);
 
-      if (existingResponses && existingResponses.length > 0) {
-        // Get question texts for the responses
-        const questionIds = existingResponses.map(r => r.question_id);
-        const { data: questionTexts } = await supabase
-          .from('0008-ap-user-power-questions')
-          .select('id, question_text')
-          .in('id', questionIds);
-        
-        const questionMap = new Map(
-          (questionTexts || []).map(q => [q.id, q.question_text])
-        );
-
-        // Deduplicate - keep only most recent response per question
-        const latestResponses = new Map<string, QuestionResponse>();
-        existingResponses.forEach(r => {
-          latestResponses.set(r.question_id, {
-            questionId: r.question_id,
-            questionText: questionMap.get(r.question_id) || '',
-            response: r.response_text,
-          });
-        });
-        
-        setResponses(Array.from(latestResponses.values()));
-      }
-
-      // Determine initial state - start with domain choice
-      if (data.mission && data.vision) {
-        // Both exist - show what they have
-        setFlowState('has-mission');
+      // Determine initial state
+      if (!data.identity) {
+        // No identity yet - start from beginning
+        setFlowState('explainer');
       } else {
-        // Let them choose which to work on
-        setFlowState('domain-choice');
+        // Has identity - go to hub
+        setSelectedIdentity(data.identity);
+        
+        // Check if there's partial progress to resume
+        if (existingResponses && existingResponses.length > 0) {
+          const domains = [...new Set(existingResponses.map(r => r.domain))];
+          if (domains.length > 0) {
+            const resumeDomain = domains[0] as DomainType;
+            // Check if this domain is already complete
+            const domainComplete = 
+              (resumeDomain === 'mission' && data.mission) ||
+              (resumeDomain === 'vision' && data.vision) ||
+              (resumeDomain === 'values' && data.values && data.values.length > 0);
+            
+            if (!domainComplete) {
+              setResumePrompt({ domain: resumeDomain, hasResponses: true });
+            }
+          }
+        }
+        
+        setFlowState('identity-hub');
       }
 
     } catch (error) {
       console.error('Error loading initial data:', error);
-      setFlowState('choice');
+      setFlowState('explainer');
+    }
+  }
+
+  async function loadQuestionsForDomain(domain: DomainType | 'identity') {
+    const supabase = getSupabaseClient();
+    
+    // Get questions user has already answered for this domain
+    const { data: answeredQuestions } = await supabase
+      .from('0008-ap-question-responses')
+      .select('question_id')
+      .eq('user_id', userId)
+      .eq('domain', domain);
+    
+    const answeredIds = (answeredQuestions || []).map(q => q.question_id);
+
+    // Load questions for domain NOT already answered
+    let questionsQuery = supabase
+      .from('0008-ap-user-power-questions')
+      .select('id, question_text, question_context, question_type')
+      .eq('domain', domain)
+      .eq('show_in_onboarding', true)
+      .eq('is_active', true);
+    
+    if (answeredIds.length > 0) {
+      questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
+    }
+    
+    const { data: domainQuestions } = await questionsQuery.limit(4);
+
+    if (domainQuestions && domainQuestions.length > 0) {
+      setQuestions(domainQuestions);
+    } else {
+      setQuestions([]);
+    }
+
+    // Load existing responses for synthesis
+    const { data: existingResponses } = await supabase
+      .from('0008-ap-question-responses')
+      .select('question_id, response_text, created_at')
+      .eq('user_id', userId)
+      .eq('domain', domain)
+      .eq('context_type', 'onboarding')
+      .order('created_at', { ascending: true });
+
+    if (existingResponses && existingResponses.length > 0) {
+      const questionIds = existingResponses.map(r => r.question_id);
+      const { data: questionTexts } = await supabase
+        .from('0008-ap-user-power-questions')
+        .select('id, question_text')
+        .in('id', questionIds);
+      
+      const questionMap = new Map(
+        (questionTexts || []).map(q => [q.id, q.question_text])
+      );
+
+      const latestResponses = new Map<string, QuestionResponse>();
+      existingResponses.forEach(r => {
+        latestResponses.set(r.question_id, {
+          questionId: r.question_id,
+          questionText: questionMap.get(r.question_id) || '',
+          response: r.response_text,
+        });
+      });
+      
+      setResponses(Array.from(latestResponses.values()));
+    } else {
+      setResponses([]);
     }
   }
 
@@ -234,7 +314,6 @@ export function TouchYourStarStep({
     try {
       const supabase = getSupabaseClient();
       
-      // Upsert response
       await supabase
         .from('0008-ap-question-responses')
         .upsert({
@@ -252,6 +331,54 @@ export function TouchYourStarStep({
     }
   }
 
+  async function saveIdentity() {
+    setSaving(true);
+    try {
+      const supabase = getSupabaseClient();
+      
+      const identityValue = selectedIdentity === 'custom' ? customIdentity : selectedIdentity;
+      
+      // Check if north star record exists
+      const { data: existing } = await supabase
+        .from('0008-ap-north-star')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('0008-ap-north-star')
+          .update({ 
+            core_identity: identityValue,
+            identity_insights: identityInsights || null,
+          })
+          .eq('user_id', userId);
+      } else {
+        await supabase
+          .from('0008-ap-north-star')
+          .insert({ 
+            user_id: userId, 
+            core_identity: identityValue,
+            identity_insights: identityInsights || null,
+          });
+      }
+
+      // Update local state
+      setNorthStarData(prev => ({ 
+        ...prev, 
+        identity: identityValue,
+        identityInsights: identityInsights,
+      }));
+      
+      setFlowState('identity-hub');
+
+    } catch (error) {
+      console.error('Error saving identity:', error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveStatement(statementText: string) {
     setSaving(true);
     try {
@@ -260,7 +387,6 @@ export function TouchYourStarStep({
       // Determine which field to update
       const fieldName = currentDomain === 'vision' ? '5yr_vision' : 'mission_statement';
       
-      // Check if north star record exists
       const { data: existing } = await supabase
         .from('0008-ap-north-star')
         .select('id')
@@ -289,35 +415,15 @@ export function TouchYourStarStep({
       }
 
       // Update local state
-      let updatedNorthStar: NorthStarData;
       if (currentDomain === 'vision') {
-        updatedNorthStar = { ...northStarData, vision: statementText };
+        setNorthStarData(prev => ({ ...prev, vision: statementText }));
       } else {
-        updatedNorthStar = { ...northStarData, mission: statementText };
+        setNorthStarData(prev => ({ ...prev, mission: statementText }));
       }
-      setNorthStarData(updatedNorthStar);
       
-      // Clear responses for next domain
-      setResponses([]);
-      setAiSuggestions([]);
-      setSelectedSuggestion(null);
-      setCustomMission('');
-      setShowCustomInput(false);
-      setCurrentQuestionIndex(0);
-      setCurrentAnswer('');
-
-      // Check if the OTHER domain still needs to be done
-      const otherDomainComplete = currentDomain === 'vision' 
-        ? updatedNorthStar.mission 
-        : updatedNorthStar.vision;
-
-      if (!otherDomainComplete) {
-        // Offer to work on the other domain
-        setFlowState('offer-other-domain');
-      } else {
-        // Both complete - show summary
-        setFlowState('has-mission');
-      }
+      // Reset state for next domain
+      resetDomainState();
+      setFlowState('identity-hub');
 
     } catch (error) {
       console.error('Error saving statement:', error);
@@ -326,11 +432,96 @@ export function TouchYourStarStep({
     }
   }
 
+  async function saveValue(name: string, commitment: string) {
+    setSaving(true);
+    try {
+      const supabase = getSupabaseClient();
+      
+      const newValue = {
+        id: `value-${Date.now()}`,
+        name,
+        commitment,
+      };
+
+      const updatedValues = editingValueIndex !== null
+        ? northStarData.values?.map((v, i) => i === editingValueIndex ? newValue : v) || [newValue]
+        : [...(northStarData.values || []), newValue];
+
+      const { data: existing } = await supabase
+        .from('0008-ap-north-star')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('0008-ap-north-star')
+          .update({ core_values: updatedValues })
+          .eq('user_id', userId);
+      } else {
+        await supabase
+          .from('0008-ap-north-star')
+          .insert({ user_id: userId, core_values: updatedValues });
+      }
+
+      // Mark responses as used
+      if (responses.length > 0) {
+        const questionIds = responses.map(r => r.questionId);
+        await supabase
+          .from('0008-ap-question-responses')
+          .update({ used_in_synthesis: true })
+          .eq('user_id', userId)
+          .in('question_id', questionIds);
+      }
+
+      setNorthStarData(prev => ({ ...prev, values: updatedValues }));
+      
+      // Reset for next value or return to hub
+      resetDomainState();
+      setEditingValueIndex(null);
+      setFlowState('identity-hub');
+
+    } catch (error) {
+      console.error('Error saving value:', error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteValue(index: number) {
+    try {
+      const supabase = getSupabaseClient();
+      
+      const updatedValues = northStarData.values?.filter((_, i) => i !== index) || [];
+
+      await supabase
+        .from('0008-ap-north-star')
+        .update({ core_values: updatedValues })
+        .eq('user_id', userId);
+
+      setNorthStarData(prev => ({ ...prev, values: updatedValues }));
+    } catch (error) {
+      console.error('Error deleting value:', error);
+    }
+  }
+
+  function resetDomainState() {
+    setResponses([]);
+    setAiSuggestions([]);
+    setSelectedSuggestion(null);
+    setCustomStatement('');
+    setShowCustomInput(false);
+    setCurrentQuestionIndex(0);
+    setCurrentAnswer('');
+    setDirectInput('');
+    setCurrentValueName('');
+    setCurrentValueCommitment('');
+  }
+
   function handleSkipQuestion() {
     const currentQuestion = questions[currentQuestionIndex];
     const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
     
-    // Track the skip
     trackQuestionSkipped(
       userId,
       currentQuestion.id,
@@ -340,12 +531,16 @@ export function TouchYourStarStep({
       currentDomain
     );
     
-    // Move to next question or synthesis
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setCurrentAnswer('');
     } else {
-      setFlowState('synthesis');
+      // Go to synthesis if we have responses, otherwise back to hub
+      if (responses.length > 0) {
+        setFlowState('synthesis');
+      } else {
+        setFlowState('identity-hub');
+      }
     }
   }
   
@@ -355,7 +550,6 @@ export function TouchYourStarStep({
     const currentQuestion = questions[currentQuestionIndex];
     const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
     
-    // Track the answer
     trackQuestionAnswered(
       userId,
       currentQuestion.id,
@@ -366,7 +560,6 @@ export function TouchYourStarStep({
       currentDomain
     );
     
-    // Save response locally
     const newResponse: QuestionResponse = {
       questionId: currentQuestion.id,
       questionText: currentQuestion.question_text,
@@ -374,11 +567,8 @@ export function TouchYourStarStep({
     };
     
     setResponses(prev => [...prev, newResponse]);
-    
-    // Save to database
     saveResponse(currentQuestion.id, currentAnswer.trim());
     
-    // Move to next question or synthesis
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setCurrentAnswer('');
@@ -390,11 +580,9 @@ export function TouchYourStarStep({
   function handlePreviousQuestion() {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(prev => prev - 1);
-      // Restore previous answer
       const prevResponse = responses[currentQuestionIndex - 1];
       if (prevResponse) {
         setCurrentAnswer(prevResponse.response);
-        // Remove last response so it can be re-added
         setResponses(prev => prev.slice(0, -1));
       }
     } else {
@@ -405,39 +593,33 @@ export function TouchYourStarStep({
   function handleSaveAndComeBack() {
     const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
     
-    // Track as skipped if they had a current question
     if (questions[currentQuestionIndex]) {
       const q = questions[currentQuestionIndex];
-      trackQuestionSkipped(
-        userId,
-        q.id,
-        q.question_text,
-        'onboarding',
-        timeSpent,
-        currentDomain
-      );
+      trackQuestionSkipped(userId, q.id, q.question_text, 'onboarding', timeSpent, currentDomain);
     }
     
-    // Save current answer if there is one
     if (currentAnswer.trim() && questions[currentQuestionIndex]) {
       saveResponse(questions[currentQuestionIndex].id, currentAnswer.trim());
     }
     
-    // Capture partial progress and continue
     onDataCapture({
-      missionReflection: undefined,
-      visionAcknowledged: false,
-      valuesAcknowledged: false,
+      missionReflection: northStarData.mission,
+      visionAcknowledged: !!northStarData.vision,
+      valuesAcknowledged: !!(northStarData.values && northStarData.values.length > 0),
     });
     onNext();
   }
 
-  async function generateAIMissionSuggestions(): Promise<string[]> {
+  async function generateAISuggestions(): Promise<string[]> {
     try {
       const supabase = getSupabaseClient();
       
       const { data, error } = await supabase.functions.invoke('generate-mission', {
-        body: { responses, domain: currentDomain },
+        body: { 
+          responses, 
+          domain: currentDomain,
+          identity: northStarData.identity,
+        },
       });
 
       if (error) throw error;
@@ -450,73 +632,43 @@ export function TouchYourStarStep({
   }
 
   function generateFallbackSuggestions(): string[] {
-    if (responses.length < 2) {
-      if (currentDomain === 'vision') {
-        return [
-          'In 5 years, I will be living with intention and making a positive impact on those around me.',
-          'In 5 years, I will have built something meaningful that reflects my deepest values.',
-        ];
-      }
+    const identity = northStarData.identity || 'human being';
+    
+    if (currentDomain === 'values') {
       return [
-        'To live with intention and make a positive impact on those around me.',
-        'To use my unique gifts to serve others and leave the world better than I found it.',
+        `Integrity: I am committed to speaking truth and keeping promises, even when difficult.`,
+        `Service: I am committed to putting others' needs alongside my own.`,
+        `Growth: I am committed to continuous learning and self-improvement.`,
       ];
     }
 
+    if (currentDomain === 'vision') {
+      return [
+        `A life where I have made a lasting positive impact on my family and community.`,
+        `A world where my work has created opportunities for those who need them most.`,
+        `A home filled with peace, purpose, and the fruits of intentional living.`,
+      ];
+    }
+
+    // Mission fallbacks
     const allText = responses.map(r => r.response).join(' ').toLowerCase();
     const suggestions: string[] = [];
-    const prefix = currentDomain === 'vision' ? 'In 5 years, I will' : 'To';
 
-    // Check for specific themes in their responses
-    const hasAfrica = allText.includes('africa');
-    const hasBusiness = allText.includes('business') || allText.includes('entrepreneur');
-    const hasVulnerable = allText.includes('vulnerable') || allText.includes('poverty') || allText.includes('struggling');
-    const hasFamily = allText.includes('family') || allText.includes('families');
-    const hasTeach = allText.includes('teach') || allText.includes('education') || allText.includes('learn');
-    const hasInspire = allText.includes('inspir') || allText.includes('happy') || allText.includes('hope');
-    const hasHelp = allText.includes('help') || allText.includes('support') || allText.includes('empower');
-    const hasCreate = allText.includes('create') || allText.includes('build') || allText.includes('start');
-
-    // Build personalized suggestions based on detected themes
-    if (hasAfrica && hasBusiness) {
-      suggestions.push(`${prefix} create sustainable business opportunities that empower African entrepreneurs and transform communities.`);
-    } else if (hasAfrica) {
-      suggestions.push(`${prefix} serve and uplift communities across Africa through meaningful work and lasting impact.`);
+    if (allText.includes('africa') || allText.includes('business') || allText.includes('entrepreneur')) {
+      suggestions.push(`To create sustainable opportunities that empower communities and transform lives.`);
+    }
+    if (allText.includes('family') || allText.includes('children')) {
+      suggestions.push(`To nurture and guide my family toward lives of purpose and fulfillment.`);
+    }
+    if (allText.includes('teach') || allText.includes('learn') || allText.includes('education')) {
+      suggestions.push(`To educate and equip others with knowledge that opens doors.`);
     }
 
-    if (hasVulnerable && hasHelp) {
-      suggestions.push(`${prefix} champion the dignity of vulnerable populations by creating pathways to opportunity and self-sufficiency.`);
-    } else if (hasVulnerable) {
-      suggestions.push(`${prefix} be a voice and advocate for those who are often overlooked, bringing hope and tangible support.`);
-    }
+    // Always include generic options
+    suggestions.push(`To serve others with wisdom and compassion, making a positive difference wherever I go.`);
+    suggestions.push(`To use my unique gifts to contribute meaningfully to the world around me.`);
 
-    if (hasFamily) {
-      suggestions.push(`${prefix} strengthen families and communities by modeling integrity, love, and purposeful action.`);
-    }
-
-    if (hasBusiness && hasCreate && !hasAfrica) {
-      suggestions.push(`${prefix} build enterprises that create jobs, solve real problems, and generate lasting positive change.`);
-    }
-
-    if (hasTeach) {
-      suggestions.push(`${prefix} educate and equip others with the knowledge and skills they need to thrive.`);
-    }
-
-    if (hasInspire && suggestions.length < 3) {
-      suggestions.push(`${prefix} inspire hope and possibility in every person I encounter.`);
-    }
-
-    // If we still don't have enough, add personalized fallbacks
-    if (suggestions.length < 2) {
-      if (hasHelp || hasCreate) {
-        suggestions.push(`${prefix} use my energy and resources to create opportunities for those who need them most.`);
-      }
-      suggestions.push(`${prefix} live boldly and kindly, leaving every person and place better than I found them.`);
-    }
-
-    // Deduplicate and limit to 3
-    const uniqueSuggestions = [...new Set(suggestions)];
-    return uniqueSuggestions.slice(0, 3);
+    return [...new Set(suggestions)].slice(0, 3);
   }
 
   function handleSelectSuggestion(index: number) {
@@ -532,45 +684,65 @@ export function TouchYourStarStep({
   function handleSaveFinalStatement() {
     let finalStatement = '';
     
-    if (showCustomInput && customMission.trim()) {
-      finalStatement = customMission.trim();
+    if (showCustomInput && customStatement.trim()) {
+      finalStatement = customStatement.trim();
     } else if (selectedSuggestion !== null) {
-      // Use AI suggestions if available, otherwise fallback
       const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateFallbackSuggestions();
       finalStatement = suggestions[selectedSuggestion];
     }
     
     if (finalStatement) {
-      saveStatement(finalStatement);
+      if (currentDomain === 'values') {
+        // Parse value suggestion into name and commitment
+        const colonIndex = finalStatement.indexOf(':');
+        if (colonIndex > 0) {
+          const name = finalStatement.substring(0, colonIndex).trim();
+          const commitment = finalStatement.substring(colonIndex + 1).trim();
+          saveValue(name, commitment);
+        } else {
+          saveValue(finalStatement, '');
+        }
+      } else {
+        saveStatement(finalStatement);
+      }
     }
   }
 
-  async function loadQuestionsForDomain(domain: 'mission' | 'vision') {
-    const supabase = getSupabaseClient();
-    
-    const { data: answeredQuestions } = await supabase
-      .from('0008-ap-question-responses')
-      .select('question_id')
-      .eq('user_id', userId)
-      .eq('domain', domain);
-    
-    const answeredIds = (answeredQuestions || []).map(q => q.question_id);
+  function startDomainFlow(domain: DomainType) {
+    setCurrentDomain(domain);
+    resetDomainState();
+    setFlowState('choice');
+  }
 
-    let questionsQuery = supabase
-      .from('0008-ap-user-power-questions')
-      .select('id, question_text, question_context')
-      .eq('domain', domain)
-      .eq('show_in_onboarding', true)
-      .eq('is_active', true);
+  // Get domain-specific labels and placeholders
+  function getDomainConfig(domain: DomainType) {
+    const identity = northStarData.identity || 'Steward';
     
-    if (answeredIds.length > 0) {
-      questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
-    }
-    
-    const { data: domainQuestions } = await questionsQuery.limit(4);
-    
-    if (domainQuestions && domainQuestions.length > 0) {
-      setQuestions(domainQuestions);
+    switch (domain) {
+      case 'mission':
+        return {
+          title: 'Define Your Mission',
+          subtitle: `As a ${identity}, my mission is...`,
+          placeholder: 'To...',
+          hint: 'Your mission describes your core purpose - what you do and why. It answers "What contribution do I make?"',
+          buttonText: 'My Mission is to...',
+        };
+      case 'vision':
+        return {
+          title: 'Define Your Vision',
+          subtitle: `As a ${identity}, in 5 years I envision...`,
+          placeholder: 'A world/life where...',
+          hint: 'Your vision paints a picture of your desired future - where you are headed. It answers "What does success look like?"',
+          buttonText: 'In 5 years, I envision...',
+        };
+      case 'values':
+        return {
+          title: 'Define Your Core Values',
+          subtitle: `As a ${identity}, I am committed to...`,
+          placeholder: 'Value Name: I am committed to...',
+          hint: 'Core values are actionable principles that guide your decisions. They answer "What do I stand for?"',
+          buttonText: 'I am committed to...',
+        };
     }
   }
 
@@ -588,15 +760,226 @@ export function TouchYourStarStep({
     );
   }
 
-  // Domain Choice - Shows existing statements if any, offers next steps
-  if (flowState === 'domain-choice') {
-    const hasVision = !!northStarData.vision;
+  // EXPLAINER SCREEN - First time introduction
+  if (flowState === 'explainer') {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.headerSection}>
+          <View style={styles.headerRow}>
+            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
+              <MiniCompass size={56} />
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
+              <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Explainer Card */}
+        <View style={[styles.explainerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
+            <NorthStarIcon size={48} color="#ed1c24" />
+          </View>
+          
+          <Text style={[styles.explainerTitle, { color: colors.text }]}>
+            Who Are You at Your Core?
+          </Text>
+          
+          <Text style={[styles.explainerText, { color: colors.textSecondary }]}>
+            Before we define what you do or where you're going, let's step back from all the titles you hold—job, parent, spouse, friend—and answer a deeper question:
+          </Text>
+          
+          <Text style={[styles.explainerQuote, { color: '#ed1c24' }]}>
+            "Who am I when everything else is stripped away?"
+          </Text>
+          
+          <Text style={[styles.explainerText, { color: colors.textSecondary }]}>
+            This foundational identity will anchor everything else—your Mission (purpose), Vision (direction), and Core Values (guidance).
+          </Text>
+        </View>
+
+        {/* Continue Button */}
+        <TouchableOpacity
+          style={[styles.continueButton, { backgroundColor: '#ed1c24' }]}
+          onPress={() => setFlowState('hero-question')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.continueButtonText}>Let's Begin</Text>
+          <ChevronRight size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  }
+
+  // HERO QUESTION - Select identity from Spark List
+  if (flowState === 'hero-question') {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={styles.headerSection}>
+            <View style={styles.headerRow}>
+              <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
+                <MiniCompass size={56} />
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Hero Question */}
+          <View style={[styles.heroQuestionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.heroQuestion, { color: colors.text }]}>
+              When you strip away every title you hold—job, parent, spouse, friend—what is the one title that remains?
+            </Text>
+            
+            <Text style={[styles.heroSubtext, { color: colors.textSecondary }]}>
+              At my core, I am a...
+            </Text>
+
+            {/* Spark List Options */}
+            <View style={styles.sparkList}>
+              {SPARK_LIST.map((spark) => (
+                <TouchableOpacity
+                  key={spark.id}
+                  style={[
+                    styles.sparkOption,
+                    {
+                      backgroundColor: selectedIdentity === spark.id ? '#ed1c2415' : colors.background,
+                      borderColor: selectedIdentity === spark.id ? '#ed1c24' : colors.border,
+                    },
+                  ]}
+                  onPress={() => setSelectedIdentity(spark.id)}
+                >
+                  <View style={[
+                    styles.radioCircle,
+                    { borderColor: selectedIdentity === spark.id ? '#ed1c24' : colors.border },
+                  ]}>
+                    {selectedIdentity === spark.id && (
+                      <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
+                    )}
+                  </View>
+                  <View style={styles.sparkOptionText}>
+                    <Text style={[styles.sparkLabel, { color: colors.text }]}>{spark.label}</Text>
+                    <Text style={[styles.sparkDescription, { color: colors.textSecondary }]}>
+                      {spark.description}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Custom Identity Input */}
+            {selectedIdentity === 'custom' && (
+              <TextInput
+                style={[
+                  styles.customIdentityInput,
+                  {
+                    backgroundColor: colors.background,
+                    color: colors.text,
+                    borderColor: colors.border,
+                  },
+                ]}
+                placeholder="Enter your identity..."
+                placeholderTextColor={colors.textSecondary}
+                value={customIdentity}
+                onChangeText={setCustomIdentity}
+              />
+            )}
+
+            {/* Optional Insights */}
+            {selectedIdentity && (
+              <View style={styles.insightsSection}>
+                <Text style={[styles.insightsLabel, { color: colors.textSecondary }]}>
+                  💭 Optional: Add any reflections, stories, or quotes that color this identity for you
+                </Text>
+                <TextInput
+                  style={[
+                    styles.insightsInput,
+                    {
+                      backgroundColor: colors.background,
+                      color: colors.text,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  placeholder="Why does this identity resonate with you?"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                  value={identityInsights}
+                  onChangeText={setIdentityInsights}
+                  textAlignVertical="top"
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.backButton, { borderColor: colors.border }]}
+              onPress={() => setFlowState('explainer')}
+            >
+              <ChevronLeft size={20} color={colors.text} />
+              <Text style={[styles.backButtonText, { color: colors.text }]}>Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                { 
+                  backgroundColor: (selectedIdentity && (selectedIdentity !== 'custom' || customIdentity.trim())) 
+                    ? '#ed1c24' 
+                    : '#ccc' 
+                },
+              ]}
+              onPress={saveIdentity}
+              disabled={!selectedIdentity || (selectedIdentity === 'custom' && !customIdentity.trim()) || saving}
+              activeOpacity={0.8}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.saveButtonText}>Save Identity</Text>
+                  <ChevronRight size={20} color="#FFFFFF" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // IDENTITY HUB - Main screen after identity is set
+  if (flowState === 'identity-hub') {
     const hasMission = !!northStarData.mission;
+    const hasVision = !!northStarData.vision;
     const hasValues = northStarData.values && northStarData.values.length > 0;
-    
-    // Determine what's still needed
-    const completedCount = (hasVision ? 1 : 0) + (hasMission ? 1 : 0) + (hasValues ? 1 : 0);
+    const completedCount = (hasMission ? 1 : 0) + (hasVision ? 1 : 0) + (hasValues ? 1 : 0);
     const allComplete = completedCount === 3;
+    const identity = northStarData.identity || 'Steward';
 
     return (
       <ScrollView
@@ -617,159 +1000,254 @@ export function TouchYourStarStep({
           </View>
         </View>
 
-        {/* Intro Text */}
-        <Text style={[styles.introText, { color: colors.textSecondary }]}>
-          This step helps calibrate your internal compass. Together, we'll define your Mission (your purpose), your Vision (your direction), and the Core Values that keep you on track.
-        </Text>
-
-        {/* Vision Card - Always show */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: hasVision ? colors.border : '#ed1c2440' }]}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR 5-YEAR VISION</Text>
-            {hasVision ? (
-              <TouchableOpacity onPress={() => {
-                setCurrentDomain('vision');
-                setShowEditOptions(true);
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={async () => {
-                setCurrentDomain('vision');
-                await loadQuestionsForDomain('vision');
-                setResponses([]);
-                setFlowState('choice');
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Define</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {hasVision ? (
-            <Text style={[styles.statementText, { color: colors.text }]}>
-              "{northStarData.vision}"
+        {/* Resume Prompt */}
+        {resumePrompt && (
+          <View style={[styles.resumeCard, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
+            <Text style={[styles.resumeText, { color: '#92400e' }]}>
+              👋 Welcome back! You were working on your {resumePrompt.domain}. Ready to continue?
             </Text>
-          ) : (
-            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-              Where do you want to be in 5 years? Your vision paints the picture of your future.
-            </Text>
-          )}
-        </View>
-
-        {/* Mission Card - Always show */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: hasMission ? colors.border : '#ed1c2440' }]}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
-            {hasMission ? (
-              <TouchableOpacity onPress={() => {
-                setCurrentDomain('mission');
-                setShowEditOptions(true);
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+            <View style={styles.resumeButtons}>
+              <TouchableOpacity
+                style={[styles.resumeButton, { backgroundColor: '#f59e0b' }]}
+                onPress={() => {
+                  setCurrentDomain(resumePrompt.domain);
+                  loadQuestionsForDomain(resumePrompt.domain);
+                  setResumePrompt(null);
+                  setFlowState('synthesis');
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>Continue</Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={async () => {
-                setCurrentDomain('mission');
-                await loadQuestionsForDomain('mission');
-                setResponses([]);
-                setFlowState('choice');
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Define</Text>
+              <TouchableOpacity
+                onPress={() => setResumePrompt(null)}
+              >
+                <Text style={{ color: '#92400e' }}>Dismiss</Text>
               </TouchableOpacity>
-            )}
-          </View>
-          {hasMission ? (
-            <Text style={[styles.statementText, { color: colors.text }]}>
-              "{northStarData.mission}"
-            </Text>
-          ) : (
-            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-              What is your core purpose? Your mission is the "why" behind everything you do.
-            </Text>
-          )}
-        </View>
-
-        {/* Core Values Card - Always show */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: hasValues ? colors.border : '#ed1c2440' }]}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR CORE VALUES</Text>
-            {hasValues ? (
-              <TouchableOpacity onPress={() => {
-                // TODO: Navigate to values editing flow
-                console.log('Edit values');
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={() => {
-                // TODO: Navigate to values creation flow
-                console.log('Define values');
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Define</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {hasValues ? (
-            <View style={styles.valuesContainer}>
-              {northStarData.values!.map((value) => (
-                <View key={value.id} style={styles.valueTag}>
-                  <Text style={[styles.valueText, { color: colors.text }]}>{value.value}</Text>
-                </View>
-              ))}
             </View>
-          ) : (
-            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-              What principles guide your decisions? Your core values keep you anchored when life gets stormy.
+          </View>
+        )}
+
+        {/* Identity Card */}
+        <View style={[styles.identityCard, { backgroundColor: '#ed1c2410', borderColor: '#ed1c2440' }]}>
+          <View style={styles.identityHeader}>
+            <Star size={20} color="#ed1c24" fill="#ed1c24" />
+            <Text style={[styles.identityLabel, { color: '#ed1c24' }]}>MY CORE IDENTITY</Text>
+            <TouchableOpacity onPress={() => setFlowState('hero-question')}>
+              <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.identityText, { color: colors.text }]}>
+            As a {identity}:
+          </Text>
+          {northStarData.identityInsights && (
+            <Text style={[styles.identityInsightsText, { color: colors.textSecondary }]}>
+              "{northStarData.identityInsights}"
             </Text>
           )}
+        </View>
+
+        {/* Domain Unlock Buttons */}
+        <View style={styles.domainUnlockSection}>
+          {/* Mission */}
+          <TouchableOpacity
+            style={[
+              styles.domainUnlockButton,
+              {
+                backgroundColor: hasMission ? '#d1fae5' : colors.surface,
+                borderColor: hasMission ? '#10b981' : colors.border,
+              },
+            ]}
+            onPress={() => {
+              if (hasMission) {
+                setEditingDomain('mission');
+                setShowEditOptions(true);
+              } else {
+                startDomainFlow('mission');
+              }
+            }}
+          >
+            <View style={styles.domainUnlockContent}>
+              <Text style={[styles.domainUnlockLabel, { color: hasMission ? '#059669' : '#ed1c24' }]}>
+                {hasMission ? '✓ MISSION DEFINED' : 'DEFINE YOUR MISSION'}
+              </Text>
+              <Text style={[styles.domainUnlockText, { color: colors.text }]}>
+                {hasMission ? `"${northStarData.mission}"` : '"My Mission is to..."'}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={hasMission ? '#059669' : colors.textSecondary} />
+          </TouchableOpacity>
+
+          {/* Vision */}
+          <TouchableOpacity
+            style={[
+              styles.domainUnlockButton,
+              {
+                backgroundColor: hasVision ? '#d1fae5' : colors.surface,
+                borderColor: hasVision ? '#10b981' : colors.border,
+              },
+            ]}
+            onPress={() => {
+              if (hasVision) {
+                setEditingDomain('vision');
+                setShowEditOptions(true);
+              } else {
+                startDomainFlow('vision');
+              }
+            }}
+          >
+            <View style={styles.domainUnlockContent}>
+              <Text style={[styles.domainUnlockLabel, { color: hasVision ? '#059669' : '#ed1c24' }]}>
+                {hasVision ? '✓ VISION DEFINED' : 'DEFINE YOUR VISION'}
+              </Text>
+              <Text style={[styles.domainUnlockText, { color: colors.text }]}>
+                {hasVision ? `"${northStarData.vision}"` : '"In 5 years, I envision..."'}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={hasVision ? '#059669' : colors.textSecondary} />
+          </TouchableOpacity>
+
+          {/* Core Values */}
+          <TouchableOpacity
+            style={[
+              styles.domainUnlockButton,
+              {
+                backgroundColor: hasValues ? '#d1fae5' : colors.surface,
+                borderColor: hasValues ? '#10b981' : colors.border,
+              },
+            ]}
+            onPress={() => {
+              if (hasValues) {
+                setEditingDomain('values');
+                setShowEditOptions(true);
+              } else {
+                startDomainFlow('values');
+              }
+            }}
+          >
+            <View style={styles.domainUnlockContent}>
+              <Text style={[styles.domainUnlockLabel, { color: hasValues ? '#059669' : '#ed1c24' }]}>
+                {hasValues ? `✓ ${northStarData.values!.length} VALUE${northStarData.values!.length > 1 ? 'S' : ''} DEFINED` : 'DEFINE CORE VALUES'}
+              </Text>
+              {hasValues ? (
+                <View style={styles.valuesPreview}>
+                  {northStarData.values!.slice(0, 3).map((v, i) => (
+                    <View key={i} style={styles.valueChip}>
+                      <Text style={[styles.valueChipText, { color: colors.text }]}>{v.name}</Text>
+                    </View>
+                  ))}
+                  {northStarData.values!.length > 3 && (
+                    <Text style={[styles.moreValues, { color: colors.textSecondary }]}>
+                      +{northStarData.values!.length - 3} more
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <Text style={[styles.domainUnlockText, { color: colors.text }]}>
+                  "I am committed to..."
+                </Text>
+              )}
+            </View>
+            <ChevronRight size={20} color={hasValues ? '#059669' : colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         {/* Edit Options Modal */}
-        {showEditOptions && (
+        {showEditOptions && editingDomain && (
           <View style={[styles.editModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.editModalTitle, { color: colors.text }]}>
-              How would you like to refine your {currentDomain === 'vision' ? 'vision' : 'mission'}?
+              {editingDomain === 'values' 
+                ? 'Manage your Core Values'
+                : `How would you like to refine your ${editingDomain}?`
+              }
             </Text>
             
-            <TouchableOpacity
-              style={[styles.editOption, { borderColor: colors.border }]}
-              onPress={() => {
-                setShowEditOptions(false);
-                const currentStatement = currentDomain === 'vision' ? northStarData.vision : northStarData.mission;
-                setDirectMission(currentStatement || '');
-                setFlowState('direct-input');
-              }}
-            >
-              <Edit3 size={20} color="#ed1c24" />
-              <View style={styles.editOptionText}>
-                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Edit directly</Text>
-                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>
-                  Make changes to your current {currentDomain === 'vision' ? 'vision' : 'mission'}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            {editingDomain === 'values' ? (
+              <>
+                {/* Show existing values with edit/delete */}
+                {northStarData.values?.map((value, index) => (
+                  <View key={index} style={[styles.valueEditRow, { borderColor: colors.border }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.valueEditName, { color: colors.text }]}>{value.name}</Text>
+                      {value.commitment && (
+                        <Text style={[styles.valueEditCommitment, { color: colors.textSecondary }]}>
+                          {value.commitment}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        setEditingValueIndex(index);
+                        setCurrentValueName(value.name);
+                        setCurrentValueCommitment(value.commitment);
+                        setShowEditOptions(false);
+                        setFlowState('value-entry');
+                      }}
+                      style={styles.valueEditButton}
+                    >
+                      <Edit3 size={16} color="#ed1c24" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                
+                {/* Add new value button */}
+                <TouchableOpacity
+                  style={[styles.addValueButton, { borderColor: '#ed1c24' }]}
+                  onPress={() => {
+                    setShowEditOptions(false);
+                    startDomainFlow('values');
+                  }}
+                >
+                  <Text style={{ color: '#ed1c24', fontWeight: '600' }}>+ Add Another Value</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[styles.editOption, { borderColor: colors.border }]}
+                  onPress={() => {
+                    setShowEditOptions(false);
+                    setCurrentDomain(editingDomain);
+                    const currentStatement = editingDomain === 'vision' ? northStarData.vision : northStarData.mission;
+                    setDirectInput(currentStatement || '');
+                    setFlowState('direct-input');
+                  }}
+                >
+                  <Edit3 size={20} color="#ed1c24" />
+                  <View style={styles.editOptionText}>
+                    <Text style={[styles.editOptionTitle, { color: colors.text }]}>Edit directly</Text>
+                    <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>
+                      Make changes to your current {editingDomain}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.editOption, { borderColor: colors.border }]}
-              onPress={async () => {
-                setShowEditOptions(false);
-                setCurrentQuestionIndex(0);
-                setCurrentAnswer('');
-                setResponses([]);
-                setAiSuggestions([]);
-                await loadQuestionsForDomain(currentDomain);
-                setFlowState('guided-questions');
-              }}
-            >
-              <Lightbulb size={20} color="#ed1c24" />
-              <View style={styles.editOptionText}>
-                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Explore with questions</Text>
-                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>Discover deeper clarity through guided reflection</Text>
-              </View>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editOption, { borderColor: colors.border }]}
+                  onPress={async () => {
+                    setShowEditOptions(false);
+                    setCurrentDomain(editingDomain);
+                    resetDomainState();
+                    await loadQuestionsForDomain(editingDomain);
+                    setFlowState('guided-questions');
+                  }}
+                >
+                  <Lightbulb size={20} color="#ed1c24" />
+                  <View style={styles.editOptionText}>
+                    <Text style={[styles.editOptionTitle, { color: colors.text }]}>Explore with questions</Text>
+                    <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>
+                      Discover deeper clarity through guided reflection
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </>
+            )}
 
             <TouchableOpacity
               style={styles.editCancelButton}
-              onPress={() => setShowEditOptions(false)}
+              onPress={() => {
+                setShowEditOptions(false);
+                setEditingDomain(null);
+              }}
             >
               <Text style={[styles.editCancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
@@ -783,8 +1261,8 @@ export function TouchYourStarStep({
               North Star Progress
             </Text>
             <View style={styles.progressDots}>
-              <View style={[styles.progressDot, { backgroundColor: hasVision ? '#ed1c24' : '#e5e7eb' }]} />
               <View style={[styles.progressDot, { backgroundColor: hasMission ? '#ed1c24' : '#e5e7eb' }]} />
+              <View style={[styles.progressDot, { backgroundColor: hasVision ? '#ed1c24' : '#e5e7eb' }]} />
               <View style={[styles.progressDot, { backgroundColor: hasValues ? '#ed1c24' : '#e5e7eb' }]} />
             </View>
             <Text style={[styles.progressText, { color: colors.text }]}>
@@ -818,158 +1296,11 @@ export function TouchYourStarStep({
       </ScrollView>
     );
   }
-  
-  // Has Mission/Vision - Show existing and allow to continue
-  if (flowState === 'has-mission') {
-    return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.headerSection}>
-          <View style={styles.headerRow}>
-            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-              <MiniCompass size={56} />
-            </View>
-            <View style={styles.headerTextContainer}>
-              <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
-              <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
-            </View>
-          </View>
-        </View>
 
-        {/* Mission Card */}
-        {northStarData.mission && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
-              <TouchableOpacity onPress={() => {
-                setCurrentDomain('mission');
-                setShowEditOptions(true);
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.statementText, { color: colors.text }]}>
-              "{northStarData.mission}"
-            </Text>
-          </View>
-        )}
-
-        {/* Vision Card */}
-        {northStarData.vision && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR 5-YEAR VISION</Text>
-              <TouchableOpacity onPress={() => {
-                setCurrentDomain('vision');
-                setShowEditOptions(true);
-              }}>
-                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.statementText, { color: colors.text }]}>
-              "{northStarData.vision}"
-            </Text>
-          </View>
-        )}
-
-        {/* Edit Options Modal */}
-        {showEditOptions && (
-          <View style={[styles.editModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.editModalTitle, { color: colors.text }]}>
-              How would you like to refine your {currentDomain === 'vision' ? 'vision' : 'mission'}?
-            </Text>
-            
-            <TouchableOpacity
-              style={[styles.editOption, { borderColor: colors.border }]}
-              onPress={() => {
-                setShowEditOptions(false);
-                const currentStatement = currentDomain === 'vision' ? northStarData.vision : northStarData.mission;
-                setDirectMission(currentStatement || '');
-                setFlowState('direct-input');
-              }}
-            >
-              <Edit3 size={20} color="#ed1c24" />
-              <View style={styles.editOptionText}>
-                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Edit directly</Text>
-                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>
-                  Make changes to your current {currentDomain === 'vision' ? 'vision' : 'mission'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.editOption, { borderColor: colors.border }]}
-              onPress={async () => {
-                setShowEditOptions(false);
-                setCurrentQuestionIndex(0);
-                setCurrentAnswer('');
-                setResponses([]);
-                setAiSuggestions([]);
-                
-                await loadQuestionsForDomain(currentDomain);
-                setFlowState('guided-questions');
-              }}
-            >
-              <Lightbulb size={20} color="#ed1c24" />
-              <View style={styles.editOptionText}>
-                <Text style={[styles.editOptionTitle, { color: colors.text }]}>Explore with questions</Text>
-                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>Discover deeper clarity through guided reflection</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.editCancelButton}
-              onPress={() => setShowEditOptions(false)}
-            >
-              <Text style={[styles.editCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Values if exist */}
-        {northStarData.values && northStarData.values.length > 0 && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.cardHeader}>
-              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>CORE VALUES</Text>
-            </View>
-            <View style={styles.valuesContainer}>
-              {northStarData.values.map((value) => (
-                <View key={value.id} style={styles.valueTag}>
-                  <Text style={[styles.valueText, { color: colors.text }]}>{value.value}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Continue Button */}
-        <TouchableOpacity
-          style={[styles.continueButton, { backgroundColor: '#ed1c24' }]}
-          onPress={() => {
-            onDataCapture({
-              missionReflection: northStarData.mission,
-              visionAcknowledged: !!northStarData.vision,
-              valuesAcknowledged: true,
-            });
-            onNext();
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.continueButtonText}>Continue</Text>
-          <ChevronRight size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    );
-  }
-
-  // Choice Screen - No mission/vision yet for this domain
+  // CHOICE SCREEN - "I Have One Ready" vs "Guide Me Through"
   if (flowState === 'choice') {
+    const config = getDomainConfig(currentDomain);
+
     return (
       <ScrollView
         style={styles.container}
@@ -989,27 +1320,31 @@ export function TouchYourStarStep({
           </View>
         </View>
 
-        {/* North Star Awaits Card */}
+        {/* Choice Card */}
         <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
             <NorthStarIcon size={40} color="#ed1c24" />
           </View>
           
           <Text style={[styles.choiceTitle, { color: colors.text }]}>
-            {currentDomain === 'vision' ? 'Define Your Vision' : 'Define Your Mission'}
+            {config.title}
+          </Text>
+          
+          <Text style={[styles.choiceSubtitle, { color: '#ed1c24' }]}>
+            {config.subtitle}
           </Text>
           
           <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
-            {currentDomain === 'vision' 
-              ? 'Do you already have a clear 5-year vision, or would you like to explore one together through guided questions?'
-              : 'Do you already have a clear mission, or would you like to explore one together through guided questions?'
-            }
+            {config.hint}
           </Text>
 
           <View style={styles.choiceButtons}>
             <TouchableOpacity
               style={[styles.choiceButton, { borderColor: '#ed1c24' }]}
-              onPress={() => setFlowState('direct-input')}
+              onPress={() => {
+                setDirectInput('');
+                setFlowState('direct-input');
+              }}
               activeOpacity={0.8}
             >
               <Edit3 size={20} color="#ed1c24" />
@@ -1020,8 +1355,14 @@ export function TouchYourStarStep({
 
             <TouchableOpacity
               style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-              onPress={() => {
-                setFlowState('guided-questions');
+              onPress={async () => {
+                await loadQuestionsForDomain(currentDomain);
+                if (questions.length > 0) {
+                  setFlowState('guided-questions');
+                } else {
+                  // No questions available, go straight to direct input
+                  setFlowState('direct-input');
+                }
               }}
               activeOpacity={0.8}
             >
@@ -1033,20 +1374,16 @@ export function TouchYourStarStep({
           </View>
         </View>
 
-        {/* Skip for now */}
+        {/* Back to Hub */}
         <TouchableOpacity
           style={styles.skipButton}
           onPress={() => {
-            onDataCapture({
-              missionReflection: undefined,
-              visionAcknowledged: false,
-              valuesAcknowledged: false,
-            });
-            onNext();
+            resetDomainState();
+            setFlowState('identity-hub');
           }}
         >
           <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
-            Skip for now
+            ← Back to North Star
           </Text>
         </TouchableOpacity>
 
@@ -1055,8 +1392,10 @@ export function TouchYourStarStep({
     );
   }
 
-  // Direct Input Screen
+  // DIRECT INPUT SCREEN
   if (flowState === 'direct-input') {
+    const config = getDomainConfig(currentDomain);
+
     return (
       <KeyboardAvoidingView
         style={styles.container}
@@ -1084,32 +1423,68 @@ export function TouchYourStarStep({
           {/* Input Card */}
           <View style={[styles.inputCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.inputLabel, { color: colors.text }]}>
-              {currentDomain === 'vision' ? 'What is your 5-year vision?' : 'What is your mission?'}
+              {config.title}
+            </Text>
+            <Text style={[styles.inputSubtitle, { color: '#ed1c24' }]}>
+              {config.subtitle}
             </Text>
             <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
-              {currentDomain === 'vision'
-                ? 'Your vision is a vivid picture of where you want to be in 5 years. What does success look like?'
-                : 'Your mission is the core purpose that drives you. It answers "Why do I exist?" or "What impact do I want to make?"'
-              }
+              {config.hint}
             </Text>
             
-            <TextInput
-              style={[
-                styles.missionInput,
-                {
-                  backgroundColor: colors.background,
-                  color: colors.text,
-                  borderColor: colors.border,
-                },
-              ]}
-              placeholder={currentDomain === 'vision' ? 'In 5 years, I will...' : 'To...'}
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={4}
-              value={directMission}
-              onChangeText={setDirectMission}
-              textAlignVertical="top"
-            />
+            {currentDomain === 'values' ? (
+              <>
+                <TextInput
+                  style={[
+                    styles.valueNameInput,
+                    {
+                      backgroundColor: colors.background,
+                      color: colors.text,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  placeholder="Value Name (e.g., Integrity, Family First)"
+                  placeholderTextColor={colors.textSecondary}
+                  value={currentValueName}
+                  onChangeText={setCurrentValueName}
+                />
+                <TextInput
+                  style={[
+                    styles.valueCommitmentInput,
+                    {
+                      backgroundColor: colors.background,
+                      color: colors.text,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  placeholder="I am committed to... (the specific behavior)"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                  value={currentValueCommitment}
+                  onChangeText={setCurrentValueCommitment}
+                  textAlignVertical="top"
+                />
+              </>
+            ) : (
+              <TextInput
+                style={[
+                  styles.missionInput,
+                  {
+                    backgroundColor: colors.background,
+                    color: colors.text,
+                    borderColor: colors.border,
+                  },
+                ]}
+                placeholder={config.placeholder}
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={4}
+                value={directInput}
+                onChangeText={setDirectInput}
+                textAlignVertical="top"
+              />
+            )}
 
             <Text style={[styles.reminderText, { color: colors.textSecondary }]}>
               💡 Don't worry about perfection—you can refine this anytime.
@@ -1129,10 +1504,24 @@ export function TouchYourStarStep({
             <TouchableOpacity
               style={[
                 styles.saveButton,
-                { backgroundColor: directMission.trim() ? '#ed1c24' : '#ccc' },
+                { 
+                  backgroundColor: (currentDomain === 'values' 
+                    ? currentValueName.trim() 
+                    : directInput.trim()) 
+                    ? '#ed1c24' 
+                    : '#ccc' 
+                },
               ]}
-              onPress={() => directMission.trim() && saveStatement(directMission.trim())}
-              disabled={!directMission.trim() || saving}
+              onPress={() => {
+                if (currentDomain === 'values') {
+                  saveValue(currentValueName.trim(), currentValueCommitment.trim());
+                } else {
+                  saveStatement(directInput.trim());
+                }
+              }}
+              disabled={
+                (currentDomain === 'values' ? !currentValueName.trim() : !directInput.trim()) || saving
+              }
               activeOpacity={0.8}
             >
               {saving ? (
@@ -1140,7 +1529,7 @@ export function TouchYourStarStep({
               ) : (
                 <>
                   <Text style={styles.saveButtonText}>
-                    {currentDomain === 'vision' ? 'Save Vision' : 'Save Mission'}
+                    Save {currentDomain === 'values' ? 'Value' : currentDomain === 'vision' ? 'Vision' : 'Mission'}
                   </Text>
                   <ChevronRight size={20} color="#FFFFFF" />
                 </>
@@ -1154,10 +1543,11 @@ export function TouchYourStarStep({
     );
   }
 
-  // Guided Questions Screen
+  // GUIDED QUESTIONS SCREEN
   if (flowState === 'guided-questions' && questions.length > 0) {
     const currentQuestion = questions[currentQuestionIndex];
     const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+    const config = getDomainConfig(currentDomain);
 
     return (
       <KeyboardAvoidingView
@@ -1189,7 +1579,7 @@ export function TouchYourStarStep({
               <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: '#ed1c24' }]} />
             </View>
             <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-              {currentDomain === 'vision' ? 'Vision' : 'Mission'} - Question {currentQuestionIndex + 1} of {questions.length}
+              {config.title} - Question {currentQuestionIndex + 1} of {questions.length}
             </Text>
           </View>
 
@@ -1273,9 +1663,10 @@ export function TouchYourStarStep({
     );
   }
 
-  // Synthesis Screen
+  // SYNTHESIS SCREEN
   if (flowState === 'synthesis') {
     const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateFallbackSuggestions();
+    const config = getDomainConfig(currentDomain);
 
     return (
       <KeyboardAvoidingView
@@ -1302,29 +1693,28 @@ export function TouchYourStarStep({
           </View>
 
           {/* Your Responses */}
-          <View style={[styles.responsesCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.responsesTitle, { color: colors.text }]}>
-              Your Responses
-            </Text>
-            {responses.map((r, index) => (
-              <View key={r.questionId} style={styles.responseItem}>
-                <Text style={[styles.responseQuestion, { color: colors.textSecondary }]}>
-                  Q{index + 1}: {r.questionText.substring(0, 50)}...
-                </Text>
-                <Text style={[styles.responseAnswer, { color: colors.text }]}>
-                  "{r.response}"
-                </Text>
-              </View>
-            ))}
-          </View>
+          {responses.length > 0 && (
+            <View style={[styles.responsesCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.responsesTitle, { color: colors.text }]}>
+                Your Responses
+              </Text>
+              {responses.map((r, index) => (
+                <View key={r.questionId} style={styles.responseItem}>
+                  <Text style={[styles.responseQuestion, { color: colors.textSecondary }]}>
+                    Q{index + 1}: {r.questionText.substring(0, 50)}...
+                  </Text>
+                  <Text style={[styles.responseAnswer, { color: colors.text }]}>
+                    "{r.response}"
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Suggestions */}
           <View style={[styles.suggestionsCard, { backgroundColor: '#ed1c2408', borderColor: '#ed1c2430' }]}>
             <Text style={[styles.suggestionsTitle, { color: colors.text }]}>
-              {currentDomain === 'vision'
-                ? 'Based on your answers, here are some vision ideas:'
-                : 'Based on your answers, here are some mission ideas:'
-              }
+              Based on your answers, here are some {currentDomain} ideas:
             </Text>
             
             {loadingSuggestions ? (
@@ -1394,12 +1784,12 @@ export function TouchYourStarStep({
                     borderColor: colors.border,
                   },
                 ]}
-                placeholder={currentDomain === 'vision' ? 'In 5 years, I will...' : 'To...'}
+                placeholder={config.placeholder}
                 placeholderTextColor={colors.textSecondary}
                 multiline
                 numberOfLines={3}
-                value={customMission}
-                onChangeText={setCustomMission}
+                value={customStatement}
+                onChangeText={setCustomStatement}
                 textAlignVertical="top"
               />
             )}
@@ -1415,13 +1805,13 @@ export function TouchYourStarStep({
             style={[
               styles.continueButton,
               {
-                backgroundColor: (selectedSuggestion !== null || (showCustomInput && customMission.trim()))
+                backgroundColor: (selectedSuggestion !== null || (showCustomInput && customStatement.trim()))
                   ? '#ed1c24'
                   : '#ccc',
               },
             ]}
             onPress={handleSaveFinalStatement}
-            disabled={selectedSuggestion === null && !(showCustomInput && customMission.trim()) || saving}
+            disabled={selectedSuggestion === null && !(showCustomInput && customStatement.trim()) || saving}
             activeOpacity={0.8}
           >
             {saving ? (
@@ -1429,7 +1819,7 @@ export function TouchYourStarStep({
             ) : (
               <>
                 <Text style={styles.continueButtonText}>
-                  {currentDomain === 'vision' ? 'Save My Vision' : 'Save My Mission'}
+                  Save My {currentDomain === 'values' ? 'Value' : currentDomain === 'vision' ? 'Vision' : 'Mission'}
                 </Text>
                 <ChevronRight size={20} color="#FFFFFF" />
               </>
@@ -1442,7 +1832,132 @@ export function TouchYourStarStep({
     );
   }
 
-  // Fallback
+  // VALUE ENTRY SCREEN (for editing individual values)
+  if (flowState === 'value-entry') {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={styles.headerSection}>
+            <View style={styles.headerRow}>
+              <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
+                <MiniCompass size={56} />
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Input Card */}
+          <View style={[styles.inputCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>
+              {editingValueIndex !== null ? 'Edit Core Value' : 'Add Core Value'}
+            </Text>
+            
+            <TextInput
+              style={[
+                styles.valueNameInput,
+                {
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Value Name (e.g., Integrity, Family First)"
+              placeholderTextColor={colors.textSecondary}
+              value={currentValueName}
+              onChangeText={setCurrentValueName}
+            />
+            <TextInput
+              style={[
+                styles.valueCommitmentInput,
+                {
+                  backgroundColor: colors.background,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="I am committed to... (the specific behavior)"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+              value={currentValueCommitment}
+              onChangeText={setCurrentValueCommitment}
+              textAlignVertical="top"
+            />
+
+            <Text style={[styles.reminderText, { color: colors.textSecondary }]}>
+              💡 Values should be actionable rules, not just words.
+            </Text>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.backButton, { borderColor: colors.border }]}
+              onPress={() => {
+                setEditingValueIndex(null);
+                setCurrentValueName('');
+                setCurrentValueCommitment('');
+                setFlowState('identity-hub');
+              }}
+            >
+              <ChevronLeft size={20} color={colors.text} />
+              <Text style={[styles.backButtonText, { color: colors.text }]}>Cancel</Text>
+            </TouchableOpacity>
+
+            {editingValueIndex !== null && (
+              <TouchableOpacity
+                style={[styles.deleteButton, { borderColor: '#ef4444' }]}
+                onPress={() => {
+                  deleteValue(editingValueIndex);
+                  setEditingValueIndex(null);
+                  setCurrentValueName('');
+                  setCurrentValueCommitment('');
+                  setFlowState('identity-hub');
+                }}
+              >
+                <Text style={{ color: '#ef4444', fontWeight: '600' }}>Delete</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                { backgroundColor: currentValueName.trim() ? '#ed1c24' : '#ccc' },
+              ]}
+              onPress={() => saveValue(currentValueName.trim(), currentValueCommitment.trim())}
+              disabled={!currentValueName.trim() || saving}
+              activeOpacity={0.8}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.saveButtonText}>Save Value</Text>
+                  <ChevronRight size={20} color="#FFFFFF" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Fallback - go to identity hub
   return null;
 }
 
@@ -1494,6 +2009,199 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  // Explainer
+  explainerCard: {
+    padding: 28,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  explainerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  explainerText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  explainerQuote: {
+    fontSize: 18,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+
+  // Hero Question
+  heroQuestionCard: {
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  heroQuestion: {
+    fontSize: 18,
+    fontWeight: '600',
+    lineHeight: 26,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  heroSubtext: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  sparkList: {
+    gap: 10,
+  },
+  sparkOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  sparkOptionText: {
+    flex: 1,
+  },
+  sparkLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  sparkDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  customIdentityInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    marginTop: 12,
+  },
+  insightsSection: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  insightsLabel: {
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  insightsInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    minHeight: 80,
+  },
+
+  // Identity Hub
+  identityCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  identityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  identityLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  identityText: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  identityInsightsText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
+
+  // Domain Unlock Buttons
+  domainUnlockSection: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  domainUnlockButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  domainUnlockContent: {
+    flex: 1,
+  },
+  domainUnlockLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  domainUnlockText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  valuesPreview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  valueChip: {
+    backgroundColor: '#d1fae5',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  valueChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  moreValues: {
+    fontSize: 13,
+    alignSelf: 'center',
+  },
+
+  // Resume Prompt
+  resumeCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  resumeText: {
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  resumeButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  resumeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+
   // Cards
   card: {
     padding: 20,
@@ -1501,7 +2209,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 16,
   },
-  cardHeader: {
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
   },
   cardLabel: {
@@ -1509,24 +2220,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
-  statementText: {
-    fontSize: 18,
-    fontWeight: '500',
-    lineHeight: 26,
-    fontStyle: 'italic',
-  },
-  valuesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  valueTag: {
-    backgroundColor: '#ed1c2415',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  valueText: {
+  editLink: {
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1550,12 +2244,18 @@ const styles = StyleSheet.create({
   choiceTitle: {
     fontSize: 22,
     fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  choiceSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 12,
     textAlign: 'center',
   },
   choiceDescription: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: 'center',
     marginBottom: 28,
   },
@@ -1598,6 +2298,11 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 18,
     fontWeight: '700',
+    marginBottom: 4,
+  },
+  inputSubtitle: {
+    fontSize: 15,
+    fontWeight: '600',
     marginBottom: 8,
   },
   inputHint: {
@@ -1611,6 +2316,21 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     minHeight: 120,
+    marginBottom: 16,
+  },
+  valueNameInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  valueCommitmentInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    minHeight: 80,
     marginBottom: 16,
   },
   reminderText: {
@@ -1637,6 +2357,12 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  deleteButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   saveButton: {
     flex: 1,
@@ -1666,9 +2392,31 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 3,
   },
+  progressCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  progressLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  progressDots: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  progressDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
   progressText: {
-    fontSize: 13,
-    textAlign: 'center',
+    fontSize: 14,
   },
 
   // Question Card
@@ -1695,6 +2443,16 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     minHeight: 140,
+  },
+  questionSkipButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  questionSkipButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   comeBackButton: {
     alignItems: 'center',
@@ -1795,18 +2553,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Card header row with edit
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  editLink: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
   // Edit Modal
   editModal: {
     padding: 20,
@@ -1847,21 +2593,33 @@ const styles = StyleSheet.create({
   editCancelText: {
     fontSize: 15,
   },
-  questionSkipButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+
+  // Value Edit
+  valueEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    gap: 12,
   },
-  questionSkipButtonText: {
-    fontSize: 16,
+  valueEditName: {
+    fontSize: 15,
     fontWeight: '600',
   },
-  successTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
+  valueEditCommitment: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  valueEditButton: {
+    padding: 8,
+  },
+  addValueButton: {
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 8,
   },
 });
 
