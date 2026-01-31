@@ -415,7 +415,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
       const supabase = getSupabaseClient();
       
       const { data, error } = await supabase.functions.invoke('generate-mission', {
-        body: { responses },
+        body: { responses, domain: currentDomain },
       });
 
       if (error) throw error;
