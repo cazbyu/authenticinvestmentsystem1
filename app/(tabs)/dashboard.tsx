@@ -589,19 +589,29 @@ export default function Dashboard() {
       .eq('user_id', user.id)
       .eq('spark_date', today);
 
-    // Reset North Star data (Mission, Vision, Core Values)
+    // Reset North Star data (Mission, Vision, Core Values, AND Identity)
     await supabase
       .from('0008-ap-north-star')
       .update({
         mission_statement: null,
         '5yr_vision': null,
         core_values: null,
+        core_identity: null,
+        identity_insights: null,
+        identity_prompt_id: null,
+        identity_answered_at: null,
       })
       .eq('user_id', user.id);
 
     // Clear question responses (for fresh onboarding)
     await supabase
       .from('0008-ap-question-responses')
+      .delete()
+      .eq('user_id', user.id);
+
+    // Clear prompt responses (so hero-question shows again)
+    await supabase
+      .from('0008-ap-prompt-responses')
       .delete()
       .eq('user_id', user.id);
 
@@ -614,7 +624,7 @@ export default function Dashboard() {
       .gte('completed_at', today);
 
     await checkRitualAvailability();
-    Alert.alert('Dev Reset Complete', 'Spark, North Star (Mission/Vision/Values), and question responses have been cleared. Weekly Alignment should now appear.');
+    Alert.alert('Dev Reset Complete', 'Spark, North Star (Identity/Mission/Vision/Values), and all responses have been cleared.');
   } catch (error) {
     console.error('Error resetting dev data:', error);
     Alert.alert('Error', 'Failed to reset dev data');
