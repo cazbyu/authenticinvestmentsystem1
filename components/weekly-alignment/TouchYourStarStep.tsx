@@ -253,10 +253,13 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     }
   }
 
-  async function saveMission(missionText: string) {
+  async function saveStatement(statementText: string) {
     setSaving(true);
     try {
       const supabase = getSupabaseClient();
+      
+      // Determine which field to update
+      const fieldName = currentDomain === 'vision' ? '5yr_vision' : 'mission_statement';
       
       // Check if north star record exists
       const { data: existing } = await supabase
@@ -268,12 +271,12 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
       if (existing) {
         await supabase
           .from('0008-ap-north-star')
-          .update({ mission_statement: missionText })
+          .update({ [fieldName]: statementText })
           .eq('user_id', userId);
       } else {
         await supabase
           .from('0008-ap-north-star')
-          .insert({ user_id: userId, mission_statement: missionText });
+          .insert({ user_id: userId, [fieldName]: statementText });
       }
 
       // Mark responses as used in synthesis
@@ -286,10 +289,15 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
           .in('question_id', questionIds);
       }
 
-      // Update local state and capture data
-      setNorthStarData(prev => ({ ...prev, mission: missionText }));
+      // Update local state
+      if (currentDomain === 'vision') {
+        setNorthStarData(prev => ({ ...prev, vision: statementText }));
+      } else {
+        setNorthStarData(prev => ({ ...prev, mission: statementText }));
+      }
+      
       onDataCapture({
-        missionReflection: missionText,
+        missionReflection: currentDomain === 'mission' ? statementText : northStarData.mission,
         visionAcknowledged: true,
         valuesAcknowledged: true,
       });
@@ -298,7 +306,7 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
       onNext();
 
     } catch (error) {
-      console.error('Error saving mission:', error);
+      console.error('Error saving statement:', error);
     } finally {
       setSaving(false);
     }
