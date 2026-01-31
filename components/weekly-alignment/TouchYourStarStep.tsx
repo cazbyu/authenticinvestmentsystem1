@@ -1248,7 +1248,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
                     borderColor: colors.border,
                   },
                 ]}
-                placeholder="To..."
+                placeholder={currentDomain === 'vision' ? 'In 5 years, I will...' : 'To...'}
                 placeholderTextColor={colors.textSecondary}
                 multiline
                 numberOfLines={3}
