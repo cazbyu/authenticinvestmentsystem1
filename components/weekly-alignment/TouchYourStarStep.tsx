@@ -103,7 +103,7 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
         'onboarding',
         currentQuestionIndex + 1,
         questions.length,
-        'mission'
+        currentDomain
       );
       questionStartTime.current = Date.now();
     }
