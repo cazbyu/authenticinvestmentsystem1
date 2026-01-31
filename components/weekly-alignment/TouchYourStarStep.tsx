@@ -243,7 +243,7 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
           question_id: questionId,
           response_text: responseText,
           context_type: 'onboarding',
-          domain: 'mission',
+          domain: currentDomain,
         }, {
           onConflict: 'user_id,question_id',
           ignoreDuplicates: false,
