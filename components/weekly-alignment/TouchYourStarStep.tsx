@@ -529,6 +529,154 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
     );
   }
 
+// Domain Choice - Mission or Vision first?
+  if (flowState === 'domain-choice') {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.headerSection}>
+          <View style={styles.headerRow}>
+            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
+              <MiniCompass size={56} />
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
+              <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Domain Choice Card */}
+        <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.northStarIconCircle, { backgroundColor: '#ed1c2420' }]}>
+            <NorthStarIcon size={40} color="#ed1c24" />
+          </View>
+          
+          <Text style={[styles.choiceTitle, { color: colors.text }]}>
+            Where shall we begin?
+          </Text>
+          
+          <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
+            Your North Star has two parts: a Mission (your purpose) and a Vision (where you're headed). Which would you like to explore first?
+          </Text>
+
+          <View style={styles.choiceButtons}>
+            <TouchableOpacity
+              style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
+              onPress={async () => {
+                setCurrentDomain('vision');
+                // Need to reload questions for vision domain
+                const supabase = getSupabaseClient();
+                
+                // Get already answered vision questions
+                const { data: answeredQuestions } = await supabase
+                  .from('0008-ap-question-responses')
+                  .select('question_id')
+                  .eq('user_id', userId)
+                  .eq('domain', 'vision');
+                
+                const answeredIds = (answeredQuestions || []).map(q => q.question_id);
+
+                // Load vision questions
+                let questionsQuery = supabase
+                  .from('0008-ap-user-power-questions')
+                  .select('id, question_text, question_context')
+                  .eq('domain', 'vision')
+                  .eq('show_in_onboarding', true)
+                  .eq('is_active', true);
+                
+                if (answeredIds.length > 0) {
+                  questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
+                }
+                
+                const { data: visionQuestions } = await questionsQuery.limit(4);
+                
+                if (visionQuestions && visionQuestions.length > 0) {
+                  setQuestions(visionQuestions);
+                }
+                
+                setResponses([]);
+                setFlowState('choice');
+              }}
+              activeOpacity={0.8}
+            >
+              <Lightbulb size={20} color="#FFFFFF" />
+              <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
+                My Vision (5-Year Picture)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.choiceButton, { borderColor: '#ed1c24' }]}
+              onPress={async () => {
+                setCurrentDomain('mission');
+                // Reload questions for mission domain
+                const supabase = getSupabaseClient();
+                
+                const { data: answeredQuestions } = await supabase
+                  .from('0008-ap-question-responses')
+                  .select('question_id')
+                  .eq('user_id', userId)
+                  .eq('domain', 'mission');
+                
+                const answeredIds = (answeredQuestions || []).map(q => q.question_id);
+
+                let questionsQuery = supabase
+                  .from('0008-ap-user-power-questions')
+                  .select('id, question_text, question_context')
+                  .eq('domain', 'mission')
+                  .eq('show_in_onboarding', true)
+                  .eq('is_active', true);
+                
+                if (answeredIds.length > 0) {
+                  questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
+                }
+                
+                const { data: missionQuestions } = await questionsQuery.limit(4);
+                
+                if (missionQuestions && missionQuestions.length > 0) {
+                  setQuestions(missionQuestions);
+                }
+                
+                setResponses([]);
+                setFlowState('choice');
+              }}
+              activeOpacity={0.8}
+            >
+              <Edit3 size={20} color="#ed1c24" />
+              <Text style={[styles.choiceButtonText, { color: '#ed1c24' }]}>
+                My Mission (Core Purpose)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Skip for now */}
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={() => {
+            onDataCapture({
+              missionReflection: undefined,
+              visionAcknowledged: false,
+              valuesAcknowledged: false,
+            });
+            onNext();
+          }}
+        >
+          <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
+            Skip for now
+          </Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  }
+  
   // Has Mission - Show existing and allow to continue
   if (flowState === 'has-mission') {
     return (
