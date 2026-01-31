@@ -508,18 +508,19 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
     setShowCustomInput(true);
   }
 
-  function handleSaveFinalMission() {
-    let finalMission = '';
+  function handleSaveFinalStatement() {
+    let finalStatement = '';
     
     if (showCustomInput && customMission.trim()) {
-      finalMission = customMission.trim();
+      finalStatement = customMission.trim();
     } else if (selectedSuggestion !== null) {
-      const suggestions = generateMissionSuggestions();
-      finalMission = suggestions[selectedSuggestion];
+      // Use AI suggestions if available, otherwise fallback
+      const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateMissionSuggestions();
+      finalStatement = suggestions[selectedSuggestion];
     }
     
-    if (finalMission) {
-      saveMission(finalMission);
+    if (finalStatement) {
+      saveStatement(finalStatement);
     }
   }
 
