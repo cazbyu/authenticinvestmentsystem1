@@ -350,7 +350,7 @@ export default function WeeklyAlignmentScreen() {
           accessible={true}
           accessibilityLabel={currentStep === 0 ? "Exit" : "Go back"}
         >
-          <ArrowLeft size={24} color={colors.text} />
+          <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
