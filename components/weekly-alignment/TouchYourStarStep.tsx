@@ -73,11 +73,11 @@ export function TouchYourStarStep({
 
   // Edit WA questions
   const [showEditOptions, setShowEditOptions] = useState(false);
-const questionStartTime = React.useRef<number>(Date.now());
+  const questionStartTime = React.useRef<number>(Date.now());
 
-  //AI support
+  // AI support
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   
   // Synthesis state
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
@@ -91,7 +91,6 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     loadInitialData();
   }, []);
 
-  // Track question shown
   // Track question shown
   useEffect(() => {
     if (flowState === 'guided-questions' && questions.length > 0 && questions[currentQuestionIndex]) {
@@ -154,12 +153,12 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
       };
       setNorthStarData(data);
 
-      // Get questions user has already answered
+      // Get questions user has already answered for current domain
       const { data: answeredQuestions } = await supabase
         .from('0008-ap-question-responses')
         .select('question_id')
         .eq('user_id', userId)
-        .eq('domain', 'mission');
+        .eq('domain', currentDomain);
       
       const answeredIds = (answeredQuestions || []).map(q => q.question_id);
 
@@ -176,10 +175,10 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
         questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
       }
       
-      const { data: missionQuestions } = await questionsQuery.limit(4);
+      const { data: domainQuestions } = await questionsQuery.limit(4);
 
-      if (missionQuestions && missionQuestions.length > 0) {
-        setQuestions(missionQuestions);
+      if (domainQuestions && domainQuestions.length > 0) {
+        setQuestions(domainQuestions);
       }
 
       // Load ALL existing responses for synthesis display
@@ -327,7 +326,7 @@ const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     }
   }
 
-function handleSkipQuestion() {
+  function handleSkipQuestion() {
     const currentQuestion = questions[currentQuestionIndex];
     const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
     
@@ -351,42 +350,42 @@ function handleSkipQuestion() {
   }
   
   function handleNextQuestion() {
-  if (!currentAnswer.trim()) return;
+    if (!currentAnswer.trim()) return;
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
-  
-  // Track the answer
-  trackQuestionAnswered(
-    userId,
-    currentQuestion.id,
-    currentQuestion.question_text,
-    'onboarding',
-    currentAnswer.trim().length,
-    timeSpent,
-    currentDomain
-  );
-  
-  // Save response locally
-  const newResponse: QuestionResponse = {
-    questionId: currentQuestion.id,
-    questionText: currentQuestion.question_text,
-    response: currentAnswer.trim(),
-  };
-  
-  setResponses(prev => [...prev, newResponse]);
-  
-  // Save to database
-  saveResponse(currentQuestion.id, currentAnswer.trim());
-  
-  // Move to next question or synthesis
-  if (currentQuestionIndex < questions.length - 1) {
-    setCurrentQuestionIndex(prev => prev + 1);
-    setCurrentAnswer('');
-  } else {
-    setFlowState('synthesis');
+    const currentQuestion = questions[currentQuestionIndex];
+    const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
+    
+    // Track the answer
+    trackQuestionAnswered(
+      userId,
+      currentQuestion.id,
+      currentQuestion.question_text,
+      'onboarding',
+      currentAnswer.trim().length,
+      timeSpent,
+      currentDomain
+    );
+    
+    // Save response locally
+    const newResponse: QuestionResponse = {
+      questionId: currentQuestion.id,
+      questionText: currentQuestion.question_text,
+      response: currentAnswer.trim(),
+    };
+    
+    setResponses(prev => [...prev, newResponse]);
+    
+    // Save to database
+    saveResponse(currentQuestion.id, currentAnswer.trim());
+    
+    // Move to next question or synthesis
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setCurrentAnswer('');
+    } else {
+      setFlowState('synthesis');
+    }
   }
-}
 
   function handlePreviousQuestion() {
     if (currentQuestionIndex > 0) {
@@ -404,36 +403,36 @@ function handleSkipQuestion() {
   }
 
   function handleSaveAndComeBack() {
-  const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
-  
-  // Track as skipped if they had a current question
-  if (questions[currentQuestionIndex]) {
-    const q = questions[currentQuestionIndex];
-    trackQuestionSkipped(
-      userId,
-      q.id,
-      q.question_text,
-      'onboarding',
-      timeSpent,
-      currentDomain
-    );
+    const timeSpent = Math.round((Date.now() - questionStartTime.current) / 1000);
+    
+    // Track as skipped if they had a current question
+    if (questions[currentQuestionIndex]) {
+      const q = questions[currentQuestionIndex];
+      trackQuestionSkipped(
+        userId,
+        q.id,
+        q.question_text,
+        'onboarding',
+        timeSpent,
+        currentDomain
+      );
+    }
+    
+    // Save current answer if there is one
+    if (currentAnswer.trim() && questions[currentQuestionIndex]) {
+      saveResponse(questions[currentQuestionIndex].id, currentAnswer.trim());
+    }
+    
+    // Capture partial progress and continue
+    onDataCapture({
+      missionReflection: undefined,
+      visionAcknowledged: false,
+      valuesAcknowledged: false,
+    });
+    onNext();
   }
-  
-  // Save current answer if there is one
-  if (currentAnswer.trim() && questions[currentQuestionIndex]) {
-    saveResponse(questions[currentQuestionIndex].id, currentAnswer.trim());
-  }
-  
-  // Capture partial progress and continue
-  onDataCapture({
-    missionReflection: undefined,
-    visionAcknowledged: false,
-    valuesAcknowledged: false,
-  });
-  onNext();
-}
 
-async function generateAIMissionSuggestions(): Promise<string[]> {
+  async function generateAIMissionSuggestions(): Promise<string[]> {
     try {
       const supabase = getSupabaseClient();
       
@@ -446,12 +445,18 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
       return data.suggestions || [];
     } catch (error) {
       console.error('AI generation failed, using fallback:', error);
-      return generateMissionSuggestions();
+      return generateFallbackSuggestions();
     }
   }
 
-    function generateMissionSuggestions(): string[] {
+  function generateFallbackSuggestions(): string[] {
     if (responses.length < 2) {
+      if (currentDomain === 'vision') {
+        return [
+          'In 5 years, I will be living with intention and making a positive impact on those around me.',
+          'In 5 years, I will have built something meaningful that reflects my deepest values.',
+        ];
+      }
       return [
         'To live with intention and make a positive impact on those around me.',
         'To use my unique gifts to serve others and leave the world better than I found it.',
@@ -460,6 +465,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
 
     const allText = responses.map(r => r.response).join(' ').toLowerCase();
     const suggestions: string[] = [];
+    const prefix = currentDomain === 'vision' ? 'In 5 years, I will' : 'To';
 
     // Check for specific themes in their responses
     const hasAfrica = allText.includes('africa');
@@ -473,39 +479,39 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
 
     // Build personalized suggestions based on detected themes
     if (hasAfrica && hasBusiness) {
-      suggestions.push('To create sustainable business opportunities that empower African entrepreneurs and transform communities.');
+      suggestions.push(`${prefix} create sustainable business opportunities that empower African entrepreneurs and transform communities.`);
     } else if (hasAfrica) {
-      suggestions.push('To serve and uplift communities across Africa through meaningful work and lasting impact.');
+      suggestions.push(`${prefix} serve and uplift communities across Africa through meaningful work and lasting impact.`);
     }
 
     if (hasVulnerable && hasHelp) {
-      suggestions.push('To champion the dignity of vulnerable populations by creating pathways to opportunity and self-sufficiency.');
+      suggestions.push(`${prefix} champion the dignity of vulnerable populations by creating pathways to opportunity and self-sufficiency.`);
     } else if (hasVulnerable) {
-      suggestions.push('To be a voice and advocate for those who are often overlooked, bringing hope and tangible support.');
+      suggestions.push(`${prefix} be a voice and advocate for those who are often overlooked, bringing hope and tangible support.`);
     }
 
     if (hasFamily) {
-      suggestions.push('To strengthen families and communities by modeling integrity, love, and purposeful action.');
+      suggestions.push(`${prefix} strengthen families and communities by modeling integrity, love, and purposeful action.`);
     }
 
     if (hasBusiness && hasCreate && !hasAfrica) {
-      suggestions.push('To build enterprises that create jobs, solve real problems, and generate lasting positive change.');
+      suggestions.push(`${prefix} build enterprises that create jobs, solve real problems, and generate lasting positive change.`);
     }
 
     if (hasTeach) {
-      suggestions.push('To educate and equip others with the knowledge and skills they need to thrive.');
+      suggestions.push(`${prefix} educate and equip others with the knowledge and skills they need to thrive.`);
     }
 
     if (hasInspire && suggestions.length < 3) {
-      suggestions.push('To inspire hope and possibility in every person I encounter.');
+      suggestions.push(`${prefix} inspire hope and possibility in every person I encounter.`);
     }
 
     // If we still don't have enough, add personalized fallbacks
     if (suggestions.length < 2) {
       if (hasHelp || hasCreate) {
-        suggestions.push('To use my energy and resources to create opportunities for those who need them most.');
+        suggestions.push(`${prefix} use my energy and resources to create opportunities for those who need them most.`);
       }
-      suggestions.push('To live boldly and kindly, leaving every person and place better than I found them.');
+      suggestions.push(`${prefix} live boldly and kindly, leaving every person and place better than I found them.`);
     }
 
     // Deduplicate and limit to 3
@@ -530,12 +536,41 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
       finalStatement = customMission.trim();
     } else if (selectedSuggestion !== null) {
       // Use AI suggestions if available, otherwise fallback
-      const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateMissionSuggestions();
+      const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateFallbackSuggestions();
       finalStatement = suggestions[selectedSuggestion];
     }
     
     if (finalStatement) {
       saveStatement(finalStatement);
+    }
+  }
+
+  async function loadQuestionsForDomain(domain: 'mission' | 'vision') {
+    const supabase = getSupabaseClient();
+    
+    const { data: answeredQuestions } = await supabase
+      .from('0008-ap-question-responses')
+      .select('question_id')
+      .eq('user_id', userId)
+      .eq('domain', domain);
+    
+    const answeredIds = (answeredQuestions || []).map(q => q.question_id);
+
+    let questionsQuery = supabase
+      .from('0008-ap-user-power-questions')
+      .select('id, question_text, question_context')
+      .eq('domain', domain)
+      .eq('show_in_onboarding', true)
+      .eq('is_active', true);
+    
+    if (answeredIds.length > 0) {
+      questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
+    }
+    
+    const { data: domainQuestions } = await questionsQuery.limit(4);
+    
+    if (domainQuestions && domainQuestions.length > 0) {
+      setQuestions(domainQuestions);
     }
   }
 
@@ -553,7 +588,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
     );
   }
 
-// Domain Choice - Mission or Vision first?
+  // Domain Choice - Mission or Vision first?
   if (flowState === 'domain-choice') {
     return (
       <ScrollView
@@ -593,36 +628,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
               style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
               onPress={async () => {
                 setCurrentDomain('vision');
-                // Need to reload questions for vision domain
-                const supabase = getSupabaseClient();
-                
-                // Get already answered vision questions
-                const { data: answeredQuestions } = await supabase
-                  .from('0008-ap-question-responses')
-                  .select('question_id')
-                  .eq('user_id', userId)
-                  .eq('domain', 'vision');
-                
-                const answeredIds = (answeredQuestions || []).map(q => q.question_id);
-
-                // Load vision questions
-                let questionsQuery = supabase
-                  .from('0008-ap-user-power-questions')
-                  .select('id, question_text, question_context')
-                  .eq('domain', 'vision')
-                  .eq('show_in_onboarding', true)
-                  .eq('is_active', true);
-                
-                if (answeredIds.length > 0) {
-                  questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
-                }
-                
-                const { data: visionQuestions } = await questionsQuery.limit(4);
-                
-                if (visionQuestions && visionQuestions.length > 0) {
-                  setQuestions(visionQuestions);
-                }
-                
+                await loadQuestionsForDomain('vision');
                 setResponses([]);
                 setFlowState('choice');
               }}
@@ -638,34 +644,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
               style={[styles.choiceButton, { borderColor: '#ed1c24' }]}
               onPress={async () => {
                 setCurrentDomain('mission');
-                // Reload questions for mission domain
-                const supabase = getSupabaseClient();
-                
-                const { data: answeredQuestions } = await supabase
-                  .from('0008-ap-question-responses')
-                  .select('question_id')
-                  .eq('user_id', userId)
-                  .eq('domain', 'mission');
-                
-                const answeredIds = (answeredQuestions || []).map(q => q.question_id);
-
-                let questionsQuery = supabase
-                  .from('0008-ap-user-power-questions')
-                  .select('id, question_text, question_context')
-                  .eq('domain', 'mission')
-                  .eq('show_in_onboarding', true)
-                  .eq('is_active', true);
-                
-                if (answeredIds.length > 0) {
-                  questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
-                }
-                
-                const { data: missionQuestions } = await questionsQuery.limit(4);
-                
-                if (missionQuestions && missionQuestions.length > 0) {
-                  setQuestions(missionQuestions);
-                }
-                
+                await loadQuestionsForDomain('mission');
                 setResponses([]);
                 setFlowState('choice');
               }}
@@ -700,8 +679,100 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
       </ScrollView>
     );
   }
+
+  // Offer to work on the other domain
+  if (flowState === 'offer-other-domain') {
+    const justCompleted = currentDomain;
+    const otherDomain = currentDomain === 'vision' ? 'mission' : 'vision';
+    const otherLabel = otherDomain === 'vision' ? 'Vision' : 'Mission';
+    const justCompletedLabel = justCompleted === 'vision' ? 'Vision' : 'Mission';
+    const completedStatement = justCompleted === 'vision' ? northStarData.vision : northStarData.mission;
+
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.headerSection}>
+          <View style={styles.headerRow}>
+            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
+              <MiniCompass size={56} />
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
+              <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Success Message */}
+        <View style={[styles.card, { backgroundColor: '#ed1c2410', borderColor: '#ed1c2430' }]}>
+          <Text style={[styles.successTitle, { color: colors.text }]}>
+            ✨ {justCompletedLabel} Saved!
+          </Text>
+          <Text style={[styles.statementText, { color: colors.text }]}>
+            "{completedStatement}"
+          </Text>
+        </View>
+
+        {/* Offer Other Domain */}
+        <View style={[styles.choiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.choiceTitle, { color: colors.text }]}>
+            Ready for your {otherLabel}?
+          </Text>
+          
+          <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
+            {otherDomain === 'vision'
+              ? 'Your Vision paints a picture of where you want to be in 5 years. It gives your Mission direction.'
+              : 'Your Mission is your core purpose — the "why" behind everything you do.'
+            }
+          </Text>
+
+          <View style={styles.choiceButtons}>
+            <TouchableOpacity
+              style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
+              onPress={async () => {
+                setCurrentDomain(otherDomain);
+                await loadQuestionsForDomain(otherDomain);
+                setResponses([]);
+                setAiSuggestions([]);
+                setFlowState('choice');
+              }}
+              activeOpacity={0.8}
+            >
+              <Lightbulb size={20} color="#FFFFFF" />
+              <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
+                Yes, let's define my {otherLabel}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.choiceButton, { borderColor: colors.border }]}
+              onPress={() => {
+                onDataCapture({
+                  missionReflection: northStarData.mission,
+                  visionAcknowledged: !!northStarData.vision,
+                  valuesAcknowledged: true,
+                });
+                onNext();
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.choiceButtonText, { color: colors.text }]}>
+                I'll do this later
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  }
   
-  // Has Mission - Show existing and allow to continue
+  // Has Mission/Vision - Show existing and allow to continue
   if (flowState === 'has-mission') {
     return (
       <ScrollView
@@ -723,37 +794,63 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
         </View>
 
         {/* Mission Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
-            <TouchableOpacity onPress={() => setShowEditOptions(true)}>
-              <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
-            </TouchableOpacity>
+        {northStarData.mission && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR MISSION</Text>
+              <TouchableOpacity onPress={() => {
+                setCurrentDomain('mission');
+                setShowEditOptions(true);
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.statementText, { color: colors.text }]}>
+              "{northStarData.mission}"
+            </Text>
           </View>
-          <Text style={[styles.statementText, { color: colors.text }]}>
-            "{northStarData.mission}"
-          </Text>
-        </View>
+        )}
+
+        {/* Vision Card */}
+        {northStarData.vision && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR 5-YEAR VISION</Text>
+              <TouchableOpacity onPress={() => {
+                setCurrentDomain('vision');
+                setShowEditOptions(true);
+              }}>
+                <Text style={[styles.editLink, { color: '#ed1c24' }]}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.statementText, { color: colors.text }]}>
+              "{northStarData.vision}"
+            </Text>
+          </View>
+        )}
 
         {/* Edit Options Modal */}
         {showEditOptions && (
           <View style={[styles.editModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.editModalTitle, { color: colors.text }]}>
-              How would you like to refine your mission?
+              How would you like to refine your {currentDomain === 'vision' ? 'vision' : 'mission'}?
             </Text>
             
             <TouchableOpacity
               style={[styles.editOption, { borderColor: colors.border }]}
               onPress={() => {
                 setShowEditOptions(false);
-                setDirectMission(northStarData.mission || '');
+                const currentStatement = currentDomain === 'vision' ? northStarData.vision : northStarData.mission;
+                setDirectMission(currentStatement || '');
                 setFlowState('direct-input');
               }}
             >
               <Edit3 size={20} color="#ed1c24" />
               <View style={styles.editOptionText}>
                 <Text style={[styles.editOptionTitle, { color: colors.text }]}>Edit directly</Text>
-                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>Make changes to your current mission</Text>
+                <Text style={[styles.editOptionDesc, { color: colors.textSecondary }]}>
+                  Make changes to your current {currentDomain === 'vision' ? 'vision' : 'mission'}
+                </Text>
               </View>
             </TouchableOpacity>
 
@@ -763,9 +860,10 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
                 setShowEditOptions(false);
                 setCurrentQuestionIndex(0);
                 setCurrentAnswer('');
+                setResponses([]);
+                setAiSuggestions([]);
                 
-                // Reload to get NEW questions (excluding answered ones)
-                await loadInitialData();
+                await loadQuestionsForDomain(currentDomain);
                 setFlowState('guided-questions');
               }}
             >
@@ -782,18 +880,6 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
             >
               <Text style={[styles.editCancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Vision if exists */}
-        {northStarData.vision && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={styles.cardHeader}>
-              <Text style={[styles.cardLabel, { color: '#ed1c24' }]}>YOUR VISION</Text>
-            </View>
-            <Text style={[styles.statementText, { color: colors.text }]}>
-              "{northStarData.vision}"
-            </Text>
           </View>
         )}
 
@@ -819,7 +905,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
           onPress={() => {
             onDataCapture({
               missionReflection: northStarData.mission,
-              visionAcknowledged: true,
+              visionAcknowledged: !!northStarData.vision,
               valuesAcknowledged: true,
             });
             onNext();
@@ -835,7 +921,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
     );
   }
 
-  // Choice Screen - No mission yet
+  // Choice Screen - No mission/vision yet for this domain
   if (flowState === 'choice') {
     return (
       <ScrollView
@@ -887,9 +973,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
 
             <TouchableOpacity
               style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
-              onPress={async () => {
-                // Reload to ensure we have fresh unanswered questions
-                await loadInitialData();
+              onPress={() => {
                 setFlowState('guided-questions');
               }}
               activeOpacity={0.8}
@@ -1008,7 +1092,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                 <Text style={styles.saveButtonText}>
+                  <Text style={styles.saveButtonText}>
                     {currentDomain === 'vision' ? 'Save Vision' : 'Save Mission'}
                   </Text>
                   <ChevronRight size={20} color="#FFFFFF" />
@@ -1058,7 +1142,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
               <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: '#ed1c24' }]} />
             </View>
             <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-              Question {currentQuestionIndex + 1} of {questions.length}
+              {currentDomain === 'vision' ? 'Vision' : 'Mission'} - Question {currentQuestionIndex + 1} of {questions.length}
             </Text>
           </View>
 
@@ -1104,10 +1188,10 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.skipButton, { borderColor: colors.border }]}
+              style={[styles.questionSkipButton, { borderColor: colors.border }]}
               onPress={handleSkipQuestion}
             >
-              <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>Skip</Text>
+              <Text style={[styles.questionSkipButtonText, { color: colors.textSecondary }]}>Skip</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1144,7 +1228,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
 
   // Synthesis Screen
   if (flowState === 'synthesis') {
-   const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateMissionSuggestions();
+    const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateFallbackSuggestions();
 
     return (
       <KeyboardAvoidingView
@@ -1187,7 +1271,7 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
             ))}
           </View>
 
-          {/* Mission Suggestions */}
+          {/* Suggestions */}
           <View style={[styles.suggestionsCard, { backgroundColor: '#ed1c2408', borderColor: '#ed1c2430' }]}>
             <Text style={[styles.suggestionsTitle, { color: colors.text }]}>
               {currentDomain === 'vision'
@@ -1664,7 +1748,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-// Card header row with edit
+  // Card header row with edit
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
