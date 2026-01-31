@@ -1175,7 +1175,10 @@ async function generateAIMissionSuggestions(): Promise<string[]> {
           {/* Mission Suggestions */}
           <View style={[styles.suggestionsCard, { backgroundColor: '#ed1c2408', borderColor: '#ed1c2430' }]}>
             <Text style={[styles.suggestionsTitle, { color: colors.text }]}>
-              Based on your answers, here are some mission ideas:
+              {currentDomain === 'vision'
+                ? 'Based on your answers, here are some vision ideas:'
+                : 'Based on your answers, here are some mission ideas:'
+              }
             </Text>
             
             {loadingSuggestions ? (
