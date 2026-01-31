@@ -323,7 +323,7 @@ function handleSkipQuestion() {
       currentQuestion.question_text,
       'onboarding',
       timeSpent,
-      'mission'
+      currentDomain
     );
     
     // Move to next question or synthesis
