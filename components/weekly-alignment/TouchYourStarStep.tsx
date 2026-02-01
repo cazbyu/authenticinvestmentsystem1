@@ -866,26 +866,54 @@ export function TouchYourStarStep({
   }
 
   function handleSaveFinalStatement() {
-    let finalStatement = '';
+    const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateFallbackSuggestions();
     
-    if (showCustomInput && customStatement.trim()) {
-      finalStatement = customStatement.trim();
-    } else if (selectedSuggestion !== null) {
-      const suggestions = aiSuggestions.length > 0 ? aiSuggestions : generateFallbackSuggestions();
-      finalStatement = suggestions[selectedSuggestion];
-    }
-    
-    if (finalStatement) {
-      if (currentDomain === 'values') {
-        const colonIndex = finalStatement.indexOf(':');
+    if (currentDomain === 'values') {
+      // Save multiple values
+      const valuesToSave: Array<{ name: string; commitment: string }> = [];
+      
+      // Add selected suggestions
+      selectedSuggestions.forEach(index => {
+        const suggestion = suggestions[index];
+        const colonIndex = suggestion.indexOf(':');
         if (colonIndex > 0) {
-          const name = finalStatement.substring(0, colonIndex).trim();
-          const commitment = finalStatement.substring(colonIndex + 1).trim();
-          saveValue(name, commitment);
+          valuesToSave.push({
+            name: suggestion.substring(0, colonIndex).trim(),
+            commitment: suggestion.substring(colonIndex + 1).trim(),
+          });
         } else {
-          saveValue(finalStatement, '');
+          valuesToSave.push({ name: suggestion, commitment: '' });
         }
-      } else {
+      });
+      
+      // Add custom value if entered
+      if (showCustomInput && customStatement.trim()) {
+        const colonIndex = customStatement.indexOf(':');
+        if (colonIndex > 0) {
+          valuesToSave.push({
+            name: customStatement.substring(0, colonIndex).trim(),
+            commitment: customStatement.substring(colonIndex + 1).trim(),
+          });
+        } else {
+          valuesToSave.push({ name: customStatement.trim(), commitment: '' });
+        }
+      }
+      
+      // Save all values
+      if (valuesToSave.length > 0) {
+        saveMultipleValues(valuesToSave);
+      }
+    } else {
+      // Single statement for mission/vision
+      let finalStatement = '';
+      
+      if (showCustomInput && customStatement.trim()) {
+        finalStatement = customStatement.trim();
+      } else if (selectedSuggestion !== null) {
+        finalStatement = suggestions[selectedSuggestion];
+      }
+      
+      if (finalStatement) {
         saveStatement(finalStatement);
       }
     }
