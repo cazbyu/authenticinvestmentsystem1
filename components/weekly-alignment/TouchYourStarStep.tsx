@@ -1442,14 +1442,15 @@ export function TouchYourStarStep({
             <TouchableOpacity
               style={[styles.choiceButton, styles.choiceButtonFilled, { backgroundColor: '#ed1c24' }]}
               onPress={async () => {
-                await loadQuestionsForDomain(currentDomain);
-                if (questions.length > 0) {
+                const loadedQuestions = await loadQuestionsForDomain(currentDomain);
+                if (loadedQuestions && loadedQuestions.length > 0) {
                   setFlowState('guided-questions');
                 } else {
                   setFlowState('direct-input');
                 }
               }}
               activeOpacity={0.8}
+            >
             >
               <Lightbulb size={20} color="#FFFFFF" />
               <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
