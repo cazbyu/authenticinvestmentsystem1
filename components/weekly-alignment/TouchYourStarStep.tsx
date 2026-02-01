@@ -2082,7 +2082,12 @@ export function TouchYourStarStep({
             ) : (
               <>
                 <Text style={styles.continueButtonText}>
-                  Save My {currentDomain === 'values' ? 'Value' : currentDomain === 'vision' ? 'Vision' : 'Mission'}
+                  <Text style={styles.continueButtonText}>
+                  {currentDomain === 'values' 
+                    ? `Save ${selectedSuggestions.length + (showCustomInput && customStatement.trim() ? 1 : 0)} Value${(selectedSuggestions.length + (showCustomInput && customStatement.trim() ? 1 : 0)) !== 1 ? 's' : ''}`
+                    : `Save My ${currentDomain === 'vision' ? 'Vision' : 'Mission'}`
+                  }
+                </Text>
                 </Text>
                 <ChevronRight size={20} color="#FFFFFF" />
               </>
