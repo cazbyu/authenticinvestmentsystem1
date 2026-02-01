@@ -163,6 +163,53 @@ export function TouchYourStarStep({
   // Custom input ref for auto-focus
   const customInputRef = useRef<TextInput>(null);
 
+  // Register back handler with parent
+  useEffect(() => {
+    if (onRegisterBackHandler) {
+      onRegisterBackHandler(() => {
+        // Return true if we handled the back, false if parent should handle exit
+        if (flowState === 'identity-hub') {
+          // From identity-hub, go back to hero-question
+          setFlowState('hero-question');
+          setPromptShownAt(new Date());
+          return true;
+        } else if (flowState === 'choice') {
+          // From choice, go back to identity-hub
+          setFlowState('identity-hub');
+          return true;
+        } else if (flowState === 'direct-input') {
+          // From direct-input, go back to choice
+          setFlowState('choice');
+          return true;
+        } else if (flowState === 'guided-questions') {
+          // From questions, go back to choice
+          resetDomainState();
+          setFlowState('choice');
+          return true;
+        } else if (flowState === 'synthesis') {
+          // From synthesis, go back to questions or choice
+          if (questions.length > 0) {
+            setFlowState('guided-questions');
+          } else {
+            setFlowState('choice');
+          }
+          return true;
+        } else if (flowState === 'value-entry') {
+          // From value entry, go back to identity-hub
+          setEditingValueIndex(null);
+          setCurrentValueName('');
+          setCurrentValueCommitment('');
+          setFlowState('identity-hub');
+          return true;
+        } else if (flowState === 'hero-question') {
+          // At the root - let parent handle exit
+          return false;
+        }
+        return false;
+      });
+    }
+  }, [flowState, questions.length, onRegisterBackHandler]);
+
   useEffect(() => {
     loadInitialData();
   }, []);
