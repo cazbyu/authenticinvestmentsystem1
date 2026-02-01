@@ -1999,18 +1999,32 @@ export function TouchYourStarStep({
                   borderColor: showCustomInput ? '#ed1c24' : colors.border,
                 },
               ]}
-              onPress={handleChooseCustom}
+              onPress={() => setShowCustomInput(!showCustomInput)}
             >
-              <View style={[
-                styles.radioCircle,
-                { borderColor: showCustomInput ? '#ed1c24' : colors.border },
-              ]}>
-                {showCustomInput && (
-                  <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
-                )}
-              </View>
+              {currentDomain === 'values' ? (
+                <View style={[
+                  styles.checkboxSquare,
+                  { 
+                    borderColor: showCustomInput ? '#ed1c24' : colors.border,
+                    backgroundColor: showCustomInput ? '#ed1c24' : 'transparent',
+                  },
+                ]}>
+                  {showCustomInput && (
+                    <Text style={styles.checkboxCheck}>✓</Text>
+                  )}
+                </View>
+              ) : (
+                <View style={[
+                  styles.radioCircle,
+                  { borderColor: showCustomInput ? '#ed1c24' : colors.border },
+                ]}>
+                  {showCustomInput && (
+                    <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
+                  )}
+                </View>
+              )}
               <Text style={[styles.suggestionText, { color: colors.text }]}>
-                Write my own
+                {currentDomain === 'values' ? '+ Add my own value' : 'Write my own'}
               </Text>
             </TouchableOpacity>
 
