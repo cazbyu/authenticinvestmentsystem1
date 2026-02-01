@@ -152,7 +152,9 @@ export function TouchYourStarStep({
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   
   // Synthesis state
+  // Synthesis state
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<number[]>([]); // For multi-select (values)
   const [customStatement, setCustomStatement] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
   
