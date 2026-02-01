@@ -74,6 +74,7 @@ export default function WeeklyAlignmentScreen() {
   const [existingAlignment, setExistingAlignment] = useState<any>(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [completionAnimation] = useState(new Animated.Value(0));
+  const [stepBackHandler, setStepBackHandler] = useState<(() => boolean) | null>(null);
 
   useEffect(() => {
     loadInitialData();
