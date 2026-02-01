@@ -424,9 +424,27 @@ export function TouchYourStarStep({
     }
   }
 
+  /**
+   * Load questions for a domain from the NEW 0008-ap-power-questions table.
+   * 
+   * MIGRATION NOTES:
+   * - Old table: 0008-ap-user-power-questions (deprecated)
+   * - New table: 0008-ap-power-questions
+   * 
+   * Query logic:
+   * - Filter by strategy_type (mission/vision/values) instead of old 'domain' column
+   * - Filter role_type IS NULL (only strategy questions, not role-specific)
+   * - Filter by user's core_identity OR universal questions (core_identity IS NULL)
+   * - Order by ob_priority (onboarding priority) instead of old 'display_order'
+   * - Identity-specific questions appear first, then universal fallbacks
+   */
   async function loadQuestionsForDomain(domain: DomainType | 'identity'): Promise<PowerQuestion[]> {
     const supabase = getSupabaseClient();
     
+    // Get user's core identity for filtering identity-specific questions
+    const userIdentity = northStarData.identity || null;
+    
+    // Get already-answered question IDs to exclude
     const { data: answeredQuestions } = await supabase
       .from('0008-ap-question-responses')
       .select('question_id')
@@ -435,22 +453,67 @@ export function TouchYourStarStep({
     
     const answeredIds = (answeredQuestions || []).map(q => q.question_id);
 
+    // ========== MIGRATED: Now queries 0008-ap-power-questions ==========
+    // Filter by strategy_type (mission/vision/values) and exclude role-specific questions
     let questionsQuery = supabase
-      .from('0008-ap-user-power-questions')
-      .select('id, question_text, question_context, question_type, display_order')
-      .eq('domain', domain)
+      .from('0008-ap-power-questions')
+      .select('id, question_text, question_context, question_type, ob_priority, core_identity')
+      .eq('strategy_type', domain)      // NEW: was 'domain', now 'strategy_type'
+      .is('role_type', null)            // NEW: Only strategy questions, not role-specific
       .eq('show_in_onboarding', true)
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
+      .eq('is_active', true);
     
+    // Filter by identity: show user's identity-specific questions OR universal (null) questions
+    if (userIdentity) {
+      // Get questions matching user's identity OR universal questions (core_identity is null)
+      questionsQuery = questionsQuery.or(`core_identity.eq.${userIdentity},core_identity.is.null`);
+    } else {
+      // No identity set - only show universal questions
+      questionsQuery = questionsQuery.is('core_identity', null);
+    }
+    
+    // Exclude already-answered questions
     if (answeredIds.length > 0) {
       questionsQuery = questionsQuery.not('id', 'in', `(${answeredIds.join(',')})`);
     }
     
-    const { data: domainQuestions } = await questionsQuery.limit(4);
+    // Order by ob_priority (NEW: was 'display_order', now 'ob_priority')
+    questionsQuery = questionsQuery.order('ob_priority', { ascending: true });
+    
+    const { data: allQuestions, error: questionsError } = await questionsQuery.limit(8); // Get more to allow sorting
+    
+    if (questionsError) {
+      console.error('Error loading questions:', questionsError);
+    }
 
-    if (domainQuestions && domainQuestions.length > 0) {
-      setQuestions(domainQuestions);
+    // Sort to prioritize identity-specific questions over universal ones
+    let sortedQuestions = allQuestions || [];
+    if (userIdentity && sortedQuestions.length > 0) {
+      sortedQuestions = sortedQuestions.sort((a: any, b: any) => {
+        // Identity-specific questions first (core_identity matches user's identity)
+        const aIsIdentitySpecific = a.core_identity === userIdentity ? 0 : 1;
+        const bIsIdentitySpecific = b.core_identity === userIdentity ? 0 : 1;
+        
+        if (aIsIdentitySpecific !== bIsIdentitySpecific) {
+          return aIsIdentitySpecific - bIsIdentitySpecific;
+        }
+        // Then by ob_priority
+        return (a.ob_priority || 999) - (b.ob_priority || 999);
+      });
+    }
+    
+    // Take top 4 questions
+    const domainQuestions = sortedQuestions.slice(0, 4);
+
+    if (domainQuestions.length > 0) {
+      // Map to expected format (display_order from ob_priority for compatibility)
+      setQuestions(domainQuestions.map((q: any) => ({
+        id: q.id,
+        question_text: q.question_text,
+        question_context: q.question_context,
+        question_type: q.question_type,
+        display_order: q.ob_priority,  // Map ob_priority to display_order for compatibility
+      })));
     } else {
       setQuestions([]);
     }
@@ -466,8 +529,9 @@ export function TouchYourStarStep({
 
     if (existingResponses && existingResponses.length > 0) {
       const questionIds = existingResponses.map(r => r.question_id);
+      // ========== MIGRATED: Query NEW table for question texts ==========
       const { data: questionTexts } = await supabase
-        .from('0008-ap-user-power-questions')
+        .from('0008-ap-power-questions')
         .select('id, question_text')
         .in('id', questionIds);
       
