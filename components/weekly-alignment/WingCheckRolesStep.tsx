@@ -6,8 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Alert,
+  Platform,
 } from 'react-native';
-import { Users, ChevronRight, AlertCircle, CheckCircle, MinusCircle, HelpCircle } from 'lucide-react-native';
+import { Compass, ChevronRight, Check, HelpCircle, Settings } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 
@@ -30,14 +33,15 @@ interface Role {
   color?: string;
   purpose?: string;
   is_active: boolean;
+  priority_order?: number | null;
 }
-
-type HealthStatus = 'thriving' | 'stable' | 'needs_attention' | null;
 
 // Brand color for Roles (purple)
 const ROLES_COLOR = '#9370DB';
 const ROLES_COLOR_LIGHT = '#9370DB15';
 const ROLES_COLOR_BORDER = '#9370DB40';
+
+const MAX_PRIORITY_ROLES = 3;
 
 export function WingCheckRolesStep({
   userId,
@@ -46,11 +50,13 @@ export function WingCheckRolesStep({
   onBack,
   onDataCapture,
 }: WingCheckRolesStepProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState<Role[]>([]);
-  const [healthFlags, setHealthFlags] = useState<Record<string, HealthStatus>>({});
-  const [expandedRole, setExpandedRole] = useState<string | null>(null);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [hasExistingPriorities, setHasExistingPriorities] = useState(false);
 
   useEffect(() => {
     loadRoles();
@@ -62,14 +68,28 @@ export function WingCheckRolesStep({
 
       const { data, error } = await supabase
         .from('0008-ap-roles')
-        .select('id, label, category, icon, color, purpose, is_active')
+        .select('id, label, category, icon, color, purpose, is_active, priority_order')
         .eq('user_id', userId)
         .eq('is_active', true)
-        .order('sort_order', { ascending: true });
+        .order('priority_order', { ascending: true, nullsFirst: false })
+        .order('label', { ascending: true });
 
       if (error) throw error;
 
-      setRoles(data || []);
+      const rolesData = data || [];
+      setRoles(rolesData);
+
+      // Check if user already has priority roles set
+      const existingPriorities = rolesData
+        .filter(r => r.priority_order !== null && r.priority_order !== undefined)
+        .sort((a, b) => (a.priority_order || 0) - (b.priority_order || 0))
+        .slice(0, MAX_PRIORITY_ROLES)
+        .map(r => r.id);
+
+      if (existingPriorities.length > 0) {
+        setSelectedRoleIds(existingPriorities);
+        setHasExistingPriorities(true);
+      }
     } catch (error) {
       console.error('Error loading roles:', error);
     } finally {
@@ -77,30 +97,83 @@ export function WingCheckRolesStep({
     }
   }
 
-  function setRoleHealth(roleId: string, status: HealthStatus) {
-    setHealthFlags(prev => ({
-      ...prev,
-      [roleId]: status,
-    }));
-  }
-
-  function handleNext() {
-    const reviewedRoles = Object.keys(healthFlags).filter(id => healthFlags[id] !== null);
-    const validHealthFlags: Record<string, 'thriving' | 'stable' | 'needs_attention'> = {};
-    
-    reviewedRoles.forEach(id => {
-      const status = healthFlags[id];
-      if (status) {
-        validHealthFlags[id] = status;
+  function toggleRoleSelection(roleId: string) {
+    setSelectedRoleIds(prev => {
+      if (prev.includes(roleId)) {
+        // Remove from selection
+        return prev.filter(id => id !== roleId);
+      } else if (prev.length < MAX_PRIORITY_ROLES) {
+        // Add to selection (maintains order of selection)
+        return [...prev, roleId];
+      } else {
+        // Already at max, show feedback
+        if (Platform.OS === 'web') {
+          window.alert(`You can only select ${MAX_PRIORITY_ROLES} priority roles. Tap a selected role to remove it first.`);
+        } else {
+          Alert.alert(
+            'Maximum Reached',
+            `You can only select ${MAX_PRIORITY_ROLES} priority roles. Tap a selected role to remove it first.`
+          );
+        }
+        return prev;
       }
     });
+  }
 
-    onDataCapture({
-      rolesReviewed: reviewedRoles,
-      roleHealthFlags: validHealthFlags,
-    });
-    
-    onNext();
+  async function handleContinue() {
+    if (selectedRoleIds.length === 0) {
+      if (Platform.OS === 'web') {
+        window.alert('Please select at least one priority role to continue.');
+      } else {
+        Alert.alert('Select Roles', 'Please select at least one priority role to continue.');
+      }
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      // First, clear all existing priority_order values for this user's roles
+      const { error: clearError } = await supabase
+        .from('0008-ap-roles')
+        .update({ priority_order: null })
+        .eq('user_id', userId);
+
+      if (clearError) throw clearError;
+
+      // Then set priority_order for selected roles (1, 2, 3)
+      for (let i = 0; i < selectedRoleIds.length; i++) {
+        const { error: updateError } = await supabase
+          .from('0008-ap-roles')
+          .update({ priority_order: i + 1 })
+          .eq('id', selectedRoleIds[i]);
+
+        if (updateError) throw updateError;
+      }
+
+      // Capture data for the weekly alignment flow
+      onDataCapture({
+        rolesReviewed: selectedRoleIds,
+        roleHealthFlags: {}, // Not using health flags in this simplified flow
+      });
+
+      onNext();
+    } catch (error) {
+      console.error('Error saving priority roles:', error);
+      if (Platform.OS === 'web') {
+        window.alert('Failed to save your priority roles. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to save your priority roles. Please try again.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleManageRoles() {
+    // Navigate to Role Bank's Manage Roles tab
+    router.push('/(tabs)/roles');
   }
 
   function getCategoryColor(category: string): string {
@@ -109,31 +182,16 @@ export function WingCheckRolesStep({
       case 'professional': return '#3B82F6';
       case 'community': return '#10B981';
       case 'family': return '#F59E0B';
+      case 'home & stewardship': return '#8B5CF6';
+      case 'recreation': return '#EC4899';
+      case 'caregiving': return '#EF4444';
       default: return '#6B7280';
     }
   }
 
-  function getCategoryEmoji(category: string): string {
-    switch (category?.toLowerCase()) {
-      case 'personal': return '🧘';
-      case 'professional': return '💼';
-      case 'community': return '🤝';
-      case 'family': return '👨‍👩‍👧‍👦';
-      default: return '👤';
-    }
-  }
-
-  function getHealthIcon(status: HealthStatus) {
-    switch (status) {
-      case 'thriving':
-        return <CheckCircle size={20} color="#10B981" />;
-      case 'stable':
-        return <MinusCircle size={20} color="#F59E0B" />;
-      case 'needs_attention':
-        return <AlertCircle size={20} color="#EF4444" />;
-      default:
-        return null;
-    }
+  function getSelectionNumber(roleId: string): number | null {
+    const index = selectedRoleIds.indexOf(roleId);
+    return index >= 0 ? index + 1 : null;
   }
 
   if (loading) {
@@ -144,6 +202,63 @@ export function WingCheckRolesStep({
           Loading your roles...
         </Text>
       </View>
+    );
+  }
+
+  // No roles state
+  if (roles.length === 0) {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.headerSection}>
+          <View style={styles.headerRow}>
+            <View style={[styles.iconContainer, { backgroundColor: ROLES_COLOR_LIGHT }]}>
+              <Compass size={40} color={ROLES_COLOR} />
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
+              <Text style={[styles.stepTitle, { color: colors.text }]}>Wing Check: Roles</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Empty State */}
+        <View style={[styles.emptyStateCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.emptyStateIconContainer}>
+            <Compass size={48} color={colors.textSecondary} />
+          </View>
+          <Text style={[styles.emptyStateTitle, { color: colors.text }]}>
+            No Roles Set Up Yet
+          </Text>
+          <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+            Before we can identify your priority roles, you'll need to create some roles first. 
+            Roles represent the different hats you wear in life—like Father, Professional, Friend, etc.
+          </Text>
+          <TouchableOpacity
+            style={[styles.manageRolesButton, { backgroundColor: ROLES_COLOR }]}
+            onPress={handleManageRoles}
+            activeOpacity={0.8}
+          >
+            <Settings size={20} color="#FFFFFF" />
+            <Text style={styles.manageRolesButtonText}>Set Up Roles</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Skip Option */}
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={onNext}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
+            Skip for now
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
     );
   }
 
@@ -158,7 +273,6 @@ export function WingCheckRolesStep({
   }, {});
 
   const categories = Object.keys(rolesByCategory);
-  const reviewedCount = Object.values(healthFlags).filter(v => v !== null).length;
 
   return (
     <ScrollView
@@ -170,14 +284,14 @@ export function WingCheckRolesStep({
       <View style={styles.headerSection}>
         <View style={styles.headerRow}>
           <View style={[styles.iconContainer, { backgroundColor: ROLES_COLOR_LIGHT }]}>
-            <Users size={40} color={ROLES_COLOR} />
+            <Compass size={40} color={ROLES_COLOR} />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
             <Text style={[styles.stepTitle, { color: colors.text }]}>Wing Check: Roles</Text>
           </View>
           {/* Tooltip Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.tooltipButton}
             onPress={() => setShowTooltip(!showTooltip)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -190,8 +304,8 @@ export function WingCheckRolesStep({
         {showTooltip && (
           <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.tooltipText, { color: colors.text }]}>
-              Your life roles represent the different hats you wear—father, professional, friend, etc. 
-              Checking in on each role helps you see where you're thriving and where you might need more attention.
+              Your life roles represent the different hats you wear—father, professional, friend, etc.
+              Identifying your top 3 priority roles helps you focus your energy where it matters most.
             </Text>
           </View>
         )}
@@ -200,7 +314,7 @@ export function WingCheckRolesStep({
       {/* Progress Card */}
       <View style={[styles.progressCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-          {reviewedCount} of {roles.length} roles checked
+          {selectedRoleIds.length} of {roles.length} roles
         </Text>
         <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
           <View
@@ -208,147 +322,144 @@ export function WingCheckRolesStep({
               styles.progressFill,
               {
                 backgroundColor: ROLES_COLOR,
-                width: `${roles.length > 0 ? (reviewedCount / roles.length) * 100 : 0}%`,
+                width: `${(selectedRoleIds.length / MAX_PRIORITY_ROLES) * 100}%`,
               },
             ]}
           />
         </View>
       </View>
 
-      {/* Instructions */}
-      <View style={[styles.instructionCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
-        <Text style={[styles.instructionText, { color: colors.text }]}>
-          💡 Tap each role and rate how it's going this week. Be honest with yourself.
+      {/* Question Card */}
+      <View style={[styles.questionCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
+        <Text style={[styles.questionText, { color: colors.text }]}>
+          Currently, what are your three most important roles?
+        </Text>
+        <Text style={[styles.questionHint, { color: colors.textSecondary }]}>
+          Tap to select up to {MAX_PRIORITY_ROLES} roles. The order you select them indicates priority.
         </Text>
       </View>
 
       {/* Roles by Category */}
-      {roles.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Users size={32} color={colors.textSecondary} />
-          <Text style={[styles.emptyStateTitle, { color: colors.text }]}>
-            No Roles Defined
+      {categories.map(category => (
+        <View key={category} style={styles.categorySection}>
+          <Text style={[styles.categoryTitle, { color: getCategoryColor(category) }]}>
+            {category}
           </Text>
-          <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-            You haven't set up any life roles yet. You can define them in the Roles section.
-          </Text>
-        </View>
-      ) : (
-        categories.map(category => (
-          <View key={category} style={styles.categorySection}>
-            <View style={styles.categoryHeader}>
-              <Text style={styles.categoryEmoji}>{getCategoryEmoji(category)}</Text>
-              <Text style={[styles.categoryTitle, { color: getCategoryColor(category) }]}>
-                {category}
-              </Text>
-            </View>
 
+          <View style={styles.rolesGrid}>
             {rolesByCategory[category].map(role => {
-              const health = healthFlags[role.id];
-              const isExpanded = expandedRole === role.id;
+              const isSelected = selectedRoleIds.includes(role.id);
+              const selectionNumber = getSelectionNumber(role.id);
+              const categoryColor = getCategoryColor(role.category);
 
               return (
-                <View key={role.id} style={styles.roleContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleCard,
-                      { 
-                        backgroundColor: colors.surface, 
-                        borderColor: health ? getCategoryColor(category) : colors.border,
-                        borderWidth: health ? 2 : 1,
-                      },
-                    ]}
-                    onPress={() => setExpandedRole(isExpanded ? null : role.id)}
-                    activeOpacity={0.7}
-                  >
-                    {/* Role Icon - Uses RoleIcon component with icon field or label as fallback */}
-                    <View style={[styles.roleIconContainer, { backgroundColor: `${getCategoryColor(category)}15` }]}>
-                      <RoleIcon 
-                        name={role.icon || role.label} 
-                        color={getCategoryColor(category)} 
-                        size={24} 
-                      />
-                    </View>
-                    
-                    <View style={styles.roleInfo}>
-                      <Text style={[styles.roleLabel, { color: colors.text }]}>
-                        {role.label}
-                      </Text>
-                      {role.purpose && (
-                        <Text 
-                          style={[styles.rolePurpose, { color: colors.textSecondary }]}
-                          numberOfLines={isExpanded ? undefined : 1}
-                        >
-                          {role.purpose}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={styles.roleStatus}>
-                      {getHealthIcon(health)}
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Health Selection Buttons */}
-                  {isExpanded && (
-                    <View style={styles.healthButtons}>
-                      <TouchableOpacity
-                        style={[
-                          styles.healthButton,
-                          { backgroundColor: health === 'thriving' ? '#10B98120' : colors.background },
-                          { borderColor: health === 'thriving' ? '#10B981' : colors.border },
-                        ]}
-                        onPress={() => setRoleHealth(role.id, 'thriving')}
-                      >
-                        <CheckCircle size={18} color="#10B981" />
-                        <Text style={[styles.healthButtonText, { color: '#10B981' }]}>
-                          Thriving
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.healthButton,
-                          { backgroundColor: health === 'stable' ? '#F59E0B20' : colors.background },
-                          { borderColor: health === 'stable' ? '#F59E0B' : colors.border },
-                        ]}
-                        onPress={() => setRoleHealth(role.id, 'stable')}
-                      >
-                        <MinusCircle size={18} color="#F59E0B" />
-                        <Text style={[styles.healthButtonText, { color: '#F59E0B' }]}>
-                          Stable
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.healthButton,
-                          { backgroundColor: health === 'needs_attention' ? '#EF444420' : colors.background },
-                          { borderColor: health === 'needs_attention' ? '#EF4444' : colors.border },
-                        ]}
-                        onPress={() => setRoleHealth(role.id, 'needs_attention')}
-                      >
-                        <AlertCircle size={18} color="#EF4444" />
-                        <Text style={[styles.healthButtonText, { color: '#EF4444' }]}>
-                          Needs Work
-                        </Text>
-                      </TouchableOpacity>
+                <TouchableOpacity
+                  key={role.id}
+                  style={[
+                    styles.roleCard,
+                    {
+                      backgroundColor: isSelected ? `${categoryColor}15` : colors.surface,
+                      borderColor: isSelected ? categoryColor : colors.border,
+                      borderWidth: isSelected ? 2 : 1,
+                    },
+                  ]}
+                  onPress={() => toggleRoleSelection(role.id)}
+                  activeOpacity={0.7}
+                >
+                  {/* Selection Badge */}
+                  {isSelected && selectionNumber && (
+                    <View style={[styles.selectionBadge, { backgroundColor: categoryColor }]}>
+                      <Text style={styles.selectionBadgeText}>{selectionNumber}</Text>
                     </View>
                   )}
+
+                  {/* Role Icon */}
+                  <View style={[styles.roleIconContainer, { backgroundColor: `${categoryColor}20` }]}>
+                    <RoleIcon
+                      name={role.icon || role.label}
+                      color={categoryColor}
+                      size={28}
+                    />
+                  </View>
+
+                  {/* Role Label */}
+                  <Text
+                    style={[
+                      styles.roleLabel,
+                      { color: isSelected ? categoryColor : colors.text },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {role.label}
+                  </Text>
+
+                  {/* Check indicator */}
+                  {isSelected && (
+                    <View style={[styles.checkContainer, { backgroundColor: categoryColor }]}>
+                      <Check size={12} color="#FFFFFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ))}
+
+      {/* Selected Summary */}
+      {selectedRoleIds.length > 0 && (
+        <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: ROLES_COLOR_BORDER }]}>
+          <Text style={[styles.summaryTitle, { color: colors.text }]}>Your Priority Roles:</Text>
+          <View style={styles.summaryList}>
+            {selectedRoleIds.map((roleId, index) => {
+              const role = roles.find(r => r.id === roleId);
+              if (!role) return null;
+              return (
+                <View key={roleId} style={styles.summaryItem}>
+                  <Text style={[styles.summaryNumber, { color: ROLES_COLOR }]}>{index + 1}.</Text>
+                  <Text style={[styles.summaryRole, { color: colors.text }]}>{role.label}</Text>
                 </View>
               );
             })}
           </View>
-        ))
+        </View>
       )}
 
       {/* Continue Button */}
       <TouchableOpacity
-        style={[styles.continueButton, { backgroundColor: ROLES_COLOR }]}
-        onPress={handleNext}
+        style={[
+          styles.continueButton,
+          {
+            backgroundColor: selectedRoleIds.length > 0 ? ROLES_COLOR : colors.border,
+            opacity: saving ? 0.7 : 1,
+          },
+        ]}
+        onPress={handleContinue}
+        disabled={saving}
         activeOpacity={0.8}
       >
-        <Text style={styles.continueButtonText}>Continue</Text>
-        <ChevronRight size={20} color="#FFFFFF" />
+        {saving ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <>
+            <Text style={styles.continueButtonText}>
+              {hasExistingPriorities ? 'Update & Continue' : 'Continue'}
+            </Text>
+            <ChevronRight size={20} color="#FFFFFF" />
+          </>
+        )}
+      </TouchableOpacity>
+
+      {/* Manage Roles Link */}
+      <TouchableOpacity
+        style={styles.manageRolesLink}
+        onPress={handleManageRoles}
+        activeOpacity={0.7}
+      >
+        <Settings size={16} color={colors.textSecondary} />
+        <Text style={[styles.manageRolesLinkText, { color: colors.textSecondary }]}>
+          Manage Roles
+        </Text>
       </TouchableOpacity>
 
       <View style={{ height: 40 }} />
@@ -440,112 +551,121 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
-  // Instructions
-  instructionCard: {
-    padding: 16,
+  // Question
+  questionCard: {
+    padding: 20,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 24,
   },
-  instructionText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-
-  // Empty State
-  emptyState: {
-    padding: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
+  questionText: {
+    fontSize: 18,
     fontWeight: '600',
-    marginTop: 16,
+    lineHeight: 26,
     marginBottom: 8,
   },
-  emptyStateText: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
+  questionHint: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 
   // Categories
   categorySection: {
     marginBottom: 20,
   },
-  categoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
-  },
-  categoryEmoji: {
-    fontSize: 20,
-  },
   categoryTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-  },
-
-  // Role Cards
-  roleContainer: {
     marginBottom: 12,
   },
-  roleCard: {
+
+  // Roles Grid
+  rolesGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  roleCard: {
+    width: '30%',
+    minWidth: 100,
+    maxWidth: 120,
+    aspectRatio: 1,
+    borderRadius: 16,
+    padding: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  selectionBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectionBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  roleIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  roleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  checkContainer: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Summary
+  summaryCard: {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 12,
+    marginBottom: 20,
   },
-  roleIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  roleInfo: {
-    flex: 1,
-  },
-  roleLabel: {
-    fontSize: 16,
+  summaryTitle: {
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 2,
+    marginBottom: 12,
   },
-  rolePurpose: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  roleStatus: {
-    marginLeft: 8,
-  },
-
-  // Health Buttons
-  healthButtons: {
-    flexDirection: 'row',
-    marginTop: 8,
+  summaryList: {
     gap: 8,
   },
-  healthButton: {
-    flex: 1,
+  summaryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 6,
+    gap: 8,
   },
-  healthButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
+  summaryNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    width: 24,
+  },
+  summaryRole: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 
   // Continue Button
@@ -556,12 +676,70 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
-    marginTop: 8,
   },
   continueButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
+  },
+
+  // Manage Roles Link
+  manageRolesLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  manageRolesLinkText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Empty State
+  emptyStateCard: {
+    padding: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  emptyStateIconContainer: {
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  manageRolesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 8,
+  },
+  manageRolesButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  skipButton: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  skipButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 
