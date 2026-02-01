@@ -7,8 +7,9 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Users, ChevronRight, AlertCircle, CheckCircle, MinusCircle } from 'lucide-react-native';
+import { Users, ChevronRight, AlertCircle, CheckCircle, MinusCircle, HelpCircle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
+import { RoleIcon } from '@/components/icons/RoleIcon';
 
 interface WingCheckRolesStepProps {
   userId: string;
@@ -33,6 +34,11 @@ interface Role {
 
 type HealthStatus = 'thriving' | 'stable' | 'needs_attention' | null;
 
+// Brand color for Roles (purple)
+const ROLES_COLOR = '#9370DB';
+const ROLES_COLOR_LIGHT = '#9370DB15';
+const ROLES_COLOR_BORDER = '#9370DB40';
+
 export function WingCheckRolesStep({
   userId,
   colors,
@@ -44,6 +50,7 @@ export function WingCheckRolesStep({
   const [roles, setRoles] = useState<Role[]>([]);
   const [healthFlags, setHealthFlags] = useState<Record<string, HealthStatus>>({});
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   useEffect(() => {
     loadRoles();
@@ -78,7 +85,6 @@ export function WingCheckRolesStep({
   }
 
   function handleNext() {
-    // Capture which roles were reviewed and their health status
     const reviewedRoles = Object.keys(healthFlags).filter(id => healthFlags[id] !== null);
     const validHealthFlags: Record<string, 'thriving' | 'stable' | 'needs_attention'> = {};
     
@@ -133,7 +139,7 @@ export function WingCheckRolesStep({
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={ROLES_COLOR} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
           Loading your roles...
         </Text>
@@ -160,20 +166,38 @@ export function WingCheckRolesStep({
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header Section */}
+      {/* Header - Matching TouchYourStarStep style */}
       <View style={styles.headerSection}>
-        <View style={[styles.iconCircle, { backgroundColor: '#9370DB20' }]}>
-          <Users size={40} color="#9370DB" />
+        <View style={styles.headerRow}>
+          <View style={[styles.iconContainer, { backgroundColor: ROLES_COLOR_LIGHT }]}>
+            <Users size={40} color={ROLES_COLOR} />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
+            <Text style={[styles.stepTitle, { color: colors.text }]}>Wing Check: Roles</Text>
+          </View>
+          {/* Tooltip Button */}
+          <TouchableOpacity 
+            style={styles.tooltipButton}
+            onPress={() => setShowTooltip(!showTooltip)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <HelpCircle size={22} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
-        <Text style={[styles.stepTitle, { color: colors.text }]}>
-          Wing Check: Roles
-        </Text>
-        <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-          How are your life roles doing?
-        </Text>
+
+        {/* Tooltip Content */}
+        {showTooltip && (
+          <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.tooltipText, { color: colors.text }]}>
+              Your life roles represent the different hats you wear—father, professional, friend, etc. 
+              Checking in on each role helps you see where you're thriving and where you might need more attention.
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Progress Indicator */}
+      {/* Progress Card */}
       <View style={[styles.progressCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.progressText, { color: colors.textSecondary }]}>
           {reviewedCount} of {roles.length} roles checked
@@ -183,7 +207,7 @@ export function WingCheckRolesStep({
             style={[
               styles.progressFill,
               {
-                backgroundColor: '#9370DB',
+                backgroundColor: ROLES_COLOR,
                 width: `${roles.length > 0 ? (reviewedCount / roles.length) * 100 : 0}%`,
               },
             ]}
@@ -192,7 +216,7 @@ export function WingCheckRolesStep({
       </View>
 
       {/* Instructions */}
-      <View style={[styles.instructionCard, { backgroundColor: '#9370DB10', borderColor: '#9370DB40' }]}>
+      <View style={[styles.instructionCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
         <Text style={[styles.instructionText, { color: colors.text }]}>
           💡 Tap each role and rate how it's going this week. Be honest with yourself.
         </Text>
@@ -237,9 +261,18 @@ export function WingCheckRolesStep({
                     onPress={() => setExpandedRole(isExpanded ? null : role.id)}
                     activeOpacity={0.7}
                   >
+                    {/* Role Icon - Uses RoleIcon component with icon field or label as fallback */}
+                    <View style={[styles.roleIconContainer, { backgroundColor: `${getCategoryColor(category)}15` }]}>
+                      <RoleIcon 
+                        name={role.icon || role.label} 
+                        color={getCategoryColor(category)} 
+                        size={24} 
+                      />
+                    </View>
+                    
                     <View style={styles.roleInfo}>
                       <Text style={[styles.roleLabel, { color: colors.text }]}>
-                        {role.icon ? `${role.icon} ` : ''}{role.label}
+                        {role.label}
                       </Text>
                       {role.purpose && (
                         <Text 
@@ -310,7 +343,7 @@ export function WingCheckRolesStep({
 
       {/* Continue Button */}
       <TouchableOpacity
-        style={[styles.continueButton, { backgroundColor: '#9370DB' }]}
+        style={[styles.continueButton, { backgroundColor: ROLES_COLOR }]}
         onPress={handleNext}
         activeOpacity={0.8}
       >
@@ -340,27 +373,53 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
+
+  // Header - Matching TouchYourStarStep
   headerSection: {
-    alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  iconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   stepTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
-    marginBottom: 8,
   },
-  stepSubtitle: {
-    fontSize: 16,
-    textAlign: 'center',
+
+  // Tooltip
+  tooltipButton: {
+    padding: 8,
   },
+  tooltipContent: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  tooltipText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
+  // Progress
   progressCard: {
     padding: 16,
     borderRadius: 12,
@@ -380,6 +439,8 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 3,
   },
+
+  // Instructions
   instructionCard: {
     padding: 16,
     borderRadius: 12,
@@ -390,6 +451,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+
+  // Empty State
   emptyState: {
     padding: 32,
     borderRadius: 16,
@@ -408,6 +471,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+
+  // Categories
   categorySection: {
     marginBottom: 20,
   },
@@ -426,6 +491,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+
+  // Role Cards
   roleContainer: {
     marginBottom: 12,
   },
@@ -435,6 +502,14 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
+    gap: 12,
+  },
+  roleIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   roleInfo: {
     flex: 1,
@@ -442,15 +517,17 @@ const styles = StyleSheet.create({
   roleLabel: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   rolePurpose: {
     fontSize: 13,
     lineHeight: 18,
   },
   roleStatus: {
-    marginLeft: 12,
+    marginLeft: 8,
   },
+
+  // Health Buttons
   healthButtons: {
     flexDirection: 'row',
     marginTop: 8,
@@ -470,6 +547,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+
+  // Continue Button
   continueButton: {
     flexDirection: 'row',
     alignItems: 'center',
