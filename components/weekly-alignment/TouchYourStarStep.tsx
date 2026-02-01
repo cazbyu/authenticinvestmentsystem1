@@ -350,7 +350,7 @@ export function TouchYourStarStep({
     }
   }
 
-  async function loadQuestionsForDomain(domain: DomainType | 'identity') {
+  async function loadQuestionsForDomain(domain: DomainType | 'identity'): Promise<PowerQuestion[]> {
     const supabase = getSupabaseClient();
     
     const { data: answeredQuestions } = await supabase
