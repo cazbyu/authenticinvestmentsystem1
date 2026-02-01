@@ -894,6 +894,13 @@ export function TouchYourStarStep({
     ];
   }
 
+  function hasValidSelection(): boolean {
+    if (currentDomain === 'values') {
+      return selectedSuggestions.length > 0 || (showCustomInput && !!customStatement.trim());
+    }
+    return selectedSuggestion !== null || (showCustomInput && !!customStatement.trim());
+  }
+
   function handleSelectSuggestion(index: number) {
     if (currentDomain === 'values') {
       // Multi-select for values
