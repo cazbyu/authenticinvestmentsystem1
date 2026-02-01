@@ -1603,7 +1603,6 @@ export function TouchYourStarStep({
               }}
               activeOpacity={0.8}
             >
-            >
               <Lightbulb size={20} color="#FFFFFF" />
               <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
                 Guide Me Through
@@ -2064,11 +2063,7 @@ export function TouchYourStarStep({
             style={[
               styles.continueButton,
               {
-                {
                 backgroundColor: hasValidSelection() ? '#ed1c24' : '#ccc',
-              },
-                  ? '#ed1c24'
-                  : '#ccc',
               },
             ]}
             onPress={handleSaveFinalStatement}
@@ -2080,12 +2075,10 @@ export function TouchYourStarStep({
             ) : (
               <>
                 <Text style={styles.continueButtonText}>
-                  <Text style={styles.continueButtonText}>
-                  {currentDomain === 'values' 
+                  {currentDomain === 'values'
                     ? `Save ${selectedSuggestions.length + (showCustomInput && customStatement.trim() ? 1 : 0)} Value${(selectedSuggestions.length + (showCustomInput && customStatement.trim() ? 1 : 0)) !== 1 ? 's' : ''}`
                     : `Save My ${currentDomain === 'vision' ? 'Vision' : 'Mission'}`
                   }
-                </Text>
                 </Text>
                 <ChevronRight size={20} color="#FFFFFF" />
               </>
