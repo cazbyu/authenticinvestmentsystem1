@@ -397,6 +397,7 @@ export default function WeeklyAlignmentScreen() {
             colors={colors}
             onNext={goToNextStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
+            onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
           />
         )}
 
