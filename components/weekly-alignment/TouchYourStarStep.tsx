@@ -676,6 +676,57 @@ export function TouchYourStarStep({
     }
   }
 
+  async function saveMultipleValues(valuesToSave: Array<{ name: string; commitment: string }>) {
+    setSaving(true);
+    try {
+      const supabase = getSupabaseClient();
+      
+      const newValues = valuesToSave.map((v, i) => ({
+        id: `value-${Date.now()}-${i}`,
+        name: v.name,
+        commitment: v.commitment,
+      }));
+
+      const updatedValues = [...(northStarData.values || []), ...newValues];
+
+      const { data: existing } = await supabase
+        .from('0008-ap-north-star')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('0008-ap-north-star')
+          .update({ core_values: updatedValues })
+          .eq('user_id', userId);
+      } else {
+        await supabase
+          .from('0008-ap-north-star')
+          .insert({ user_id: userId, core_values: updatedValues });
+      }
+
+      if (responses.length > 0) {
+        const questionIds = responses.map(r => r.questionId);
+        await supabase
+          .from('0008-ap-question-responses')
+          .update({ used_in_synthesis: true })
+          .eq('user_id', userId)
+          .in('question_id', questionIds);
+      }
+
+      setNorthStarData(prev => ({ ...prev, values: updatedValues }));
+      
+      resetDomainState();
+      setFlowState('identity-hub');
+
+    } catch (error) {
+      console.error('Error saving multiple values:', error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function deleteValue(index: number) {
     try {
       const supabase = getSupabaseClient();
