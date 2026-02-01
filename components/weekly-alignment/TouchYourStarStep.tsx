@@ -414,6 +414,8 @@ export function TouchYourStarStep({
     } else {
       setResponses([]);
     }
+
+    return domainQuestions || [];
   }
 
   async function saveResponse(questionId: string, responseText: string) {
