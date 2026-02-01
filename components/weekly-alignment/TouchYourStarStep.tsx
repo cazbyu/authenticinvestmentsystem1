@@ -1943,31 +1943,53 @@ export function TouchYourStarStep({
                   Crafting personalized suggestions...
                 </Text>
               </View>
-            ) : suggestions.map((suggestion, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.suggestionOption,
-                  {
-                    backgroundColor: selectedSuggestion === index ? '#ed1c2420' : colors.background,
-                    borderColor: selectedSuggestion === index ? '#ed1c24' : colors.border,
-                  },
-                ]}
-                onPress={() => handleSelectSuggestion(index)}
-              >
-                <View style={[
-                  styles.radioCircle,
-                  { borderColor: selectedSuggestion === index ? '#ed1c24' : colors.border },
-                ]}>
-                  {selectedSuggestion === index && (
-                    <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
+            ) : suggestions.map((suggestion, index) => {
+              const isSelected = currentDomain === 'values' 
+                ? selectedSuggestions.includes(index)
+                : selectedSuggestion === index;
+              
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.suggestionOption,
+                    {
+                      backgroundColor: isSelected ? '#ed1c2420' : colors.background,
+                      borderColor: isSelected ? '#ed1c24' : colors.border,
+                    },
+                  ]}
+                  onPress={() => handleSelectSuggestion(index)}
+                >
+                  {currentDomain === 'values' ? (
+                    // Checkbox for values (multi-select)
+                    <View style={[
+                      styles.checkboxSquare,
+                      { 
+                        borderColor: isSelected ? '#ed1c24' : colors.border,
+                        backgroundColor: isSelected ? '#ed1c24' : 'transparent',
+                      },
+                    ]}>
+                      {isSelected && (
+                        <Text style={styles.checkboxCheck}>✓</Text>
+                      )}
+                    </View>
+                  ) : (
+                    // Radio for mission/vision (single-select)
+                    <View style={[
+                      styles.radioCircle,
+                      { borderColor: isSelected ? '#ed1c24' : colors.border },
+                    ]}>
+                      {isSelected && (
+                        <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
+                      )}
+                    </View>
                   )}
-                </View>
-                <Text style={[styles.suggestionText, { color: colors.text }]}>
-                  "{suggestion}"
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text style={[styles.suggestionText, { color: colors.text }]}>
+                    "{suggestion}"
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
 
             <TouchableOpacity
               style={[
