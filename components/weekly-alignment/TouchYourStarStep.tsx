@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -152,7 +152,6 @@ export function TouchYourStarStep({
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   
   // Synthesis state
-  // Synthesis state
   const [selectedSuggestion, setSelectedSuggestion] = useState<number | null>(null);
   const [selectedSuggestions, setSelectedSuggestions] = useState<number[]>([]); // For multi-select (values)
   const [customStatement, setCustomStatement] = useState('');
@@ -165,52 +164,76 @@ export function TouchYourStarStep({
   // Custom input ref for auto-focus
   const customInputRef = useRef<TextInput>(null);
 
-  // Register back handler with parent
+  // ============ BACK HANDLER FIX ============
+  // Refs to track current state for back handler (avoids stale closures and infinite loops)
+  const flowStateRef = useRef<FlowState>(flowState);
+  const questionsLengthRef = useRef(questions.length);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    flowStateRef.current = flowState;
+  }, [flowState]);
+
+  useEffect(() => {
+    questionsLengthRef.current = questions.length;
+  }, [questions.length]);
+
+  // Stable back handler function using refs - doesn't change on re-renders
+  const handleBack = useCallback(() => {
+    const currentFlowState = flowStateRef.current;
+    const currentQuestionsLength = questionsLengthRef.current;
+    
+    // Return true if we handled the back, false if parent should handle exit
+    if (currentFlowState === 'identity-hub') {
+      // From identity-hub, go back to hero-question
+      setFlowState('hero-question');
+      setPromptShownAt(new Date());
+      return true;
+    } else if (currentFlowState === 'choice') {
+      // From choice, go back to identity-hub
+      setFlowState('identity-hub');
+      return true;
+    } else if (currentFlowState === 'direct-input') {
+      // From direct-input, go back to choice
+      setFlowState('choice');
+      return true;
+    } else if (currentFlowState === 'guided-questions') {
+      // From questions, go back to choice
+      resetDomainState();
+      setFlowState('choice');
+      return true;
+    } else if (currentFlowState === 'synthesis') {
+      // From synthesis, go back to questions or choice
+      if (currentQuestionsLength > 0) {
+        setFlowState('guided-questions');
+      } else {
+        setFlowState('choice');
+      }
+      return true;
+    } else if (currentFlowState === 'value-entry') {
+      // From value entry, go back to identity-hub
+      setEditingValueIndex(null);
+      setCurrentValueName('');
+      setCurrentValueCommitment('');
+      setFlowState('identity-hub');
+      return true;
+    } else if (currentFlowState === 'hero-question') {
+      // At the root - let parent handle exit
+      return false;
+    }
+    return false;
+  }, []); // Empty deps - uses refs for all state access
+
+  // Register back handler with parent - only once on mount
   useEffect(() => {
     if (onRegisterBackHandler) {
-      onRegisterBackHandler(() => {
-        // Return true if we handled the back, false if parent should handle exit
-        if (flowState === 'identity-hub') {
-          // From identity-hub, go back to hero-question
-          setFlowState('hero-question');
-          setPromptShownAt(new Date());
-          return true;
-        } else if (flowState === 'choice') {
-          // From choice, go back to identity-hub
-          setFlowState('identity-hub');
-          return true;
-        } else if (flowState === 'direct-input') {
-          // From direct-input, go back to choice
-          setFlowState('choice');
-          return true;
-        } else if (flowState === 'guided-questions') {
-          // From questions, go back to choice
-          resetDomainState();
-          setFlowState('choice');
-          return true;
-        } else if (flowState === 'synthesis') {
-          // From synthesis, go back to questions or choice
-          if (questions.length > 0) {
-            setFlowState('guided-questions');
-          } else {
-            setFlowState('choice');
-          }
-          return true;
-        } else if (flowState === 'value-entry') {
-          // From value entry, go back to identity-hub
-          setEditingValueIndex(null);
-          setCurrentValueName('');
-          setCurrentValueCommitment('');
-          setFlowState('identity-hub');
-          return true;
-        } else if (flowState === 'hero-question') {
-          // At the root - let parent handle exit
-          return false;
-        }
-        return false;
-      });
+      onRegisterBackHandler(handleBack);
     }
-  }, [flowState, questions.length, onRegisterBackHandler]);
+    // Intentionally only run on mount to prevent infinite loops
+    // The handleBack function uses refs to always access current state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // ============ END BACK HANDLER FIX ============
 
   useEffect(() => {
     loadInitialData();
