@@ -697,6 +697,7 @@ export function TouchYourStarStep({
     setResponses([]);
     setAiSuggestions([]);
     setSelectedSuggestion(null);
+    setSelectedSuggestions([]);
     setCustomStatement('');
     setShowCustomInput(false);
     setCurrentQuestionIndex(0);
