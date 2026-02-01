@@ -844,8 +844,20 @@ export function TouchYourStarStep({
   }
 
   function handleSelectSuggestion(index: number) {
-    setSelectedSuggestion(index);
-    setShowCustomInput(false);
+    if (currentDomain === 'values') {
+      // Multi-select for values
+      setSelectedSuggestions(prev => {
+        if (prev.includes(index)) {
+          return prev.filter(i => i !== index);
+        } else {
+          return [...prev, index];
+        }
+      });
+    } else {
+      // Single select for mission/vision
+      setSelectedSuggestion(index);
+      setShowCustomInput(false);
+    }
   }
 
   function handleChooseCustom() {
