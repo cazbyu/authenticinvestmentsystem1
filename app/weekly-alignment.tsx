@@ -156,13 +156,9 @@ export default function WeeklyAlignmentScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } else {
-      // First step and step didn't handle it - confirm exit to Compass
-      if (Platform.OS === 'web') {
-        if (window.confirm('Return to the Compass?')) {
-          router.back();
-        }
-      } else {
-        Alert.alert(
+  // First step - just go back
+  router.back();
+}
           'Return to the Compass?',
           '',
           [
