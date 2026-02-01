@@ -2057,7 +2057,13 @@ export function TouchYourStarStep({
             style={[
               styles.continueButton,
               {
-                backgroundColor: (selectedSuggestion !== null || (showCustomInput && customStatement.trim()))
+                {
+                backgroundColor: (
+                  currentDomain === 'values'
+                    ? (selectedSuggestions.length > 0 || (showCustomInput && customStatement.trim()))
+                    : (selectedSuggestion !== null || (showCustomInput && customStatement.trim()))
+                ) ? '#ed1c24' : '#ccc',
+              },
                   ? '#ed1c24'
                   : '#ccc',
               },
