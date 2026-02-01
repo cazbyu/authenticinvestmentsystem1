@@ -2063,7 +2063,12 @@ export function TouchYourStarStep({
               },
             ]}
             onPress={handleSaveFinalStatement}
-            disabled={selectedSuggestion === null && !(showCustomInput && customStatement.trim()) || saving}
+            disabled={
+              (currentDomain === 'values' 
+                ? (selectedSuggestions.length === 0 && !(showCustomInput && customStatement.trim()))
+                : (selectedSuggestion === null && !(showCustomInput && customStatement.trim()))
+              ) || saving
+            }
             activeOpacity={0.8}
           >
             {saving ? (
