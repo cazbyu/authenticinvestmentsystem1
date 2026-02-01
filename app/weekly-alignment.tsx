@@ -136,25 +136,38 @@ export default function WeeklyAlignmentScreen() {
   }
 
   function goToPreviousStep() {
+    // If we're on step 0 and have a step back handler, let the step handle it first
+    if (currentStep === 0 && stepBackHandler) {
+      const handled = stepBackHandler();
+      if (handled) {
+        // Step handled the back internally
+        if (Platform.OS !== 'web') {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        return;
+      }
+    }
+
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
+      setStepBackHandler(null); // Clear handler when changing steps
       
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } else {
-      // First step - confirm exit
+      // First step and step didn't handle it - confirm exit to Compass
       if (Platform.OS === 'web') {
-        if (window.confirm('Exit Weekly Alignment?\n\nYour progress will not be saved.')) {
+        if (window.confirm('Return to the Compass?')) {
           router.back();
         }
       } else {
         Alert.alert(
-          'Exit Weekly Alignment?',
-          'Your progress will not be saved.',
+          'Return to the Compass?',
+          '',
           [
             { text: 'Stay', style: 'cancel' },
-            { text: 'Exit', style: 'destructive', onPress: () => router.back() },
+            { text: 'Return', onPress: () => router.back() },
           ]
         );
       }
