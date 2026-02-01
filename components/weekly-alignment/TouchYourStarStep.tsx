@@ -25,6 +25,7 @@ interface TouchYourStarStepProps {
   userId: string;
   colors: any;
   onNext: () => void;
+  onRegisterBackHandler?: (handler: () => boolean) => void;
   onDataCapture: (data: {
     missionReflection?: string;
     visionAcknowledged?: boolean;
