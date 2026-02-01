@@ -140,7 +140,7 @@ export default function WeeklyAlignmentScreen() {
     if (currentStep === 0 && stepBackHandler) {
       const handled = stepBackHandler();
       if (handled) {
-        // Step handled the back internally
+        // Step handled the back internally (e.g., going from identity-hub to hero-question)
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
@@ -156,17 +156,8 @@ export default function WeeklyAlignmentScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } else {
-  // First step - just go back
-  router.back();
-}
-          'Return to the Compass?',
-          '',
-          [
-            { text: 'Stay', style: 'cancel' },
-            { text: 'Return', onPress: () => router.back() },
-          ]
-        );
-      }
+      // First step and step didn't handle it - just go back without confirmation
+      router.back();
     }
   }
 
@@ -377,7 +368,7 @@ export default function WeeklyAlignmentScreen() {
         {/* Continue Button */}
         <TouchableOpacity
           onPress={goToNextStep}
-          style={styles.resetButton}
+          style={styles.nextButton}
           accessible={true}
           accessibilityLabel="Continue to next step"
         >
@@ -483,7 +474,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  resetButton: {
+  nextButton: {
     padding: 8,
     width: 44,
     alignItems: 'flex-end',
