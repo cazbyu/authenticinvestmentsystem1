@@ -101,6 +101,7 @@ export function TouchYourStarStep({
   userId,
   colors,
   onNext,
+  onRegisterBackHandler,
   onDataCapture,
 }: TouchYourStarStepProps) {
   // Core state
