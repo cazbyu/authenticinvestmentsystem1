@@ -2368,6 +2368,19 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
   },
+  checkboxSquare: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxCheck: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   // Identity Card (Identity Hub)
   identityCard: {
