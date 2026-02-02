@@ -8,8 +8,12 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Image,
 } from 'react-native';
 import { Compass, ChevronRight, Check, HelpCircle, Settings } from 'lucide-react-native';
+
+// Compass Roles icon for Step 2 header
+const CompassRolesIcon = require('@/assets/images/compass-roles.png');
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
@@ -203,7 +207,7 @@ export function WingCheckRolesStep({
         <View style={styles.headerSection}>
           <View style={styles.headerRow}>
             <View style={[styles.iconContainer, { backgroundColor: ROLES_COLOR_LIGHT }]}>
-              <Compass size={40} color={ROLES_COLOR} />
+              <Image source={CompassRolesIcon} style={{ width: 40, height: 40 }} resizeMode="contain" />
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
@@ -270,7 +274,7 @@ export function WingCheckRolesStep({
       <View style={styles.headerSection}>
         <View style={styles.headerRow}>
           <View style={[styles.iconContainer, { backgroundColor: ROLES_COLOR_LIGHT }]}>
-            <Compass size={40} color={ROLES_COLOR} />
+            <Image source={CompassRolesIcon} style={{ width: 40, height: 40 }} resizeMode="contain" />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
