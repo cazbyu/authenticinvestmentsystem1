@@ -41,8 +41,6 @@ const ROLES_COLOR = '#9370DB';
 const ROLES_COLOR_LIGHT = '#9370DB15';
 const ROLES_COLOR_BORDER = '#9370DB40';
 
-const MAX_PRIORITY_ROLES = 3;
-
 export function WingCheckRolesStep({
   userId,
   colors,
@@ -79,11 +77,10 @@ export function WingCheckRolesStep({
       const rolesData = data || [];
       setRoles(rolesData);
 
-      // Check if user already has priority roles set
+      // Check if user already has priority roles set - load ALL of them (no limit)
       const existingPriorities = rolesData
         .filter(r => r.priority_order !== null && r.priority_order !== undefined)
         .sort((a, b) => (a.priority_order || 0) - (b.priority_order || 0))
-        .slice(0, MAX_PRIORITY_ROLES)
         .map(r => r.id);
 
       if (existingPriorities.length > 0) {
@@ -102,20 +99,9 @@ export function WingCheckRolesStep({
       if (prev.includes(roleId)) {
         // Remove from selection
         return prev.filter(id => id !== roleId);
-      } else if (prev.length < MAX_PRIORITY_ROLES) {
-        // Add to selection (maintains order of selection)
-        return [...prev, roleId];
       } else {
-        // Already at max, show feedback
-        if (Platform.OS === 'web') {
-          window.alert(`You can only select ${MAX_PRIORITY_ROLES} priority roles. Tap a selected role to remove it first.`);
-        } else {
-          Alert.alert(
-            'Maximum Reached',
-            `You can only select ${MAX_PRIORITY_ROLES} priority roles. Tap a selected role to remove it first.`
-          );
-        }
-        return prev;
+        // Add to selection (no limit - maintains order of selection)
+        return [...prev, roleId];
       }
     });
   }
@@ -142,7 +128,7 @@ export function WingCheckRolesStep({
 
       if (clearError) throw clearError;
 
-      // Then set priority_order for selected roles (1, 2, 3)
+      // Then set priority_order for selected roles (1, 2, 3, 4, ...)
       for (let i = 0; i < selectedRoleIds.length; i++) {
         const { error: updateError } = await supabase
           .from('0008-ap-roles')
@@ -305,7 +291,7 @@ export function WingCheckRolesStep({
           <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.tooltipText, { color: colors.text }]}>
               Your life roles represent the different hats you wear—father, professional, friend, etc.
-              Identifying your top 3 priority roles helps you focus your energy where it matters most.
+              Select and prioritize the roles that matter most to you right now. The order you tap them sets their priority.
             </Text>
           </View>
         )}
@@ -314,7 +300,7 @@ export function WingCheckRolesStep({
       {/* Progress Card */}
       <View style={[styles.progressCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.progressText, { color: colors.textSecondary }]}>
-          {selectedRoleIds.length} of {roles.length} roles
+          {selectedRoleIds.length} of {roles.length} roles prioritized
         </Text>
         <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
           <View
@@ -322,7 +308,7 @@ export function WingCheckRolesStep({
               styles.progressFill,
               {
                 backgroundColor: ROLES_COLOR,
-                width: `${(selectedRoleIds.length / MAX_PRIORITY_ROLES) * 100}%`,
+                width: `${Math.min((selectedRoleIds.length / roles.length) * 100, 100)}%`,
               },
             ]}
           />
@@ -332,10 +318,10 @@ export function WingCheckRolesStep({
       {/* Question Card */}
       <View style={[styles.questionCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
         <Text style={[styles.questionText, { color: colors.text }]}>
-          Currently, what are your three most important roles?
+          Which roles matter most to you right now?
         </Text>
         <Text style={[styles.questionHint, { color: colors.textSecondary }]}>
-          Tap to select up to {MAX_PRIORITY_ROLES} roles. The order you select them indicates priority.
+          Tap roles to prioritize them. The order you select them sets their rank (R1, R2, R3...).
         </Text>
       </View>
 
@@ -409,14 +395,16 @@ export function WingCheckRolesStep({
       {/* Selected Summary */}
       {selectedRoleIds.length > 0 && (
         <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: ROLES_COLOR_BORDER }]}>
-          <Text style={[styles.summaryTitle, { color: colors.text }]}>Your Priority Roles:</Text>
+          <Text style={[styles.summaryTitle, { color: colors.text }]}>
+            Your Priority Roles ({selectedRoleIds.length}):
+          </Text>
           <View style={styles.summaryList}>
             {selectedRoleIds.map((roleId, index) => {
               const role = roles.find(r => r.id === roleId);
               if (!role) return null;
               return (
                 <View key={roleId} style={styles.summaryItem}>
-                  <Text style={[styles.summaryNumber, { color: ROLES_COLOR }]}>{index + 1}.</Text>
+                  <Text style={[styles.summaryNumber, { color: ROLES_COLOR }]}>R{index + 1}</Text>
                   <Text style={[styles.summaryRole, { color: colors.text }]}>{role.label}</Text>
                 </View>
               );
@@ -659,9 +647,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   summaryNumber: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    width: 24,
+    width: 32,
   },
   summaryRole: {
     fontSize: 16,
