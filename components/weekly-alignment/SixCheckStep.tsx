@@ -24,8 +24,9 @@ import {
   Animated,
   TextInput,
 } from 'react-native';
-import { ChevronRight, Check, HelpCircle, Target, TrendingUp, AlertTriangle, Calendar, Flag, Zap, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { ChevronRight, Check, HelpCircle, Target, TrendingUp, AlertTriangle, Calendar, Flag, Zap, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
+import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsForWeek';
 
 // Compass Goals icon for Step 4 header
 const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
@@ -41,6 +42,9 @@ interface SixCheckStepProps {
     annualGoalsCount: number;
     campaignsCount: number;
     plannedActionsCount: number;
+    leadingIndicatorCount: number;
+    boostActionsCount: number;
+    weekNumber?: number;
     keyFocusGoal?: string;
   }) => void;
 }
@@ -142,9 +146,11 @@ export function SixCheckStep({
   // Data state
   const [annualGoals, setAnnualGoals] = useState<AnnualGoal[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [plannedActions, setPlannedActions] = useState<GoalAction[]>([]);
   const [topWellnessZones, setTopWellnessZones] = useState<WellnessZone[]>([]);
   const [topRoles, setTopRoles] = useState<Role[]>([]);
+  
+  // Planned actions state (from new helper)
+  const [plannedActionsData, setPlannedActionsData] = useState<PlannedActionsResult | null>(null);
   
   // UI state
   const [loading, setLoading] = useState(true);
@@ -333,24 +339,21 @@ export function SixCheckStep({
         setTopRoles(rolesData);
       }
 
-      // Load planned actions for this week (leading indicators)
-      // This would need the current week's tasks - simplified for now
-      const { data: actionsData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, title, weekly_target')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .limit(20);
-
-      if (actionsData) {
-        setPlannedActions(actionsData.map(a => ({
-          id: a.id,
-          title: a.title,
-          weeklyTarget: a.weekly_target || 0,
-          weeklyActual: 0,
-          isComplete: false,
-        })));
-      }
+      // ============================================
+      // LOAD PLANNED ACTIONS using new helper
+      // This replaces the incorrect direct tasks query
+      // ============================================
+      const plannedActions = await fetchPlannedActionsForWeek();
+      setPlannedActionsData(plannedActions);
+      
+      console.log('[SixCheckStep] Planned actions loaded:', {
+        leadingIndicators: plannedActions.leadingIndicators.count,
+        leadingIndicatorTarget: plannedActions.leadingIndicators.totalTarget,
+        leadingIndicatorActual: plannedActions.leadingIndicators.totalActual,
+        boostActions: plannedActions.boostActions.count,
+        boostCompleted: plannedActions.boostActions.completed,
+        weekNumber: plannedActions.week?.weekNumber,
+      });
 
       setFlowState('main');
 
@@ -397,11 +400,17 @@ export function SixCheckStep({
   }
 
   function handleContinue() {
+    const leadingCount = plannedActionsData?.leadingIndicators.count || 0;
+    const boostCount = plannedActionsData?.boostActions.count || 0;
+    
     onDataCapture({
       goalsReviewed: true,
       annualGoalsCount: annualGoals.length,
       campaignsCount: campaigns.length,
-      plannedActionsCount: plannedActions.length,
+      plannedActionsCount: leadingCount + boostCount,
+      leadingIndicatorCount: leadingCount,
+      boostActionsCount: boostCount,
+      weekNumber: plannedActionsData?.week?.weekNumber,
       keyFocusGoal: undefined,
     });
     
@@ -413,11 +422,28 @@ export function SixCheckStep({
     slideToState('goal-detail');
   }
 
-  // Counts for scoreboard
+  // ============================================
+  // SCOREBOARD DATA (from helper)
+  // ============================================
   const annualGoalsCount = annualGoals.length;
   const campaignsCount = campaigns.length;
-  const plannedActionsCount = plannedActions.length;
   const laggingCampaignsCount = campaigns.filter(c => c.is_lagging).length;
+  
+  // Leading indicators (recurring actions)
+  const leadingIndicatorCount = plannedActionsData?.leadingIndicators.count || 0;
+  const leadingIndicatorTarget = plannedActionsData?.leadingIndicators.totalTarget || 0;
+  const leadingIndicatorActual = plannedActionsData?.leadingIndicators.totalActual || 0;
+  
+  // Boost actions (one-time tasks)
+  const boostActionsCount = plannedActionsData?.boostActions.count || 0;
+  const boostActionsCompleted = plannedActionsData?.boostActions.completed || 0;
+  const boostActionsPending = plannedActionsData?.boostActions.pending || 0;
+  
+  // Combined count for display
+  const totalPlannedActions = leadingIndicatorCount + boostActionsCount;
+  
+  // Current week info
+  const currentWeekNumber = plannedActionsData?.week?.weekNumber;
 
   const { months: monthsLeft, days: daysLeft } = getDaysUntilYearEnd();
 
@@ -570,7 +596,7 @@ export function SixCheckStep({
                   onPress={() => togglePrioritySelection(`role-${role.id}`)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.priorityBadge, { backgroundColor: role.color || '#9370DB' }]}>
+                  <View style={[styles.priorityBadge, { backgroundColor: role.color || '#6B7280' }]}>
                     <Text style={styles.priorityBadgeText}>R{index + 1}</Text>
                   </View>
                   <Text style={[styles.priorityLabel, { color: colors.text }]}>{role.label}</Text>
@@ -584,10 +610,10 @@ export function SixCheckStep({
             </View>
           )}
 
-          {(topWellnessZones.length === 0 && topRoles.length === 0) && (
+          {topWellnessZones.length === 0 && topRoles.length === 0 && (
             <View style={[styles.emptyPriorities, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.emptyPrioritiesText, { color: colors.textSecondary }]}>
-                Complete Steps 2 and 3 first to see your priorities here.
+                Complete earlier steps to see your priorities here. You can still create goals manually.
               </Text>
             </View>
           )}
@@ -611,7 +637,7 @@ export function SixCheckStep({
   if (flowState === 'setup-vision') {
     return (
       <Animated.View style={[styles.container, { transform: [{ translateX: slideAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-300, 0, 300] }) }] }]}>
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
               <View style={[styles.compassContainer, { backgroundColor: GOALS_COLOR_LIGHT }]}>
@@ -624,45 +650,43 @@ export function SixCheckStep({
             </View>
           </View>
 
-          <View style={[styles.timeCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
-            <Calendar size={24} color={GOALS_COLOR} />
-            <View style={styles.timeCardContent}>
-              <Text style={[styles.timeCardTitle, { color: colors.text }]}>
-                The year ends in {monthsLeft} months and {daysLeft} days
-              </Text>
-            </View>
-          </View>
-
-          <View style={[styles.questionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.questionCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
             <Text style={[styles.questionText, { color: colors.text }]}>
-              What would you love to have accomplished by December 31st?
+              What would you love to achieve by December 31st?
             </Text>
             <Text style={[styles.questionHint, { color: colors.textSecondary }]}>
-              Think big but achievable. This becomes your North Star for the year.
+              Think about the areas you selected. What progress would make this year meaningful?
             </Text>
           </View>
 
           <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <TextInput
               style={[styles.textInput, { color: colors.text }]}
-              placeholder="By the end of this year, I want to..."
+              placeholder="I want to..."
               placeholderTextColor={colors.textSecondary}
               value={visionText}
               onChangeText={setVisionText}
               multiline
-              numberOfLines={4}
               textAlignVertical="top"
             />
           </View>
 
           <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: visionText.trim() ? GOALS_COLOR : colors.border }]}
+            style={[styles.primaryButton, { backgroundColor: GOALS_COLOR, opacity: visionText.trim().length > 10 ? 1 : 0.5 }]}
             onPress={() => slideToState('setup-campaigns-intro')}
-            disabled={!visionText.trim()}
+            disabled={visionText.trim().length <= 10}
             activeOpacity={0.8}
           >
             <Text style={styles.primaryButtonText}>Continue</Text>
             <ChevronRight size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryButton, { borderColor: colors.border }]}
+            onPress={() => slideToState('main')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>Skip for Now</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -683,16 +707,24 @@ export function SixCheckStep({
               </View>
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: GOALS_COLOR }]}>Step 4</Text>
-                <Text style={[styles.stepTitle, { color: colors.text }]}>Goal Campaigns</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>How Goals Work</Text>
               </View>
             </View>
           </View>
 
           <View style={[styles.infoCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
+            <Text style={styles.infoEmoji}>🎯</Text>
+            <Text style={[styles.infoTitle, { color: colors.text }]}>Annual Goals</Text>
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+              Big-picture direction for the year. Where do you want to be by December 31st?
+            </Text>
+          </View>
+
+          <View style={[styles.infoCard, { backgroundColor: '#3B82F615', borderColor: '#3B82F640' }]}>
             <Text style={styles.infoEmoji}>🚀</Text>
             <Text style={[styles.infoTitle, { color: colors.text }]}>12-Week Campaigns</Text>
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-              Break your annual goal into focused 12-week campaigns. This creates urgency and allows you to pack 4 powerful campaigns into each year.
+              Focused sprints within annual goals. 12 weeks is short enough to maintain urgency, long enough to achieve meaningful results.
             </Text>
           </View>
 
@@ -899,26 +931,18 @@ export function SixCheckStep({
             return (
               <View key={campaign.id} style={styles.campaignWrapper}>
                 <TouchableOpacity
-                  style={[
-                    styles.campaignCard,
-                    { 
-                      backgroundColor: colors.surface, 
-                      borderColor: campaign.is_lagging ? '#EF4444' : colors.border,
-                      borderLeftColor: progressColor,
-                      borderLeftWidth: 4,
-                    }
-                  ]}
+                  style={[styles.campaignCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   onPress={() => toggleCampaignExpanded(campaign.id)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.campaignHeader}>
                     <View style={styles.campaignTitleRow}>
-                      <View style={[styles.campaignTypeBadge, { backgroundColor: campaign.goal_type === '12week' ? '#3B82F620' : '#F59E0B20' }]}>
+                      <View style={[styles.campaignTypeBadge, { backgroundColor: campaign.goal_type === '12week' ? '#3B82F615' : '#F59E0B15' }]}>
                         <Text style={[styles.campaignTypeText, { color: campaign.goal_type === '12week' ? '#3B82F6' : '#F59E0B' }]}>
                           {campaign.goal_type === '12week' ? '12W' : 'Custom'}
                         </Text>
                       </View>
-                      <Text style={[styles.campaignTitle, { color: colors.text }]} numberOfLines={2}>
+                      <Text style={[styles.campaignTitle, { color: colors.text }]} numberOfLines={1}>
                         {campaign.title}
                       </Text>
                     </View>
@@ -931,7 +955,12 @@ export function SixCheckStep({
 
                   <View style={styles.campaignProgress}>
                     <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
-                      <View style={[styles.progressBarFill, { backgroundColor: progressColor, width: `${Math.min(100, campaign.progress || 0)}%` }]} />
+                      <View 
+                        style={[
+                          styles.progressBarFill, 
+                          { backgroundColor: progressColor, width: `${campaign.progress || 0}%` }
+                        ]} 
+                      />
                     </View>
                     <Text style={[styles.progressText, { color: progressColor }]}>
                       {campaign.progress || 0}%
@@ -939,26 +968,28 @@ export function SixCheckStep({
                   </View>
 
                   <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
-                    {campaign.weeks_remaining} week{campaign.weeks_remaining !== 1 ? 's' : ''} remaining
-                    {campaign.is_lagging && <Text style={{ color: '#EF4444' }}> • Behind schedule</Text>}
+                    {campaign.weeks_remaining} weeks remaining
+                    {campaign.is_lagging && ' • Behind schedule'}
                   </Text>
                 </TouchableOpacity>
 
                 {isExpanded && (
                   <View style={[styles.actionsContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <Text style={[styles.actionsTitle, { color: colors.text }]}>
-                      📋 This Week's Leading Indicators
+                      This Week's Leading Indicators
                     </Text>
-                    {(campaign.actions || []).length > 0 ? (
-                      campaign.actions?.map(action => (
+                    {campaign.actions && campaign.actions.length > 0 ? (
+                      campaign.actions.map(action => (
                         <View key={action.id} style={styles.actionItem}>
-                          <View style={[
-                            styles.actionCheck,
-                            { 
-                              backgroundColor: action.isComplete ? '#10B981' : 'transparent',
-                              borderColor: action.isComplete ? '#10B981' : colors.border,
-                            }
-                          ]}>
+                          <View 
+                            style={[
+                              styles.actionCheck, 
+                              { 
+                                borderColor: action.isComplete ? '#10B981' : colors.border,
+                                backgroundColor: action.isComplete ? '#10B981' : 'transparent',
+                              }
+                            ]}
+                          >
                             {action.isComplete && <Check size={12} color="#FFFFFF" />}
                           </View>
                           <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1}>
@@ -971,7 +1002,7 @@ export function SixCheckStep({
                       ))
                     ) : (
                       <Text style={[styles.noActionsText, { color: colors.textSecondary }]}>
-                        No actions planned for this week. Add some in the Goals section.
+                        No leading indicators set for this campaign
                       </Text>
                     )}
                   </View>
@@ -981,9 +1012,13 @@ export function SixCheckStep({
           })}
 
           {goalCampaigns.length === 0 && (
-            <View style={[styles.tipCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.tipText, { color: colors.textSecondary }]}>
-                💡 Create campaigns in the Goals section to break this annual goal into focused sprints.
+            <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Zap size={32} color={colors.textSecondary} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                No Campaigns Yet
+              </Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                Create a 12-week or custom campaign to start tracking progress toward this goal.
               </Text>
             </View>
           )}
@@ -996,7 +1031,7 @@ export function SixCheckStep({
             }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.secondaryButtonText, { color: GOALS_COLOR }]}>Back to Annual Goals</Text>
+            <Text style={[styles.secondaryButtonText, { color: GOALS_COLOR }]}>Back to Goals</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -1027,87 +1062,61 @@ export function SixCheckStep({
               <View style={[styles.identityIconContainer, { backgroundColor: GOALS_COLOR }]}>
                 <Zap size={12} color="#FFFFFF" />
               </View>
-              <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>ACTIVE CAMPAIGNS</Text>
-            </View>
-            <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
-              Your 12-week and custom goal campaigns
-            </Text>
-          </View>
-
-          {campaigns.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Zap size={40} color={colors.textSecondary} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Active Campaigns</Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Create campaigns in the Goals section to track your progress.
+              <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>
+                {campaignsCount} ACTIVE CAMPAIGN{campaignsCount !== 1 ? 'S' : ''}
               </Text>
             </View>
-          ) : (
-            campaigns.map(campaign => {
-              const progressColor = getProgressColor(campaign.progress || 0, campaign.is_lagging);
+            {laggingCampaignsCount > 0 && (
+              <Text style={[styles.identitySubtext, { color: '#EF4444' }]}>
+                ⚠️ {laggingCampaignsCount} campaign{laggingCampaignsCount > 1 ? 's are' : ' is'} behind schedule
+              </Text>
+            )}
+          </View>
 
-              return (
-                <View
-                  key={campaign.id}
-                  style={[
-                    styles.campaignCard,
-                    { 
-                      backgroundColor: colors.surface, 
-                      borderColor: campaign.is_lagging ? '#EF4444' : colors.border,
-                      borderLeftColor: progressColor,
-                      borderLeftWidth: 4,
-                    }
-                  ]}
-                >
-                  <View style={styles.campaignHeader}>
-                    <View style={styles.campaignTitleRow}>
-                      <View style={[styles.campaignTypeBadge, { backgroundColor: campaign.goal_type === '12week' ? '#3B82F620' : '#F59E0B20' }]}>
-                        <Text style={[styles.campaignTypeText, { color: campaign.goal_type === '12week' ? '#3B82F6' : '#F59E0B' }]}>
-                          {campaign.goal_type === '12week' ? '12W' : 'Custom'}
-                        </Text>
-                      </View>
-                      <Text style={[styles.campaignTitle, { color: colors.text }]} numberOfLines={2}>
-                        {campaign.title}
+          {campaigns.map(campaign => {
+            const progressColor = getProgressColor(campaign.progress || 0, campaign.is_lagging);
+
+            return (
+              <View key={campaign.id} style={[styles.campaignCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
+                <View style={styles.campaignHeader}>
+                  <View style={styles.campaignTitleRow}>
+                    <View style={[styles.campaignTypeBadge, { backgroundColor: campaign.goal_type === '12week' ? '#3B82F615' : '#F59E0B15' }]}>
+                      <Text style={[styles.campaignTypeText, { color: campaign.goal_type === '12week' ? '#3B82F6' : '#F59E0B' }]}>
+                        {campaign.goal_type === '12week' ? '12W' : 'Custom'}
                       </Text>
                     </View>
-                    {campaign.is_lagging && (
-                      <View style={[styles.statusBadge, { backgroundColor: '#EF444420' }]}>
-                        <AlertTriangle size={12} color="#EF4444" />
-                        <Text style={[styles.statusBadgeText, { color: '#EF4444' }]}>Behind</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.campaignProgress}>
-                    <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
-                      <View style={[styles.progressBarFill, { backgroundColor: progressColor, width: `${Math.min(100, campaign.progress || 0)}%` }]} />
-                    </View>
-                    <Text style={[styles.progressText, { color: progressColor }]}>
-                      {campaign.progress || 0}%
+                    <Text style={[styles.campaignTitle, { color: colors.text }]} numberOfLines={1}>
+                      {campaign.title}
                     </Text>
                   </View>
+                  {campaign.is_lagging && (
+                    <View style={[styles.statusBadge, { backgroundColor: '#EF444415' }]}>
+                      <AlertTriangle size={12} color="#EF4444" />
+                      <Text style={[styles.statusBadgeText, { color: '#EF4444' }]}>Behind</Text>
+                    </View>
+                  )}
+                </View>
 
-                  <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
-                    {campaign.weeks_remaining} week{campaign.weeks_remaining !== 1 ? 's' : ''} remaining
+                <View style={styles.campaignProgress}>
+                  <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
+                    <View 
+                      style={[
+                        styles.progressBarFill, 
+                        { backgroundColor: progressColor, width: `${campaign.progress || 0}%` }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={[styles.progressText, { color: progressColor }]}>
+                    {campaign.progress || 0}%
                   </Text>
                 </View>
-              );
-            })
-          )}
 
-          {laggingCampaignsCount > 0 && (
-            <View style={[styles.alertCard, { backgroundColor: '#EF444410', borderColor: '#EF444440' }]}>
-              <AlertTriangle size={20} color="#EF4444" />
-              <View style={styles.alertContent}>
-                <Text style={[styles.alertTitle, { color: '#EF4444' }]}>
-                  {laggingCampaignsCount} Campaign{laggingCampaignsCount > 1 ? 's' : ''} Behind
-                </Text>
-                <Text style={[styles.alertText, { color: colors.textSecondary }]}>
-                  Consider dedicating focused time this week to catch up.
+                <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
+                  {campaign.weeks_remaining} weeks remaining
                 </Text>
               </View>
-            </View>
-          )}
+            );
+          })}
 
           <TouchableOpacity
             style={[styles.secondaryButton, { borderColor: GOALS_COLOR }]}
@@ -1166,6 +1175,16 @@ export function SixCheckStep({
         )}
       </View>
 
+      {/* Week Context Badge */}
+      {currentWeekNumber && (
+        <View style={[styles.weekBadge, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
+          <Calendar size={14} color={GOALS_COLOR} />
+          <Text style={[styles.weekBadgeText, { color: GOALS_COLOR }]}>
+            Week {currentWeekNumber}
+          </Text>
+        </View>
+      )}
+
       {/* Scoreboard Card */}
       <View style={[styles.identityCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
         <View style={styles.identityHeader}>
@@ -1175,6 +1194,7 @@ export function SixCheckStep({
           <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>GOALS SCOREBOARD</Text>
         </View>
         
+        {/* Row 1: Annual Goals & Campaigns */}
         <View style={styles.scoreboardRow}>
           <View style={styles.scoreboardItem}>
             <Text style={[styles.scoreboardNumber, { color: GOALS_COLOR }]}>{annualGoalsCount}</Text>
@@ -1185,10 +1205,48 @@ export function SixCheckStep({
             <Text style={[styles.scoreboardNumber, { color: laggingCampaignsCount > 0 ? '#F59E0B' : '#10B981' }]}>{campaignsCount}</Text>
             <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Campaigns</Text>
           </View>
-          <View style={[styles.scoreboardDivider, { backgroundColor: colors.border }]} />
-          <View style={styles.scoreboardItem}>
-            <Text style={[styles.scoreboardNumber, { color: colors.text }]}>{plannedActionsCount}</Text>
-            <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Planned Actions</Text>
+        </View>
+
+        {/* Row 2: Actions This Week */}
+        <View style={[styles.actionsScoreboardSection, { borderTopColor: colors.border }]}>
+          <Text style={[styles.actionsScoreboardTitle, { color: colors.text }]}>
+            Actions This Week
+          </Text>
+          
+          <View style={styles.scoreboardRow}>
+            {/* Leading Indicators */}
+            <View style={styles.scoreboardItem}>
+              <View style={styles.scoreboardIconRow}>
+                <Repeat size={14} color="#10B981" />
+                <Text style={[styles.scoreboardNumber, { color: '#10B981', marginLeft: 4 }]}>
+                  {leadingIndicatorCount}
+                </Text>
+              </View>
+              <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Leading</Text>
+              {leadingIndicatorTarget > 0 && (
+                <Text style={[styles.scoreboardSubLabel, { color: colors.textSecondary }]}>
+                  {leadingIndicatorActual}/{leadingIndicatorTarget} days
+                </Text>
+              )}
+            </View>
+            
+            <View style={[styles.scoreboardDivider, { backgroundColor: colors.border }]} />
+            
+            {/* Boost Actions */}
+            <View style={styles.scoreboardItem}>
+              <View style={styles.scoreboardIconRow}>
+                <Rocket size={14} color="#F59E0B" />
+                <Text style={[styles.scoreboardNumber, { color: '#F59E0B', marginLeft: 4 }]}>
+                  {boostActionsCount}
+                </Text>
+              </View>
+              <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Boost</Text>
+              {boostActionsCount > 0 && (
+                <Text style={[styles.scoreboardSubLabel, { color: colors.textSecondary }]}>
+                  {boostActionsCompleted}/{boostActionsCount} done
+                </Text>
+              )}
+            </View>
           </View>
         </View>
       </View>
@@ -1345,18 +1403,35 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
+  // Week Badge
+  weekBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 6,
+  },
+  weekBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
   // Identity Card
   identityCard: {
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: 16,
   },
   identityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: 10,
+    marginBottom: 12,
   },
   identityIconContainer: {
     width: 24,
@@ -1366,10 +1441,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   identityLabel: {
-    flex: 1,
     fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   identitySubtext: {
     fontSize: 14,
@@ -1379,11 +1453,16 @@ const styles = StyleSheet.create({
   // Scoreboard
   scoreboardRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
+    alignItems: 'flex-start',
+    justifyContent: 'space-around',
   },
   scoreboardItem: {
     flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  scoreboardIconRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   scoreboardNumber: {
@@ -1391,13 +1470,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scoreboardLabel: {
-    fontSize: 10,
+    fontSize: 12,
+    fontWeight: '500',
     marginTop: 2,
-    textAlign: 'center',
+  },
+  scoreboardSubLabel: {
+    fontSize: 11,
+    marginTop: 2,
   },
   scoreboardDivider: {
     width: 1,
-    height: 40,
+    height: 50,
+    marginHorizontal: 8,
+  },
+  actionsScoreboardSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  actionsScoreboardTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
   },
 
   // Action Buttons
@@ -1419,9 +1514,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionButtonIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1431,45 +1526,52 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 2,
   },
   actionButtonSubtext: {
     fontSize: 13,
-    marginTop: 2,
   },
+
+  // Primary Button
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     borderRadius: 12,
     gap: 8,
+    marginTop: 8,
   },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
+
+  // Secondary Button
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: 12,
-    borderWidth: 2,
-    marginTop: 16,
+    borderWidth: 1,
+    marginTop: 8,
   },
   secondaryButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 
-  // Setup Cards
+  // Setup Card
   setupCard: {
     padding: 24,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 16,
     alignItems: 'center',
+    marginBottom: 16,
   },
   setupEmoji: {
     fontSize: 48,
@@ -1478,8 +1580,8 @@ const styles = StyleSheet.create({
   setupTitle: {
     fontSize: 20,
     fontWeight: '700',
-    marginBottom: 8,
     textAlign: 'center',
+    marginBottom: 12,
   },
   setupText: {
     fontSize: 15,
@@ -1494,24 +1596,24 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: 20,
     gap: 12,
   },
   timeCardContent: {
     flex: 1,
   },
   timeCardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
+    marginBottom: 2,
   },
   timeCardSubtext: {
     fontSize: 13,
-    marginTop: 2,
   },
 
   // Instruction Card
   instructionCard: {
-    padding: 20,
+    padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 16,
