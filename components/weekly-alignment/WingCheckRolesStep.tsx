@@ -5,7 +5,8 @@
 // - 72x72 container with 56x56 compass icon
 // - "My Top 3 Active Roles" card (styled like "My Core Identity" in Step 1)
 // - NO back arrows in subheaders - parent handles back navigation
-// - RoleIcon used for card headers (like NorthStarIcon in Step 1)
+// - RolesIcon from CustomIcons used for card headers (like NorthStarIcon in Step 1)
+// - RoleIcon from RoleIcon.tsx used for individual role display
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -23,10 +24,11 @@ import {
   Animated,
   KeyboardAvoidingView,
 } from 'react-native';
-import { ChevronRight, ChevronDown, ChevronUp, Check, HelpCircle, Settings } from 'lucide-react-native';
+import { ChevronRight, Check, HelpCircle, Settings } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
+import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
 
 // Compass Roles icon for Step 2 header (matches Step 1 sizing: 56x56 in 72x72 container)
 const CompassRolesIcon = require('@/assets/images/compass-roles.png');
@@ -386,7 +388,7 @@ export function WingCheckRolesStep({
         <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
           <View style={styles.identityHeader}>
             <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
-              <RoleIcon name="users" color="#FFFFFF" size={14} />
+              <RolesIcon size={14} color="#FFFFFF" />
             </View>
             <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>ACTIVATE MY ROLES</Text>
           </View>
@@ -595,7 +597,7 @@ export function WingCheckRolesStep({
           <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
             <View style={styles.identityHeader}>
               <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
-                <RoleIcon name="users" color="#FFFFFF" size={14} />
+                <RolesIcon size={14} color="#FFFFFF" />
               </View>
               <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>REVIEW YOUR ROLES</Text>
             </View>
@@ -698,17 +700,15 @@ export function WingCheckRolesStep({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Header - Standard format, NO back arrow */}
+            {/* Header - Standard format, NO back arrow, CENTERED icon */}
             <View style={styles.headerSection}>
               <View style={styles.headerRow}>
                 <View style={[styles.compassContainer, { backgroundColor: `${categoryColor}15` }]}>
-                  <View style={[styles.reflectionHeaderIcon, { backgroundColor: `${categoryColor}30` }]}>
-                    <RoleIcon 
-                      name={selectedReflectionRole.icon || selectedReflectionRole.label} 
-                      color={categoryColor} 
-                      size={40} 
-                    />
-                  </View>
+                  <RoleIcon 
+                    name={selectedReflectionRole.icon || selectedReflectionRole.label} 
+                    color={categoryColor} 
+                    size={40} 
+                  />
                 </View>
                 <View style={styles.headerTextContainer}>
                   <Text style={[styles.stepLabel, { color: categoryColor }]}>
@@ -818,7 +818,7 @@ export function WingCheckRolesStep({
       <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
         <View style={styles.identityHeader}>
           <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
-            <RoleIcon name="users" color="#FFFFFF" size={14} />
+            <RolesIcon size={14} color="#FFFFFF" />
           </View>
           <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>MY TOP 3 ACTIVE ROLES</Text>
           <TouchableOpacity onPress={() => slideToState('prioritize')}>
@@ -887,7 +887,7 @@ export function WingCheckRolesStep({
         >
           <View style={styles.actionButtonContent}>
             <View style={[styles.actionButtonIcon, { backgroundColor: ROLES_COLOR }]}>
-              <RoleIcon name="users" color="#FFFFFF" size={16} />
+              <RolesIcon size={16} color="#FFFFFF" />
             </View>
             <View style={styles.actionButtonTextWrap}>
               <Text style={[styles.actionButtonText, { color: hasMinimumPriorities ? ROLES_COLOR : colors.text }]}>
@@ -1306,14 +1306,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Role Reflection screen
-  reflectionHeaderIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // Input container
   inputContainer: {
     borderRadius: 12,
     borderWidth: 1,
