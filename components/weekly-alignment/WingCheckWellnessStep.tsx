@@ -27,7 +27,7 @@ import { ChevronRight, Check, HelpCircle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 
 // Compass Wellness icon for Step 3 header (matches Step 1 & 2 sizing: 56x56 in 72x72 container)
-const CompassWellnessIcon = require('@/assets/images/compass-wellness.png');
+const CompassWellnessIcon = require('@/assets/images/compass-wellness-zones.png');
 
 interface WingCheckWellnessStepProps {
   userId: string;
