@@ -185,10 +185,9 @@ export function TouchYourStarStep({
     
     // Return true if we handled the back, false if parent should handle exit
     if (currentFlowState === 'identity-hub') {
-      // From identity-hub, go back to hero-question
-      setFlowState('hero-question');
-      setPromptShownAt(new Date());
-      return true;
+      // From identity-hub, exit the step (identity already selected)
+      // User can tap "Edit" on Core Identity card to change their identity
+      return false;
     } else if (currentFlowState === 'choice') {
       // From choice, go back to identity-hub
       setFlowState('identity-hub');
@@ -391,8 +390,8 @@ export function TouchYourStarStep({
         .eq('used_in_synthesis', false);
 
       // Determine initial state
-      // If user has identity AND has answered the prompt before, skip to hub
-      if (data.identity && existingPromptResponse) {
+      // If user has identity, skip to hub (user can tap Edit on Core Identity card to change)
+      if (data.identity) {
         setSelectedIdentity(data.identity);
         
         // Check if there's partial progress to resume
