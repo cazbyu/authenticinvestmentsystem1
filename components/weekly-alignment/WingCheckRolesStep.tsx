@@ -3,9 +3,9 @@
 // ============================================================================
 // Design Pattern: Matches TouchYourStarStep (Step 1) layout
 // - 72x72 container with 56x56 compass icon
-// - "My Top 3 Active Roles" card (like "My Core Identity" in Step 1)
-// - Collapsible prioritization section
-// - Review Your Roles flow with purpose questions
+// - "My Top 3 Active Roles" card (styled like "My Core Identity" in Step 1)
+// - NO back arrows in subheaders - parent handles back navigation
+// - RoleIcon used for card headers (like NorthStarIcon in Step 1)
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -23,7 +23,7 @@ import {
   Animated,
   KeyboardAvoidingView,
 } from 'react-native';
-import { ChevronRight, ChevronDown, ChevronUp, Check, HelpCircle, Settings, ArrowLeft } from 'lucide-react-native';
+import { ChevronRight, ChevronDown, ChevronUp, Check, HelpCircle, Settings } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
@@ -36,6 +36,7 @@ interface WingCheckRolesStepProps {
   colors: any;
   onNext: () => void;
   onBack: () => void;
+  onRegisterBackHandler?: (handler: () => boolean) => void;
   onDataCapture: (data: {
     rolesReviewed: string[];
     roleHealthFlags: Record<string, 'thriving' | 'stable' | 'needs_attention'>;
@@ -72,6 +73,7 @@ export function WingCheckRolesStep({
   colors,
   onNext,
   onBack,
+  onRegisterBackHandler,
   onDataCapture,
 }: WingCheckRolesStepProps) {
   const router = useRouter();
@@ -88,7 +90,6 @@ export function WingCheckRolesStep({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
-  const [isActiveRolesExpanded, setIsActiveRolesExpanded] = useState(false);
   
   // Role reflection state
   const [selectedReflectionRole, setSelectedReflectionRole] = useState<Role | null>(null);
@@ -97,16 +98,42 @@ export function WingCheckRolesStep({
   // Animation
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  // Refs for back handler (prevents stale closures)
+  const flowStateRef = useRef<FlowState>(flowState);
+
+  useEffect(() => {
+    flowStateRef.current = flowState;
+  }, [flowState]);
+
+  // Back handler for parent component
+  useEffect(() => {
+    if (onRegisterBackHandler) {
+      onRegisterBackHandler(() => {
+        const currentFlowState = flowStateRef.current;
+        
+        if (currentFlowState === 'main' || currentFlowState === 'activate-roles') {
+          // At root - let parent handle exit
+          return false;
+        } else if (currentFlowState === 'prioritize') {
+          setFlowState('main');
+          return true;
+        } else if (currentFlowState === 'review-roles') {
+          setFlowState('main');
+          return true;
+        } else if (currentFlowState === 'role-reflection') {
+          setPurposeResponse('');
+          setSelectedReflectionRole(null);
+          setFlowState('review-roles');
+          return true;
+        }
+        return false;
+      });
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
   }, []);
-
-  // Determine if collapsible should be expanded by default
-  useEffect(() => {
-    if (prioritizedRoles.length < 3) {
-      setIsActiveRolesExpanded(true);
-    }
-  }, [prioritizedRoles]);
 
   async function loadData() {
     try {
@@ -296,6 +323,16 @@ export function WingCheckRolesStep({
     return index >= 0 ? index + 1 : null;
   }
 
+  // Get all active roles sorted: prioritized first, then alphabetical
+  function getAllRolesSorted(): Role[] {
+    const prioritizedIds = new Set(prioritizedRoles.map(r => r.id));
+    const nonPrioritized = roles
+      .filter(r => !prioritizedIds.has(r.id))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    
+    return [...prioritizedRoles, ...nonPrioritized];
+  }
+
   // ===== RENDER: LOADING STATE =====
   if (flowState === 'loading' || loading) {
     return (
@@ -345,30 +382,35 @@ export function WingCheckRolesStep({
           )}
         </View>
 
-        {/* Activate My Roles Card */}
-        <View style={[styles.activateCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
-          <View style={styles.activateCardHeader}>
-            <View style={[styles.activateIconContainer, { backgroundColor: ROLES_COLOR }]}>
-              <RoleIcon name="user" color="#FFFFFF" size={20} />
+        {/* Activate My Roles Card - styled like My Core Identity */}
+        <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
+          <View style={styles.identityHeader}>
+            <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
+              <RoleIcon name="users" color="#FFFFFF" size={14} />
             </View>
-            <Text style={[styles.activateCardTitle, { color: colors.text }]}>Activate My Roles</Text>
+            <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>ACTIVATE MY ROLES</Text>
           </View>
           
-          <Text style={[styles.activateCardText, { color: colors.textSecondary }]}>
+          <Text style={[styles.identityText, { color: colors.text }]}>
+            No roles activated yet
+          </Text>
+          
+          <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
             Roles are the different hats you wear in life—like Father, Business Owner, Friend, etc.
             You'll need to activate at least 3 roles before you can prioritize them.
           </Text>
-
-          <TouchableOpacity
-            style={[styles.manageRolesButton, { backgroundColor: ROLES_COLOR }]}
-            onPress={handleManageRoles}
-            activeOpacity={0.8}
-          >
-            <Settings size={20} color="#FFFFFF" />
-            <Text style={styles.manageRolesButtonText}>Manage Roles</Text>
-            <ChevronRight size={20} color="#FFFFFF" />
-          </TouchableOpacity>
         </View>
+
+        {/* Manage Roles Button */}
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: ROLES_COLOR }]}
+          onPress={handleManageRoles}
+          activeOpacity={0.8}
+        >
+          <Settings size={20} color="#FFFFFF" />
+          <Text style={styles.primaryButtonText}>Manage Roles</Text>
+          <ChevronRight size={20} color="#FFFFFF" />
+        </TouchableOpacity>
 
         {/* Skip Option */}
         <TouchableOpacity
@@ -401,27 +443,17 @@ export function WingCheckRolesStep({
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header with Back */}
+          {/* Header - Standard format, NO back arrow */}
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
-              <TouchableOpacity onPress={() => slideToState('main')} style={styles.backButton}>
-                <ArrowLeft size={24} color={colors.text} />
-              </TouchableOpacity>
+              <View style={[styles.compassContainer, { backgroundColor: ROLES_COLOR_LIGHT }]}>
+                <Image source={CompassRolesIcon} style={styles.compassIcon} resizeMode="contain" />
+              </View>
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Prioritize Roles</Text>
               </View>
             </View>
-          </View>
-
-          {/* Instructions */}
-          <View style={[styles.questionCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
-            <Text style={[styles.questionText, { color: colors.text }]}>
-              Tap to prioritize at least your top 3 roles
-            </Text>
-            <Text style={[styles.questionHint, { color: colors.textSecondary }]}>
-              The order you select them sets their rank (R1, R2, R3...).
-            </Text>
           </View>
 
           {/* Progress */}
@@ -509,7 +541,7 @@ export function WingCheckRolesStep({
           {/* Save Button */}
           <TouchableOpacity
             style={[
-              styles.continueButton,
+              styles.primaryButton,
               {
                 backgroundColor: selectedRoleIds.length >= 3 ? ROLES_COLOR : colors.border,
                 opacity: saving ? 0.7 : 1,
@@ -523,7 +555,7 @@ export function WingCheckRolesStep({
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
-                <Text style={styles.continueButtonText}>Save Priorities</Text>
+                <Text style={styles.primaryButtonText}>Save Priorities</Text>
                 <ChevronRight size={20} color="#FFFFFF" />
               </>
             )}
@@ -537,6 +569,8 @@ export function WingCheckRolesStep({
 
   // ===== RENDER: REVIEW ROLES STATE =====
   if (flowState === 'review-roles') {
+    const allRolesSorted = getAllRolesSorted();
+    
     return (
       <Animated.View style={[styles.container, { transform: [{ translateX: slideAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-300, 0, 300] }) }] }]}>
         <ScrollView
@@ -544,12 +578,9 @@ export function WingCheckRolesStep({
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header with Back */}
+          {/* Header - Standard format, NO back arrow */}
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
-              <TouchableOpacity onPress={() => slideToState('main')} style={styles.backButton}>
-                <ArrowLeft size={24} color={colors.text} />
-              </TouchableOpacity>
               <View style={[styles.compassContainer, { backgroundColor: ROLES_COLOR_LIGHT }]}>
                 <Image source={CompassRolesIcon} style={styles.compassIcon} resizeMode="contain" />
               </View>
@@ -560,24 +591,26 @@ export function WingCheckRolesStep({
             </View>
           </View>
 
-          {/* Review Roles Card - Similar to My Core Identity card */}
-          <View style={[styles.reviewCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
-            <View style={styles.reviewCardHeader}>
-              <View style={[styles.reviewCardIconContainer, { backgroundColor: ROLES_COLOR }]}>
-                <RoleIcon name="users" color="#FFFFFF" size={18} />
+          {/* Review Roles Card - Styled like My Core Identity */}
+          <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
+            <View style={styles.identityHeader}>
+              <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
+                <RoleIcon name="users" color="#FFFFFF" size={14} />
               </View>
-              <Text style={[styles.reviewCardTitle, { color: ROLES_COLOR }]}>REVIEW YOUR ROLES</Text>
+              <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>REVIEW YOUR ROLES</Text>
             </View>
             
-            <Text style={[styles.reviewCardSubtitle, { color: colors.textSecondary }]}>
-              Tap a role to reflect on your purpose
+            <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
+              Tap a role to reflect on its purpose
             </Text>
           </View>
 
-          {/* Prioritized Roles List */}
-          {prioritizedRoles.map((role, index) => {
+          {/* All Roles List - Prioritized first, then alphabetical */}
+          {allRolesSorted.map((role) => {
             const categoryColor = getCategoryColor(role.category);
             const hasPurpose = !!role.purpose;
+            const priorityIndex = prioritizedRoles.findIndex(r => r.id === role.id);
+            const isPrioritized = priorityIndex >= 0;
             
             return (
               <TouchableOpacity
@@ -599,9 +632,11 @@ export function WingCheckRolesStep({
                 activeOpacity={0.7}
               >
                 <View style={styles.reviewRoleLeft}>
-                  <View style={[styles.reviewRoleBadge, { backgroundColor: categoryColor }]}>
-                    <Text style={styles.reviewRoleBadgeText}>R{index + 1}</Text>
-                  </View>
+                  {isPrioritized && (
+                    <View style={[styles.reviewRoleBadge, { backgroundColor: categoryColor }]}>
+                      <Text style={styles.reviewRoleBadgeText}>R{priorityIndex + 1}</Text>
+                    </View>
+                  )}
                   <View style={[styles.reviewRoleIconWrap, { backgroundColor: `${categoryColor}20` }]}>
                     <RoleIcon name={role.icon || role.label} color={categoryColor} size={24} />
                   </View>
@@ -630,7 +665,7 @@ export function WingCheckRolesStep({
             );
           })}
 
-          {/* Back to Main Button */}
+          {/* Done Reviewing Button */}
           <TouchableOpacity
             style={[styles.secondaryButton, { borderColor: ROLES_COLOR }]}
             onPress={() => slideToState('main')}
@@ -649,6 +684,7 @@ export function WingCheckRolesStep({
   if (flowState === 'role-reflection' && selectedReflectionRole) {
     const categoryColor = getCategoryColor(selectedReflectionRole.category);
     const priorityIndex = prioritizedRoles.findIndex(r => r.id === selectedReflectionRole.id);
+    const isPrioritized = priorityIndex >= 0;
     
     return (
       <KeyboardAvoidingView 
@@ -662,22 +698,21 @@ export function WingCheckRolesStep({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Header with Back */}
+            {/* Header - Standard format, NO back arrow */}
             <View style={styles.headerSection}>
               <View style={styles.headerRow}>
-                <TouchableOpacity 
-                  onPress={() => {
-                    setPurposeResponse('');
-                    setSelectedReflectionRole(null);
-                    slideToState('review-roles');
-                  }} 
-                  style={styles.backButton}
-                >
-                  <ArrowLeft size={24} color={colors.text} />
-                </TouchableOpacity>
+                <View style={[styles.compassContainer, { backgroundColor: `${categoryColor}15` }]}>
+                  <View style={[styles.reflectionHeaderIcon, { backgroundColor: `${categoryColor}30` }]}>
+                    <RoleIcon 
+                      name={selectedReflectionRole.icon || selectedReflectionRole.label} 
+                      color={categoryColor} 
+                      size={40} 
+                    />
+                  </View>
+                </View>
                 <View style={styles.headerTextContainer}>
                   <Text style={[styles.stepLabel, { color: categoryColor }]}>
-                    R{priorityIndex + 1} Role
+                    {isPrioritized ? `R${priorityIndex + 1}` : 'Step 2'}
                   </Text>
                   <Text style={[styles.stepTitle, { color: colors.text }]}>
                     {selectedReflectionRole.label}
@@ -686,18 +721,7 @@ export function WingCheckRolesStep({
               </View>
             </View>
 
-            {/* Role Icon Large */}
-            <View style={styles.reflectionIconSection}>
-              <View style={[styles.reflectionIconContainer, { backgroundColor: `${categoryColor}20` }]}>
-                <RoleIcon 
-                  name={selectedReflectionRole.icon || selectedReflectionRole.label} 
-                  color={categoryColor} 
-                  size={64} 
-                />
-              </View>
-            </View>
-
-            {/* Purpose Question */}
+            {/* Purpose Question Card */}
             <View style={[styles.questionCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
               <Text style={[styles.questionText, { color: colors.text }]}>
                 What is your primary purpose as a {selectedReflectionRole.label}?
@@ -724,7 +748,7 @@ export function WingCheckRolesStep({
             {/* Save Button */}
             <TouchableOpacity
               style={[
-                styles.continueButton,
+                styles.primaryButton,
                 {
                   backgroundColor: purposeResponse.trim() ? ROLES_COLOR : colors.border,
                   opacity: saving ? 0.7 : 1,
@@ -738,7 +762,7 @@ export function WingCheckRolesStep({
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Text style={styles.continueButtonText}>Save Purpose</Text>
+                  <Text style={styles.primaryButtonText}>Save Purpose</Text>
                   <ChevronRight size={20} color="#FFFFFF" />
                 </>
               )}
@@ -790,13 +814,16 @@ export function WingCheckRolesStep({
         )}
       </View>
 
-      {/* My Top 3 Active Roles Card */}
-      <View style={[styles.top3Card, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
-        <View style={styles.top3Header}>
-          <View style={[styles.top3IconContainer, { backgroundColor: ROLES_COLOR }]}>
-            <RoleIcon name="users" color="#FFFFFF" size={18} />
+      {/* My Top 3 Active Roles Card - Styled like My Core Identity */}
+      <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
+        <View style={styles.identityHeader}>
+          <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
+            <RoleIcon name="users" color="#FFFFFF" size={14} />
           </View>
-          <Text style={[styles.top3Title, { color: ROLES_COLOR }]}>MY TOP 3 ACTIVE ROLES</Text>
+          <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>MY TOP 3 ACTIVE ROLES</Text>
+          <TouchableOpacity onPress={() => slideToState('prioritize')}>
+            <Text style={[styles.editLink, { color: ROLES_COLOR }]}>Update</Text>
+          </TouchableOpacity>
         </View>
         
         {top3Roles.length > 0 ? (
@@ -817,68 +844,40 @@ export function WingCheckRolesStep({
             })}
           </View>
         ) : (
-          <Text style={[styles.top3EmptyText, { color: colors.textSecondary }]}>
-            No roles prioritized yet. Tap below to set your priorities.
+          <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
+            No roles prioritized yet. Tap "Update" to set your priorities.
           </Text>
         )}
       </View>
 
-      {/* Collapsible Active Roles Section */}
-      <TouchableOpacity
-        style={[
-          styles.collapsibleHeader,
-          { 
-            backgroundColor: colors.surface, 
-            borderColor: hasMinimumPriorities ? colors.border : '#F59E0B',
-            borderWidth: hasMinimumPriorities ? 1 : 2,
-          }
-        ]}
-        onPress={() => setIsActiveRolesExpanded(!isActiveRolesExpanded)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.collapsibleHeaderLeft}>
-          <Text style={[styles.collapsibleTitle, { color: colors.text }]}>
-            Your Active Roles
-          </Text>
-          <Text style={[styles.collapsibleSubtitle, { color: colors.textSecondary }]}>
-            Which matter most to you right now?
-          </Text>
-        </View>
-        {isActiveRolesExpanded ? (
-          <ChevronUp size={24} color={colors.textSecondary} />
-        ) : (
-          <ChevronDown size={24} color={colors.textSecondary} />
-        )}
-      </TouchableOpacity>
-
-      {isActiveRolesExpanded && (
-        <View style={[styles.collapsibleContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.collapsibleInstructions, { color: colors.textSecondary }]}>
-            Tap to prioritize at least your top 3 roles
-          </Text>
-          
-          <TouchableOpacity
-            style={[styles.prioritizeButton, { backgroundColor: ROLES_COLOR }]}
-            onPress={() => slideToState('prioritize')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.prioritizeButtonText}>
-              {hasMinimumPriorities ? 'Update Priorities' : 'Set Priorities'}
-            </Text>
-            <ChevronRight size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Action Buttons */}
       <View style={styles.actionButtonsSection}>
+        {/* Manage Roles Button */}
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={handleManageRoles}
+          activeOpacity={0.7}
+        >
+          <View style={styles.actionButtonContent}>
+            <Settings size={20} color={colors.textSecondary} />
+            <View style={styles.actionButtonTextWrap}>
+              <Text style={[styles.actionButtonText, { color: colors.text }]}>Manage Roles</Text>
+              <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
+                Activate or remove existing roles
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
+
         {/* Review Your Roles Button */}
         <TouchableOpacity
           style={[
             styles.actionButton,
             { 
               backgroundColor: colors.surface, 
-              borderColor: ROLES_COLOR,
+              borderColor: hasMinimumPriorities ? ROLES_COLOR : colors.border,
+              borderWidth: hasMinimumPriorities ? 2 : 1,
               opacity: hasMinimumPriorities ? 1 : 0.5,
             }
           ]}
@@ -886,14 +885,26 @@ export function WingCheckRolesStep({
           disabled={!hasMinimumPriorities}
           activeOpacity={0.7}
         >
-          <Text style={[styles.actionButtonText, { color: ROLES_COLOR }]}>Review Your Roles</Text>
-          <ChevronRight size={20} color={ROLES_COLOR} />
+          <View style={styles.actionButtonContent}>
+            <View style={[styles.actionButtonIcon, { backgroundColor: ROLES_COLOR }]}>
+              <RoleIcon name="users" color="#FFFFFF" size={16} />
+            </View>
+            <View style={styles.actionButtonTextWrap}>
+              <Text style={[styles.actionButtonText, { color: hasMinimumPriorities ? ROLES_COLOR : colors.text }]}>
+                Review Your Roles
+              </Text>
+              <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
+                Reflect on your purpose for each role
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color={hasMinimumPriorities ? ROLES_COLOR : colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Continue to Wellness Zones Button */}
         <TouchableOpacity
           style={[
-            styles.continueButton,
+            styles.primaryButton,
             {
               backgroundColor: hasMinimumPriorities ? ROLES_COLOR : colors.border,
             },
@@ -902,22 +913,16 @@ export function WingCheckRolesStep({
           disabled={!hasMinimumPriorities}
           activeOpacity={0.8}
         >
-          <Text style={styles.continueButtonText}>Continue to Wellness Zones</Text>
+          <Text style={styles.primaryButtonText}>Continue to Wellness Zones</Text>
           <ChevronRight size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* Manage Roles Link */}
-      <TouchableOpacity
-        style={styles.manageRolesLink}
-        onPress={handleManageRoles}
-        activeOpacity={0.7}
-      >
-        <Settings size={16} color={colors.textSecondary} />
-        <Text style={[styles.manageRolesLinkText, { color: colors.textSecondary }]}>
-          Manage Roles
+      {!hasMinimumPriorities && (
+        <Text style={[styles.warningText, { color: '#F59E0B' }]}>
+          Please prioritize at least 3 roles to continue
         </Text>
-      </TouchableOpacity>
+      )}
 
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -975,10 +980,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
   },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
   tooltipButton: {
     padding: 8,
   },
@@ -993,31 +994,46 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // My Top 3 Active Roles Card
-  top3Card: {
+  // Identity Card - Styled like My Core Identity in Step 1
+  identityCard: {
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     marginBottom: 16,
   },
-  top3Header: {
+  identityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 8,
   },
-  top3IconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  identityIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
   },
-  top3Title: {
+  identityLabel: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
+  identityText: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  identitySubtext: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  editLink: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Top 3 Roles List
   top3List: {
     gap: 10,
   },
@@ -1050,105 +1066,44 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
-  top3EmptyText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
 
-  // Review Card (for Review Roles screen)
-  reviewCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
+  // Action Buttons Section
+  actionButtonsSection: {
+    gap: 12,
   },
-  reviewCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  reviewCardIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  reviewCardTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  reviewCardSubtitle: {
-    fontSize: 14,
-  },
-
-  // Collapsible Active Roles
-  collapsibleHeader: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 2,
-  },
-  collapsibleHeaderLeft: {
-    flex: 1,
-  },
-  collapsibleTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  collapsibleSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  collapsibleContent: {
-    padding: 16,
-    borderRadius: 12,
     borderWidth: 1,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    marginBottom: 16,
   },
-  collapsibleInstructions: {
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  prioritizeButton: {
+  actionButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  prioritizeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  // Action Buttons
-  actionButtonsSection: {
+    flex: 1,
     gap: 12,
-    marginTop: 8,
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  actionButtonIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    gap: 8,
+    alignItems: 'center',
+  },
+  actionButtonTextWrap: {
+    flex: 1,
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },
-  continueButton: {
+  actionButtonSubtext: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1156,7 +1111,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
-  continueButtonText: {
+  primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
@@ -1174,61 +1129,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  manageRolesLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    marginTop: 8,
-  },
-  manageRolesLinkText: {
+  warningText: {
     fontSize: 14,
-  },
-
-  // Activate Roles Card
-  activateCard: {
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 20,
-  },
-  activateCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  activateIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  activateCardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  activateCardText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  manageRolesButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  manageRolesButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
     textAlign: 'center',
+    marginTop: 12,
+    fontStyle: 'italic',
   },
   skipButton: {
     alignItems: 'center',
@@ -1342,7 +1247,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Review Role Cards (for Review screen)
+  // Review Role Cards
   reviewRoleCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1402,14 +1307,10 @@ const styles = StyleSheet.create({
   },
 
   // Role Reflection screen
-  reflectionIconSection: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  reflectionIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+  reflectionHeaderIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
