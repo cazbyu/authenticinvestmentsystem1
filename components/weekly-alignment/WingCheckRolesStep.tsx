@@ -770,8 +770,8 @@ export function WingCheckRolesStep({
 
             <View style={{ height: 40 }} />
           </ScrollView>
-        </Animated.View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </Animated.View>
     );
   }
 
