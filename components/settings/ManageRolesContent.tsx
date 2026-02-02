@@ -185,11 +185,15 @@ export function ManageRolesContent({ onUpdate, onDataLoaded }: ManageRolesConten
       const existingUserRole = userRoles.find(r => r.preset_role_id === presetRole.id);
       const newActiveState = existingUserRole ? !existingUserRole.is_active : true;
 
-      console.log('Toggle preset role:', presetRole.label, 'Current active:', existingUserRole?.is_active, 'New active:', newActiveState);
-
-      // Optimistic update - immediately update UI
       if (existingUserRole) {
-        // First, update the database
+        // FIX: OPTIMISTIC UPDATE FIRST - Update UI immediately to prevent bounce
+        setUserRoles(prev => prev.map(role =>
+          role.id === existingUserRole.id
+            ? { ...role, is_active: newActiveState }
+            : role
+        ));
+
+        // THEN update the database
         try {
           const { error } = await supabase
             .from('0008-ap-roles')
@@ -198,21 +202,18 @@ export function ManageRolesContent({ onUpdate, onDataLoaded }: ManageRolesConten
 
           if (error) throw error;
 
-          console.log('Database updated successfully');
-
-          // After successful database update, update the UI
-          setUserRoles(prev => prev.map(role =>
-            role.id === existingUserRole.id
-              ? { ...role, is_active: newActiveState }
-              : role
-          ));
-
           if (onUpdate) {
             onUpdate();
           }
         } catch (error) {
           console.error('Error updating preset role:', error);
           Alert.alert('Error', 'Failed to update role');
+          // REVERT optimistic update on error
+          setUserRoles(prev => prev.map(role =>
+            role.id === existingUserRole.id
+              ? { ...role, is_active: !newActiveState }
+              : role
+          ));
         }
       } else {
         // Create temporary role for immediate UI feedback
@@ -323,6 +324,8 @@ export function ManageRolesContent({ onUpdate, onDataLoaded }: ManageRolesConten
                 placeholder="Add a custom role..."
                 value={customRoleLabel}
                 onChangeText={setCustomRoleLabel}
+                onSubmitEditing={handleAddCustomRole}
+                returnKeyType="done"
               />
               <TouchableOpacity style={styles.addButton} onPress={handleAddCustomRole}>
                 <Text style={styles.addButtonText}>Add</Text>
@@ -336,7 +339,7 @@ export function ManageRolesContent({ onUpdate, onDataLoaded }: ManageRolesConten
                     <Switch
                       value={role.is_active}
                       onValueChange={async (newValue) => {
-                        // Optimistically update UI
+                        // Optimistically update UI FIRST
                         setUserRoles(prev => prev.map(r =>
                           r.id === role.id ? { ...r, is_active: newValue } : r
                         ));
