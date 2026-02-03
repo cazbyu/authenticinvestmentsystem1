@@ -27,6 +27,7 @@ import {
 import { ChevronRight, Check, HelpCircle, Target, TrendingUp, Calendar, Flag, Zap, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsforWeek';
+import { parseLocalDate } from '@/lib/dateUtils';
 
 // Compass Goals icon for Step 4 header
 const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
@@ -68,7 +69,8 @@ interface Campaign {
   goal_type: '12week' | 'custom';
   start_date?: string;
   end_date?: string;
-  one_year_goal_id?: string;
+  parent_goal_id?: string;
+  parent_goal_type?: string;
   weeks_remaining?: number;
   actions?: GoalAction[];
   // Added for display
@@ -279,21 +281,18 @@ export function SixCheckStep({
     try {
       const supabase = getSupabaseClient();
 
-      // Load user preferences for week_start_day
-      // Try to get from user-global-timelines (most reliable source)
-      const { data: timelineData, error: timelineError } = await supabase
-        .from('0008-ap-user-global-timelines')
+      // Load user preferences for week_start_day from main users table
+      const { data: userData, error: userError } = await supabase
+        .from('0008-ap-users')
         .select('week_start_day')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .limit(1)
-        .maybeSingle();
+        .eq('id', userId)
+        .single();
 
-      console.log('[SixCheckStep] Week start day from timeline:', { timelineData, timelineError });
+      console.log('[SixCheckStep] Week start day from users table:', { userData, userError });
       
-      if (!timelineError && timelineData?.week_start_day !== undefined && timelineData?.week_start_day !== null) {
-        const parsedDay = parseWeekStartDay(timelineData.week_start_day);
-        console.log('[SixCheckStep] Parsed week_start_day:', { raw: timelineData.week_start_day, parsed: parsedDay });
+      if (!userError && userData?.week_start_day !== undefined && userData?.week_start_day !== null) {
+        const parsedDay = parseWeekStartDay(userData.week_start_day);
+        console.log('[SixCheckStep] Parsed week_start_day:', { raw: userData.week_start_day, parsed: parsedDay });
         setWeekStartDay(parsedDay);
       } else {
         console.log('[SixCheckStep] Using default week_start_day: 1 (Monday)');
@@ -355,15 +354,16 @@ export function SixCheckStep({
         console.log('[SixCheckStep] 12wk campaign:', { 
           id: goal.id, 
           title: goal.title, 
-          one_year_goal_id: goal.one_year_goal_id,
-          mappedTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : 'none'
+          parent_goal_id: goal.parent_goal_id,
+          parent_goal_type: goal.parent_goal_type,
+          mappedTitle: goal.parent_goal_id ? annualGoalMap[goal.parent_goal_id] : 'none'
         });
 
         allCampaigns.push({
           ...goal,
           goal_type: '12week',
           weeks_remaining: weeksRemaining,
-          annualGoalTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : undefined,
+          annualGoalTitle: goal.parent_goal_id ? annualGoalMap[goal.parent_goal_id] : undefined,
         });
       });
 
@@ -380,15 +380,16 @@ export function SixCheckStep({
         console.log('[SixCheckStep] Custom campaign:', { 
           id: goal.id, 
           title: goal.title, 
-          one_year_goal_id: goal.one_year_goal_id,
-          mappedTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : 'none'
+          parent_goal_id: goal.parent_goal_id,
+          parent_goal_type: goal.parent_goal_type,
+          mappedTitle: goal.parent_goal_id ? annualGoalMap[goal.parent_goal_id] : 'none'
         });
 
         allCampaigns.push({
           ...goal,
           goal_type: 'custom',
           weeks_remaining: weeksRemaining,
-          annualGoalTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : undefined,
+          annualGoalTitle: goal.parent_goal_id ? annualGoalMap[goal.parent_goal_id] : undefined,
         });
       });
 
@@ -397,7 +398,7 @@ export function SixCheckStep({
       // Attach campaigns to annual goals
       const annualGoalsWithCampaigns = (annualData || []).map(ag => ({
         ...ag,
-        campaigns: allCampaigns.filter(c => c.one_year_goal_id === ag.id),
+        campaigns: allCampaigns.filter(c => c.parent_goal_id === ag.id),
       }));
 
       setAnnualGoals(annualGoalsWithCampaigns);
@@ -542,9 +543,9 @@ export function SixCheckStep({
   const currentWeekDateRange = (() => {
     const weekData = plannedActionsData?.week;
     if (weekData?.startDate && weekData?.endDate) {
-      // Parse the actual timeline dates
-      const startDate = new Date(weekData.startDate + 'T00:00:00');
-      const endDate = new Date(weekData.endDate + 'T00:00:00');
+      // Use parseLocalDate for consistent timezone handling
+      const startDate = parseLocalDate(weekData.startDate);
+      const endDate = parseLocalDate(weekData.endDate);
       
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const startMonth = monthNames[startDate.getMonth()];
