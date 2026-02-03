@@ -65,6 +65,7 @@
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
     "metro": "^0.83.1",
+    "react-native-svg-transformer": "^1.5.1",
     "shx": "^0.4.0",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.2"
