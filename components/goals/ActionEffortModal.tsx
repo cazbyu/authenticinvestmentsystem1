@@ -155,6 +155,10 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       fetchData();
       if (mode === 'create') {
         resetForm();
+        // Quick Add Mode: Auto-select current week
+        if (quickAddMode && currentWeekData) {
+          setSelectedWeeks([currentWeekData.weekNumber]);
+        }
       } else if (mode === 'edit' && initialData) {
         loadInitialData();
       }
