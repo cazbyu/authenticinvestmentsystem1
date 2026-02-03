@@ -280,17 +280,20 @@ export function SixCheckStep({
       const supabase = getSupabaseClient();
 
       // Load user preferences for week_start_day
-      const { data: userData, error: userError } = await supabase
-        .from('0008-ap-user')
+      // Try to get from user-global-timelines (most reliable source)
+      const { data: timelineData, error: timelineError } = await supabase
+        .from('0008-ap-user-global-timelines')
         .select('week_start_day')
         .eq('user_id', userId)
-        .single();
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle();
 
-      console.log('[SixCheckStep] User preferences:', { userData, userError });
+      console.log('[SixCheckStep] Week start day from timeline:', { timelineData, timelineError });
       
-      if (!userError && userData?.week_start_day !== undefined && userData?.week_start_day !== null) {
-        const parsedDay = parseWeekStartDay(userData.week_start_day);
-        console.log('[SixCheckStep] Parsed week_start_day:', { raw: userData.week_start_day, parsed: parsedDay });
+      if (!timelineError && timelineData?.week_start_day !== undefined && timelineData?.week_start_day !== null) {
+        const parsedDay = parseWeekStartDay(timelineData.week_start_day);
+        console.log('[SixCheckStep] Parsed week_start_day:', { raw: timelineData.week_start_day, parsed: parsedDay });
         setWeekStartDay(parsedDay);
       } else {
         console.log('[SixCheckStep] Using default week_start_day: 1 (Monday)');
@@ -532,9 +535,30 @@ export function SixCheckStep({
   // Combined count for display
   const totalPlannedActions = leadingIndicatorCount + boostActionsCount;
   
-  // Current week info
+  // Current week info - use actual dates from timeline data
   const currentWeekNumber = plannedActionsData?.week?.weekNumber;
-  const currentWeekDateRange = getCurrentWeekDateRange(weekStartDay);
+  
+  // Use actual timeline week dates if available, otherwise calculate
+  const currentWeekDateRange = (() => {
+    const weekData = plannedActionsData?.week;
+    if (weekData?.startDate && weekData?.endDate) {
+      // Parse the actual timeline dates
+      const startDate = new Date(weekData.startDate + 'T00:00:00');
+      const endDate = new Date(weekData.endDate + 'T00:00:00');
+      
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const startMonth = monthNames[startDate.getMonth()];
+      const endMonth = monthNames[endDate.getMonth()];
+      
+      if (startMonth === endMonth) {
+        return `${startMonth} ${startDate.getDate()} - ${endDate.getDate()}`;
+      } else {
+        return `${startMonth} ${startDate.getDate()} - ${endMonth} ${endDate.getDate()}`;
+      }
+    }
+    // Fallback to calculation if no timeline data
+    return getCurrentWeekDateRange(weekStartDay);
+  })();
 
   const { months: monthsLeft, days: daysLeft } = getDaysUntilYearEnd();
 
