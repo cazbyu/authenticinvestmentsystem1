@@ -132,6 +132,32 @@ function getDaysUntilYearEnd(): { months: number; days: number } {
   return { months, days };
 }
 
+// Helper to get the current week's date range (Monday - Sunday)
+function getCurrentWeekDateRange(): string {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  // Calculate Monday of current week
+  const monday = new Date(now);
+  const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  monday.setDate(now.getDate() + daysToMonday);
+  
+  // Calculate Sunday of current week
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  
+  // Format as "Feb 3 - 9" or "Jan 27 - Feb 2" if spans months
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const mondayMonth = monthNames[monday.getMonth()];
+  const sundayMonth = monthNames[sunday.getMonth()];
+  
+  if (mondayMonth === sundayMonth) {
+    return `${mondayMonth} ${monday.getDate()} - ${sunday.getDate()}`;
+  } else {
+    return `${mondayMonth} ${monday.getDate()} - ${sundayMonth} ${sunday.getDate()}`;
+  }
+}
+
 export function SixCheckStep({
   userId,
   colors,
@@ -444,6 +470,7 @@ export function SixCheckStep({
   
   // Current week info
   const currentWeekNumber = plannedActionsData?.week?.weekNumber;
+  const currentWeekDateRange = getCurrentWeekDateRange();
 
   const { months: monthsLeft, days: daysLeft } = getDaysUntilYearEnd();
 
@@ -857,7 +884,7 @@ export function SixCheckStep({
                         <View style={styles.metaItem}>
                           <AlertTriangle size={14} color="#EF4444" />
                           <Text style={[styles.metaText, { color: '#EF4444' }]}>
-                            {laggingCount} behind
+                            {laggingCount} off pace
                           </Text>
                         </View>
                       )}
@@ -915,7 +942,7 @@ export function SixCheckStep({
               <View style={[styles.identityIconContainer, { backgroundColor: GOALS_COLOR }]}>
                 <Zap size={12} color="#FFFFFF" />
               </View>
-              <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>CAMPAIGNS</Text>
+              <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>GOAL CAMPAIGNS</Text>
             </View>
             <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
               {goalCampaigns.length > 0 
@@ -969,7 +996,7 @@ export function SixCheckStep({
 
                   <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
                     {campaign.weeks_remaining} weeks remaining
-                    {campaign.is_lagging && ' • Behind schedule'}
+                    {campaign.is_lagging && ' • Off pace'}
                   </Text>
                 </TouchableOpacity>
 
@@ -1052,7 +1079,7 @@ export function SixCheckStep({
               </View>
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: GOALS_COLOR }]}>Step 4</Text>
-                <Text style={[styles.stepTitle, { color: colors.text }]}>All Campaigns</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>All Goal Campaigns</Text>
               </View>
             </View>
           </View>
@@ -1063,12 +1090,12 @@ export function SixCheckStep({
                 <Zap size={12} color="#FFFFFF" />
               </View>
               <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>
-                {campaignsCount} ACTIVE CAMPAIGN{campaignsCount !== 1 ? 'S' : ''}
+                {campaignsCount} ACTIVE GOAL CAMPAIGN{campaignsCount !== 1 ? 'S' : ''}
               </Text>
             </View>
             {laggingCampaignsCount > 0 && (
               <Text style={[styles.identitySubtext, { color: '#EF4444' }]}>
-                ⚠️ {laggingCampaignsCount} campaign{laggingCampaignsCount > 1 ? 's are' : ' is'} behind schedule
+                ⚠️ {laggingCampaignsCount} campaign{laggingCampaignsCount > 1 ? 's are' : ' is'} off pace
               </Text>
             )}
           </View>
@@ -1092,7 +1119,7 @@ export function SixCheckStep({
                   {campaign.is_lagging && (
                     <View style={[styles.statusBadge, { backgroundColor: '#EF444415' }]}>
                       <AlertTriangle size={12} color="#EF4444" />
-                      <Text style={[styles.statusBadgeText, { color: '#EF4444' }]}>Behind</Text>
+                      <Text style={[styles.statusBadgeText, { color: '#EF4444' }]}>Off Pace</Text>
                     </View>
                   )}
                 </View>
@@ -1169,23 +1196,15 @@ export function SixCheckStep({
               {'\n\n'}
               <Text style={{ fontWeight: '600' }}>Custom Campaigns</Text> let you manage goals on any timeline (school semesters, projects, etc.).
               {'\n\n'}
+              <Text style={{ fontWeight: '600' }}>Off Pace</Text> means a campaign's progress is more than 10% behind where it should be based on time elapsed.
+              {'\n\n'}
               💡 Don't worry if you're starting late—just start!
             </Text>
           </View>
         )}
       </View>
 
-      {/* Week Context Badge */}
-      {currentWeekNumber && (
-        <View style={[styles.weekBadge, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
-          <Calendar size={14} color={GOALS_COLOR} />
-          <Text style={[styles.weekBadgeText, { color: GOALS_COLOR }]}>
-            Week {currentWeekNumber}
-          </Text>
-        </View>
-      )}
-
-      {/* Scoreboard Card */}
+      {/* Scoreboard Card - Now includes Week Badge */}
       <View style={[styles.identityCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
         <View style={styles.identityHeader}>
           <View style={[styles.identityIconContainer, { backgroundColor: GOALS_COLOR }]}>
@@ -1194,7 +1213,22 @@ export function SixCheckStep({
           <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>GOALS SCOREBOARD</Text>
         </View>
         
-        {/* Row 1: Annual Goals & Campaigns */}
+        {/* Week Badge Row - Inside the scoreboard */}
+        {currentWeekNumber && (
+          <View style={styles.weekBadgeRow}>
+            <View style={styles.weekBadgeInline}>
+              <Calendar size={14} color={GOALS_COLOR} />
+              <Text style={[styles.weekBadgeText, { color: GOALS_COLOR }]}>
+                Week {currentWeekNumber}
+              </Text>
+            </View>
+            <Text style={[styles.weekDateText, { color: colors.textSecondary }]}>
+              {currentWeekDateRange}
+            </Text>
+          </View>
+        )}
+        
+        {/* Row: Annual Goals & Goal Campaigns */}
         <View style={styles.scoreboardRow}>
           <View style={styles.scoreboardItem}>
             <Text style={[styles.scoreboardNumber, { color: GOALS_COLOR }]}>{annualGoalsCount}</Text>
@@ -1203,50 +1237,12 @@ export function SixCheckStep({
           <View style={[styles.scoreboardDivider, { backgroundColor: colors.border }]} />
           <View style={styles.scoreboardItem}>
             <Text style={[styles.scoreboardNumber, { color: laggingCampaignsCount > 0 ? '#F59E0B' : '#10B981' }]}>{campaignsCount}</Text>
-            <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Campaigns</Text>
-          </View>
-        </View>
-
-        {/* Row 2: Actions This Week */}
-        <View style={[styles.actionsScoreboardSection, { borderTopColor: colors.border }]}>
-          <Text style={[styles.actionsScoreboardTitle, { color: colors.text }]}>
-            Actions This Week
-          </Text>
-          
-          <View style={styles.scoreboardRow}>
-            {/* Leading Indicators */}
-            <View style={styles.scoreboardItem}>
-              <View style={styles.scoreboardIconRow}>
-                <Repeat size={14} color="#10B981" />
-                <Text style={[styles.scoreboardNumber, { color: '#10B981', marginLeft: 4 }]}>
-                  {leadingIndicatorCount}
-                </Text>
-              </View>
-              <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Leading</Text>
-              {leadingIndicatorTarget > 0 && (
-                <Text style={[styles.scoreboardSubLabel, { color: colors.textSecondary }]}>
-                  {leadingIndicatorActual}/{leadingIndicatorTarget} days
-                </Text>
-              )}
-            </View>
-            
-            <View style={[styles.scoreboardDivider, { backgroundColor: colors.border }]} />
-            
-            {/* Boost Actions */}
-            <View style={styles.scoreboardItem}>
-              <View style={styles.scoreboardIconRow}>
-                <Rocket size={14} color="#F59E0B" />
-                <Text style={[styles.scoreboardNumber, { color: '#F59E0B', marginLeft: 4 }]}>
-                  {boostActionsCount}
-                </Text>
-              </View>
-              <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Boost</Text>
-              {boostActionsCount > 0 && (
-                <Text style={[styles.scoreboardSubLabel, { color: colors.textSecondary }]}>
-                  {boostActionsCompleted}/{boostActionsCount} done
-                </Text>
-              )}
-            </View>
+            <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Goal Campaigns</Text>
+            {laggingCampaignsCount > 0 && (
+              <Text style={[styles.scoreboardSubLabel, { color: '#EF4444' }]}>
+                {laggingCampaignsCount} off pace
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -1275,7 +1271,7 @@ export function SixCheckStep({
           <ChevronRight size={20} color={GOALS_COLOR} />
         </TouchableOpacity>
 
-        {/* Review Campaigns */}
+        {/* Review Goal Campaigns */}
         <TouchableOpacity
           style={[
             styles.actionButton,
@@ -1296,11 +1292,11 @@ export function SixCheckStep({
             </View>
             <View style={styles.actionButtonTextWrap}>
               <Text style={[styles.actionButtonText, { color: campaignsCount > 0 ? GOALS_COLOR : colors.text }]}>
-                Review Campaigns
+                Review Goal Campaigns
               </Text>
               <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
                 {campaignsCount > 0 
-                  ? `${campaignsCount} active (${laggingCampaignsCount} behind)`
+                  ? `${campaignsCount} active (${laggingCampaignsCount} off pace)`
                   : 'No active campaigns'}
               </Text>
             </View>
@@ -1324,10 +1320,10 @@ export function SixCheckStep({
           <AlertTriangle size={20} color="#EF4444" />
           <View style={styles.alertContent}>
             <Text style={[styles.alertTitle, { color: '#EF4444' }]}>
-              {laggingCampaignsCount} Campaign{laggingCampaignsCount > 1 ? 's' : ''} Behind
+              {laggingCampaignsCount} Campaign{laggingCampaignsCount > 1 ? 's' : ''} Off Pace
             </Text>
             <Text style={[styles.alertText, { color: colors.textSecondary }]}>
-              Review your campaigns to get back on track.
+              Progress is behind schedule. Review your campaigns to get back on track.
             </Text>
           </View>
         </View>
@@ -1403,21 +1399,28 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // Week Badge
-  weekBadge: {
+  // Week Badge Row (inside scoreboard)
+  weekBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(65, 105, 225, 0.2)',
+  },
+  weekBadgeInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   weekBadgeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
+  },
+  weekDateText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
 
   // Identity Card
@@ -1482,17 +1485,6 @@ const styles = StyleSheet.create({
     width: 1,
     height: 50,
     marginHorizontal: 8,
-  },
-  actionsScoreboardSection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  actionsScoreboardTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 8,
   },
 
   // Action Buttons
