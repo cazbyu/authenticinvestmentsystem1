@@ -101,6 +101,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   onDelete,
   initialData,
   mode = 'create',
+  quickAddMode = false,
+  currentWeekData,
 }) => {
   // Form state
   const [title, setTitle] = useState('');
