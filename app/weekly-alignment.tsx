@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ChevronLeft, ChevronRight, CheckCircle2, Compass } from 'lucide-react-native';
+import { ChevronLeft, CheckCircle2, Compass, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
@@ -23,7 +23,7 @@ import { WingCheckRolesStep } from '@/components/weekly-alignment/WingCheckRoles
 import { WingCheckWellnessStep } from '@/components/weekly-alignment/WingCheckWellnessStep';
 import { SixCheckStep } from '@/components/weekly-alignment/SixCheckStep';
 import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
-import { StepIndicatorCompact } from '@/components/rituals/StepIndicator';
+// Note: StepIndicatorCompact removed - using inline clickable version
 
 // Types
 interface WeeklyAlignmentData {
@@ -134,6 +134,21 @@ export default function WeeklyAlignmentScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
     }
+  }
+
+  function goToStep(stepIndex: number) {
+    if (stepIndex >= 0 && stepIndex < STEPS.length && stepIndex !== currentStep) {
+      setCurrentStep(stepIndex);
+      setStepBackHandler(null); // Clear handler when jumping steps
+      
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+  }
+
+  function handleExit() {
+    router.back();
   }
 
   function goToPreviousStep() {
@@ -343,6 +358,31 @@ export default function WeeklyAlignmentScreen() {
 
   const currentStepData = STEPS[currentStep];
 
+  // Inline clickable step indicator
+  const renderStepDots = () => (
+    <View style={styles.stepDotsContainer}>
+      {STEPS.map((step, index) => (
+        <TouchableOpacity
+          key={step.key}
+          onPress={() => goToStep(index)}
+          style={styles.stepDotTouchable}
+          accessible={true}
+          accessibilityLabel={`Go to ${step.label}`}
+          accessibilityRole="button"
+        >
+          <View
+            style={[
+              styles.stepDot,
+              index === currentStep 
+                ? [styles.stepDotActive, { backgroundColor: currentStepData.color }]
+                : { backgroundColor: colors.border },
+            ]}
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
@@ -360,21 +400,17 @@ export default function WeeklyAlignmentScreen() {
           <Text style={[styles.headerTitle, { color: colors.text }]}>
             Weekly Alignment
           </Text>
-          <StepIndicatorCompact
-            currentStep={currentStep}
-            totalSteps={STEPS.length}
-            activeColor={currentStepData.color}
-          />
+          {renderStepDots()}
         </View>
 
-        {/* Continue Button */}
+        {/* Exit Button */}
         <TouchableOpacity
-          onPress={goToNextStep}
-          style={styles.nextButton}
+          onPress={handleExit}
+          style={styles.exitButton}
           accessible={true}
-          accessibilityLabel="Continue to next step"
+          accessibilityLabel="Exit Weekly Alignment"
         >
-          <ChevronRight size={24} color={colors.text} />
+          <X size={22} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -477,10 +513,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  nextButton: {
+  exitButton: {
     padding: 8,
     width: 44,
     alignItems: 'flex-end',
+  },
+  stepDotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepDotTouchable: {
+    padding: 4, // Increase touch target
+  },
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  stepDotActive: {
+    width: 20, // Longer for current step
+    borderRadius: 4,
   },
   stepContent: {
     flex: 1,
