@@ -438,11 +438,39 @@ export function SixCheckStep({
       }
 
       // ============================================
-      // LOAD PLANNED ACTIONS using new helper
-      // This replaces the incorrect direct tasks query
-      // ============================================
-      const plannedActions = await fetchPlannedActionsForWeek();
-      setPlannedActionsData(plannedActions);
+// LOAD PLANNED ACTIONS using new helper
+// ============================================
+const plannedActions = await fetchPlannedActionsForWeek();
+setPlannedActionsData(plannedActions);
+
+// Map actions to their campaigns
+const campaignsWithActions = allCampaigns.map(campaign => {
+  // Find leading indicators for this campaign (by goalId)
+  const campaignActions = (plannedActions.leadingIndicators.actions || [])
+    .filter(action => action.goalId === campaign.id)
+    .map(li => ({
+      id: li.id,
+      title: li.title,
+      weeklyTarget: li.targetDays,
+      weeklyActual: li.actualDays,
+      isComplete: li.actualDays >= li.targetDays,
+    }));
+
+  return {
+    ...campaign,
+    actions: campaignActions,
+  };
+});
+
+// Update campaigns with actions
+setCampaigns(campaignsWithActions);
+
+// Also update annual goals to include campaigns with actions
+const annualGoalsUpdated = (annualData || []).map(ag => ({
+  ...ag,
+  campaigns: campaignsWithActions.filter(c => c.parent_goal_id === ag.id),
+}));
+setAnnualGoals(annualGoalsUpdated);
       
       console.log('[SixCheckStep] Planned actions loaded:', {
         leadingIndicators: plannedActions.leadingIndicators.count,
