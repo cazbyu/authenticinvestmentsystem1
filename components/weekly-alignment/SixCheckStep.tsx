@@ -161,19 +161,34 @@ function getCurrentWeekDateRange(weekStartDay: number = 1): string {
   }
 }
 
-// Convert week_start_day string to number
-function parseWeekStartDay(weekStartDay: string | null): number {
-  if (!weekStartDay) return 1; // Default to Monday
+// Convert week_start_day to number - handles string names, numbers, or numeric strings
+function parseWeekStartDay(weekStartDay: string | number | null | undefined): number {
+  if (weekStartDay === null || weekStartDay === undefined) return 1; // Default to Monday
+  
+  // If it's already a number
+  if (typeof weekStartDay === 'number') {
+    return weekStartDay >= 0 && weekStartDay <= 6 ? weekStartDay : 1;
+  }
+  
+  // If it's a numeric string like "0" or "1"
+  const numericValue = parseInt(weekStartDay, 10);
+  if (!isNaN(numericValue) && numericValue >= 0 && numericValue <= 6) {
+    return numericValue;
+  }
+  
+  // If it's a day name string
   const dayMap: Record<string, number> = {
-    'sunday': 0,
-    'monday': 1,
-    'tuesday': 2,
-    'wednesday': 3,
-    'thursday': 4,
-    'friday': 5,
-    'saturday': 6,
+    'sunday': 0, 'sun': 0,
+    'monday': 1, 'mon': 1,
+    'tuesday': 2, 'tue': 2,
+    'wednesday': 3, 'wed': 3,
+    'thursday': 4, 'thu': 4,
+    'friday': 5, 'fri': 5,
+    'saturday': 6, 'sat': 6,
   };
-  return dayMap[weekStartDay.toLowerCase()] ?? 1;
+  
+  const normalized = weekStartDay.toString().toLowerCase().trim();
+  return dayMap[normalized] ?? 1; // Default to Monday if unrecognized
 }
 
 export function SixCheckStep({
@@ -271,8 +286,14 @@ export function SixCheckStep({
         .eq('user_id', userId)
         .single();
 
-      if (!userError && userData?.week_start_day) {
-        setWeekStartDay(parseWeekStartDay(userData.week_start_day));
+      console.log('[SixCheckStep] User preferences:', { userData, userError });
+      
+      if (!userError && userData?.week_start_day !== undefined && userData?.week_start_day !== null) {
+        const parsedDay = parseWeekStartDay(userData.week_start_day);
+        console.log('[SixCheckStep] Parsed week_start_day:', { raw: userData.week_start_day, parsed: parsedDay });
+        setWeekStartDay(parsedDay);
+      } else {
+        console.log('[SixCheckStep] Using default week_start_day: 1 (Monday)');
       }
 
       // Load annual goals
@@ -290,6 +311,8 @@ export function SixCheckStep({
       (annualData || []).forEach(ag => {
         annualGoalMap[ag.id] = ag.title;
       });
+      
+      console.log('[SixCheckStep] Annual goals map:', annualGoalMap);
 
       // Load 12-week campaigns
       const { data: twelveWeekData, error: twelveWeekError } = await supabase
@@ -326,6 +349,13 @@ export function SixCheckStep({
         const daysRemaining = Math.max(0, totalDays - daysElapsed);
         const weeksRemaining = Math.ceil(daysRemaining / 7);
 
+        console.log('[SixCheckStep] 12wk campaign:', { 
+          id: goal.id, 
+          title: goal.title, 
+          one_year_goal_id: goal.one_year_goal_id,
+          mappedTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : 'none'
+        });
+
         allCampaigns.push({
           ...goal,
           goal_type: '12week',
@@ -343,6 +373,13 @@ export function SixCheckStep({
         const daysElapsed = Math.ceil((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
         const daysRemaining = Math.max(0, totalDays - daysElapsed);
         const weeksRemaining = Math.ceil(daysRemaining / 7);
+
+        console.log('[SixCheckStep] Custom campaign:', { 
+          id: goal.id, 
+          title: goal.title, 
+          one_year_goal_id: goal.one_year_goal_id,
+          mappedTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : 'none'
+        });
 
         allCampaigns.push({
           ...goal,
