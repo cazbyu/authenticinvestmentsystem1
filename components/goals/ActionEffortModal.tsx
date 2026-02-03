@@ -82,6 +82,13 @@ interface ActionEffortModalProps {
   onDelete?: (actionId: string) => Promise<void>;
   initialData?: any;
   mode?: 'create' | 'edit';
+  // Quick Add mode props (for Weekly Alignment)
+  quickAddMode?: boolean;
+  currentWeekData?: {
+    weekNumber: number;
+    startDate: string;
+    endDate: string;
+  };
 }
 
 const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
