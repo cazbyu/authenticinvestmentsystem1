@@ -24,7 +24,7 @@ import {
   Animated,
   TextInput,
 } from 'react-native';
-import { ChevronRight, Check, HelpCircle, Target, TrendingUp, AlertTriangle, Calendar, Flag, Zap, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
+import { ChevronRight, Check, HelpCircle, Target, TrendingUp, Calendar, Flag, Zap, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsforWeek';
 
@@ -69,9 +69,10 @@ interface Campaign {
   start_date?: string;
   end_date?: string;
   one_year_goal_id?: string;
-  is_lagging?: boolean;
   weeks_remaining?: number;
   actions?: GoalAction[];
+  // Added for display
+  annualGoalTitle?: string;
 }
 
 interface GoalAction {
@@ -114,8 +115,7 @@ const GOALS_COLOR_LIGHT = '#4169E115';
 const GOALS_COLOR_BORDER = '#4169E140';
 
 // Helper functions
-function getProgressColor(progress: number, isLagging?: boolean): string {
-  if (isLagging) return '#EF4444';
+function getProgressColor(progress: number): string {
   if (progress >= 75) return '#10B981';
   if (progress >= 50) return '#3B82F6';
   if (progress >= 25) return '#F59E0B';
@@ -132,30 +132,48 @@ function getDaysUntilYearEnd(): { months: number; days: number } {
   return { months, days };
 }
 
-// Helper to get the current week's date range (Monday - Sunday)
-function getCurrentWeekDateRange(): string {
+// Helper to get the current week's date range based on user's preferred week start day
+// weekStartDay: 0 = Sunday, 1 = Monday, etc.
+function getCurrentWeekDateRange(weekStartDay: number = 1): string {
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const currentDayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
   
-  // Calculate Monday of current week
-  const monday = new Date(now);
-  const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  monday.setDate(now.getDate() + daysToMonday);
+  // Calculate the start of the week based on user preference
+  let daysToStart = currentDayOfWeek - weekStartDay;
+  if (daysToStart < 0) daysToStart += 7;
   
-  // Calculate Sunday of current week
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - daysToStart);
+  
+  // Calculate end of week (6 days after start)
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
   
   // Format as "Feb 3 - 9" or "Jan 27 - Feb 2" if spans months
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const mondayMonth = monthNames[monday.getMonth()];
-  const sundayMonth = monthNames[sunday.getMonth()];
+  const startMonth = monthNames[weekStart.getMonth()];
+  const endMonth = monthNames[weekEnd.getMonth()];
   
-  if (mondayMonth === sundayMonth) {
-    return `${mondayMonth} ${monday.getDate()} - ${sunday.getDate()}`;
+  if (startMonth === endMonth) {
+    return `${startMonth} ${weekStart.getDate()} - ${weekEnd.getDate()}`;
   } else {
-    return `${mondayMonth} ${monday.getDate()} - ${sundayMonth} ${sunday.getDate()}`;
+    return `${startMonth} ${weekStart.getDate()} - ${endMonth} ${weekEnd.getDate()}`;
   }
+}
+
+// Convert week_start_day string to number
+function parseWeekStartDay(weekStartDay: string | null): number {
+  if (!weekStartDay) return 1; // Default to Monday
+  const dayMap: Record<string, number> = {
+    'sunday': 0,
+    'monday': 1,
+    'tuesday': 2,
+    'wednesday': 3,
+    'thursday': 4,
+    'friday': 5,
+    'saturday': 6,
+  };
+  return dayMap[weekStartDay.toLowerCase()] ?? 1;
 }
 
 export function SixCheckStep({
@@ -174,6 +192,7 @@ export function SixCheckStep({
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [topWellnessZones, setTopWellnessZones] = useState<WellnessZone[]>([]);
   const [topRoles, setTopRoles] = useState<Role[]>([]);
+  const [weekStartDay, setWeekStartDay] = useState<number>(1); // Default Monday
   
   // Planned actions state (from new helper)
   const [plannedActionsData, setPlannedActionsData] = useState<PlannedActionsResult | null>(null);
@@ -245,6 +264,17 @@ export function SixCheckStep({
     try {
       const supabase = getSupabaseClient();
 
+      // Load user preferences for week_start_day
+      const { data: userData, error: userError } = await supabase
+        .from('0008-ap-user')
+        .select('week_start_day')
+        .eq('user_id', userId)
+        .single();
+
+      if (!userError && userData?.week_start_day) {
+        setWeekStartDay(parseWeekStartDay(userData.week_start_day));
+      }
+
       // Load annual goals
       const { data: annualData, error: annualError } = await supabase
         .from('0008-ap-goals-1y')
@@ -254,6 +284,12 @@ export function SixCheckStep({
         .order('priority', { ascending: true });
 
       if (annualError) throw annualError;
+
+      // Create a map of annual goal IDs to titles for quick lookup
+      const annualGoalMap: Record<string, string> = {};
+      (annualData || []).forEach(ag => {
+        annualGoalMap[ag.id] = ag.title;
+      });
 
       // Load 12-week campaigns
       const { data: twelveWeekData, error: twelveWeekError } = await supabase
@@ -290,15 +326,11 @@ export function SixCheckStep({
         const daysRemaining = Math.max(0, totalDays - daysElapsed);
         const weeksRemaining = Math.ceil(daysRemaining / 7);
 
-        const expectedProgress = totalDays > 0 ? Math.min(100, (daysElapsed / totalDays) * 100) : 0;
-        const actualProgress = goal.progress || 0;
-        const isLagging = actualProgress < (expectedProgress - 10);
-
         allCampaigns.push({
           ...goal,
           goal_type: '12week',
-          is_lagging: isLagging,
           weeks_remaining: weeksRemaining,
+          annualGoalTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : undefined,
         });
       });
 
@@ -312,15 +344,11 @@ export function SixCheckStep({
         const daysRemaining = Math.max(0, totalDays - daysElapsed);
         const weeksRemaining = Math.ceil(daysRemaining / 7);
 
-        const expectedProgress = totalDays > 0 ? Math.min(100, (daysElapsed / totalDays) * 100) : 0;
-        const actualProgress = goal.progress || 0;
-        const isLagging = actualProgress < (expectedProgress - 10);
-
         allCampaigns.push({
           ...goal,
           goal_type: 'custom',
-          is_lagging: isLagging,
           weeks_remaining: weeksRemaining,
+          annualGoalTitle: goal.one_year_goal_id ? annualGoalMap[goal.one_year_goal_id] : undefined,
         });
       });
 
@@ -453,7 +481,6 @@ export function SixCheckStep({
   // ============================================
   const annualGoalsCount = annualGoals.length;
   const campaignsCount = campaigns.length;
-  const laggingCampaignsCount = campaigns.filter(c => c.is_lagging).length;
   
   // Leading indicators (recurring actions)
   const leadingIndicatorCount = plannedActionsData?.leadingIndicators.count || 0;
@@ -470,7 +497,7 @@ export function SixCheckStep({
   
   // Current week info
   const currentWeekNumber = plannedActionsData?.week?.weekNumber;
-  const currentWeekDateRange = getCurrentWeekDateRange();
+  const currentWeekDateRange = getCurrentWeekDateRange(weekStartDay);
 
   const { months: monthsLeft, days: daysLeft } = getDaysUntilYearEnd();
 
@@ -858,7 +885,6 @@ export function SixCheckStep({
 
               {annualGoals.map(goal => {
                 const campaignCount = goal.campaigns?.length || 0;
-                const laggingCount = goal.campaigns?.filter(c => c.is_lagging).length || 0;
 
                 return (
                   <TouchableOpacity
@@ -880,14 +906,6 @@ export function SixCheckStep({
                           {campaignCount} campaign{campaignCount !== 1 ? 's' : ''}
                         </Text>
                       </View>
-                      {laggingCount > 0 && (
-                        <View style={styles.metaItem}>
-                          <AlertTriangle size={14} color="#EF4444" />
-                          <Text style={[styles.metaText, { color: '#EF4444' }]}>
-                            {laggingCount} off pace
-                          </Text>
-                        </View>
-                      )}
                     </View>
                   </TouchableOpacity>
                 );
@@ -953,7 +971,7 @@ export function SixCheckStep({
 
           {goalCampaigns.map(campaign => {
             const isExpanded = expandedCampaigns[campaign.id];
-            const progressColor = getProgressColor(campaign.progress || 0, campaign.is_lagging);
+            const progressColor = getProgressColor(campaign.progress || 0);
 
             return (
               <View key={campaign.id} style={styles.campaignWrapper}>
@@ -996,7 +1014,6 @@ export function SixCheckStep({
 
                   <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
                     {campaign.weeks_remaining} weeks remaining
-                    {campaign.is_lagging && ' • Off pace'}
                   </Text>
                 </TouchableOpacity>
 
@@ -1093,15 +1110,10 @@ export function SixCheckStep({
                 {campaignsCount} ACTIVE GOAL CAMPAIGN{campaignsCount !== 1 ? 'S' : ''}
               </Text>
             </View>
-            {laggingCampaignsCount > 0 && (
-              <Text style={[styles.identitySubtext, { color: '#EF4444' }]}>
-                ⚠️ {laggingCampaignsCount} campaign{laggingCampaignsCount > 1 ? 's are' : ' is'} off pace
-              </Text>
-            )}
           </View>
 
           {campaigns.map(campaign => {
-            const progressColor = getProgressColor(campaign.progress || 0, campaign.is_lagging);
+            const progressColor = getProgressColor(campaign.progress || 0);
 
             return (
               <View key={campaign.id} style={[styles.campaignCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
@@ -1116,12 +1128,6 @@ export function SixCheckStep({
                       {campaign.title}
                     </Text>
                   </View>
-                  {campaign.is_lagging && (
-                    <View style={[styles.statusBadge, { backgroundColor: '#EF444415' }]}>
-                      <AlertTriangle size={12} color="#EF4444" />
-                      <Text style={[styles.statusBadgeText, { color: '#EF4444' }]}>Off Pace</Text>
-                    </View>
-                  )}
                 </View>
 
                 <View style={styles.campaignProgress}>
@@ -1141,6 +1147,16 @@ export function SixCheckStep({
                 <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
                   {campaign.weeks_remaining} weeks remaining
                 </Text>
+                
+                {/* Annual Goal Link */}
+                {campaign.annualGoalTitle && (
+                  <View style={styles.annualGoalLink}>
+                    <TrendingUp size={12} color={GOALS_COLOR} />
+                    <Text style={[styles.annualGoalLinkText, { color: GOALS_COLOR }]} numberOfLines={1}>
+                      {campaign.annualGoalTitle}
+                    </Text>
+                  </View>
+                )}
               </View>
             );
           })}
@@ -1196,8 +1212,6 @@ export function SixCheckStep({
               {'\n\n'}
               <Text style={{ fontWeight: '600' }}>Custom Campaigns</Text> let you manage goals on any timeline (school semesters, projects, etc.).
               {'\n\n'}
-              <Text style={{ fontWeight: '600' }}>Off Pace</Text> means a campaign's progress is more than 10% behind where it should be based on time elapsed.
-              {'\n\n'}
               💡 Don't worry if you're starting late—just start!
             </Text>
           </View>
@@ -1216,14 +1230,9 @@ export function SixCheckStep({
         {/* Week Badge Row - Inside the scoreboard */}
         {currentWeekNumber && (
           <View style={styles.weekBadgeRow}>
-            <View style={styles.weekBadgeInline}>
-              <Calendar size={14} color={GOALS_COLOR} />
-              <Text style={[styles.weekBadgeText, { color: GOALS_COLOR }]}>
-                Week {currentWeekNumber}
-              </Text>
-            </View>
-            <Text style={[styles.weekDateText, { color: colors.textSecondary }]}>
-              {currentWeekDateRange}
+            <Calendar size={14} color={GOALS_COLOR} />
+            <Text style={[styles.weekBadgeText, { color: GOALS_COLOR }]}>
+              Week {currentWeekNumber} ({currentWeekDateRange})
             </Text>
           </View>
         )}
@@ -1236,13 +1245,8 @@ export function SixCheckStep({
           </View>
           <View style={[styles.scoreboardDivider, { backgroundColor: colors.border }]} />
           <View style={styles.scoreboardItem}>
-            <Text style={[styles.scoreboardNumber, { color: laggingCampaignsCount > 0 ? '#F59E0B' : '#10B981' }]}>{campaignsCount}</Text>
+            <Text style={[styles.scoreboardNumber, { color: '#10B981' }]}>{campaignsCount}</Text>
             <Text style={[styles.scoreboardLabel, { color: colors.textSecondary }]}>Goal Campaigns</Text>
-            {laggingCampaignsCount > 0 && (
-              <Text style={[styles.scoreboardSubLabel, { color: '#EF4444' }]}>
-                {laggingCampaignsCount} off pace
-              </Text>
-            )}
           </View>
         </View>
       </View>
@@ -1296,7 +1300,7 @@ export function SixCheckStep({
               </Text>
               <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
                 {campaignsCount > 0 
-                  ? `${campaignsCount} active (${laggingCampaignsCount} off pace)`
+                  ? `${campaignsCount} active campaign${campaignsCount !== 1 ? 's' : ''}`
                   : 'No active campaigns'}
               </Text>
             </View>
@@ -1314,20 +1318,6 @@ export function SixCheckStep({
           <ChevronRight size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
-
-      {laggingCampaignsCount > 0 && (
-        <View style={[styles.alertCard, { backgroundColor: '#EF444410', borderColor: '#EF444440' }]}>
-          <AlertTriangle size={20} color="#EF4444" />
-          <View style={styles.alertContent}>
-            <Text style={[styles.alertTitle, { color: '#EF4444' }]}>
-              {laggingCampaignsCount} Campaign{laggingCampaignsCount > 1 ? 's' : ''} Off Pace
-            </Text>
-            <Text style={[styles.alertText, { color: colors.textSecondary }]}>
-              Progress is behind schedule. Review your campaigns to get back on track.
-            </Text>
-          </View>
-        </View>
-      )}
 
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -1403,24 +1393,15 @@ const styles = StyleSheet.create({
   weekBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(65, 105, 225, 0.2)',
-  },
-  weekBadgeInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 6,
   },
   weekBadgeText: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  weekDateText: {
-    fontSize: 13,
-    fontWeight: '500',
   },
 
   // Identity Card
@@ -1839,6 +1820,19 @@ const styles = StyleSheet.create({
   campaignMeta: {
     fontSize: 13,
   },
+  
+  // Annual Goal Link (shown under campaigns)
+  annualGoalLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 6,
+  },
+  annualGoalLinkText: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
+  },
 
   // Progress Bar
   progressBarBg: {
@@ -1909,28 +1903,6 @@ const styles = StyleSheet.create({
   noActionsText: {
     fontSize: 14,
     fontStyle: 'italic',
-  },
-
-  // Alert Card
-  alertCard: {
-    flexDirection: 'row',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 16,
-    gap: 12,
-  },
-  alertContent: {
-    flex: 1,
-  },
-  alertTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  alertText: {
-    fontSize: 13,
-    lineHeight: 18,
   },
 });
 
