@@ -24,10 +24,12 @@ import {
   Animated,
   TextInput,
 } from 'react-native';
-import { ChevronRight, Check, HelpCircle, TrendingUp, Calendar, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
+import { ChevronRight, Check, HelpCircle, TrendingUp, Calendar, ChevronDown, ChevronUp, Repeat, Rocket, Plus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsforWeek';
 import { parseLocalDate } from '@/lib/dateUtils';
+import { useGoals, Timeline } from '@/hooks/useGoals';
+import ActionEffortModal from '@/components/goals/ActionEffortModal';
 
 // Compass Goals icon for Step 4 header
 const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
@@ -233,6 +235,14 @@ export function SixCheckStep({
   // Refs for back handler
   const flowStateRef = useRef<FlowState>(flowState);
 
+  // Quick Add Modal state
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [quickAddCampaign, setQuickAddCampaign] = useState<Campaign | null>(null);
+
+  // Get timeline and createTaskWithWeekPlan from useGoals hook
+  const { currentTimeline, createTaskWithWeekPlan, fetchCurrentTimeline } = useGoals();
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
+
   useEffect(() => {
     flowStateRef.current = flowState;
   }, [flowState]);
@@ -283,6 +293,13 @@ export function SixCheckStep({
   async function loadAllData() {
     try {
       const supabase = getSupabaseClient();
+
+      // Fetch the current timeline for task creation
+      const fetchedTimeline = await fetchCurrentTimeline();
+      if (fetchedTimeline) {
+        setTimeline(fetchedTimeline);
+        console.log('[SixCheckStep] Timeline loaded:', fetchedTimeline.id, fetchedTimeline.source);
+      }
 
       // Load user preferences for week_start_day from main users table
       const { data: userData, error: userError } = await supabase
@@ -396,16 +413,6 @@ export function SixCheckStep({
         });
       });
 
-      setCampaigns(allCampaigns);
-
-      // Attach campaigns to annual goals
-      const annualGoalsWithCampaigns = (annualData || []).map(ag => ({
-        ...ag,
-        campaigns: allCampaigns.filter(c => c.parent_goal_id === ag.id),
-      }));
-
-      setAnnualGoals(annualGoalsWithCampaigns);
-
       // Load top 3 wellness zones
       const { data: zonesData } = await supabase
         .from('0008-ap-user-wellness-zones')
@@ -438,39 +445,10 @@ export function SixCheckStep({
       }
 
       // ============================================
-// LOAD PLANNED ACTIONS using new helper
-// ============================================
-const plannedActions = await fetchPlannedActionsForWeek();
-setPlannedActionsData(plannedActions);
-
-// Map actions to their campaigns
-const campaignsWithActions = allCampaigns.map(campaign => {
-  // Find leading indicators for this campaign (by goalId)
-  const campaignActions = (plannedActions.leadingIndicators.actions || [])
-    .filter(action => action.goalId === campaign.id)
-    .map(li => ({
-      id: li.id,
-      title: li.title,
-      weeklyTarget: li.targetDays,
-      weeklyActual: li.actualDays,
-      isComplete: li.actualDays >= li.targetDays,
-    }));
-
-  return {
-    ...campaign,
-    actions: campaignActions,
-  };
-});
-
-// Update campaigns with actions
-setCampaigns(campaignsWithActions);
-
-// Also update annual goals to include campaigns with actions
-const annualGoalsUpdated = (annualData || []).map(ag => ({
-  ...ag,
-  campaigns: campaignsWithActions.filter(c => c.parent_goal_id === ag.id),
-}));
-setAnnualGoals(annualGoalsUpdated);
+      // LOAD PLANNED ACTIONS using new helper
+      // ============================================
+      const plannedActions = await fetchPlannedActionsForWeek();
+      setPlannedActionsData(plannedActions);
       
       console.log('[SixCheckStep] Planned actions loaded:', {
         leadingIndicators: plannedActions.leadingIndicators.count,
@@ -479,7 +457,49 @@ setAnnualGoals(annualGoalsUpdated);
         boostActions: plannedActions.boostActions.count,
         boostCompleted: plannedActions.boostActions.completed,
         weekNumber: plannedActions.week?.weekNumber,
+        actions: plannedActions.leadingIndicators.actions?.map(a => ({
+          id: a.id,
+          title: a.title,
+          goalId: a.goalId,
+        })),
       });
+
+      // ============================================
+      // MAP ACTIONS TO CAMPAIGNS (FIX FOR DISPLAY BUG)
+      // ============================================
+      const campaignsWithActions = allCampaigns.map(campaign => {
+        // Find leading indicators for this campaign by goalId
+        const campaignActions = (plannedActions.leadingIndicators.actions || [])
+          .filter(action => action.goalId === campaign.id)
+          .map(li => ({
+            id: li.id,
+            title: li.title,
+            weeklyTarget: li.targetDays,
+            weeklyActual: li.actualDays,
+            isComplete: li.actualDays >= li.targetDays,
+          }));
+
+        console.log('[SixCheckStep] Campaign actions mapped:', {
+          campaignId: campaign.id,
+          campaignTitle: campaign.title,
+          actionsCount: campaignActions.length,
+        });
+
+        return {
+          ...campaign,
+          actions: campaignActions,
+        };
+      });
+
+      // Update campaigns with actions
+      setCampaigns(campaignsWithActions);
+
+      // Also update annual goals to include campaigns with actions
+      const annualGoalsUpdated = (annualData || []).map(ag => ({
+        ...ag,
+        campaigns: campaignsWithActions.filter(c => c.parent_goal_id === ag.id),
+      }));
+      setAnnualGoals(annualGoalsUpdated);
 
       setFlowState('main');
 
@@ -546,6 +566,26 @@ setAnnualGoals(annualGoalsUpdated);
   function handleOpenGoalDetail(goal: AnnualGoal) {
     setSelectedGoal(goal);
     slideToState('goal-detail');
+  }
+
+  // Quick Add handlers
+  function handleOpenQuickAdd(campaign: Campaign) {
+    setQuickAddCampaign(campaign);
+    setShowQuickAddModal(true);
+  }
+
+  function handleQuickAddClose() {
+    setShowQuickAddModal(false);
+    setQuickAddCampaign(null);
+  }
+
+  async function handleQuickAddSave() {
+    // Refresh data after save
+    setShowQuickAddModal(false);
+    setQuickAddCampaign(null);
+    // Reload data to show the new action
+    setLoading(true);
+    await loadAllData();
   }
 
   // ============================================
@@ -1112,9 +1152,18 @@ setAnnualGoals(annualGoalsUpdated);
 
                 {isExpanded && (
                   <View style={[styles.actionsContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Text style={[styles.actionsTitle, { color: colors.text }]}>
-                      This Week's Leading Indicators
-                    </Text>
+                    <View style={styles.actionsHeader}>
+                      <Text style={[styles.actionsTitle, { color: colors.text }]}>
+                        This Week's Leading Indicators
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.quickAddButton, { backgroundColor: GOALS_COLOR }]}
+                        onPress={() => handleOpenQuickAdd(campaign)}
+                        activeOpacity={0.7}
+                      >
+                        <Plus size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
                     {campaign.actions && campaign.actions.length > 0 ? (
                       campaign.actions.map(action => (
                         <View key={action.id} style={styles.actionItem}>
@@ -1173,6 +1222,30 @@ setAnnualGoals(annualGoalsUpdated);
 
           <View style={{ height: 40 }} />
         </ScrollView>
+
+        {/* Quick Add Action Modal */}
+        {timeline && (
+          <ActionEffortModal
+            visible={showQuickAddModal}
+            onClose={handleQuickAddClose}
+            goal={quickAddCampaign ? {
+              id: quickAddCampaign.id,
+              title: quickAddCampaign.title,
+              description: quickAddCampaign.description,
+              goal_type: quickAddCampaign.goal_type === '12week' ? '12week' : 'custom',
+            } : null}
+            cycleWeeks={[]}
+            timeline={timeline}
+            createTaskWithWeekPlan={createTaskWithWeekPlan}
+            mode="create"
+            quickAddMode={true}
+            currentWeekData={plannedActionsData?.week ? {
+              weekNumber: plannedActionsData.week.weekNumber,
+              startDate: plannedActionsData.week.startDate,
+              endDate: plannedActionsData.week.endDate,
+            } : undefined}
+          />
+        )}
       </Animated.View>
     );
   }
@@ -1966,10 +2039,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
+  actionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   actionsTitle: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 12,
+  },
+  quickAddButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionItem: {
     flexDirection: 'row',
