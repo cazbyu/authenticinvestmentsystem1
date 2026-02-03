@@ -991,7 +991,7 @@ export function SixCheckStep({
 
   // ===== RENDER: GOAL DETAIL STATE =====
   if (flowState === 'goal-detail' && selectedGoal) {
-    const goalCampaigns = campaigns.filter(c => c.one_year_goal_id === selectedGoal.id);
+    const goalCampaigns = campaigns.filter(c => c.parent_goal_id === selectedGoal.id);
 
     return (
       <Animated.View style={[styles.container, { transform: [{ translateX: slideAnim.interpolate({ inputRange: [-1, 0, 1], outputRange: [-300, 0, 300] }) }] }]}>
