@@ -259,9 +259,11 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       setInheritedRoleIds(roleIds);
       setInheritedDomainIds(domainIds);
 
-      // Auto-expand sections if they have inherited items
-      if (roleIds.length > 0) setRolesExpanded(true);
-      if (domainIds.length > 0) setDomainsExpanded(true);
+      // Auto-expand sections if they have inherited items (but not in quick add mode)
+      if (!quickAddMode) {
+        if (roleIds.length > 0) setRolesExpanded(true);
+        if (domainIds.length > 0) setDomainsExpanded(true);
+      }
     } else {
       setSelectedRoleIds([]);
       setSelectedDomainIds([]);
@@ -281,47 +283,47 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setAttachedFiles([]);
 
     // Parse frequency - prioritize weeklyTarget for preset frequencies
-// (weeklyTarget is the source of truth for "X days per week" selections)
-if (initialData.weeklyTarget !== undefined && initialData.weeklyTarget > 0) {
-  const target = initialData.weeklyTarget;
-  console.log('[ActionEffortModal] Setting frequency from weeklyTarget:', target);
-  
-  if (target >= 7) {
-    setRecurrenceType('daily');
-  } else if (target === 6) {
-    setRecurrenceType('6days');
-  } else if (target === 5) {
-    setRecurrenceType('5days');
-  } else if (target === 4) {
-    setRecurrenceType('4days');
-  } else if (target === 3) {
-    setRecurrenceType('3days');
-  } else if (target === 2) {
-    setRecurrenceType('2days');
-  } else if (target === 1) {
-    setRecurrenceType('1day');
-  }
-}
-
-// Check for custom day selection (BYDAY in recurrence rule)
-if (initialData.recurrence_rule) {
-  const rule = initialData.recurrence_rule;
-  console.log('[ActionEffortModal] Parsing recurrence rule:', rule);
-
-  // Only override to custom if BYDAY specifies exact days
-  if (rule.includes('BYDAY=')) {
-    const byDayMatch = rule.match(/BYDAY=([^;]+)/);
-    if (byDayMatch) {
-      const days = byDayMatch[1].split(',');
-      const dayMap: Record<string, number> = { 'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6 };
-      const selectedDays = days.map(day => dayMap[day]).filter(d => d !== undefined);
+    // (weeklyTarget is the source of truth for "X days per week" selections)
+    if (initialData.weeklyTarget !== undefined && initialData.weeklyTarget > 0) {
+      const target = initialData.weeklyTarget;
+      console.log('[ActionEffortModal] Setting frequency from weeklyTarget:', target);
       
-      // Custom means user picked specific days, not just "any X days"
-      setRecurrenceType('custom');
-      setSelectedCustomDays(selectedDays);
+      if (target >= 7) {
+        setRecurrenceType('daily');
+      } else if (target === 6) {
+        setRecurrenceType('6days');
+      } else if (target === 5) {
+        setRecurrenceType('5days');
+      } else if (target === 4) {
+        setRecurrenceType('4days');
+      } else if (target === 3) {
+        setRecurrenceType('3days');
+      } else if (target === 2) {
+        setRecurrenceType('2days');
+      } else if (target === 1) {
+        setRecurrenceType('1day');
+      }
     }
-  }
-}
+
+    // Check for custom day selection (BYDAY in recurrence rule)
+    if (initialData.recurrence_rule) {
+      const rule = initialData.recurrence_rule;
+      console.log('[ActionEffortModal] Parsing recurrence rule:', rule);
+
+      // Only override to custom if BYDAY specifies exact days
+      if (rule.includes('BYDAY=')) {
+        const byDayMatch = rule.match(/BYDAY=([^;]+)/);
+        if (byDayMatch) {
+          const days = byDayMatch[1].split(',');
+          const dayMap: Record<string, number> = { 'SU': 0, 'MO': 1, 'TU': 2, 'WE': 3, 'TH': 4, 'FR': 5, 'SA': 6 };
+          const selectedDays = days.map(day => dayMap[day]).filter(d => d !== undefined);
+          
+          // Custom means user picked specific days, not just "any X days"
+          setRecurrenceType('custom');
+          setSelectedCustomDays(selectedDays);
+        }
+      }
+    }
 
     // Load time data if present
     if (initialData.start_time) {
@@ -782,50 +784,63 @@ if (initialData.recurrence_rule) {
 
               {/* Weeks - Hidden in Quick Add Mode */}
               {!quickAddMode && (
-              <View style={styles.field}>
-                <Text style={styles.label}>Weeks *</Text>
-                <View style={styles.weekSelector}>
-                  <TouchableOpacity
-                    style={[
-                      styles.weekButton,
-                      selectedWeeks.length === processedWeeks.length && processedWeeks.length > 0 && styles.weekButtonSelected
-                    ]}
-                    onPress={handleSelectAll}
-                  >
-                    <Text style={[
-                      styles.weekButtonText,
-                      selectedWeeks.length === processedWeeks.length && processedWeeks.length > 0 && styles.weekButtonTextSelected
-                    ]}>
-                      Select All
-                    </Text>
-                  </TouchableOpacity>
-
-                  {processedWeeks.map(weekData => (
+                <View style={styles.field}>
+                  <Text style={styles.label}>Weeks *</Text>
+                  <View style={styles.weekSelector}>
                     <TouchableOpacity
-                      key={weekData.week_number}
                       style={[
                         styles.weekButton,
-                        selectedWeeks.includes(weekData.week_number) && styles.weekButtonSelected,
-                        weekData.is_partial && styles.weekButtonPartial
+                        selectedWeeks.length === processedWeeks.length && processedWeeks.length > 0 && styles.weekButtonSelected
                       ]}
-                      onPress={() => handleWeekToggle(weekData.week_number)}
+                      onPress={handleSelectAll}
                     >
                       <Text style={[
                         styles.weekButtonText,
-                        selectedWeeks.includes(weekData.week_number) && styles.weekButtonTextSelected
+                        selectedWeeks.length === processedWeeks.length && processedWeeks.length > 0 && styles.weekButtonTextSelected
                       ]}>
-                        Wk {weekData.week_number}
-                        {weekData.is_partial && ` (${weekData.available_days}d)`}
+                        Select All
                       </Text>
                     </TouchableOpacity>
-                  ))}
+
+                    {processedWeeks.map(weekData => (
+                      <TouchableOpacity
+                        key={weekData.week_number}
+                        style={[
+                          styles.weekButton,
+                          selectedWeeks.includes(weekData.week_number) && styles.weekButtonSelected,
+                          weekData.is_partial && styles.weekButtonPartial
+                        ]}
+                        onPress={() => handleWeekToggle(weekData.week_number)}
+                      >
+                        <Text style={[
+                          styles.weekButtonText,
+                          selectedWeeks.includes(weekData.week_number) && styles.weekButtonTextSelected
+                        ]}>
+                          Wk {weekData.week_number}
+                          {weekData.is_partial && ` (${weekData.available_days}d)`}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {processedWeeks.some(w => w.is_partial) && (
+                    <Text style={styles.partialWeekNote}>
+                      Partial weeks shown with available days. Target will be capped automatically.
+                    </Text>
+                  )}
                 </View>
-                {processedWeeks.some(w => w.is_partial) && (
-                  <Text style={styles.partialWeekNote}>
-                    Partial weeks shown with available days. Target will be capped automatically.
-                  </Text>
-                )}
-              </View>
+              )}
+
+              {/* Quick Add: Show current week badge instead */}
+              {quickAddMode && currentWeekData && (
+                <View style={styles.field}>
+                  <Text style={styles.label}>Week</Text>
+                  <View style={styles.quickAddWeekBadge}>
+                    <Text style={styles.quickAddWeekText}>
+                      Week {currentWeekData.weekNumber} (This Week)
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {/* Frequency */}
               <View style={styles.field}>
@@ -964,118 +979,122 @@ if (initialData.recurrence_rule) {
                 </View>
               )}
 
-              {/* Wellness Zones - Collapsible with Toggle Switches (2 columns) - FIRST */}
-              <View style={styles.collapsibleSection}>
-                <TouchableOpacity
-                  style={styles.collapsibleHeader}
-                  onPress={() => setDomainsExpanded(!domainsExpanded)}
-                >
-                  <View style={styles.collapsibleHeaderLeft}>
-                    <Text style={styles.collapsibleLabel}>Wellness Zones</Text>
-                    {getSelectedDomainsCount() > 0 && (
-                      <View style={styles.countBadge}>
-                        <Text style={styles.countBadgeText}>{getSelectedDomainsCount()}</Text>
-                      </View>
-                    )}
-                  </View>
-                  {domainsExpanded ? (
-                    <ChevronUp size={20} color="#6b7280" />
-                  ) : (
-                    <ChevronDown size={20} color="#6b7280" />
-                  )}
-                </TouchableOpacity>
-
-                {domainsExpanded && (
-                  <View style={styles.collapsibleContent}>
-                    <View style={styles.toggleGrid}>
-                      {allDomains.map(domain => {
-                        const isSelected = selectedDomainIds.includes(domain.id);
-                        const isInherited = inheritedDomainIds.includes(domain.id);
-                        return (
-                          <View key={domain.id} style={styles.toggleGridItem}>
-                            <View style={styles.toggleLabelContainer}>
-                              <Text style={[
-                                styles.toggleLabel,
-                                isInherited && styles.toggleLabelLocked
-                              ]} numberOfLines={1}>
-                                {domain.name}
-                              </Text>
-                              {isInherited && (
-                                <Lock size={12} color="#0078d4" style={styles.lockIcon} />
-                              )}
-                            </View>
-                            <Switch
-                              value={isSelected}
-                              onValueChange={() => handleToggleSelect('domains', domain.id)}
-                              trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                              thumbColor="#ffffff"
-                              disabled={isInherited && isSelected}
-                            />
-                          </View>
-                        );
-                      })}
+              {/* Wellness Zones - Hidden in Quick Add Mode */}
+              {!quickAddMode && (
+                <View style={styles.collapsibleSection}>
+                  <TouchableOpacity
+                    style={styles.collapsibleHeader}
+                    onPress={() => setDomainsExpanded(!domainsExpanded)}
+                  >
+                    <View style={styles.collapsibleHeaderLeft}>
+                      <Text style={styles.collapsibleLabel}>Wellness Zones</Text>
+                      {getSelectedDomainsCount() > 0 && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>{getSelectedDomainsCount()}</Text>
+                        </View>
+                      )}
                     </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Roles - Collapsible with Toggle Switches (2 columns) - SECOND */}
-              <View style={styles.collapsibleSection}>
-                <TouchableOpacity
-                  style={styles.collapsibleHeader}
-                  onPress={() => setRolesExpanded(!rolesExpanded)}
-                >
-                  <View style={styles.collapsibleHeaderLeft}>
-                    <Text style={styles.collapsibleLabel}>Roles</Text>
-                    {getSelectedRolesCount() > 0 && (
-                      <View style={styles.countBadge}>
-                        <Text style={styles.countBadgeText}>{getSelectedRolesCount()}</Text>
-                      </View>
+                    {domainsExpanded ? (
+                      <ChevronUp size={20} color="#6b7280" />
+                    ) : (
+                      <ChevronDown size={20} color="#6b7280" />
                     )}
-                  </View>
-                  {rolesExpanded ? (
-                    <ChevronUp size={20} color="#6b7280" />
-                  ) : (
-                    <ChevronDown size={20} color="#6b7280" />
-                  )}
-                </TouchableOpacity>
+                  </TouchableOpacity>
 
-                {rolesExpanded && (
-                  <View style={styles.collapsibleContent}>
-                    <View style={styles.toggleGrid}>
-                      {allRoles.map(role => {
-                        const isSelected = selectedRoleIds.includes(role.id);
-                        const isInherited = inheritedRoleIds.includes(role.id);
-                        return (
-                          <View key={role.id} style={styles.toggleGridItem}>
-                            <View style={styles.toggleLabelContainer}>
-                              <Text style={[
-                                styles.toggleLabel,
-                                isInherited && styles.toggleLabelLocked
-                              ]} numberOfLines={1}>
-                                {role.label}
-                              </Text>
-                              {isInherited && (
-                                <Lock size={12} color="#0078d4" style={styles.lockIcon} />
-                              )}
+                  {domainsExpanded && (
+                    <View style={styles.collapsibleContent}>
+                      <View style={styles.toggleGrid}>
+                        {allDomains.map(domain => {
+                          const isSelected = selectedDomainIds.includes(domain.id);
+                          const isInherited = inheritedDomainIds.includes(domain.id);
+                          return (
+                            <View key={domain.id} style={styles.toggleGridItem}>
+                              <View style={styles.toggleLabelContainer}>
+                                <Text style={[
+                                  styles.toggleLabel,
+                                  isInherited && styles.toggleLabelLocked
+                                ]} numberOfLines={1}>
+                                  {domain.name}
+                                </Text>
+                                {isInherited && (
+                                  <Lock size={12} color="#0078d4" style={styles.lockIcon} />
+                                )}
+                              </View>
+                              <Switch
+                                value={isSelected}
+                                onValueChange={() => handleToggleSelect('domains', domain.id)}
+                                trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                                thumbColor="#ffffff"
+                                disabled={isInherited && isSelected}
+                              />
                             </View>
-                            <Switch
-                              value={isSelected}
-                              onValueChange={() => handleToggleSelect('roles', role.id)}
-                              trackColor={{ false: '#d1d5db', true: '#0078d4' }}
-                              thumbColor="#ffffff"
-                              disabled={isInherited && isSelected}
-                            />
-                          </View>
-                        );
-                      })}
+                          );
+                        })}
+                      </View>
                     </View>
-                  </View>
-                )}
-              </View>
+                  )}
+                </View>
+              )}
 
-              {/* Key Relationships - Collapsible with Toggle Switches (2 columns) */}
-              {filteredKeyRelationships.length > 0 && (
+              {/* Roles - Hidden in Quick Add Mode */}
+              {!quickAddMode && (
+                <View style={styles.collapsibleSection}>
+                  <TouchableOpacity
+                    style={styles.collapsibleHeader}
+                    onPress={() => setRolesExpanded(!rolesExpanded)}
+                  >
+                    <View style={styles.collapsibleHeaderLeft}>
+                      <Text style={styles.collapsibleLabel}>Roles</Text>
+                      {getSelectedRolesCount() > 0 && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>{getSelectedRolesCount()}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {rolesExpanded ? (
+                      <ChevronUp size={20} color="#6b7280" />
+                    ) : (
+                      <ChevronDown size={20} color="#6b7280" />
+                    )}
+                  </TouchableOpacity>
+
+                  {rolesExpanded && (
+                    <View style={styles.collapsibleContent}>
+                      <View style={styles.toggleGrid}>
+                        {allRoles.map(role => {
+                          const isSelected = selectedRoleIds.includes(role.id);
+                          const isInherited = inheritedRoleIds.includes(role.id);
+                          return (
+                            <View key={role.id} style={styles.toggleGridItem}>
+                              <View style={styles.toggleLabelContainer}>
+                                <Text style={[
+                                  styles.toggleLabel,
+                                  isInherited && styles.toggleLabelLocked
+                                ]} numberOfLines={1}>
+                                  {role.label}
+                                </Text>
+                                {isInherited && (
+                                  <Lock size={12} color="#0078d4" style={styles.lockIcon} />
+                                )}
+                              </View>
+                              <Switch
+                                value={isSelected}
+                                onValueChange={() => handleToggleSelect('roles', role.id)}
+                                trackColor={{ false: '#d1d5db', true: '#0078d4' }}
+                                thumbColor="#ffffff"
+                                disabled={isInherited && isSelected}
+                              />
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Key Relationships - Hidden in Quick Add Mode */}
+              {!quickAddMode && filteredKeyRelationships.length > 0 && (
                 <View style={styles.collapsibleSection}>
                   <TouchableOpacity
                     style={styles.collapsibleHeader}
@@ -1119,69 +1138,71 @@ if (initialData.recurrence_rule) {
                 </View>
               )}
 
-              {/* Notes with Attachment Option */}
-              <View style={styles.field}>
-                <View style={styles.notesHeader}>
-                  <Text style={styles.label}>Notes (optional)</Text>
-                  <View style={styles.attachmentButtons}>
-                    <TouchableOpacity
-                      style={styles.attachmentIconButton}
-                      onPress={handlePickImage}
-                    >
-                      <ImageIcon size={20} color="#0078d4" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.attachmentIconButton}
-                      onPress={handlePickDocument}
-                    >
-                      <Paperclip size={20} color="#0078d4" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Add details if useful"
-                  placeholderTextColor="#9ca3af"
-                  multiline
-                  numberOfLines={3}
-                  maxLength={500}
-                />
-
-                {/* Attached Files Display */}
-                {attachedFiles.length > 0 && (
-                  <View style={styles.attachmentsContainer}>
-                    <Text style={styles.attachmentsLabel}>
-                      Attachments ({attachedFiles.length})
-                    </Text>
-                    <View style={styles.attachmentsGrid}>
-                      {attachedFiles.map((file, index) => (
-                        <View key={index} style={styles.attachmentThumbnailWrapper}>
-                          <AttachmentThumbnail
-                            uri={file.uri}
-                            fileType={file.type}
-                            fileName={file.name}
-                            size="medium"
-                          />
-                          <TouchableOpacity
-                            style={styles.removeAttachmentButton}
-                            onPress={() => handleRemoveAttachment(index)}
-                          >
-                            <X size={14} color="#ffffff" />
-                          </TouchableOpacity>
-                          <Text
-                            style={styles.attachmentFileName}
-                            numberOfLines={1}
-                          >
-                            {file.name}
-                          </Text>
-                        </View>
-                      ))}
+              {/* Notes with Attachment Option - Hidden in Quick Add Mode */}
+              {!quickAddMode && (
+                <View style={styles.field}>
+                  <View style={styles.notesHeader}>
+                    <Text style={styles.label}>Notes (optional)</Text>
+                    <View style={styles.attachmentButtons}>
+                      <TouchableOpacity
+                        style={styles.attachmentIconButton}
+                        onPress={handlePickImage}
+                      >
+                        <ImageIcon size={20} color="#0078d4" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.attachmentIconButton}
+                        onPress={handlePickDocument}
+                      >
+                        <Paperclip size={20} color="#0078d4" />
+                      </TouchableOpacity>
                     </View>
                   </View>
-                )}
-              </View>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="Add details if useful"
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    numberOfLines={3}
+                    maxLength={500}
+                  />
+
+                  {/* Attached Files Display */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsContainer}>
+                      <Text style={styles.attachmentsLabel}>
+                        Attachments ({attachedFiles.length})
+                      </Text>
+                      <View style={styles.attachmentsGrid}>
+                        {attachedFiles.map((file, index) => (
+                          <View key={index} style={styles.attachmentThumbnailWrapper}>
+                            <AttachmentThumbnail
+                              uri={file.uri}
+                              fileType={file.type}
+                              fileName={file.name}
+                              size="medium"
+                            />
+                            <TouchableOpacity
+                              style={styles.removeAttachmentButton}
+                              onPress={() => handleRemoveAttachment(index)}
+                            >
+                              <X size={14} color="#ffffff" />
+                            </TouchableOpacity>
+                            <Text
+                              style={styles.attachmentFileName}
+                              numberOfLines={1}
+                            >
+                              {file.name}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           </ScrollView>
         )}
@@ -1597,6 +1618,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
     color: '#374151',
+  },
+  // Quick Add Week Badge
+  quickAddWeekBadge: {
+    backgroundColor: '#0078d415',
+    borderColor: '#0078d4',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  quickAddWeekText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0078d4',
   },
   // Actions
   actions: {
