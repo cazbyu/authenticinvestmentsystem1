@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toLocalISOString } from '@/lib/dateUtils';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Animated, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -8,6 +8,8 @@ import { ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { checkTodaysSpark, updateSparkFuelLevel } from '@/lib/sparkUtils';
+import GaugeBg from '@/assets/images/gauge-bg.svg';
+import GaugeNeedle from '@/assets/images/gauge-needle.svg';
 
 type FuelLevel = 1 | 2 | 3;
 
@@ -327,11 +329,7 @@ export default function MorningSparkFuelCheck() {
           <View style={styles.gaugeContainer}>
             {/* SVG Gauge Background */}
             <View style={styles.gaugeSvgContainer}>
-              <Image
-                source={require('@/assets/images/gauge-bg.svg')}
-                style={styles.gaugeBg}
-                resizeMode="contain"
-              />
+              <GaugeBg width="100%" height="100%" style={styles.gaugeBg} />
 
               {/* Clickable Icon Buttons positioned around gauge */}
               <Animated.View style={[styles.iconButton, styles.iconLow, { transform: [{ scale: iconScales[1] }] }]}>
@@ -395,11 +393,7 @@ export default function MorningSparkFuelCheck() {
                   },
                 ]}
               >
-                <Image
-                  source={require('@/assets/images/gauge-needle.svg')}
-                  style={styles.needleSvg}
-                  resizeMode="contain"
-                />
+                <GaugeNeedle width={40} height={100} style={styles.needleSvg} />
               </Animated.View>
             </View>
 
