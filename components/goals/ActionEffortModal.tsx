@@ -780,7 +780,8 @@ if (initialData.recurrence_rule) {
                 />
               </View>
 
-              {/* Weeks */}
+              {/* Weeks - Hidden in Quick Add Mode */}
+              {!quickAddMode && (
               <View style={styles.field}>
                 <Text style={styles.label}>Weeks *</Text>
                 <View style={styles.weekSelector}>
