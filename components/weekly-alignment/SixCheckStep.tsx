@@ -24,13 +24,16 @@ import {
   Animated,
   TextInput,
 } from 'react-native';
-import { ChevronRight, Check, HelpCircle, Target, TrendingUp, Calendar, Flag, Zap, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
+import { ChevronRight, Check, HelpCircle, TrendingUp, Calendar, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsforWeek';
 import { parseLocalDate } from '@/lib/dateUtils';
 
 // Compass Goals icon for Step 4 header
 const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
+
+// Goal icon for card headers (matches app-wide icon)
+import { GoalIcon } from '@/components/icons/CustomIcons';
 
 interface SixCheckStepProps {
   userId: string;
@@ -905,7 +908,7 @@ export function SixCheckStep({
           {annualGoals.length === 0 ? (
             <>
               <View style={[styles.emptyCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
-                <Target size={40} color={GOALS_COLOR} />
+                <GoalIcon size={40} color={GOALS_COLOR} />
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>
                   No Annual Goals Yet
                 </Text>
@@ -936,7 +939,7 @@ export function SixCheckStep({
               <View style={[styles.identityCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
                 <View style={styles.identityHeader}>
                   <View style={[styles.identityIconContainer, { backgroundColor: GOALS_COLOR }]}>
-                    <Flag size={12} color="#FFFFFF" />
+                    <GoalIcon size={12} color="#FFFFFF" />
                   </View>
                   <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>ANNUAL GOALS ({new Date().getFullYear()})</Text>
                 </View>
@@ -963,7 +966,7 @@ export function SixCheckStep({
                     </View>
                     <View style={styles.annualGoalMeta}>
                       <View style={styles.metaItem}>
-                        <Target size={14} color={GOALS_COLOR} />
+                        <GoalIcon size={14} color={GOALS_COLOR} />
                         <Text style={[styles.metaText, { color: colors.textSecondary }]}>
                           {campaignCount} campaign{campaignCount !== 1 ? 's' : ''}
                         </Text>
@@ -1020,7 +1023,7 @@ export function SixCheckStep({
           <View style={[styles.identityCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
             <View style={styles.identityHeader}>
               <View style={[styles.identityIconContainer, { backgroundColor: GOALS_COLOR }]}>
-                <Zap size={12} color="#FFFFFF" />
+                <GoalIcon size={12} color="#FFFFFF" />
               </View>
               <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>GOAL CAMPAIGNS</Text>
             </View>
@@ -1119,7 +1122,7 @@ export function SixCheckStep({
 
           {goalCampaigns.length === 0 && (
             <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Zap size={32} color={colors.textSecondary} />
+              <GoalIcon size={32} color={colors.textSecondary} />
               <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 No Campaigns Yet
               </Text>
@@ -1166,7 +1169,7 @@ export function SixCheckStep({
           <View style={[styles.identityCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
             <View style={styles.identityHeader}>
               <View style={[styles.identityIconContainer, { backgroundColor: GOALS_COLOR }]}>
-                <Zap size={12} color="#FFFFFF" />
+                <GoalIcon size={12} color="#FFFFFF" />
               </View>
               <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>
                 {campaignsCount} ACTIVE GOAL CAMPAIGN{campaignsCount !== 1 ? 'S' : ''}
@@ -1284,7 +1287,7 @@ export function SixCheckStep({
       <View style={[styles.identityCard, { backgroundColor: GOALS_COLOR_LIGHT, borderColor: GOALS_COLOR_BORDER }]}>
         <View style={styles.identityHeader}>
           <View style={[styles.identityIconContainer, { backgroundColor: GOALS_COLOR }]}>
-            <Target size={12} color="#FFFFFF" />
+            <GoalIcon size={12} color="#FFFFFF" />
           </View>
           <Text style={[styles.identityLabel, { color: GOALS_COLOR }]}>GOALS SCOREBOARD</Text>
         </View>
@@ -1323,7 +1326,7 @@ export function SixCheckStep({
         >
           <View style={styles.actionButtonContent}>
             <View style={[styles.actionButtonIcon, { backgroundColor: GOALS_COLOR }]}>
-              <Flag size={16} color="#FFFFFF" />
+              <GoalIcon size={16} color="#FFFFFF" />
             </View>
             <View style={styles.actionButtonTextWrap}>
               <Text style={[styles.actionButtonText, { color: GOALS_COLOR }]}>
@@ -1354,7 +1357,7 @@ export function SixCheckStep({
         >
           <View style={styles.actionButtonContent}>
             <View style={[styles.actionButtonIcon, { backgroundColor: campaignsCount > 0 ? GOALS_COLOR : colors.border }]}>
-              <Zap size={16} color="#FFFFFF" />
+              <GoalIcon size={16} color="#FFFFFF" />
             </View>
             <View style={styles.actionButtonTextWrap}>
               <Text style={[styles.actionButtonText, { color: campaignsCount > 0 ? GOALS_COLOR : colors.text }]}>
