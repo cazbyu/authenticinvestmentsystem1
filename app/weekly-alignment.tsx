@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ChevronLeft, CheckCircle2, Compass, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
@@ -403,14 +403,25 @@ export default function WeeklyAlignmentScreen() {
           {renderStepDots()}
         </View>
 
-        {/* Exit Button */}
+        {/* Forward Arrow */}
+        <TouchableOpacity
+          onPress={goToNextStep}
+          style={styles.nextButton}
+          accessible={true}
+          accessibilityLabel="Continue to next step"
+        >
+          <ChevronRight size={24} color={currentStep < STEPS.length - 1 ? colors.text : colors.border} />
+        </TouchableOpacity>
+
+        {/* Small X Close Button - Top Right Corner */}
         <TouchableOpacity
           onPress={handleExit}
-          style={styles.exitButton}
+          style={styles.closeButton}
           accessible={true}
           accessibilityLabel="Exit Weekly Alignment"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <X size={22} color={colors.textSecondary} />
+          <X size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -498,7 +509,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    paddingTop: 8,
     borderBottomWidth: 1,
+    position: 'relative',
   },
   backButton: {
     padding: 8,
@@ -513,10 +526,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  exitButton: {
+  nextButton: {
     padding: 8,
     width: 44,
     alignItems: 'flex-end',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 2,
+    right: 8,
+    padding: 4,
   },
   stepDotsContainer: {
     flexDirection: 'row',
