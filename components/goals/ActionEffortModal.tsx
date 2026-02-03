@@ -744,7 +744,7 @@ if (initialData.recurrence_rule) {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
-            {mode === 'edit' ? 'Edit Action' : 'Add Action'}
+            {quickAddMode ? 'Quick Add Action' : (mode === 'edit' ? 'Edit Action' : 'Add Action')}
           </Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <X size={24} color="#1f2937" />
