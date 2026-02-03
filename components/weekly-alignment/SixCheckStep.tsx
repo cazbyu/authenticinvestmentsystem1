@@ -1276,51 +1276,110 @@ export function SixCheckStep({
                 {campaignsCount} ACTIVE GOAL CAMPAIGN{campaignsCount !== 1 ? 'S' : ''}
               </Text>
             </View>
+            <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
+              Expand a campaign to see this week's leading indicators
+            </Text>
           </View>
 
           {campaigns.map(campaign => {
+            const isExpanded = expandedCampaigns[campaign.id];
             const progressColor = getProgressColor(campaign.progress || 0);
 
             return (
-              <View key={campaign.id} style={[styles.campaignCard, { backgroundColor: colors.surface, borderColor: colors.border, marginBottom: 10 }]}>
-                <View style={styles.campaignHeader}>
-                  <View style={styles.campaignTitleRow}>
-                    <View style={[styles.campaignTypeBadge, { backgroundColor: campaign.goal_type === '12week' ? '#3B82F615' : '#F59E0B15' }]}>
-                      <Text style={[styles.campaignTypeText, { color: campaign.goal_type === '12week' ? '#3B82F6' : '#F59E0B' }]}>
-                        {campaign.goal_type === '12week' ? '12W' : 'Custom'}
+              <View key={campaign.id} style={styles.campaignWrapper}>
+                <TouchableOpacity
+                  style={[styles.campaignCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => toggleCampaignExpanded(campaign.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.campaignHeader}>
+                    <View style={styles.campaignTitleRow}>
+                      <View style={[styles.campaignTypeBadge, { backgroundColor: campaign.goal_type === '12week' ? '#3B82F615' : '#F59E0B15' }]}>
+                        <Text style={[styles.campaignTypeText, { color: campaign.goal_type === '12week' ? '#3B82F6' : '#F59E0B' }]}>
+                          {campaign.goal_type === '12week' ? '12W' : 'Custom'}
+                        </Text>
+                      </View>
+                      <Text style={[styles.campaignTitle, { color: colors.text }]} numberOfLines={1}>
+                        {campaign.title}
                       </Text>
                     </View>
-                    <Text style={[styles.campaignTitle, { color: colors.text }]} numberOfLines={1}>
-                      {campaign.title}
+                    {isExpanded ? (
+                      <ChevronUp size={20} color={colors.textSecondary} />
+                    ) : (
+                      <ChevronDown size={20} color={colors.textSecondary} />
+                    )}
+                  </View>
+
+                  <View style={styles.campaignProgress}>
+                    <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
+                      <View 
+                        style={[
+                          styles.progressBarFill, 
+                          { backgroundColor: progressColor, width: `${campaign.progress || 0}%` }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={[styles.progressText, { color: progressColor }]}>
+                      {campaign.progress || 0}%
                     </Text>
                   </View>
-                </View>
 
-                <View style={styles.campaignProgress}>
-                  <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
-                    <View 
-                      style={[
-                        styles.progressBarFill, 
-                        { backgroundColor: progressColor, width: `${campaign.progress || 0}%` }
-                      ]} 
-                    />
-                  </View>
-                  <Text style={[styles.progressText, { color: progressColor }]}>
-                    {campaign.progress || 0}%
+                  <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
+                    {campaign.weeks_remaining} weeks remaining
                   </Text>
-                </View>
+                  
+                  {/* Annual Goal Link */}
+                  {campaign.annualGoalTitle && (
+                    <View style={styles.annualGoalLink}>
+                      <TrendingUp size={12} color={GOALS_COLOR} />
+                      <Text style={[styles.annualGoalLinkText, { color: GOALS_COLOR }]} numberOfLines={1}>
+                        {campaign.annualGoalTitle}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
 
-                <Text style={[styles.campaignMeta, { color: colors.textSecondary }]}>
-                  {campaign.weeks_remaining} weeks remaining
-                </Text>
-                
-                {/* Annual Goal Link */}
-                {campaign.annualGoalTitle && (
-                  <View style={styles.annualGoalLink}>
-                    <TrendingUp size={12} color={GOALS_COLOR} />
-                    <Text style={[styles.annualGoalLinkText, { color: GOALS_COLOR }]} numberOfLines={1}>
-                      {campaign.annualGoalTitle}
-                    </Text>
+                {isExpanded && (
+                  <View style={[styles.actionsContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={styles.actionsHeader}>
+                      <Text style={[styles.actionsTitle, { color: colors.text }]}>
+                        This Week's Leading Indicators
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.quickAddButton, { backgroundColor: GOALS_COLOR }]}
+                        onPress={() => handleOpenQuickAdd(campaign)}
+                        activeOpacity={0.7}
+                      >
+                        <Plus size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                    {campaign.actions && campaign.actions.length > 0 ? (
+                      campaign.actions.map(action => (
+                        <View key={action.id} style={styles.actionItem}>
+                          <View 
+                            style={[
+                              styles.actionCheck, 
+                              { 
+                                borderColor: action.isComplete ? '#10B981' : colors.border,
+                                backgroundColor: action.isComplete ? '#10B981' : 'transparent',
+                              }
+                            ]}
+                          >
+                            {action.isComplete && <Check size={12} color="#FFFFFF" />}
+                          </View>
+                          <Text style={[styles.actionText, { color: colors.text }]} numberOfLines={1}>
+                            {action.title}
+                          </Text>
+                          <Text style={[styles.actionProgress, { color: colors.textSecondary }]}>
+                            {action.weeklyActual}/{action.weeklyTarget}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={[styles.noActionsText, { color: colors.textSecondary }]}>
+                        No leading indicators set for this campaign
+                      </Text>
+                    )}
                   </View>
                 )}
               </View>
@@ -1337,6 +1396,30 @@ export function SixCheckStep({
 
           <View style={{ height: 40 }} />
         </ScrollView>
+
+        {/* Quick Add Action Modal */}
+        {timeline && (
+          <ActionEffortModal
+            visible={showQuickAddModal}
+            onClose={handleQuickAddClose}
+            goal={quickAddCampaign ? {
+              id: quickAddCampaign.id,
+              title: quickAddCampaign.title,
+              description: quickAddCampaign.description,
+              goal_type: quickAddCampaign.goal_type === '12week' ? '12week' : 'custom',
+            } : null}
+            cycleWeeks={[]}
+            timeline={timeline}
+            createTaskWithWeekPlan={createTaskWithWeekPlan}
+            mode="create"
+            quickAddMode={true}
+            currentWeekData={plannedActionsData?.week ? {
+              weekNumber: plannedActionsData.week.weekNumber,
+              startDate: plannedActionsData.week.startDate,
+              endDate: plannedActionsData.week.endDate,
+            } : undefined}
+          />
+        )}
       </Animated.View>
     );
   }
