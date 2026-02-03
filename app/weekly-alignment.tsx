@@ -128,6 +128,7 @@ export default function WeeklyAlignmentScreen() {
   function goToNextStep() {
     if (currentStep < STEPS.length - 1) {
       setCurrentStep(prev => prev + 1);
+      setStepBackHandler(null); // Clear handler when moving to next step
       
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -136,11 +137,12 @@ export default function WeeklyAlignmentScreen() {
   }
 
   function goToPreviousStep() {
-    // If we're on step 0 and have a step back handler, let the step handle it first
-    if (currentStep === 0 && stepBackHandler) {
+    // Check if current step has a custom back handler
+    // This allows steps with sub-views (like SixCheckStep's annual-goals view) to handle back internally
+    if (stepBackHandler) {
       const handled = stepBackHandler();
       if (handled) {
-        // Step handled the back internally (e.g., going from identity-hub to hero-question)
+        // Step handled the back internally (e.g., going from sub-view to main view)
         if (Platform.OS !== 'web') {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
@@ -415,6 +417,7 @@ export default function WeeklyAlignmentScreen() {
             onNext={goToNextStep}
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
+            onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
           />
         )}
 
