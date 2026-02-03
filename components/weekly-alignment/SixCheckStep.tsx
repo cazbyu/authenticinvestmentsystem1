@@ -26,7 +26,7 @@ import {
 } from 'react-native';
 import { ChevronRight, Check, HelpCircle, Target, TrendingUp, AlertTriangle, Calendar, Flag, Zap, ChevronDown, ChevronUp, Repeat, Rocket } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsForWeek';
+import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsforWeek';
 
 // Compass Goals icon for Step 4 header
 const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
