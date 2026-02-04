@@ -33,6 +33,7 @@ import { uploadNoteAttachment, saveNoteAttachmentMetadata, fetchNoteAttachments,
 import ReflectionModePills from '../reflections/ReflectionModePills';
 import FollowUpToggleSection from '../reflections/FollowUpToggleSection';
 import RichTextInput from '../reflections/RichTextInput';
+import { ActivityConfig } from '@/lib/activityConfig';
 
 // ------------ Types & Models ------------
 type SchedulingType = 'task' | 'event' | 'reflection';
