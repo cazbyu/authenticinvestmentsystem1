@@ -231,9 +231,22 @@ export function WingCheckWellnessStep({
     loadData();
   }, []);
 
-  async function loadData() {
+ async function loadData() {
     try {
       const supabase = getSupabaseClient();
+
+      // Load user's week start preference
+      const { data: userData } = await supabase
+        .from('0008-ap-users')
+        .select('week_start_day')
+        .eq('id', userId)
+        .single();
+      
+      if (userData?.week_start_day) {
+        setWeekStartDay(userData.week_start_day as 'sunday' | 'monday');
+      }
+
+      // Load all active roles
 
       // Load all wellness zones from domains table
       const { data: domainsData, error: domainsError } = await supabase
