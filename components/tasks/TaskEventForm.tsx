@@ -211,6 +211,9 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   // Recurrence state
   const [showCustomRecurrenceModal, setShowCustomRecurrenceModal] = useState(false);
 
+// Banner
+  const [showContextBanner, setShowContextBanner] = useState(true);
+  
   // Goal Mode (when a goal is selected + goalToggle true)
   const [goalMode, setGoalMode] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
