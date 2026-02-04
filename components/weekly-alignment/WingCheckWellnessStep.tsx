@@ -6,6 +6,12 @@
 // - "My Top 3 Wellness Zones" card (styled like "My Top 3 Active Roles")
 // - NO back arrows in subheaders - parent handles back navigation
 // - Green color scheme (#39b54a)
+// 
+// ONE Thing Integration (zone-reflection state):
+// - Card 1: Fulfillment Vision (existing)
+// - Card 2: ONE Thing question + input
+// - Card 3: Activity icons (Task, Event, Deposit Idea, Reflection)
+// - Card 4: Actions/Ideas tabs
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -23,8 +29,20 @@ import {
   Animated,
   KeyboardAvoidingView,
 } from 'react-native';
-import { ChevronRight, Check, HelpCircle } from 'lucide-react-native';
+import { 
+  ChevronRight, 
+  Check, 
+  HelpCircle,
+  CheckSquare,
+  Calendar,
+  Lightbulb,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+} from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
+import { getWeekStartDate } from '@/lib/dateUtils';
 
 // Compass Wellness icon for Step 3 header (matches Step 1 & 2 sizing: 56x56 in 72x72 container)
 const CompassWellnessIcon = require('@/assets/images/compass-wellness-zones.png');
@@ -40,6 +58,7 @@ interface WingCheckWellnessStepProps {
     zonesChecked: string[];
     flaggedWellnessZones: string[];
   }) => void;
+  onOpenTaskForm?: (initialData: any) => void;
 }
 
 interface WellnessZone {
@@ -53,18 +72,41 @@ interface WellnessZone {
   user_zone_id?: string; // ID from 0008-ap-user-wellness-zones if exists
 }
 
+interface Task {
+  id: string;
+  title: string;
+  type: 'task' | 'event';
+  status: string;
+  scheduled_date?: string;
+  one_thing?: boolean;
+}
+
+interface DepositIdea {
+  id: string;
+  title: string;
+  one_thing?: boolean;
+}
+
 // Flow states for the step
 type FlowState = 
   | 'loading'           // Initial data fetch
   | 'main'              // Main hub view
   | 'prioritize'        // Prioritization selection view
   | 'review-zones'      // List of prioritized zones for review
-  | 'zone-reflection';  // Fulfillment question for selected zone
+  | 'zone-reflection';  // Fulfillment + ONE Thing for selected zone
 
 // Brand color for Wellness (green)
 const WELLNESS_COLOR = '#39b54a';
 const WELLNESS_COLOR_LIGHT = '#39b54a15';
 const WELLNESS_COLOR_BORDER = '#39b54a40';
+
+// Activity type configuration (no Rose/Thorn for ONE Thing flow)
+const ACTIVITY_TYPES = [
+  { key: 'task', label: 'Task', icon: CheckSquare, color: '#3B82F6' },
+  { key: 'event', label: 'Event', icon: Calendar, color: '#8B5CF6' },
+  { key: 'depositIdea', label: 'Idea', icon: Lightbulb, color: '#F59E0B' },
+  { key: 'reflection', label: 'Reflect', icon: BookOpen, color: '#10B981' },
+] as const;
 
 // Zone icon colors by name
 function getZoneColor(zoneName: string): string {
@@ -103,6 +145,7 @@ export function WingCheckWellnessStep({
   onBack,
   onRegisterBackHandler,
   onDataCapture,
+  onOpenTaskForm,
 }: WingCheckWellnessStepProps) {
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -121,6 +164,19 @@ export function WingCheckWellnessStep({
   const [selectedReflectionZone, setSelectedReflectionZone] = useState<WellnessZone | null>(null);
   const [fulfillmentResponse, setFulfillmentResponse] = useState('');
   
+  // ONE Thing state
+  const [oneThingAnswer, setOneThingAnswer] = useState('');
+  const [existingOneThingId, setExistingOneThingId] = useState<string | null>(null);
+  const [savingOneThing, setSavingOneThing] = useState(false);
+  const [weekStartDate, setWeekStartDate] = useState<string>('');
+  
+  // Actions/Ideas state
+  const [zoneTasks, setZoneTasks] = useState<Task[]>([]);
+  const [zoneDepositIdeas, setZoneDepositIdeas] = useState<DepositIdea[]>([]);
+  const [activeTab, setActiveTab] = useState<'actions' | 'ideas'>('actions');
+  const [actionsExpanded, setActionsExpanded] = useState(true);
+  const [loadingZoneData, setLoadingZoneData] = useState(false);
+  
   // Animation
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -130,6 +186,12 @@ export function WingCheckWellnessStep({
   useEffect(() => {
     flowStateRef.current = flowState;
   }, [flowState]);
+
+  // Calculate week start date on mount
+  useEffect(() => {
+    const weekStart = getWeekStartDate(new Date());
+    setWeekStartDate(weekStart.toISOString().split('T')[0]);
+  }, []);
 
   // Back handler for parent component
   useEffect(() => {
@@ -147,7 +209,12 @@ export function WingCheckWellnessStep({
           setFlowState('main');
           return true;
         } else if (currentFlowState === 'zone-reflection') {
+          // Reset zone reflection state
           setFulfillmentResponse('');
+          setOneThingAnswer('');
+          setExistingOneThingId(null);
+          setZoneTasks([]);
+          setZoneDepositIdeas([]);
           setSelectedReflectionZone(null);
           setFlowState('review-zones');
           return true;
@@ -219,6 +286,105 @@ export function WingCheckWellnessStep({
       setFlowState('main');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Load ONE Thing and zone data when entering zone-reflection
+  async function loadZoneReflectionData(zone: WellnessZone) {
+    if (!weekStartDate) return;
+    
+    setLoadingZoneData(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      // 1. Load existing ONE Thing answer for this zone and week
+      const { data: oneThingData, error: oneThingError } = await supabase
+        .from('0008-ap-reflections')
+        .select('id, content')
+        .eq('user_id', userId)
+        .eq('one_thing', true)
+        .eq('week_start_date', weekStartDate)
+        .eq('archived', false)
+        .maybeSingle();
+
+      // Check if this ONE Thing is linked to this domain
+      if (oneThingData) {
+        const { data: domainJoin } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .select('id')
+          .eq('parent_type', 'reflection')
+          .eq('parent_id', oneThingData.id)
+          .eq('domain_id', zone.domain_id)
+          .maybeSingle();
+
+        if (domainJoin) {
+          setOneThingAnswer(oneThingData.content || '');
+          setExistingOneThingId(oneThingData.id);
+        } else {
+          setOneThingAnswer('');
+          setExistingOneThingId(null);
+        }
+      } else {
+        setOneThingAnswer('');
+        setExistingOneThingId(null);
+      }
+
+      // 2. Load tasks for this zone
+      const { data: taskJoins } = await supabase
+        .from('0008-ap-universal-domains-join')
+        .select('parent_id')
+        .eq('parent_type', 'task')
+        .eq('domain_id', zone.domain_id);
+
+      const taskIds = taskJoins?.map(tj => tj.parent_id) || [];
+
+      if (taskIds.length > 0) {
+        const { data: tasksData } = await supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, status, scheduled_date, one_thing')
+          .eq('user_id', userId)
+          .in('id', taskIds)
+          .is('deleted_at', null)
+          .not('status', 'in', '(completed,cancelled)')
+          .in('type', ['task', 'event'])
+          .order('scheduled_date', { ascending: true, nullsFirst: false })
+          .limit(10);
+
+        setZoneTasks(tasksData || []);
+      } else {
+        setZoneTasks([]);
+      }
+
+      // 3. Load deposit ideas for this zone
+      const { data: ideaJoins } = await supabase
+        .from('0008-ap-universal-domains-join')
+        .select('parent_id')
+        .eq('parent_type', 'depositIdea')
+        .eq('domain_id', zone.domain_id);
+
+      const ideaIds = ideaJoins?.map(ij => ij.parent_id) || [];
+
+      if (ideaIds.length > 0) {
+        const { data: ideasData } = await supabase
+          .from('0008-ap-deposit-ideas')
+          .select('id, title, one_thing')
+          .eq('user_id', userId)
+          .in('id', ideaIds)
+          .eq('archived', false)
+          .eq('is_active', true)
+          .is('activated_task_id', null)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        setZoneDepositIdeas(ideasData || []);
+      } else {
+        setZoneDepositIdeas([]);
+      }
+
+    } catch (error) {
+      console.error('Error loading zone reflection data:', error);
+    } finally {
+      setLoadingZoneData(false);
     }
   }
 
@@ -347,21 +513,15 @@ export function WingCheckWellnessStep({
       }
 
       // Update local state
+      const updatedZone = { ...selectedReflectionZone, fulfillment_vision: fulfillmentResponse.trim() };
+      setSelectedReflectionZone(updatedZone);
       setAllZones(prev => prev.map(z => 
-        z.id === selectedReflectionZone.id 
-          ? { ...z, fulfillment_vision: fulfillmentResponse.trim() }
-          : z
+        z.id === selectedReflectionZone.id ? updatedZone : z
       ));
       setPrioritizedZones(prev => prev.map(z => 
-        z.id === selectedReflectionZone.id 
-          ? { ...z, fulfillment_vision: fulfillmentResponse.trim() }
-          : z
+        z.id === selectedReflectionZone.id ? updatedZone : z
       ));
 
-      // Go back to review
-      setFulfillmentResponse('');
-      setSelectedReflectionZone(null);
-      slideToState('review-zones');
     } catch (error) {
       console.error('Error saving zone fulfillment:', error);
       if (Platform.OS === 'web') {
@@ -372,6 +532,76 @@ export function WingCheckWellnessStep({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveOneThing() {
+    if (!selectedReflectionZone || !oneThingAnswer.trim() || !weekStartDate) return;
+
+    setSavingOneThing(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      if (existingOneThingId) {
+        // Update existing
+        const { error: updateError } = await supabase
+          .from('0008-ap-reflections')
+          .update({
+            content: oneThingAnswer.trim(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingOneThingId);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new reflection
+        const { data: newReflection, error: insertError } = await supabase
+          .from('0008-ap-reflections')
+          .insert({
+            user_id: userId,
+            content: oneThingAnswer.trim(),
+            reflection_type: 'reflection',
+            one_thing: true,
+            week_start_date: weekStartDate,
+          })
+          .select('id')
+          .single();
+
+        if (insertError) throw insertError;
+
+        // Link to domain
+        const { error: joinError } = await supabase
+          .from('0008-ap-universal-domains-join')
+          .insert({
+            parent_type: 'reflection',
+            parent_id: newReflection.id,
+            domain_id: selectedReflectionZone.domain_id,
+          });
+
+        if (joinError) throw joinError;
+
+        setExistingOneThingId(newReflection.id);
+      }
+
+    } catch (error) {
+      console.error('Error saving ONE Thing:', error);
+      if (Platform.OS === 'web') {
+        window.alert('Failed to save. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to save. Please try again.');
+      }
+    } finally {
+      setSavingOneThing(false);
+    }
+  }
+
+  function handleCreateItem(type: 'task' | 'event' | 'depositIdea' | 'reflection') {
+    if (!selectedReflectionZone || !onOpenTaskForm) return;
+
+    onOpenTaskForm({
+      type: type,
+      selectedDomainIds: [selectedReflectionZone.domain_id],
+      one_thing: true, // Mark as created from ONE Thing flow
+    });
   }
 
   function handleContinueToGoals() {
@@ -575,7 +805,7 @@ export function WingCheckWellnessStep({
             </View>
             
             <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
-              Tap a zone to define what fulfillment looks like
+              Tap a zone to define fulfillment and set your ONE Thing
             </Text>
           </View>
 
@@ -601,6 +831,7 @@ export function WingCheckWellnessStep({
                 onPress={() => {
                   setSelectedReflectionZone(zone);
                   setFulfillmentResponse(zone.fulfillment_vision || '');
+                  loadZoneReflectionData(zone);
                   slideToState('zone-reflection');
                 }}
                 activeOpacity={0.7}
@@ -654,7 +885,7 @@ export function WingCheckWellnessStep({
     );
   }
 
-  // ===== RENDER: ZONE REFLECTION STATE =====
+  // ===== RENDER: ZONE REFLECTION STATE (with ONE Thing) =====
   if (flowState === 'zone-reflection' && selectedReflectionZone) {
     const zoneColor = getZoneColor(selectedReflectionZone.name);
     const priorityIndex = prioritizedZones.findIndex(z => z.id === selectedReflectionZone.id);
@@ -672,7 +903,7 @@ export function WingCheckWellnessStep({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Header - Standard format, NO back arrow, CENTERED icon */}
+            {/* Header */}
             <View style={styles.headerSection}>
               <View style={styles.headerRow}>
                 <View style={[styles.compassContainer, { backgroundColor: `${zoneColor}15` }]}>
@@ -680,7 +911,7 @@ export function WingCheckWellnessStep({
                 </View>
                 <View style={styles.headerTextContainer}>
                   <Text style={[styles.stepLabel, { color: zoneColor }]}>
-                    {isPrioritized ? `W${priorityIndex + 1}` : 'Step 3'}
+                    {isPrioritized ? `W${priorityIndex + 1}` : 'Zone'}
                   </Text>
                   <Text style={[styles.stepTitle, { color: colors.text }]}>
                     {selectedReflectionZone.name}
@@ -689,51 +920,281 @@ export function WingCheckWellnessStep({
               </View>
             </View>
 
-            {/* Fulfillment Question Card */}
-            <View style={[styles.questionCard, { backgroundColor: WELLNESS_COLOR_LIGHT, borderColor: WELLNESS_COLOR_BORDER }]}>
-              <Text style={[styles.questionText, { color: colors.text }]}>
-                What does fulfillment look like in your {selectedReflectionZone.name.toLowerCase()} life?
-              </Text>
-              <Text style={[styles.questionHint, { color: colors.textSecondary }]}>
-                Describe what thriving in this area means to you.
-              </Text>
-            </View>
-
-            {/* Response Input */}
-            <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <TextInput
-                style={[styles.textInput, { color: colors.text }]}
-                placeholder="Fulfillment in this area means..."
-                placeholderTextColor={colors.textSecondary}
-                value={fulfillmentResponse}
-                onChangeText={setFulfillmentResponse}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Save Button */}
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                {
-                  backgroundColor: fulfillmentResponse.trim() ? WELLNESS_COLOR : colors.border,
-                  opacity: saving ? 0.7 : 1,
-                },
-              ]}
-              onPress={saveZoneFulfillment}
-              disabled={saving || !fulfillmentResponse.trim()}
-              activeOpacity={0.8}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+            {/* Card 1: Fulfillment Vision */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.cardLabel, { color: zoneColor }]}>WHAT FULFILLMENT LOOKS LIKE</Text>
+                <TouchableOpacity 
+                  style={styles.editButton}
+                  onPress={() => {}}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                >
+                  <Pencil size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              
+              {selectedReflectionZone.fulfillment_vision ? (
+                <Text style={[styles.visionText, { color: colors.text }]}>
+                  "{selectedReflectionZone.fulfillment_vision}"
+                </Text>
               ) : (
                 <>
-                  <Text style={styles.primaryButtonText}>Save Vision</Text>
-                  <ChevronRight size={20} color="#FFFFFF" />
+                  <Text style={[styles.questionHint, { color: colors.textSecondary, marginBottom: 12 }]}>
+                    Describe what thriving in this area means to you.
+                  </Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.textInput, { color: colors.text }]}
+                      placeholder="Fulfillment in this area means..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={fulfillmentResponse}
+                      onChangeText={setFulfillmentResponse}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.saveVisionButton,
+                      {
+                        backgroundColor: fulfillmentResponse.trim() ? WELLNESS_COLOR : colors.border,
+                        opacity: saving ? 0.7 : 1,
+                      },
+                    ]}
+                    onPress={saveZoneFulfillment}
+                    disabled={saving || !fulfillmentResponse.trim()}
+                    activeOpacity={0.8}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.saveVisionButtonText}>Save Vision</Text>
+                    )}
+                  </TouchableOpacity>
                 </>
               )}
+            </View>
+
+            {/* Card 2: ONE Thing Question */}
+            <View style={[styles.card, { backgroundColor: `${zoneColor}08`, borderColor: `${zoneColor}30` }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.cardLabel, { color: zoneColor }]}>ONE THING THIS WEEK</Text>
+                {existingOneThingId && (
+                  <View style={[styles.savedBadge, { backgroundColor: '#10b981' }]}>
+                    <Check size={12} color="#FFFFFF" />
+                    <Text style={styles.savedBadgeText}>Saved</Text>
+                  </View>
+                )}
+              </View>
+              
+              <Text style={[styles.questionText, { color: colors.text }]}>
+                What is the ONE thing I can do for my {selectedReflectionZone.name.toLowerCase()} well-being this week that will make everything else easier or unnecessary?
+              </Text>
+              
+              <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput
+                  style={[styles.textInput, { color: colors.text }]}
+                  placeholder="My ONE thing this week is..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={oneThingAnswer}
+                  onChangeText={setOneThingAnswer}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  {
+                    backgroundColor: oneThingAnswer.trim() ? zoneColor : colors.border,
+                    opacity: savingOneThing ? 0.7 : 1,
+                  },
+                ]}
+                onPress={saveOneThing}
+                disabled={savingOneThing || !oneThingAnswer.trim()}
+                activeOpacity={0.8}
+              >
+                {savingOneThing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>
+                    {existingOneThingId ? 'Update ONE Thing' : 'Save ONE Thing'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Card 3: Activity Icons */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.cardLabel, { color: colors.textSecondary, marginBottom: 12 }]}>
+                TAKE ACTION
+              </Text>
+              
+              <View style={styles.activityIconsRow}>
+                {ACTIVITY_TYPES.map(({ key, label, icon: Icon, color }) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={styles.activityButton}
+                    onPress={() => handleCreateItem(key as any)}
+                    activeOpacity={0.7}
+                    disabled={!onOpenTaskForm}
+                  >
+                    <View style={[styles.activityIconCircle, { backgroundColor: `${color}15` }]}>
+                      <Icon size={20} color={color} />
+                    </View>
+                    <Text style={[styles.activityLabel, { color: colors.text }]}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Card 4: Actions & Ideas Tabs */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <TouchableOpacity 
+                style={styles.expandHeader}
+                onPress={() => setActionsExpanded(!actionsExpanded)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>
+                  SCHEDULED & IDEAS
+                </Text>
+                {actionsExpanded ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+
+              {actionsExpanded && (
+                <>
+                  {/* Tab Selector */}
+                  <View style={[styles.tabRow, { backgroundColor: colors.border }]}>
+                    <TouchableOpacity
+                      style={[
+                        styles.tab,
+                        activeTab === 'actions' && { backgroundColor: zoneColor },
+                      ]}
+                      onPress={() => setActiveTab('actions')}
+                    >
+                      <Text style={[
+                        styles.tabText,
+                        activeTab === 'actions' && styles.tabTextActive,
+                      ]}>
+                        Actions ({zoneTasks.length})
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.tab,
+                        activeTab === 'ideas' && { backgroundColor: zoneColor },
+                      ]}
+                      onPress={() => setActiveTab('ideas')}
+                    >
+                      <Text style={[
+                        styles.tabText,
+                        activeTab === 'ideas' && styles.tabTextActive,
+                      ]}>
+                        Ideas ({zoneDepositIdeas.length})
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Tab Content */}
+                  <View style={styles.tabContent}>
+                    {loadingZoneData ? (
+                      <View style={styles.tabLoadingContainer}>
+                        <ActivityIndicator size="small" color={zoneColor} />
+                      </View>
+                    ) : activeTab === 'actions' ? (
+                      zoneTasks.length === 0 ? (
+                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                          No actions scheduled for this zone
+                        </Text>
+                      ) : (
+                        zoneTasks.slice(0, 5).map(task => (
+                          <View
+                            key={task.id}
+                            style={[styles.listItem, { borderColor: colors.border }]}
+                          >
+                            <View style={[
+                              styles.itemIcon,
+                              { backgroundColor: task.type === 'event' ? '#8B5CF615' : '#3B82F615' }
+                            ]}>
+                              {task.type === 'event' ? (
+                                <Calendar size={14} color="#8B5CF6" />
+                              ) : (
+                                <CheckSquare size={14} color="#3B82F6" />
+                              )}
+                            </View>
+                            <View style={styles.itemContent}>
+                              <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
+                                {task.title}
+                              </Text>
+                              {task.scheduled_date && (
+                                <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
+                                  {new Date(task.scheduled_date).toLocaleDateString()}
+                                </Text>
+                              )}
+                            </View>
+                            {task.one_thing && (
+                              <View style={[styles.oneThingBadge, { backgroundColor: zoneColor }]}>
+                                <Text style={styles.oneThingBadgeText}>1</Text>
+                              </View>
+                            )}
+                          </View>
+                        ))
+                      )
+                    ) : (
+                      zoneDepositIdeas.length === 0 ? (
+                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                          No deposit ideas for this zone
+                        </Text>
+                      ) : (
+                        zoneDepositIdeas.slice(0, 5).map(idea => (
+                          <View
+                            key={idea.id}
+                            style={[styles.listItem, { borderColor: colors.border }]}
+                          >
+                            <View style={[styles.itemIcon, { backgroundColor: '#F59E0B15' }]}>
+                              <Lightbulb size={14} color="#F59E0B" />
+                            </View>
+                            <View style={styles.itemContent}>
+                              <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
+                                {idea.title}
+                              </Text>
+                            </View>
+                            {idea.one_thing && (
+                              <View style={[styles.oneThingBadge, { backgroundColor: zoneColor }]}>
+                                <Text style={styles.oneThingBadgeText}>1</Text>
+                              </View>
+                            )}
+                          </View>
+                        ))
+                      )
+                    )}
+                  </View>
+                </>
+              )}
+            </View>
+
+            {/* Back to Review Button */}
+            <TouchableOpacity
+              style={[styles.secondaryButton, { borderColor: zoneColor }]}
+              onPress={() => {
+                setFulfillmentResponse('');
+                setOneThingAnswer('');
+                setExistingOneThingId(null);
+                setZoneTasks([]);
+                setZoneDepositIdeas([]);
+                setSelectedReflectionZone(null);
+                slideToState('review-zones');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.secondaryButtonText, { color: zoneColor }]}>Back to Zones</Text>
             </TouchableOpacity>
 
             <View style={{ height: 40 }} />
@@ -844,7 +1305,7 @@ export function WingCheckWellnessStep({
                 Review Your Zones
               </Text>
               <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
-                Define what fulfillment looks like
+                Set fulfillment vision & ONE Thing
               </Text>
             </View>
           </View>
@@ -1130,21 +1591,41 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Question Card
-  questionCard: {
-    padding: 20,
+  // Cards (for zone-reflection)
+  card: {
+    padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 16,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cardLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  editButton: {
+    padding: 4,
+  },
+  visionText: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    lineHeight: 22,
+  },
+
+  // Question Card
   questionText: {
-    fontSize: 18,
-    fontWeight: '600',
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 22,
+    marginBottom: 12,
   },
   questionHint: {
     fontSize: 14,
-    marginTop: 8,
     lineHeight: 20,
   },
 
@@ -1274,14 +1755,154 @@ const styles = StyleSheet.create({
 
   // Input container
   inputContainer: {
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   textInput: {
-    padding: 16,
+    padding: 12,
     fontSize: 16,
-    minHeight: 120,
+    minHeight: 80,
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  saveVisionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 8,
+  },
+  saveVisionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  savedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  savedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Activity Icons
+  activityIconsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  activityButton: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  activityIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  // Expand Header
+  expandHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  // Tabs
+  tabRow: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    padding: 3,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+  tabContent: {
+    minHeight: 60,
+  },
+  tabLoadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 16,
+    fontStyle: 'italic',
+  },
+
+  // List Items
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  itemIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemContent: {
+    flex: 1,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  itemMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  oneThingBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  oneThingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
 
