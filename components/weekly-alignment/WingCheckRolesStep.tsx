@@ -47,6 +47,7 @@ import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
+import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 
 // Helper function to get Monday of current week
 function getWeekStartDate(date: Date): Date {
@@ -155,6 +156,7 @@ export function WingCheckRolesStep({
   const [existingOneThingId, setExistingOneThingId] = useState<string | null>(null);
   const [savingOneThing, setSavingOneThing] = useState(false);
   const [weekStartDate, setWeekStartDate] = useState<string>('');
+  const [weekStartDay, setWeekStartDay] = useState<'sunday' | 'monday'>('sunday');
   
   // Actions/Ideas state
   const [roleTasks, setRoleTasks] = useState<Task[]>([]);
