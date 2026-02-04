@@ -843,7 +843,7 @@ export function WingCheckRolesStep({
               </View>
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
-                <Text style={[styles.stepTitle, { color: colors.text }]}>Review Your Roles</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>Design Your Legacy</Text>
               </View>
             </View>
           </View>
@@ -854,7 +854,7 @@ export function WingCheckRolesStep({
               <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
                 <RolesIcon size={14} color="#FFFFFF" />
               </View>
-              <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>REVIEW YOUR ROLES</Text>
+              <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>DESIGN YOUR LEGACY</Text>
             </View>
             
             <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
@@ -1046,7 +1046,7 @@ export function WingCheckRolesStep({
               </View>
               
               <Text style={[styles.questionText, { color: colors.text }]}>
-                What is the ONE thing I can do as a {selectedReflectionRole.label} this week that will make everything else easier or unnecessary?
+                What is the ONE thing I want to do as a {selectedReflectionRole.label} this week?
               </Text>
               
               <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -1359,7 +1359,7 @@ export function WingCheckRolesStep({
             </View>
             <View style={styles.actionButtonTextWrap}>
               <Text style={[styles.actionButtonText, { color: hasMinimumPriorities ? ROLES_COLOR : colors.text }]}>
-                Review Your Roles
+                Design Your Legacy
               </Text>
               <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
                 Set purpose & ONE Thing for each role
