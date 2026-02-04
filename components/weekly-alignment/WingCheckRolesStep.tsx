@@ -3,7 +3,7 @@
 // ============================================================================
 // Design Pattern: Matches TouchYourStarStep (Step 1) layout
 // - 72x72 container with 56x56 compass icon
-// - "My Top 3 Active Roles" card (styled like "My Core Identity" in Step 1)
+// - "This Week's Top Focus" card (styled like "My Core Identity" in Step 1)
 // - NO back arrows in subheaders - parent handles back navigation
 // - RolesIcon from CustomIcons used for card headers (like NorthStarIcon in Step 1)
 // - RoleIcon from RoleIcon.tsx used for individual role display
@@ -1300,13 +1300,13 @@ export function WingCheckRolesStep({
         )}
       </View>
 
-      {/* My Top 3 Active Roles Card - Styled like My Core Identity */}
+      {/* This Week's Top Focus Card - Styled like My Core Identity */}
       <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
         <View style={styles.identityHeader}>
           <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
             <RolesIcon size={14} color="#FFFFFF" />
           </View>
-          <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>MY TOP 3 ACTIVE ROLES</Text>
+          <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>THIS WEEK'S TOP FOCUS</Text>
           <TouchableOpacity onPress={() => slideToState('prioritize')}>
             <Text style={[styles.editLink, { color: ROLES_COLOR }]}>Update</Text>
           </TouchableOpacity>
@@ -1336,27 +1336,9 @@ export function WingCheckRolesStep({
         )}
       </View>
 
-      {/* Action Buttons */}
+      {/* Action Buttons - Review Your Roles FIRST, then Manage Roles */}
       <View style={styles.actionButtonsSection}>
-        {/* Manage Roles Button */}
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={handleManageRoles}
-          activeOpacity={0.7}
-        >
-          <View style={styles.actionButtonContent}>
-            <Settings size={20} color={colors.textSecondary} />
-            <View style={styles.actionButtonTextWrap}>
-              <Text style={[styles.actionButtonText, { color: colors.text }]}>Manage Roles</Text>
-              <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
-                Activate or remove existing roles
-              </Text>
-            </View>
-          </View>
-          <ChevronRight size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        {/* Review Your Roles Button */}
+        {/* Review Your Roles Button - NOW FIRST */}
         <TouchableOpacity
           style={[
             styles.actionButton,
@@ -1385,6 +1367,24 @@ export function WingCheckRolesStep({
             </View>
           </View>
           <ChevronRight size={20} color={hasMinimumPriorities ? ROLES_COLOR : colors.textSecondary} />
+        </TouchableOpacity>
+
+        {/* Manage Roles Button - NOW SECOND */}
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={handleManageRoles}
+          activeOpacity={0.7}
+        >
+          <View style={styles.actionButtonContent}>
+            <Settings size={20} color={colors.textSecondary} />
+            <View style={styles.actionButtonTextWrap}>
+              <Text style={[styles.actionButtonText, { color: colors.text }]}>Manage Roles</Text>
+              <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
+                Activate or remove existing roles
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Continue to Wellness Zones Button */}
