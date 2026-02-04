@@ -175,11 +175,13 @@ export function WingCheckRolesStep({
     flowStateRef.current = flowState;
   }, [flowState]);
 
-  // Calculate week start date on mount
+  // Calculate week start date after we have user preference
   useEffect(() => {
-    const weekStart = getWeekStartDate(new Date());
-    setWeekStartDate(weekStart.toISOString().split('T')[0]);
-  }, []);
+    if (weekStartDay) {
+      const weekStart = getWeekStart(new Date(), weekStartDay);
+      setWeekStartDate(formatLocalDate(weekStart));
+    }
+  }, [weekStartDay]);
 
   // Back handler for parent component
   useEffect(() => {
