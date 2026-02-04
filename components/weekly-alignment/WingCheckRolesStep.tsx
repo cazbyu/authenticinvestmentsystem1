@@ -222,6 +222,17 @@ export function WingCheckRolesStep({
     try {
       const supabase = getSupabaseClient();
 
+      // Load user's week start preference
+      const { data: userData } = await supabase
+        .from('0008-ap-users')
+        .select('week_start_day')
+        .eq('id', userId)
+        .single();
+      
+      if (userData?.week_start_day) {
+        setWeekStartDay(userData.week_start_day as 'sunday' | 'monday');
+      }
+
       // Load all active roles
       const { data: rolesData, error: rolesError } = await supabase
         .from('0008-ap-roles')
