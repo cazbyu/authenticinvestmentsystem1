@@ -11,12 +11,13 @@ import {
   ActivityIndicator,
   Alert,
   useWindowDimensions,
+  Image,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { Platform, Image, Linking } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, toLocalISOString, parseLocalDate, formatTimeString, convert12HourTo24Hour } from '@/lib/dateUtils';
@@ -137,10 +138,19 @@ interface TaskEventFormProps {
   preSelectedType?: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection';
   parentId?: string;
   parentType?: 'task' | 'depositIdea' | 'reflection';
+  config?: ActivityConfig; // Speed Dial config - moved inside interface
 }
-config?: ActivityConfig;
 
-export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, preSelectedType, parentId, parentType }: TaskEventFormProps) {
+export default function TaskEventForm({ 
+  mode, 
+  initialData, 
+  onSubmitSuccess, 
+  onClose, 
+  preSelectedType, 
+  parentId, 
+  parentType,
+  config // Added config to destructured props
+}: TaskEventFormProps) {
   const { colors, isDarkMode } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
@@ -211,7 +221,7 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   // Recurrence state
   const [showCustomRecurrenceModal, setShowCustomRecurrenceModal] = useState(false);
 
-// Banner
+  // Context banner for Speed Dial
   const [showContextBanner, setShowContextBanner] = useState(true);
   
   // Goal Mode (when a goal is selected + goalToggle true)
@@ -323,6 +333,41 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
 
     initialize();
   }, [mode, initialData]);
+
+  // ============================================
+  // NEW: Apply Speed Dial config defaults
+  // ============================================
+  useEffect(() => {
+    if (config && mode === 'create') {
+      setFormData(prev => {
+        const updates: Partial<FormData> = {};
+        
+        // Apply type from config
+        if (config.formDefaults.type) {
+          if (config.formDefaults.type === 'task' || config.formDefaults.type === 'event') {
+            updates.type = config.formDefaults.type;
+          } else if (config.formDefaults.type === 'reflection' || config.formDefaults.type === 'depositIdea') {
+            updates.type = 'reflection';
+          }
+        }
+        
+        // Apply reflection mode if specified
+        if (config.formDefaults.reflectionMode) {
+          updates.reflectionMode = config.formDefaults.reflectionMode;
+        }
+        
+        // Apply isAnytime if specified
+        if (config.formDefaults.isAnytime !== undefined) {
+          updates.isAnytime = config.formDefaults.isAnytime;
+        }
+        
+        return { ...prev, ...updates };
+      });
+      
+      // Show the context banner
+      setShowContextBanner(true);
+    }
+  }, [config, mode]);
 
   // Handle pre-selected type
   useEffect(() => {
@@ -1599,6 +1644,48 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
     formData.selectedRoleIds.includes(kr.role_id)
   );
 
+  // ============================================
+  // NEW: Context Banner for Speed Dial
+  // ============================================
+  const renderContextBanner = () => {
+    // Only show if config is provided, we're in create mode, and banner not dismissed
+    if (!config || mode !== 'create' || !showContextBanner) {
+      return null;
+    }
+
+    return (
+      <View style={[
+        styles.contextBanner,
+        { 
+          backgroundColor: `${config.color}15`, // 15% opacity
+          borderColor: `${config.color}40`, // 40% opacity
+        }
+      ]}>
+        <View style={styles.contextBannerContent}>
+          <Image
+            source={config.imageSource}
+            style={styles.contextBannerIcon}
+            resizeMode="contain"
+          />
+          <View style={styles.contextBannerText}>
+            <Text style={[styles.contextBannerLabel, { color: config.color }]}>
+              {config.label}
+            </Text>
+            <Text style={[styles.contextBannerDescription, { color: colors.textSecondary }]}>
+              {config.description}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.contextBannerDismiss}
+          onPress={() => setShowContextBanner(false)}
+        >
+          <X size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderTypeSelector = () => (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>Type</Text>
@@ -1844,6 +1931,9 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
 
       <ScrollView ref={scrollRef} style={styles.content}>
         <View style={styles.form}>
+          {/* Context Banner - Shows at top when coming from Speed Dial */}
+          {renderContextBanner()}
+
           {/* REFLECTION FORM LAYOUT */}
           {formData.type === 'reflection' && (
             <View style={styles.reflectionContainer}>
@@ -1870,8 +1960,8 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
                 />
               </View>
 
-              {/* Type Selector - THIRD */}
-              {renderTypeSelector()}
+              {/* Type Selector - THIRD (only show if no config) */}
+              {!config && renderTypeSelector()}
 
               {/* Content Area - Varies by reflection mode */}
               {(formData.reflectionMode === 'rose' || formData.reflectionMode === 'thorn') && (
@@ -2033,8 +2123,8 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
                 />
               </View>
 
-              {/* Type Selector */}
-              {renderTypeSelector()}
+              {/* Type Selector - only show if no config passed */}
+              {!config && renderTypeSelector()}
             </>
           )}
 
@@ -2750,6 +2840,40 @@ const styles = StyleSheet.create({
   typeButtonText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  // Context Banner Styles (Speed Dial)
+  contextBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  contextBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  contextBannerIcon: {
+    width: 32,
+    height: 32,
+  },
+  contextBannerText: {
+    flex: 1,
+  },
+  contextBannerLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  contextBannerDescription: {
+    fontSize: 13,
+  },
+  contextBannerDismiss: {
+    padding: 4,
   },
   switchesRowWrapper: {
     width: '100%',
