@@ -4,7 +4,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Ima
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
-import { DraggableFab } from '@/components/DraggableFab';
+import { SpeedDialFab } from '@/components/SpeedDialFab';
+import { ActivityConfig, ACTIVITY_CONFIGS } from '@/lib/activityConfig';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
@@ -120,6 +121,9 @@ const { headerColor } = useHeaderColor();
   const [roleStatistics, setRoleStatistics] = useState<Record<string, RoleStatistics>>({});
   const [loadingStatistics, setLoadingStatistics] = useState(false);
 
+  // Speed Dial activity config state
+  const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
+
   // Memoize the scope object to prevent unnecessary re-renders
   const goalsScope = useMemo(() => {
     if (!selectedRole) return undefined;
@@ -194,6 +198,7 @@ const { headerColor } = useHeaderColor();
         type: 'withdrawal'
       };
       setEditingTask(editData);
+      setSelectedActivityConfig(null);
       setTaskFormVisible(true);
     } else if (entry.source_type === 'depositIdea') {
       // Open TaskEventForm in depositIdea reflection mode for editing
@@ -203,6 +208,7 @@ const { headerColor } = useHeaderColor();
         reflectionMode: 'depositIdea'
       };
       setEditingTask(editData);
+      setSelectedActivityConfig(null);
       setTaskFormVisible(true);
     } else if (entry.source_type === 'reflection') {
       // Fetch full reflection data and open ReflectionDetailsModal
@@ -764,6 +770,7 @@ const { headerColor } = useHeaderColor();
     setEditingTask(null);
     setEditingRole(null);
     setEditingKR(null);
+    setSelectedActivityConfig(null);
     fetchAbortController.current?.abort();
     fetchAbortController.current = null;
     if (roleClickTimeout.current) {
@@ -1059,6 +1066,7 @@ const { headerColor } = useHeaderColor();
       type: 'depositIdea'
     };
     setEditingTask(editData);
+    setSelectedActivityConfig(null);
     setDepositIdeaDetailVisible(false);
     setTaskFormVisible(true);
   };
@@ -1100,6 +1108,7 @@ const { headerColor } = useHeaderColor();
         selectedKeyRelationshipIds: depositIdea.keyRelationships?.map(kr => kr.id) || [],
       };
       setEditingTask(editData);
+      setSelectedActivityConfig(null);
       setTaskFormVisible(true);
     } catch (error) {
       Alert.alert('Error', (error as Error).message || 'Failed to activate deposit idea.');
@@ -1117,6 +1126,7 @@ const { headerColor } = useHeaderColor();
 
   const handleUpdateTask = (task: Task) => {
     setEditingTask(task);
+    setSelectedActivityConfig(null);
     setTaskDetailVisible(false);
     setTimeout(() => setTaskFormVisible(true), 100);
   };
@@ -1152,6 +1162,7 @@ const { headerColor } = useHeaderColor();
   const handleFormSubmitSuccess = () => {
     setTaskFormVisible(false);
     setEditingTask(null);
+    setSelectedActivityConfig(null);
     if (selectedRole) {
       fetchRoleTasks(selectedRole.id, activeView);
     }
@@ -1164,6 +1175,7 @@ const { headerColor } = useHeaderColor();
   const handleFormClose = () => {
     setTaskFormVisible(false);
     setEditingTask(null);
+    setSelectedActivityConfig(null);
   };
 
   const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
@@ -1277,6 +1289,27 @@ const { headerColor } = useHeaderColor();
       Alert.alert('Error', (error as Error).message);
     }
   };
+
+  // Speed Dial FAB handler - creates activity with context-aware role/KR pre-selection
+  const handleSpeedDialSelect = useCallback((config: ActivityConfig) => {
+    // Build initial data with context-aware pre-selections
+    const initialData: any = {};
+    
+    // Pre-select the current role if viewing a role
+    if (selectedRole) {
+      initialData.selectedRoleIds = [selectedRole.id];
+    }
+    
+    // Pre-select the current KR if viewing a KR (also include the role)
+    if (selectedKR && selectedRole) {
+      initialData.selectedRoleIds = [selectedRole.id];
+      initialData.selectedKeyRelationshipIds = [selectedKR.id];
+    }
+    
+    setEditingTask(Object.keys(initialData).length > 0 ? initialData : null);
+    setSelectedActivityConfig(config);
+    setTaskFormVisible(true);
+  }, [selectedRole, selectedKR]);
 
   const getImageUrl = (imagePath?: string, bucket: string = '0008-role-images') => {
     if (!imagePath) return null;
@@ -1597,6 +1630,7 @@ const { headerColor } = useHeaderColor();
                               countsTowardWeeklyProgress: true,
                               selectedRoleIds: [selectedRole.id],
                             } as any);
+                            setSelectedActivityConfig(null);
                             setTaskFormVisible(true);
                           }}
                         />
@@ -1843,25 +1877,8 @@ const { headerColor } = useHeaderColor();
       {renderRoleBankHeader()}
       {renderContent()}
 
-      <DraggableFab onPress={() => {
-        if (selectedRole) {
-          setEditingTask({
-            type: 'task',
-            selectedRoleIds: [selectedRole.id],
-          } as any);
-        } else if (selectedKR && selectedRole) {
-          setEditingTask({
-            type: 'task',
-            selectedRoleIds: [selectedRole.id],
-            selectedKeyRelationshipIds: [selectedKR.id],
-          } as any);
-        } else {
-          setEditingTask(null);
-        }
-        setTaskFormVisible(true);
-      }} size={44}>
-        <Plus size={28} color="#ffffff" />
-      </DraggableFab>
+      {/* Speed Dial FAB - replaces old DraggableFab */}
+      <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
 
       {/* Modals */}
       <ManageRolesModal
@@ -1889,6 +1906,7 @@ const { headerColor } = useHeaderColor();
         <TaskEventForm
           mode={editingTask ? "edit" : "create"}
           initialData={editingTask || undefined}
+          config={selectedActivityConfig || undefined}
           onSubmitSuccess={handleFormSubmitSuccess}
           onClose={handleFormClose}
         />
