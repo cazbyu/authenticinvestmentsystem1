@@ -103,6 +103,18 @@ export function getWeekEnd(date: Date, weekStartDay: 'sunday' | 'monday' = 'sund
 }
 
 /**
+ * Gets the Monday of the week for a given date (used for ONE Thing weekly tracking)
+ */
+export function getWeekStartDate(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
  * Generates week windows for a 12-week cycle
  */
 export function generateCycleWeeks(
