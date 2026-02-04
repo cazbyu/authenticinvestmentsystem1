@@ -42,7 +42,7 @@ import {
   Pencil,
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { getWeekStartDate } from '@/lib/dateUtils';
+import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 
 // Compass Wellness icon for Step 3 header (matches Step 1 & 2 sizing: 56x56 in 72x72 container)
 const CompassWellnessIcon = require('@/assets/images/compass-wellness-zones.png');
