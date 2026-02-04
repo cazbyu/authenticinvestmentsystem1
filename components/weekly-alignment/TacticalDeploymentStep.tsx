@@ -30,7 +30,8 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
 
 // Compass icon for Step 5 header
-const CompassDeployIcon = require('@/assets/images/compass-deploy.png');
+// const CompassDeployIcon = require('@/assets/images/compass-deploy.png');
+const CompassDeployIcon = null; // Temporarily disabled - image missing
 
 interface TacticalDeploymentStepProps {
   userId: string;
