@@ -4,6 +4,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Pla
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
+import { SpeedDialFab } from '@/components/SpeedDialFab';
+import { ActivityConfig, ACTIVITY_CONFIGS } from '@/lib/activityConfig';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
@@ -21,7 +23,6 @@ import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
-import { DraggableFab } from '@/components/DraggableFab';
 import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
@@ -91,6 +92,9 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const [domainStatsPeriod, setDomainStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [domainStatistics, setDomainStatistics] = useState<Record<string, DomainStatistics>>({});
   const [loadingStatistics, setLoadingStatistics] = useState(false);
+
+  // Speed Dial activity config state
+  const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
 
   // 12-Week Goals for selected domain (only fetch when domain is selected)
   const goalProgressScope = useMemo(() =>
@@ -404,6 +408,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     setSelectedTask(null);
     setSelectedDepositIdea(null);
     setEditingTask(null);
+    setSelectedActivityConfig(null);
     setDomainAuthenticScore(0);
     setPeriodScore(undefined);
     setJournalDateRange('week');
@@ -611,6 +616,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       type: 'depositIdea'
     };
     setEditingTask(editData);
+    setSelectedActivityConfig(null);
     setDepositIdeaDetailVisible(false);
     setTaskFormVisible(true);
   }, []);
@@ -649,11 +655,13 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         selectedKeyRelationshipIds: depositIdea.keyRelationships?.map(kr => kr.id) || [],
       };
       setEditingTask(editData);
+      setSelectedActivityConfig(null);
       setTaskFormVisible(true);
     } catch (error) {
       Alert.alert('Error', (error as Error).message || 'Failed to activate deposit idea.');
     }
   }, []);
+
   const handleTaskPress = useCallback((task: Task) => {
     setSelectedTask(task);
     setTaskDetailVisible(true);
@@ -666,6 +674,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
   const handleUpdateTask = useCallback((task: Task) => {
     setEditingTask(task);
+    setSelectedActivityConfig(null);
     setTaskDetailVisible(false);
     setTimeout(() => setTaskFormVisible(true), 100);
   }, []);
@@ -698,6 +707,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const handleFormSubmitSuccess = useCallback(() => {
     setTaskFormVisible(false);
     setEditingTask(null);
+    setSelectedActivityConfig(null);
     if (selectedDomain) {
       fetchDomainTasks(selectedDomain.id, activeView);
     }
@@ -709,6 +719,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const handleFormClose = useCallback(() => {
     setTaskFormVisible(false);
     setEditingTask(null);
+    setSelectedActivityConfig(null);
   }, []);
 
   const handleOpenFollowThrough = (type: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection', parentId: string, parentType: string) => {
@@ -743,6 +754,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         type: 'withdrawal'
       };
       setEditingTask(editData);
+      setSelectedActivityConfig(null);
       setTaskFormVisible(true);
     } else if (entry.source_type === 'depositIdea') {
       // Open TaskEventForm in depositIdea reflection mode for editing
@@ -752,6 +764,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         reflectionMode: 'depositIdea'
       };
       setEditingTask(editData);
+      setSelectedActivityConfig(null);
       setTaskFormVisible(true);
     } else if (entry.source_type === 'reflection') {
       // Fetch full reflection data and open ReflectionDetailsModal
@@ -769,6 +782,21 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       calculatePeriodScore(dateRange, selectedDomain.id);
     }
   }, [selectedDomain, calculatePeriodScore]);
+
+  // Speed Dial FAB handler - creates activity with context-aware domain pre-selection
+  const handleSpeedDialSelect = useCallback((config: ActivityConfig) => {
+    // Build initial data with context-aware pre-selections
+    const initialData: any = {};
+    
+    // Pre-select the current domain if viewing a domain
+    if (selectedDomain) {
+      initialData.selectedDomainIds = [selectedDomain.id];
+    }
+    
+    setEditingTask(Object.keys(initialData).length > 0 ? initialData : null);
+    setSelectedActivityConfig(config);
+    setTaskFormVisible(true);
+  }, [selectedDomain]);
 
   const getDomainColor = useCallback((domainName: string) => {
     const colors: Record<string, string> = {
@@ -880,6 +908,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                           isGoal: true,
                           selectedDomainIds: selectedDomain ? [selectedDomain.id] : [],
                         } as any);
+                        setSelectedActivityConfig(null);
                         setTaskFormVisible(true);
                       }}
                     />
@@ -984,26 +1013,15 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       {renderWellnessBankHeader()}
       {renderContent()}
 
-      <DraggableFab onPress={() => {
-        if (selectedDomain) {
-          setEditingTask({
-            type: 'task',
-            selectedDomainIds: [selectedDomain.id],
-          } as any);
-          setTaskFormVisible(true);
-        } else {
-          setEditingTask(null);
-          setTaskFormVisible(true);
-        }
-      }} size={44}>
-        <Plus size={28} color="#ffffff" />
-      </DraggableFab>
+      {/* Speed Dial FAB - replaces old DraggableFab */}
+      <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
 
       {/* Modals */}
       <Modal visible={taskFormVisible} animationType="slide" presentationStyle="pageSheet">
         <TaskEventForm
           mode={editingTask?.id ? "edit" : "create"}
           initialData={editingTask || undefined}
+          config={selectedActivityConfig || undefined}
           onSubmitSuccess={handleFormSubmitSuccess}
           onClose={handleFormClose}
         />
