@@ -241,7 +241,6 @@ export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onCl
   // Goals collapsible state
   const [showGoalsSection, setShowGoalsSection] = useState(false);
 
-
   // Helper function to get next 15-minute interval + 15 min buffer
   const getDefaultStartTime = () => {
     const now = new Date();
