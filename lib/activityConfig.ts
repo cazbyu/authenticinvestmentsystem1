@@ -10,22 +10,20 @@ export interface ActivityConfig {
   label: string;
   color: string;
   description: string;
-  // Icon can be either a Lucide icon name or an image source
-  iconType: 'lucide' | 'image';
-  iconName?: string; // For Lucide icons
-  imageSource?: ImageSourcePropType; // For PNG images
+  imageSource: ImageSourcePropType;
   formDefaults: {
     type: 'task' | 'event' | 'reflection' | 'depositIdea';
     reflectionMode?: 'rose' | 'thorn' | 'reflection';
     isAnytime?: boolean;
-    // Add other defaults as needed
   };
 }
 
-// Image imports - update these paths to match your project structure
+// Image imports - all 6 activities use PNG icons for consistency
 const IMAGES = {
-  rose: require('@/assets/images/rose.png'),
-  thorn: require('@/assets/images/thorn.png'),
+  task: require('@/assets/images/task-list.png'),
+  event: require('@/assets/images/calendar.png'),
+  rose: require('@/assets/images/rose-81.png'),
+  thorn: require('@/assets/images/thorn-81.png'),
   depositIdea: require('@/assets/images/deposit-idea.png'),
   reflection: require('@/assets/images/reflections-72.png'),
 };
@@ -36,8 +34,7 @@ export const ACTIVITY_CONFIGS: Record<ActivityType, ActivityConfig> = {
     label: 'Task',
     color: '#3b82f6', // Blue
     description: 'Create an action item to complete',
-    iconType: 'lucide',
-    iconName: 'CheckSquare',
+    imageSource: IMAGES.task,
     formDefaults: {
       type: 'task',
     },
@@ -47,8 +44,7 @@ export const ACTIVITY_CONFIGS: Record<ActivityType, ActivityConfig> = {
     label: 'Event',
     color: '#22c55e', // Green
     description: 'Schedule a time-based activity',
-    iconType: 'lucide',
-    iconName: 'Calendar',
+    imageSource: IMAGES.event,
     formDefaults: {
       type: 'event',
     },
@@ -58,7 +54,6 @@ export const ACTIVITY_CONFIGS: Record<ActivityType, ActivityConfig> = {
     label: 'Rose',
     color: '#ec4899', // Pink
     description: 'Celebrate a small win or positive moment from today',
-    iconType: 'image',
     imageSource: IMAGES.rose,
     formDefaults: {
       type: 'reflection',
@@ -71,7 +66,6 @@ export const ACTIVITY_CONFIGS: Record<ActivityType, ActivityConfig> = {
     label: 'Thorn',
     color: '#ef4444', // Red
     description: 'Acknowledge a challenge or difficulty you faced',
-    iconType: 'image',
     imageSource: IMAGES.thorn,
     formDefaults: {
       type: 'reflection',
@@ -84,7 +78,6 @@ export const ACTIVITY_CONFIGS: Record<ActivityType, ActivityConfig> = {
     label: 'Deposit Idea',
     color: '#f59e0b', // Yellow/Amber
     description: 'Capture an idea to explore later',
-    iconType: 'image',
     imageSource: IMAGES.depositIdea,
     formDefaults: {
       type: 'depositIdea',
@@ -95,7 +88,6 @@ export const ACTIVITY_CONFIGS: Record<ActivityType, ActivityConfig> = {
     label: 'Reflection',
     color: '#9333ea', // Purple
     description: 'Record a thought, insight, or observation',
-    iconType: 'image',
     imageSource: IMAGES.reflection,
     formDefaults: {
       type: 'reflection',
