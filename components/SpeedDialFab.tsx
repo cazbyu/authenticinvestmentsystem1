@@ -11,7 +11,7 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import { Plus, CheckSquare, Calendar, X } from 'lucide-react-native';
+import { Plus } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ACTIVITY_CONFIGS, ACTIVITY_ORDER, ActivityConfig, ActivityType } from '@/lib/activityConfig';
 
@@ -23,13 +23,6 @@ interface SpeedDialFabProps {
 
 const MINI_FAB_SIZE = 48;
 const MINI_FAB_SPACING = 60;
-const LABEL_OFFSET = 56;
-
-// Map Lucide icon names to components
-const LucideIcons: Record<string, any> = {
-  CheckSquare,
-  Calendar,
-};
 
 export function SpeedDialFab({
   onActivitySelect,
@@ -223,14 +216,8 @@ export function SpeedDialFab({
   const labelStyles = ACTIVITY_ORDER.map((_, index) => createLabelStyle(index));
 
   const renderIcon = (config: ActivityConfig) => {
-    if (config.iconType === 'lucide' && config.iconName) {
-      const IconComponent = LucideIcons[config.iconName];
-      if (IconComponent) {
-        return <IconComponent size={22} color={config.color} />;
-      }
-    }
-    
-    if (config.iconType === 'image' && config.imageSource) {
+    // All activities use PNG images
+    if (config.imageSource) {
       return (
         <Image
           source={config.imageSource}
@@ -240,7 +227,7 @@ export function SpeedDialFab({
       );
     }
 
-    // Fallback
+    // Fallback (shouldn't happen)
     return <Plus size={22} color={config.color} />;
   };
 
