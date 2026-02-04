@@ -45,9 +45,18 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
-import { getWeekStartDate } from '@/lib/dateUtils';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
+
+// Helper function to get Monday of current week
+function getWeekStartDate(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 // Compass Roles icon for Step 2 header (matches Step 1 sizing: 56x56 in 72x72 container)
 const CompassRolesIcon = require('@/assets/images/compass-roles.png');
