@@ -138,6 +138,7 @@ interface TaskEventFormProps {
   parentId?: string;
   parentType?: 'task' | 'depositIdea' | 'reflection';
 }
+config?: ActivityConfig;
 
 export default function TaskEventForm({ mode, initialData, onSubmitSuccess, onClose, preSelectedType, parentId, parentType }: TaskEventFormProps) {
   const { colors, isDarkMode } = useTheme();
