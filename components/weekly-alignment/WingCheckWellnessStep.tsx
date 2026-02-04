@@ -169,6 +169,7 @@ export function WingCheckWellnessStep({
   const [existingOneThingId, setExistingOneThingId] = useState<string | null>(null);
   const [savingOneThing, setSavingOneThing] = useState(false);
   const [weekStartDate, setWeekStartDate] = useState<string>('');
+  const [weekStartDay, setWeekStartDay] = useState<'sunday' | 'monday'>('sunday');
   
   // Actions/Ideas state
   const [zoneTasks, setZoneTasks] = useState<Task[]>([]);
