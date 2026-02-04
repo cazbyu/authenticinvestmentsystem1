@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Easing, Platform, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Easing, Platform, FlatList, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
@@ -15,7 +15,8 @@ import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDet
 import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
-import { DraggableFab } from '@/components/DraggableFab';
+import { SpeedDialFab } from '@/components/SpeedDialFab';
+import { ActivityConfig } from '@/lib/activityConfig';
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
@@ -74,6 +75,8 @@ export default function Dashboard() {
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
+  // Speed Dial FAB state - tracks which activity was selected
+  const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
 
   
   // === SLOT MAPPING TEST - DELETE AFTER TESTING ===
@@ -109,6 +112,15 @@ export default function Dashboard() {
   const {
     deleteTask,
   } = useGoalProgress();
+
+
+  // Speed Dial FAB handler
+  const handleActivitySelect = (config: ActivityConfig) => {
+    console.log('[Dashboard] Activity selected from Speed Dial:', config.key, config.label);
+    setSelectedActivityConfig(config);
+    setEditingTask(null);
+    setIsFormModalVisible(true);
+  };
   
 
   const loadJournalPeriodScore = async () => {
@@ -233,6 +245,7 @@ export default function Dashboard() {
     setSelectedTask(null);
     setEditingTask(null);
     setSelectedDepositIdea(null);
+    setSelectedActivityConfig(null);
     setTasks([]);
     setDepositIdeas([]);
   }, []);
@@ -973,6 +986,7 @@ export default function Dashboard() {
     }
 
     setEditingTask(task);
+    setSelectedActivityConfig(null); // Clear any Speed Dial config when editing
     setIsDetailModalVisible(false);
     setTimeout(() => setIsFormModalVisible(true), 100); // Small delay to ensure modal transition
   };
@@ -1002,6 +1016,7 @@ export default function Dashboard() {
   const handleFormSubmitSuccess = async () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
+    setSelectedActivityConfig(null); // Clear Speed Dial config after successful submit
 
     // Force complete data refresh
     await fetchData();
@@ -1015,6 +1030,7 @@ export default function Dashboard() {
   const handleFormClose = () => {
     setIsFormModalVisible(false);
     setEditingTask(null);
+    setSelectedActivityConfig(null); // Clear Speed Dial config when closing
   };
 
 
@@ -1415,15 +1431,19 @@ const renderDashboardTabs = () => (
         </View>
       </ScrollView>
 
-      <DraggableFab onPress={() => setIsFormModalVisible(true)} size={44}>
-        <Plus size={28} color="#ffffff" />
-      </DraggableFab>
+      {/* Speed Dial FAB - replaces DraggableFab */}
+      <SpeedDialFab 
+        onActivitySelect={handleActivitySelect}
+        size={56}
+      />
+
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
         <TaskEventForm
           mode={editingTask ? "edit" : "create"}
           initialData={editingTask || undefined}
           onSubmitSuccess={handleFormSubmitSuccess}
           onClose={handleFormClose}
+          config={editingTask ? undefined : selectedActivityConfig || undefined}
         />
       </Modal>
       <ActionDetailsModal
