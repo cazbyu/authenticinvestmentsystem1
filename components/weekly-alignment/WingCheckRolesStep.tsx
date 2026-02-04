@@ -7,6 +7,12 @@
 // - NO back arrows in subheaders - parent handles back navigation
 // - RolesIcon from CustomIcons used for card headers (like NorthStarIcon in Step 1)
 // - RoleIcon from RoleIcon.tsx used for individual role display
+//
+// ONE Thing Integration (role-reflection state):
+// - Card 1: Purpose (existing)
+// - Card 2: ONE Thing question + input
+// - Card 3: Activity icons (Task, Event, Deposit Idea, Reflection)
+// - Card 4: Actions/Ideas tabs
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -24,9 +30,22 @@ import {
   Animated,
   KeyboardAvoidingView,
 } from 'react-native';
-import { ChevronRight, Check, HelpCircle, Settings } from 'lucide-react-native';
+import { 
+  ChevronRight, 
+  Check, 
+  HelpCircle, 
+  Settings,
+  CheckSquare,
+  Calendar,
+  Lightbulb,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
+import { getWeekStartDate } from '@/lib/dateUtils';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
 
@@ -43,6 +62,7 @@ interface WingCheckRolesStepProps {
     rolesReviewed: string[];
     roleHealthFlags: Record<string, 'thriving' | 'stable' | 'needs_attention'>;
   }) => void;
+  onOpenTaskForm?: (initialData: any) => void;
 }
 
 interface Role {
@@ -56,6 +76,21 @@ interface Role {
   priority_order?: number | null;
 }
 
+interface Task {
+  id: string;
+  title: string;
+  type: 'task' | 'event';
+  status: string;
+  scheduled_date?: string;
+  one_thing?: boolean;
+}
+
+interface DepositIdea {
+  id: string;
+  title: string;
+  one_thing?: boolean;
+}
+
 // Flow states for the step
 type FlowState = 
   | 'loading'           // Initial data fetch
@@ -63,12 +98,20 @@ type FlowState =
   | 'main'              // Main hub view
   | 'prioritize'        // Prioritization selection view
   | 'review-roles'      // List of prioritized roles for review
-  | 'role-reflection';  // Purpose question for selected role
+  | 'role-reflection';  // Purpose + ONE Thing for selected role
 
 // Brand color for Roles (purple)
 const ROLES_COLOR = '#9370DB';
 const ROLES_COLOR_LIGHT = '#9370DB15';
 const ROLES_COLOR_BORDER = '#9370DB40';
+
+// Activity type configuration (no Rose/Thorn for ONE Thing flow)
+const ACTIVITY_TYPES = [
+  { key: 'task', label: 'Task', icon: CheckSquare, color: '#3B82F6' },
+  { key: 'event', label: 'Event', icon: Calendar, color: '#8B5CF6' },
+  { key: 'depositIdea', label: 'Idea', icon: Lightbulb, color: '#F59E0B' },
+  { key: 'reflection', label: 'Reflect', icon: BookOpen, color: '#10B981' },
+] as const;
 
 export function WingCheckRolesStep({
   userId,
@@ -77,6 +120,7 @@ export function WingCheckRolesStep({
   onBack,
   onRegisterBackHandler,
   onDataCapture,
+  onOpenTaskForm,
 }: WingCheckRolesStepProps) {
   const router = useRouter();
   
@@ -97,6 +141,19 @@ export function WingCheckRolesStep({
   const [selectedReflectionRole, setSelectedReflectionRole] = useState<Role | null>(null);
   const [purposeResponse, setPurposeResponse] = useState('');
   
+  // ONE Thing state
+  const [oneThingAnswer, setOneThingAnswer] = useState('');
+  const [existingOneThingId, setExistingOneThingId] = useState<string | null>(null);
+  const [savingOneThing, setSavingOneThing] = useState(false);
+  const [weekStartDate, setWeekStartDate] = useState<string>('');
+  
+  // Actions/Ideas state
+  const [roleTasks, setRoleTasks] = useState<Task[]>([]);
+  const [roleDepositIdeas, setRoleDepositIdeas] = useState<DepositIdea[]>([]);
+  const [activeTab, setActiveTab] = useState<'actions' | 'ideas'>('actions');
+  const [actionsExpanded, setActionsExpanded] = useState(true);
+  const [loadingRoleData, setLoadingRoleData] = useState(false);
+  
   // Animation
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -106,6 +163,12 @@ export function WingCheckRolesStep({
   useEffect(() => {
     flowStateRef.current = flowState;
   }, [flowState]);
+
+  // Calculate week start date on mount
+  useEffect(() => {
+    const weekStart = getWeekStartDate(new Date());
+    setWeekStartDate(weekStart.toISOString().split('T')[0]);
+  }, []);
 
   // Back handler for parent component
   useEffect(() => {
@@ -123,7 +186,12 @@ export function WingCheckRolesStep({
           setFlowState('main');
           return true;
         } else if (currentFlowState === 'role-reflection') {
+          // Reset role reflection state
           setPurposeResponse('');
+          setOneThingAnswer('');
+          setExistingOneThingId(null);
+          setRoleTasks([]);
+          setRoleDepositIdeas([]);
           setSelectedReflectionRole(null);
           setFlowState('review-roles');
           return true;
@@ -175,6 +243,105 @@ export function WingCheckRolesStep({
       setFlowState('activate-roles');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Load ONE Thing and role data when entering role-reflection
+  async function loadRoleReflectionData(role: Role) {
+    if (!weekStartDate) return;
+    
+    setLoadingRoleData(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      // 1. Load existing ONE Thing answer for this role and week
+      const { data: oneThingData, error: oneThingError } = await supabase
+        .from('0008-ap-reflections')
+        .select('id, content')
+        .eq('user_id', userId)
+        .eq('one_thing', true)
+        .eq('week_start_date', weekStartDate)
+        .eq('archived', false)
+        .maybeSingle();
+
+      // Check if this ONE Thing is linked to this role
+      if (oneThingData) {
+        const { data: roleJoin } = await supabase
+          .from('0008-ap-universal-roles-join')
+          .select('id')
+          .eq('parent_type', 'reflection')
+          .eq('parent_id', oneThingData.id)
+          .eq('role_id', role.id)
+          .maybeSingle();
+
+        if (roleJoin) {
+          setOneThingAnswer(oneThingData.content || '');
+          setExistingOneThingId(oneThingData.id);
+        } else {
+          setOneThingAnswer('');
+          setExistingOneThingId(null);
+        }
+      } else {
+        setOneThingAnswer('');
+        setExistingOneThingId(null);
+      }
+
+      // 2. Load tasks for this role
+      const { data: taskJoins } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id')
+        .eq('parent_type', 'task')
+        .eq('role_id', role.id);
+
+      const taskIds = taskJoins?.map(tj => tj.parent_id) || [];
+
+      if (taskIds.length > 0) {
+        const { data: tasksData } = await supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, status, scheduled_date, one_thing')
+          .eq('user_id', userId)
+          .in('id', taskIds)
+          .is('deleted_at', null)
+          .not('status', 'in', '(completed,cancelled)')
+          .in('type', ['task', 'event'])
+          .order('scheduled_date', { ascending: true, nullsFirst: false })
+          .limit(10);
+
+        setRoleTasks(tasksData || []);
+      } else {
+        setRoleTasks([]);
+      }
+
+      // 3. Load deposit ideas for this role
+      const { data: ideaJoins } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id')
+        .eq('parent_type', 'depositIdea')
+        .eq('role_id', role.id);
+
+      const ideaIds = ideaJoins?.map(ij => ij.parent_id) || [];
+
+      if (ideaIds.length > 0) {
+        const { data: ideasData } = await supabase
+          .from('0008-ap-deposit-ideas')
+          .select('id, title, one_thing')
+          .eq('user_id', userId)
+          .in('id', ideaIds)
+          .eq('archived', false)
+          .eq('is_active', true)
+          .is('activated_task_id', null)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        setRoleDepositIdeas(ideasData || []);
+      } else {
+        setRoleDepositIdeas([]);
+      }
+
+    } catch (error) {
+      console.error('Error loading role reflection data:', error);
+    } finally {
+      setLoadingRoleData(false);
     }
   }
 
@@ -272,21 +439,15 @@ export function WingCheckRolesStep({
       if (updateError) throw updateError;
 
       // Update local state
+      const updatedRole = { ...selectedReflectionRole, purpose: purposeResponse.trim() };
+      setSelectedReflectionRole(updatedRole);
       setRoles(prev => prev.map(r => 
-        r.id === selectedReflectionRole.id 
-          ? { ...r, purpose: purposeResponse.trim() }
-          : r
+        r.id === selectedReflectionRole.id ? updatedRole : r
       ));
       setPrioritizedRoles(prev => prev.map(r => 
-        r.id === selectedReflectionRole.id 
-          ? { ...r, purpose: purposeResponse.trim() }
-          : r
+        r.id === selectedReflectionRole.id ? updatedRole : r
       ));
 
-      // Go back to review
-      setPurposeResponse('');
-      setSelectedReflectionRole(null);
-      slideToState('review-roles');
     } catch (error) {
       console.error('Error saving role purpose:', error);
       if (Platform.OS === 'web') {
@@ -297,6 +458,76 @@ export function WingCheckRolesStep({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveOneThing() {
+    if (!selectedReflectionRole || !oneThingAnswer.trim() || !weekStartDate) return;
+
+    setSavingOneThing(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      if (existingOneThingId) {
+        // Update existing
+        const { error: updateError } = await supabase
+          .from('0008-ap-reflections')
+          .update({
+            content: oneThingAnswer.trim(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingOneThingId);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new reflection
+        const { data: newReflection, error: insertError } = await supabase
+          .from('0008-ap-reflections')
+          .insert({
+            user_id: userId,
+            content: oneThingAnswer.trim(),
+            reflection_type: 'reflection',
+            one_thing: true,
+            week_start_date: weekStartDate,
+          })
+          .select('id')
+          .single();
+
+        if (insertError) throw insertError;
+
+        // Link to role
+        const { error: joinError } = await supabase
+          .from('0008-ap-universal-roles-join')
+          .insert({
+            parent_type: 'reflection',
+            parent_id: newReflection.id,
+            role_id: selectedReflectionRole.id,
+          });
+
+        if (joinError) throw joinError;
+
+        setExistingOneThingId(newReflection.id);
+      }
+
+    } catch (error) {
+      console.error('Error saving ONE Thing:', error);
+      if (Platform.OS === 'web') {
+        window.alert('Failed to save. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to save. Please try again.');
+      }
+    } finally {
+      setSavingOneThing(false);
+    }
+  }
+
+  function handleCreateItem(type: 'task' | 'event' | 'depositIdea' | 'reflection') {
+    if (!selectedReflectionRole || !onOpenTaskForm) return;
+
+    onOpenTaskForm({
+      type: type,
+      selectedRoleIds: [selectedReflectionRole.id],
+      one_thing: true, // Mark as created from ONE Thing flow
+    });
   }
 
   function handleContinueToWellnessZones() {
@@ -603,7 +834,7 @@ export function WingCheckRolesStep({
             </View>
             
             <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
-              Tap a role to reflect on its purpose
+              Tap a role to define purpose and set your ONE Thing
             </Text>
           </View>
 
@@ -629,6 +860,7 @@ export function WingCheckRolesStep({
                 onPress={() => {
                   setSelectedReflectionRole(role);
                   setPurposeResponse(role.purpose || '');
+                  loadRoleReflectionData(role);
                   slideToState('role-reflection');
                 }}
                 activeOpacity={0.7}
@@ -682,7 +914,7 @@ export function WingCheckRolesStep({
     );
   }
 
-  // ===== RENDER: ROLE REFLECTION STATE =====
+  // ===== RENDER: ROLE REFLECTION STATE (with ONE Thing) =====
   if (flowState === 'role-reflection' && selectedReflectionRole) {
     const categoryColor = getCategoryColor(selectedReflectionRole.category);
     const priorityIndex = prioritizedRoles.findIndex(r => r.id === selectedReflectionRole.id);
@@ -700,7 +932,7 @@ export function WingCheckRolesStep({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Header - Standard format, NO back arrow, CENTERED icon */}
+            {/* Header */}
             <View style={styles.headerSection}>
               <View style={styles.headerRow}>
                 <View style={[styles.compassContainer, { backgroundColor: `${categoryColor}15` }]}>
@@ -712,7 +944,7 @@ export function WingCheckRolesStep({
                 </View>
                 <View style={styles.headerTextContainer}>
                   <Text style={[styles.stepLabel, { color: categoryColor }]}>
-                    {isPrioritized ? `R${priorityIndex + 1}` : 'Step 2'}
+                    {isPrioritized ? `R${priorityIndex + 1}` : 'Role'}
                   </Text>
                   <Text style={[styles.stepTitle, { color: colors.text }]}>
                     {selectedReflectionRole.label}
@@ -721,51 +953,281 @@ export function WingCheckRolesStep({
               </View>
             </View>
 
-            {/* Purpose Question Card */}
-            <View style={[styles.questionCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
-              <Text style={[styles.questionText, { color: colors.text }]}>
-                What is your primary purpose as a {selectedReflectionRole.label}?
-              </Text>
-              <Text style={[styles.questionHint, { color: colors.textSecondary }]}>
-                Describe what success looks like in this role.
-              </Text>
-            </View>
-
-            {/* Response Input */}
-            <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <TextInput
-                style={[styles.textInput, { color: colors.text }]}
-                placeholder="My purpose in this role is to..."
-                placeholderTextColor={colors.textSecondary}
-                value={purposeResponse}
-                onChangeText={setPurposeResponse}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Save Button */}
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                {
-                  backgroundColor: purposeResponse.trim() ? ROLES_COLOR : colors.border,
-                  opacity: saving ? 0.7 : 1,
-                },
-              ]}
-              onPress={saveRolePurpose}
-              disabled={saving || !purposeResponse.trim()}
-              activeOpacity={0.8}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+            {/* Card 1: Purpose */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.cardLabel, { color: categoryColor }]}>MY PURPOSE IN THIS ROLE</Text>
+                <TouchableOpacity 
+                  style={styles.editButton}
+                  onPress={() => {}}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                >
+                  <Pencil size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              
+              {selectedReflectionRole.purpose ? (
+                <Text style={[styles.purposeText, { color: colors.text }]}>
+                  "{selectedReflectionRole.purpose}"
+                </Text>
               ) : (
                 <>
-                  <Text style={styles.primaryButtonText}>Save Purpose</Text>
-                  <ChevronRight size={20} color="#FFFFFF" />
+                  <Text style={[styles.questionHint, { color: colors.textSecondary, marginBottom: 12 }]}>
+                    Describe what success looks like in this role.
+                  </Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.textInput, { color: colors.text }]}
+                      placeholder="My purpose in this role is to..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={purposeResponse}
+                      onChangeText={setPurposeResponse}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.savePurposeButton,
+                      {
+                        backgroundColor: purposeResponse.trim() ? ROLES_COLOR : colors.border,
+                        opacity: saving ? 0.7 : 1,
+                      },
+                    ]}
+                    onPress={saveRolePurpose}
+                    disabled={saving || !purposeResponse.trim()}
+                    activeOpacity={0.8}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.savePurposeButtonText}>Save Purpose</Text>
+                    )}
+                  </TouchableOpacity>
                 </>
               )}
+            </View>
+
+            {/* Card 2: ONE Thing Question */}
+            <View style={[styles.card, { backgroundColor: `${categoryColor}08`, borderColor: `${categoryColor}30` }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.cardLabel, { color: categoryColor }]}>ONE THING THIS WEEK</Text>
+                {existingOneThingId && (
+                  <View style={[styles.savedBadge, { backgroundColor: '#10b981' }]}>
+                    <Check size={12} color="#FFFFFF" />
+                    <Text style={styles.savedBadgeText}>Saved</Text>
+                  </View>
+                )}
+              </View>
+              
+              <Text style={[styles.questionText, { color: colors.text }]}>
+                What is the ONE thing I can do as a {selectedReflectionRole.label} this week that will make everything else easier or unnecessary?
+              </Text>
+              
+              <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput
+                  style={[styles.textInput, { color: colors.text }]}
+                  placeholder="My ONE thing this week is..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={oneThingAnswer}
+                  onChangeText={setOneThingAnswer}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  {
+                    backgroundColor: oneThingAnswer.trim() ? categoryColor : colors.border,
+                    opacity: savingOneThing ? 0.7 : 1,
+                  },
+                ]}
+                onPress={saveOneThing}
+                disabled={savingOneThing || !oneThingAnswer.trim()}
+                activeOpacity={0.8}
+              >
+                {savingOneThing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>
+                    {existingOneThingId ? 'Update ONE Thing' : 'Save ONE Thing'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Card 3: Activity Icons */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.cardLabel, { color: colors.textSecondary, marginBottom: 12 }]}>
+                TAKE ACTION
+              </Text>
+              
+              <View style={styles.activityIconsRow}>
+                {ACTIVITY_TYPES.map(({ key, label, icon: Icon, color }) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={styles.activityButton}
+                    onPress={() => handleCreateItem(key as any)}
+                    activeOpacity={0.7}
+                    disabled={!onOpenTaskForm}
+                  >
+                    <View style={[styles.activityIconCircle, { backgroundColor: `${color}15` }]}>
+                      <Icon size={20} color={color} />
+                    </View>
+                    <Text style={[styles.activityLabel, { color: colors.text }]}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Card 4: Actions & Ideas Tabs */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <TouchableOpacity 
+                style={styles.expandHeader}
+                onPress={() => setActionsExpanded(!actionsExpanded)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>
+                  SCHEDULED & IDEAS
+                </Text>
+                {actionsExpanded ? (
+                  <ChevronUp size={20} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={20} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+
+              {actionsExpanded && (
+                <>
+                  {/* Tab Selector */}
+                  <View style={[styles.tabRow, { backgroundColor: colors.border }]}>
+                    <TouchableOpacity
+                      style={[
+                        styles.tab,
+                        activeTab === 'actions' && { backgroundColor: categoryColor },
+                      ]}
+                      onPress={() => setActiveTab('actions')}
+                    >
+                      <Text style={[
+                        styles.tabText,
+                        activeTab === 'actions' && styles.tabTextActive,
+                      ]}>
+                        Actions ({roleTasks.length})
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.tab,
+                        activeTab === 'ideas' && { backgroundColor: categoryColor },
+                      ]}
+                      onPress={() => setActiveTab('ideas')}
+                    >
+                      <Text style={[
+                        styles.tabText,
+                        activeTab === 'ideas' && styles.tabTextActive,
+                      ]}>
+                        Ideas ({roleDepositIdeas.length})
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Tab Content */}
+                  <View style={styles.tabContent}>
+                    {loadingRoleData ? (
+                      <View style={styles.tabLoadingContainer}>
+                        <ActivityIndicator size="small" color={categoryColor} />
+                      </View>
+                    ) : activeTab === 'actions' ? (
+                      roleTasks.length === 0 ? (
+                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                          No actions scheduled for this role
+                        </Text>
+                      ) : (
+                        roleTasks.slice(0, 5).map(task => (
+                          <View
+                            key={task.id}
+                            style={[styles.listItem, { borderColor: colors.border }]}
+                          >
+                            <View style={[
+                              styles.itemIcon,
+                              { backgroundColor: task.type === 'event' ? '#8B5CF615' : '#3B82F615' }
+                            ]}>
+                              {task.type === 'event' ? (
+                                <Calendar size={14} color="#8B5CF6" />
+                              ) : (
+                                <CheckSquare size={14} color="#3B82F6" />
+                              )}
+                            </View>
+                            <View style={styles.itemContent}>
+                              <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
+                                {task.title}
+                              </Text>
+                              {task.scheduled_date && (
+                                <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
+                                  {new Date(task.scheduled_date).toLocaleDateString()}
+                                </Text>
+                              )}
+                            </View>
+                            {task.one_thing && (
+                              <View style={[styles.oneThingBadge, { backgroundColor: categoryColor }]}>
+                                <Text style={styles.oneThingBadgeText}>1</Text>
+                              </View>
+                            )}
+                          </View>
+                        ))
+                      )
+                    ) : (
+                      roleDepositIdeas.length === 0 ? (
+                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                          No deposit ideas for this role
+                        </Text>
+                      ) : (
+                        roleDepositIdeas.slice(0, 5).map(idea => (
+                          <View
+                            key={idea.id}
+                            style={[styles.listItem, { borderColor: colors.border }]}
+                          >
+                            <View style={[styles.itemIcon, { backgroundColor: '#F59E0B15' }]}>
+                              <Lightbulb size={14} color="#F59E0B" />
+                            </View>
+                            <View style={styles.itemContent}>
+                              <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
+                                {idea.title}
+                              </Text>
+                            </View>
+                            {idea.one_thing && (
+                              <View style={[styles.oneThingBadge, { backgroundColor: categoryColor }]}>
+                                <Text style={styles.oneThingBadgeText}>1</Text>
+                              </View>
+                            )}
+                          </View>
+                        ))
+                      )
+                    )}
+                  </View>
+                </>
+              )}
+            </View>
+
+            {/* Back to Review Button */}
+            <TouchableOpacity
+              style={[styles.secondaryButton, { borderColor: categoryColor }]}
+              onPress={() => {
+                setPurposeResponse('');
+                setOneThingAnswer('');
+                setExistingOneThingId(null);
+                setRoleTasks([]);
+                setRoleDepositIdeas([]);
+                setSelectedReflectionRole(null);
+                slideToState('review-roles');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.secondaryButtonText, { color: categoryColor }]}>Back to Roles</Text>
             </TouchableOpacity>
 
             <View style={{ height: 40 }} />
@@ -894,7 +1356,7 @@ export function WingCheckRolesStep({
                 Review Your Roles
               </Text>
               <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
-                Reflect on your purpose for each role
+                Set purpose & ONE Thing for each role
               </Text>
             </View>
           </View>
@@ -1164,6 +1626,33 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
+  // Cards (for role-reflection)
+  card: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cardLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  editButton: {
+    padding: 4,
+  },
+  purposeText: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    lineHeight: 22,
+  },
+
   // Question Card
   questionCard: {
     padding: 20,
@@ -1172,13 +1661,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   questionText: {
-    fontSize: 18,
-    fontWeight: '600',
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 22,
+    marginBottom: 12,
   },
   questionHint: {
     fontSize: 14,
-    marginTop: 8,
     lineHeight: 20,
   },
 
@@ -1308,14 +1796,154 @@ const styles = StyleSheet.create({
 
   // Input container
   inputContainer: {
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   textInput: {
-    padding: 16,
+    padding: 12,
     fontSize: 16,
-    minHeight: 120,
+    minHeight: 80,
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  savePurposeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 8,
+  },
+  savePurposeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  savedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  savedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Activity Icons
+  activityIconsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  activityButton: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  activityIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+
+  // Expand Header
+  expandHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  // Tabs
+  tabRow: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    padding: 3,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+  tabContent: {
+    minHeight: 60,
+  },
+  tabLoadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 16,
+    fontStyle: 'italic',
+  },
+
+  // List Items
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  itemIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemContent: {
+    flex: 1,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  itemMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  oneThingBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  oneThingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
 
