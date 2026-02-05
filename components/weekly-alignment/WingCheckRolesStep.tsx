@@ -474,6 +474,7 @@ export function WingCheckRolesStep({
 
   // Slide transition helper
   function slideToState(newState: FlowState) {
+    setShowTooltip(false);
     Animated.timing(slideAnim, {
       toValue: -1,
       duration: 150,
@@ -1180,7 +1181,22 @@ export function WingCheckRolesStep({
                 <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Design Your Legacy</Text>
               </View>
+              <TouchableOpacity
+                style={styles.tooltipButton}
+                onPress={() => setShowTooltip(!showTooltip)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <HelpCircle size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
+
+            {showTooltip && (
+              <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.tooltipText, { color: colors.text }]}>
+                  This is where you shape each role in your life. Tap any role to open its Living Vision Board — set your ONE Thing for the week, capture ideas, record roses and thorns, and define your dream and purpose. Roles with a green checkmark already have a purpose or dream defined.
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={[styles.identityCard, { backgroundColor: ROLES_COLOR_LIGHT, borderColor: ROLES_COLOR_BORDER }]}>
@@ -1298,7 +1314,29 @@ export function WingCheckRolesStep({
                     {selectedReflectionRole.label}
                   </Text>
                 </View>
+                <TouchableOpacity
+                  style={styles.tooltipButton}
+                  onPress={() => setShowTooltip(!showTooltip)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <HelpCircle size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
+
+              {showTooltip && (
+                <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.tooltipText, { color: colors.text }]}>
+                    This is your Living Vision Board for your {selectedReflectionRole.label} role. Use it to stay intentional each week:{'\n\n'}
+                    • ONE Thing — pick the single most important action for this role this week and save it as a task or event.{'\n'}
+                    • Capture an Idea — save ideas you can't act on yet for later.{'\n'}
+                    • Roses & Thorns — note what's going well and what's challenging.{'\n'}
+                    • Capture a Thought — record any insight or reflection.{'\n'}
+                    • Dream & Purpose — define the bigger picture for this role, and use Deeper Introspection to explore it further.{'\n'}
+                    • Key Relationships — track the people who matter most in this role.{'\n'}
+                    • Journal — a dedicated space for ongoing notes about this role.
+                  </Text>
+                </View>
+              )}
             </View>
 
             {loadingRoleData && (
