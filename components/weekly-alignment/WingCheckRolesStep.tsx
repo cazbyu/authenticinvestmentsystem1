@@ -89,7 +89,6 @@ function getWeekDates(weekStart: string): { label: string; value: string }[] {
 
 // Compass Roles icon for Step 2 header (matches Step 1 sizing: 56x56 in 72x72 container)
 const CompassRolesIcon = require('@/assets/images/compass-roles.png');
-const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
 const DepositIdeaIcon = require('@/assets/images/deposit-idea.png');
 const RoseIcon = require('@/assets/images/rose-81.png');
 const ThornIcon = require('@/assets/images/thorn-81.png');
@@ -1383,7 +1382,7 @@ export function WingCheckRolesStep({
             <View style={[styles.card, { backgroundColor: `${categoryColor}08`, borderColor: `${categoryColor}30` }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <Image source={CompassGoalsIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                  <RolesIcon size={16} color={categoryColor} />
                   <Text style={[styles.cardLabel, { color: categoryColor, marginLeft: 6 }]}>ONE THING THIS WEEK</Text>
                 </View>
                 {renderSavedBadge('oneThing')}
@@ -1821,7 +1820,7 @@ export function WingCheckRolesStep({
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <Image source={CompassRolesIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                  <RolesIcon size={16} color={categoryColor} />
                   <Text style={[styles.cardLabel, { color: categoryColor, marginLeft: 6 }]}>KEY RELATIONSHIPS</Text>
                 </View>
               </View>
