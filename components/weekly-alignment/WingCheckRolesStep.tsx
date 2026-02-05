@@ -683,28 +683,14 @@ export function WingCheckRolesStep({
       if (insertError) throw insertError;
 
       // Link to role via join table
-      // DEBUG: Check auth state before join insert
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('DEBUG-AUTH-CHECK:', {
-        hasSession: !!session,
-        authUserId: session?.user?.id,
-        propUserId: userId,
-        match: session?.user?.id === userId,
-      });
-
-      const joinPayload = {
-        parent_type: 'task',
-        parent_id: newTask.id,
-        role_id: selectedReflectionRole.id,
-        user_id: userId,
-      };
-      console.log('DEBUG-JOIN-INSERT-V3:', JSON.stringify(joinPayload));
-      
-      const { error: joinError, status: joinStatus, statusText: joinStatusText } = await supabase
+      const { error: joinError } = await supabase
         .from('0008-ap-universal-roles-join')
-        .insert(joinPayload);
-
-      console.log('DEBUG-JOIN-RESULT:', { joinStatus, joinStatusText, joinError });
+        .insert({
+          parent_type: 'task',
+          parent_id: newTask.id,
+          role_id: selectedReflectionRole.id,
+          user_id: userId,
+        });
 
       if (joinError) throw joinError;
 
@@ -713,7 +699,7 @@ export function WingCheckRolesStep({
 
     } catch (error) {
       console.error('Error saving ONE Thing:', error);
-      showErrorAlert('Failed to save ONE Thing (v3 debug).');
+      showErrorAlert('Failed to save ONE Thing.');
     } finally {
       setSavingOneThing(false);
     }
@@ -775,7 +761,7 @@ export function WingCheckRolesStep({
           content: roseText.trim(),
           reflection_type: 'rose',
           daily_rose: true,
-          week_start_date: weekStartDate,
+          one_thing: true,
         })
         .select('id')
         .single();
@@ -818,7 +804,7 @@ export function WingCheckRolesStep({
           content: thornText.trim(),
           reflection_type: 'thorn',
           daily_thorn: true,
-          week_start_date: weekStartDate,
+          one_thing: true,
         })
         .select('id')
         .single();
@@ -861,7 +847,6 @@ export function WingCheckRolesStep({
           content: thoughtText.trim(),
           reflection_type: 'reflection',
           one_thing: true,
-          week_start_date: weekStartDate,
         })
         .select('id')
         .single();
