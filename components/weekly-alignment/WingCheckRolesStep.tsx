@@ -1502,7 +1502,29 @@ export function WingCheckRolesStep({
                 />
               </View>
               
-              {renderSaveButton(saveDepositIdea, savingIdea, !ideaText.trim(), '#F59E0B', 'Save Idea')}
+              <TouchableOpacity
+                style={[
+                  styles.inlineSaveButton,
+                  {
+                    backgroundColor: !ideaText.trim() ? colors.border : '#F59E0B',
+                    opacity: savingIdea ? 0.7 : 1,
+                    flexDirection: 'row',
+                    gap: 8,
+                  },
+                ]}
+                onPress={saveDepositIdea}
+                disabled={savingIdea || !ideaText.trim()}
+                activeOpacity={0.8}
+              >
+                {savingIdea ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Image source={DepositIdeaIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                    <Text style={styles.inlineSaveButtonText}>Save Idea</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* ===== SECTION 3: Roses ===== */}
