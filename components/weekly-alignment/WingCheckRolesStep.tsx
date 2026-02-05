@@ -442,6 +442,9 @@ export function WingCheckRolesStep({
       
       // 3. Load introspection questions for MISSION (purpose section)
       await loadIntrospectionData(role, 'mission');
+      
+      // 4. Load role items (roses, thorns, reflections, ideas, tasks)
+      await loadRoleItemsData(role);
 
     } catch (error) {
       console.error('Error loading role reflection data:', error);
