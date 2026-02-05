@@ -444,6 +444,7 @@ export default function WeeklyAlignmentScreen() {
             onNext={goToNextStep}
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
+            onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
           />
         )}
 
@@ -454,6 +455,7 @@ export default function WeeklyAlignmentScreen() {
             onNext={goToNextStep}
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
+            onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
           />
         )}
 
@@ -474,6 +476,7 @@ export default function WeeklyAlignmentScreen() {
             colors={colors}
             onComplete={handleComplete}
             onBack={goToPreviousStep}
+            onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
             capturedData={{
               missionReflection: alignmentData.missionReflection,
               roleHealthFlags: alignmentData.roleHealthFlags,
