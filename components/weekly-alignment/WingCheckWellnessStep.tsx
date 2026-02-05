@@ -33,10 +33,6 @@ import {
   ChevronRight, 
   Check, 
   HelpCircle,
-  CheckSquare,
-  Calendar,
-  Lightbulb,
-  BookOpen,
   ChevronDown,
   ChevronUp,
   Pencil,
@@ -46,6 +42,12 @@ import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 
 // Compass Wellness icon for Step 3 header (matches Step 1 & 2 sizing: 56x56 in 72x72 container)
 const CompassWellnessIcon = require('@/assets/images/compass-wellness-zones.png');
+
+// Section icons - using PNG assets from app/assets/images (matching activityConfig pattern)
+const TaskListIcon = require('@/assets/images/task-list.png');
+const CalendarIcon = require('@/assets/images/calendar.png');
+const DepositIdeaIcon = require('@/assets/images/deposit-idea.png');
+const ReflectionsIcon = require('@/assets/images/reflections-72.png');
 
 interface WingCheckWellnessStepProps {
   userId: string;
@@ -77,7 +79,11 @@ interface Task {
   title: string;
   type: 'task' | 'event';
   status: string;
-  scheduled_date?: string;
+  due_date?: string;
+  start_date?: string;
+  start_time?: string;
+  end_time?: string;
+  is_anytime?: boolean;
   one_thing?: boolean;
 }
 
@@ -101,11 +107,12 @@ const WELLNESS_COLOR_LIGHT = '#39b54a15';
 const WELLNESS_COLOR_BORDER = '#39b54a40';
 
 // Activity type configuration (no Rose/Thorn for ONE Thing flow)
+// Uses Image assets instead of lucide icons
 const ACTIVITY_TYPES = [
-  { key: 'task', label: 'Task', icon: CheckSquare, color: '#3B82F6' },
-  { key: 'event', label: 'Event', icon: Calendar, color: '#8B5CF6' },
-  { key: 'depositIdea', label: 'Idea', icon: Lightbulb, color: '#F59E0B' },
-  { key: 'reflection', label: 'Reflect', icon: BookOpen, color: '#10B981' },
+  { key: 'task', label: 'Task', imageSource: TaskListIcon, color: '#3B82F6' },
+  { key: 'event', label: 'Event', imageSource: CalendarIcon, color: '#8B5CF6' },
+  { key: 'depositIdea', label: 'Idea', imageSource: DepositIdeaIcon, color: '#F59E0B' },
+  { key: 'reflection', label: 'Reflect', imageSource: ReflectionsIcon, color: '#10B981' },
 ] as const;
 
 // Zone icon colors by name
@@ -246,8 +253,6 @@ export function WingCheckWellnessStep({
         setWeekStartDay(userData.week_start_day as 'sunday' | 'monday');
       }
 
-      // Load all active roles
-
       // Load all wellness zones from domains table
       const { data: domainsData, error: domainsError } = await supabase
         .from('0008-ap-domains')
@@ -345,7 +350,7 @@ export function WingCheckWellnessStep({
         setExistingOneThingId(null);
       }
 
-      // 2. Load tasks for this zone
+      // 2. Load tasks for this zone (using proper date columns)
       const { data: taskJoins } = await supabase
         .from('0008-ap-universal-domains-join')
         .select('parent_id')
@@ -357,13 +362,13 @@ export function WingCheckWellnessStep({
       if (taskIds.length > 0) {
         const { data: tasksData } = await supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, status, scheduled_date, one_thing')
+          .select('id, title, type, status, due_date, start_date, start_time, end_time, is_anytime, one_thing')
           .eq('user_id', userId)
           .in('id', taskIds)
           .is('deleted_at', null)
           .not('status', 'in', '(completed,cancelled)')
           .in('type', ['task', 'event'])
-          .order('scheduled_date', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: false })
           .limit(10);
 
         setZoneTasks(tasksData || []);
@@ -584,13 +589,14 @@ export function WingCheckWellnessStep({
 
         if (insertError) throw insertError;
 
-        // Link to domain
+        // Link to domain (include user_id for RLS)
         const { error: joinError } = await supabase
           .from('0008-ap-universal-domains-join')
           .insert({
             parent_type: 'reflection',
             parent_id: newReflection.id,
             domain_id: selectedReflectionZone.domain_id,
+            user_id: userId,
           });
 
         if (joinError) throw joinError;
@@ -642,6 +648,17 @@ export function WingCheckWellnessStep({
       .sort((a, b) => a.name.localeCompare(b.name));
     
     return [...prioritizedZones, ...nonPrioritized];
+  }
+
+  // Helper: get display date from task
+  function getTaskDisplayDate(task: Task): string | null {
+    const dateStr = task.due_date || task.start_date;
+    if (!dateStr) return null;
+    const formatted = new Date(dateStr).toLocaleDateString();
+    if (task.type === 'event' && task.start_time) {
+      return `${formatted} • ${task.start_time.slice(0, 5)}`;
+    }
+    return formatted;
   }
 
   // ===== RENDER: LOADING STATE =====
@@ -1043,14 +1060,14 @@ export function WingCheckWellnessStep({
               </TouchableOpacity>
             </View>
 
-            {/* Card 3: Activity Icons */}
+            {/* Card 3: Activity Icons (using Image assets) */}
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.cardLabel, { color: colors.textSecondary, marginBottom: 12 }]}>
                 TAKE ACTION
               </Text>
               
               <View style={styles.activityIconsRow}>
-                {ACTIVITY_TYPES.map(({ key, label, icon: Icon, color }) => (
+                {ACTIVITY_TYPES.map(({ key, label, imageSource, color }) => (
                   <TouchableOpacity
                     key={key}
                     style={styles.activityButton}
@@ -1059,7 +1076,7 @@ export function WingCheckWellnessStep({
                     disabled={!onOpenTaskForm}
                   >
                     <View style={[styles.activityIconCircle, { backgroundColor: `${color}15` }]}>
-                      <Icon size={20} color={color} />
+                      <Image source={imageSource} style={{ width: 24, height: 24 }} resizeMode="contain" />
                     </View>
                     <Text style={[styles.activityLabel, { color: colors.text }]}>{label}</Text>
                   </TouchableOpacity>
@@ -1130,38 +1147,41 @@ export function WingCheckWellnessStep({
                           No actions scheduled for this zone
                         </Text>
                       ) : (
-                        zoneTasks.slice(0, 5).map(task => (
-                          <View
-                            key={task.id}
-                            style={[styles.listItem, { borderColor: colors.border }]}
-                          >
-                            <View style={[
-                              styles.itemIcon,
-                              { backgroundColor: task.type === 'event' ? '#8B5CF615' : '#3B82F615' }
-                            ]}>
-                              {task.type === 'event' ? (
-                                <Calendar size={14} color="#8B5CF6" />
-                              ) : (
-                                <CheckSquare size={14} color="#3B82F6" />
-                              )}
-                            </View>
-                            <View style={styles.itemContent}>
-                              <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
-                                {task.title}
-                              </Text>
-                              {task.scheduled_date && (
-                                <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
-                                  {new Date(task.scheduled_date).toLocaleDateString()}
-                                </Text>
-                              )}
-                            </View>
-                            {task.one_thing && (
-                              <View style={[styles.oneThingBadge, { backgroundColor: zoneColor }]}>
-                                <Text style={styles.oneThingBadgeText}>1</Text>
+                        zoneTasks.slice(0, 5).map(task => {
+                          const displayDate = getTaskDisplayDate(task);
+                          return (
+                            <View
+                              key={task.id}
+                              style={[styles.listItem, { borderColor: colors.border }]}
+                            >
+                              <View style={[
+                                styles.itemIcon,
+                                { backgroundColor: task.type === 'event' ? '#8B5CF615' : '#3B82F615' }
+                              ]}>
+                                {task.type === 'event' ? (
+                                  <Image source={CalendarIcon} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                                ) : (
+                                  <Image source={TaskListIcon} style={{ width: 14, height: 14 }} resizeMode="contain" />
+                                )}
                               </View>
-                            )}
-                          </View>
-                        ))
+                              <View style={styles.itemContent}>
+                                <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
+                                  {task.title}
+                                </Text>
+                                {displayDate && (
+                                  <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
+                                    {displayDate}
+                                  </Text>
+                                )}
+                              </View>
+                              {task.one_thing && (
+                                <View style={[styles.oneThingBadge, { backgroundColor: zoneColor }]}>
+                                  <Text style={styles.oneThingBadgeText}>1</Text>
+                                </View>
+                              )}
+                            </View>
+                          );
+                        })
                       )
                     ) : (
                       zoneDepositIdeas.length === 0 ? (
@@ -1175,7 +1195,7 @@ export function WingCheckWellnessStep({
                             style={[styles.listItem, { borderColor: colors.border }]}
                           >
                             <View style={[styles.itemIcon, { backgroundColor: '#F59E0B15' }]}>
-                              <Lightbulb size={14} color="#F59E0B" />
+                              <Image source={DepositIdeaIcon} style={{ width: 14, height: 14 }} resizeMode="contain" />
                             </View>
                             <View style={styles.itemContent}>
                               <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
