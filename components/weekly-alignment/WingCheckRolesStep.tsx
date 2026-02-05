@@ -219,6 +219,7 @@ export function WingCheckRolesStep({
   const [existingOneThingTask, setExistingOneThingTask] = useState<Task | null>(null);
   
   // Capture inputs
+  // Capture inputs
   const [ideaText, setIdeaText] = useState('');
   const [savingIdea, setSavingIdea] = useState(false);
   const [roseText, setRoseText] = useState('');
@@ -227,6 +228,21 @@ export function WingCheckRolesStep({
   const [savingThorn, setSavingThorn] = useState(false);
   const [thoughtText, setThoughtText] = useState('');
   const [savingThought, setSavingThought] = useState(false);
+  
+  // Consolidated reflection tab
+  const [activeReflectionTab, setActiveReflectionTab] = useState<'rose' | 'thorn' | 'reflection'>('rose');
+  const [showReflectionsList, setShowReflectionsList] = useState(false);
+  const [weekRoses, setWeekRoses] = useState<any[]>([]);
+  const [weekThorns, setWeekThorns] = useState<any[]>([]);
+  const [weekReflections, setWeekReflections] = useState<any[]>([]);
+  
+  // Ideas list
+  const [showIdeasList, setShowIdeasList] = useState(false);
+  const [roleIdeas, setRoleIdeas] = useState<DepositIdea[]>([]);
+  
+  // Tasks/Events list
+  const [showTasksList, setShowTasksList] = useState(false);
+  const [roleTasks, setRoleTasks] = useState<Task[]>([]);
   
   // Deeper Introspection state
   const [visionQuestion, setVisionQuestion] = useState<PowerQuestion | null>(null);
