@@ -1670,7 +1670,33 @@ export function WingCheckRolesStep({
                 />
               </View>
               
-              {renderSaveButton(saveThought, savingThought, !thoughtText.trim(), '#10B981', 'Save Thought')}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  alignSelf: 'flex-start',
+                  gap: 8,
+                  backgroundColor: '#FFFFFF',
+                  borderColor: '#10B981',
+                  borderWidth: 1.5,
+                  borderRadius: 10,
+                  paddingVertical: 12,
+                  paddingHorizontal: 20,
+                  opacity: savingThought ? 0.7 : (!thoughtText.trim() ? 0.5 : 1),
+                }}
+                onPress={saveThought}
+                disabled={savingThought || !thoughtText.trim()}
+                activeOpacity={0.7}
+              >
+                {savingThought ? (
+                  <ActivityIndicator size="small" color="#10B981" />
+                ) : (
+                  <>
+                    <Image source={ReflectionsIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                    <Text style={{ color: '#10B981', fontSize: 15, fontWeight: '600' }}>Save Thought</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* ===== SECTION 6: My Dream for this Role ===== */}
