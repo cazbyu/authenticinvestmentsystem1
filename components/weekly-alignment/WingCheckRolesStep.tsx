@@ -1503,15 +1503,19 @@ export function WingCheckRolesStep({
               </View>
               
               <TouchableOpacity
-                style={[
-                  styles.saveAsButton,
-                  {
-                    backgroundColor: '#FFFFFF',
-                    borderColor: '#F59E0B',
-                    borderWidth: 1.5,
-                    opacity: savingIdea ? 0.7 : (!ideaText.trim() ? 0.5 : 1),
-                  },
-                ]}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  alignSelf: 'flex-start',
+                  gap: 8,
+                  backgroundColor: '#FFFFFF',
+                  borderColor: '#F59E0B',
+                  borderWidth: 1.5,
+                  borderRadius: 10,
+                  paddingVertical: 12,
+                  paddingHorizontal: 20,
+                  opacity: savingIdea ? 0.7 : (!ideaText.trim() ? 0.5 : 1),
+                }}
                 onPress={saveDepositIdea}
                 disabled={savingIdea || !ideaText.trim()}
                 activeOpacity={0.7}
@@ -1521,7 +1525,7 @@ export function WingCheckRolesStep({
                 ) : (
                   <>
                     <Image source={DepositIdeaIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                    <Text style={[styles.saveAsButtonText, { color: '#F59E0B' }]}>Save Idea</Text>
+                    <Text style={{ color: '#F59E0B', fontSize: 15, fontWeight: '600' }}>Save Idea</Text>
                   </>
                 )}
               </TouchableOpacity>
