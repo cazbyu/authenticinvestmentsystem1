@@ -1676,172 +1676,261 @@ async function loadRoleItemsData(role: Role) {
               </TouchableOpacity>
             </View>
 
-            {/* ===== SECTION 3: Roses ===== */}
+            {/* ===== SECTION 3: Roses / Thorns / Reflections (Tabbed) ===== */}
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderLeft}>
+              {/* Tab Header */}
+              <View style={{ flexDirection: 'row', marginBottom: 16, borderRadius: 8, backgroundColor: colors.background, padding: 4 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 10,
+                    borderRadius: 6,
+                    backgroundColor: activeReflectionTab === 'rose' ? '#FFFFFF' : 'transparent',
+                  }}
+                  onPress={() => setActiveReflectionTab('rose')}
+                  activeOpacity={0.7}
+                >
                   <Image source={RoseIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                  <Text style={[styles.cardLabel, { color: ROSE_COLOR, marginLeft: 6 }]}>ROSES</Text>
-                </View>
-                {renderSavedBadge('rose')}
-              </View>
-              
-              <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-                Are there any roses you would like to capture about this role?
-              </Text>
-              
-              <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput
-                  style={[styles.textInputSmall, { color: colors.text }]}
-                  placeholder="What's going well..."
-                  placeholderTextColor={colors.textSecondary}
-                  value={roseText}
-                  onChangeText={setRoseText}
-                  multiline
-                  numberOfLines={2}
-                  textAlignVertical="top"
-                />
-              </View>
-              
-              <TouchableOpacity
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  alignSelf: 'flex-start',
-                  gap: 8,
-                  backgroundColor: '#FFFFFF',
-                  borderColor: ROSE_COLOR,
-                  borderWidth: 1.5,
-                  borderRadius: 10,
-                  paddingVertical: 12,
-                  paddingHorizontal: 20,
-                  opacity: savingRose ? 0.7 : (!roseText.trim() ? 0.5 : 1),
-                }}
-                onPress={saveRose}
-                disabled={savingRose || !roseText.trim()}
-                activeOpacity={0.7}
-              >
-                {savingRose ? (
-                  <ActivityIndicator size="small" color={ROSE_COLOR} />
-                ) : (
-                  <>
-                    <Image source={RoseIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                    <Text style={{ color: ROSE_COLOR, fontSize: 15, fontWeight: '600' }}>Save Rose</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* ===== SECTION 4: Thorns ===== */}
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderLeft}>
+                  <Text style={{ color: ROSE_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'rose' ? '700' : '500' }}>Rose</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 10,
+                    borderRadius: 6,
+                    backgroundColor: activeReflectionTab === 'thorn' ? '#FFFFFF' : 'transparent',
+                  }}
+                  onPress={() => setActiveReflectionTab('thorn')}
+                  activeOpacity={0.7}
+                >
                   <Image source={ThornIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                  <Text style={[styles.cardLabel, { color: THORN_COLOR, marginLeft: 6 }]}>THORNS</Text>
-                </View>
-                {renderSavedBadge('thorn')}
-              </View>
-              
-              <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-                Are there any thorns you would like to capture about this role?
-              </Text>
-              
-              <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput
-                  style={[styles.textInputSmall, { color: colors.text }]}
-                  placeholder="What's been challenging..."
-                  placeholderTextColor={colors.textSecondary}
-                  value={thornText}
-                  onChangeText={setThornText}
-                  multiline
-                  numberOfLines={2}
-                  textAlignVertical="top"
-                />
-              </View>
-              
-              <TouchableOpacity
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  alignSelf: 'flex-start',
-                  gap: 8,
-                  backgroundColor: '#FFFFFF',
-                  borderColor: THORN_COLOR,
-                  borderWidth: 1.5,
-                  borderRadius: 10,
-                  paddingVertical: 12,
-                  paddingHorizontal: 20,
-                  opacity: savingThorn ? 0.7 : (!thornText.trim() ? 0.5 : 1),
-                }}
-                onPress={saveThorn}
-                disabled={savingThorn || !thornText.trim()}
-                activeOpacity={0.7}
-              >
-                {savingThorn ? (
-                  <ActivityIndicator size="small" color={THORN_COLOR} />
-                ) : (
-                  <>
-                    <Image source={ThornIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                    <Text style={{ color: THORN_COLOR, fontSize: 15, fontWeight: '600' }}>Save Thorn</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* ===== SECTION 5: Capture a Thought ===== */}
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderLeft}>
+                  <Text style={{ color: THORN_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'thorn' ? '700' : '500' }}>Thorn</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 10,
+                    borderRadius: 6,
+                    backgroundColor: activeReflectionTab === 'reflection' ? '#FFFFFF' : 'transparent',
+                  }}
+                  onPress={() => setActiveReflectionTab('reflection')}
+                  activeOpacity={0.7}
+                >
                   <Image source={ReflectionsIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                  <Text style={[styles.cardLabel, { color: '#10B981', marginLeft: 6 }]}>CAPTURE A THOUGHT</Text>
+                  <Text style={{ color: '#10B981', fontSize: 13, fontWeight: activeReflectionTab === 'reflection' ? '700' : '500' }}>Reflect</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Tab Content */}
+              {activeReflectionTab === 'rose' && (
+                <View>
+                  <View style={styles.cardHeader}>
+                    <Text style={[styles.cardLabel, { color: ROSE_COLOR }]}>CAPTURE A ROSE</Text>
+                    {renderSavedBadge('rose')}
+                  </View>
+                  <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                    What's going well in your {selectedReflectionRole?.label} role?
+                  </Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.textInputSmall, { color: colors.text }]}
+                      placeholder="What's going well..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={roseText}
+                      onChangeText={setRoseText}
+                      multiline
+                      numberOfLines={2}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      alignSelf: 'flex-start',
+                      gap: 8,
+                      backgroundColor: '#FFFFFF',
+                      borderColor: ROSE_COLOR,
+                      borderWidth: 1.5,
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      paddingHorizontal: 20,
+                      opacity: savingRose ? 0.7 : (!roseText.trim() ? 0.5 : 1),
+                    }}
+                    onPress={saveRose}
+                    disabled={savingRose || !roseText.trim()}
+                    activeOpacity={0.7}
+                  >
+                    {savingRose ? (
+                      <ActivityIndicator size="small" color={ROSE_COLOR} />
+                    ) : (
+                      <>
+                        <Image source={RoseIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                        <Text style={{ color: ROSE_COLOR, fontSize: 15, fontWeight: '600' }}>Save Rose</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
-                {renderSavedBadge('thought')}
-              </View>
-              
-              <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-                Do you have any other insights or thoughts you want to capture regarding this role?
-              </Text>
-              
-              <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput
-                  style={[styles.textInputSmall, { color: colors.text }]}
-                  placeholder="Your thoughts..."
-                  placeholderTextColor={colors.textSecondary}
-                  value={thoughtText}
-                  onChangeText={setThoughtText}
-                  multiline
-                  numberOfLines={2}
-                  textAlignVertical="top"
-                />
-              </View>
-              
+              )}
+
+              {activeReflectionTab === 'thorn' && (
+                <View>
+                  <View style={styles.cardHeader}>
+                    <Text style={[styles.cardLabel, { color: THORN_COLOR }]}>CAPTURE A THORN</Text>
+                    {renderSavedBadge('thorn')}
+                  </View>
+                  <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                    What's been challenging in your {selectedReflectionRole?.label} role?
+                  </Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.textInputSmall, { color: colors.text }]}
+                      placeholder="What's been challenging..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={thornText}
+                      onChangeText={setThornText}
+                      multiline
+                      numberOfLines={2}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      alignSelf: 'flex-start',
+                      gap: 8,
+                      backgroundColor: '#FFFFFF',
+                      borderColor: THORN_COLOR,
+                      borderWidth: 1.5,
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      paddingHorizontal: 20,
+                      opacity: savingThorn ? 0.7 : (!thornText.trim() ? 0.5 : 1),
+                    }}
+                    onPress={saveThorn}
+                    disabled={savingThorn || !thornText.trim()}
+                    activeOpacity={0.7}
+                  >
+                    {savingThorn ? (
+                      <ActivityIndicator size="small" color={THORN_COLOR} />
+                    ) : (
+                      <>
+                        <Image source={ThornIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                        <Text style={{ color: THORN_COLOR, fontSize: 15, fontWeight: '600' }}>Save Thorn</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {activeReflectionTab === 'reflection' && (
+                <View>
+                  <View style={styles.cardHeader}>
+                    <Text style={[styles.cardLabel, { color: '#10B981' }]}>CAPTURE A THOUGHT</Text>
+                    {renderSavedBadge('thought')}
+                  </View>
+                  <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                    Any other insights about your {selectedReflectionRole?.label} role?
+                  </Text>
+                  <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <TextInput
+                      style={[styles.textInputSmall, { color: colors.text }]}
+                      placeholder="Your thoughts..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={thoughtText}
+                      onChangeText={setThoughtText}
+                      multiline
+                      numberOfLines={2}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      alignSelf: 'flex-start',
+                      gap: 8,
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#10B981',
+                      borderWidth: 1.5,
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      paddingHorizontal: 20,
+                      opacity: savingThought ? 0.7 : (!thoughtText.trim() ? 0.5 : 1),
+                    }}
+                    onPress={saveThought}
+                    disabled={savingThought || !thoughtText.trim()}
+                    activeOpacity={0.7}
+                  >
+                    {savingThought ? (
+                      <ActivityIndicator size="small" color="#10B981" />
+                    ) : (
+                      <>
+                        <Image source={ReflectionsIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                        <Text style={{ color: '#10B981', fontSize: 15, fontWeight: '600' }}>Save Thought</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Collapsible List for This Week */}
               <TouchableOpacity
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  alignSelf: 'flex-start',
-                  gap: 8,
-                  backgroundColor: '#FFFFFF',
-                  borderColor: '#10B981',
-                  borderWidth: 1.5,
-                  borderRadius: 10,
+                  justifyContent: 'space-between',
                   paddingVertical: 12,
-                  paddingHorizontal: 20,
-                  opacity: savingThought ? 0.7 : (!thoughtText.trim() ? 0.5 : 1),
+                  marginTop: 16,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
                 }}
-                onPress={saveThought}
-                disabled={savingThought || !thoughtText.trim()}
+                onPress={() => setShowReflectionsList(!showReflectionsList)}
                 activeOpacity={0.7}
               >
-                {savingThought ? (
-                  <ActivityIndicator size="small" color="#10B981" />
+                <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
+                  This Week's {activeReflectionTab === 'rose' ? 'Roses' : activeReflectionTab === 'thorn' ? 'Thorns' : 'Reflections'} ({activeReflectionTab === 'rose' ? weekRoses.length : activeReflectionTab === 'thorn' ? weekThorns.length : weekReflections.length})
+                </Text>
+                {showReflectionsList ? (
+                  <ChevronUp size={18} color={colors.textSecondary} />
                 ) : (
-                  <>
-                    <Image source={ReflectionsIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                    <Text style={{ color: '#10B981', fontSize: 15, fontWeight: '600' }}>Save Thought</Text>
-                  </>
+                  <ChevronDown size={18} color={colors.textSecondary} />
                 )}
               </TouchableOpacity>
+
+              {showReflectionsList && (
+                <View style={{ marginTop: 8 }}>
+                  {(activeReflectionTab === 'rose' ? weekRoses : activeReflectionTab === 'thorn' ? weekThorns : weekReflections).length === 0 ? (
+                    <Text style={{ color: colors.textSecondary, fontSize: 14, fontStyle: 'italic', paddingVertical: 8 }}>
+                      No {activeReflectionTab === 'rose' ? 'roses' : activeReflectionTab === 'thorn' ? 'thorns' : 'reflections'} captured this week yet.
+                    </Text>
+                  ) : (
+                    (activeReflectionTab === 'rose' ? weekRoses : activeReflectionTab === 'thorn' ? weekThorns : weekReflections).map((item) => (
+                      <View key={item.id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                        <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{item.content}</Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4 }}>
+                          {new Date(item.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
             </View>
 
             {/* ===== SECTION 6: My Dream for this Role ===== */}
