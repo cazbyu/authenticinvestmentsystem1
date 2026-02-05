@@ -1618,6 +1618,64 @@ async function loadRoleItemsData(role: Role) {
                   )}
                 </>
               )}
+
+              {/* Collapsible Tasks/Events List */}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 12,
+                  marginTop: 16,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                }}
+                onPress={() => setShowTasksList(!showTasksList)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
+                  Pending Tasks & Events ({roleTasks.length})
+                </Text>
+                {showTasksList ? (
+                  <ChevronUp size={18} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={18} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+
+              {showTasksList && (
+                <View style={{ marginTop: 8 }}>
+                  {roleTasks.length === 0 ? (
+                    <Text style={{ color: colors.textSecondary, fontSize: 14, fontStyle: 'italic', paddingVertical: 8 }}>
+                      No pending tasks or events for this role.
+                    </Text>
+                  ) : (
+                    roleTasks.map((task) => (
+                      <View key={task.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 }}>
+                        {task.type === 'event' ? (
+                          <Image source={CalendarIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                        ) : (
+                          <Image source={TaskListIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontSize: 14 }}>{task.title}</Text>
+                          {(task.due_date || task.start_date) && (
+                            <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
+                              {formatShortDate((task.due_date || task.start_date || '').split('T')[0])}
+                              {task.type === 'event' && task.start_time ? ` • ${task.start_time.slice(0, 5)}` : ''}
+                            </Text>
+                          )}
+                        </View>
+                        {task.one_thing && (
+                          <View style={{ backgroundColor: categoryColor, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                            <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>1</Text>
+                          </View>
+                        )}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
             </View>
 
             {/* ===== SECTION 2: Capture an Idea ===== */}
