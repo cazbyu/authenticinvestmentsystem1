@@ -1674,6 +1674,52 @@ async function loadRoleItemsData(role: Role) {
                   </>
                 )}
               </TouchableOpacity>
+
+              {/* Collapsible Ideas List */}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 12,
+                  marginTop: 16,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                }}
+                onPress={() => setShowIdeasList(!showIdeasList)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
+                  Pending Ideas ({roleIdeas.length})
+                </Text>
+                {showIdeasList ? (
+                  <ChevronUp size={18} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={18} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
+
+              {showIdeasList && (
+                <View style={{ marginTop: 8 }}>
+                  {roleIdeas.length === 0 ? (
+                    <Text style={{ color: colors.textSecondary, fontSize: 14, fontStyle: 'italic', paddingVertical: 8 }}>
+                      No ideas captured for this role yet.
+                    </Text>
+                  ) : (
+                    roleIdeas.map((idea) => (
+                      <View key={idea.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 }}>
+                        <Image source={DepositIdeaIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                        <Text style={{ color: colors.text, fontSize: 14, flex: 1 }}>{idea.title}</Text>
+                        {idea.one_thing && (
+                          <View style={{ backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                            <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>1</Text>
+                          </View>
+                        )}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
             </View>
 
             {/* ===== SECTION 3: Roses / Thorns / Reflections (Tabbed) ===== */}
