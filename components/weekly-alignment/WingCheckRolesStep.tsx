@@ -41,19 +41,10 @@ import {
   Check, 
   HelpCircle, 
   Settings,
-  CheckSquare,
-  Calendar,
-  Lightbulb,
-  BookOpen,
   ChevronDown,
   ChevronUp,
   Pencil,
-  Flower2,
-  AlertTriangle,
-  Heart,
-  Users,
   Plus,
-  Clock,
   MessageCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -98,6 +89,13 @@ function getWeekDates(weekStart: string): { label: string; value: string }[] {
 
 // Compass Roles icon for Step 2 header (matches Step 1 sizing: 56x56 in 72x72 container)
 const CompassRolesIcon = require('@/assets/images/compass-roles.png');
+const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
+const DepositIdeaIcon = require('@/assets/images/deposit-idea.png');
+const RoseIcon = require('@/assets/images/rose-81.png');
+const ThornIcon = require('@/assets/images/thorn-81.png');
+const ReflectionsIcon = require('@/assets/images/reflections-72.png');
+const TaskListIcon = require('@/assets/images/task-list.png');
+const CalendarIcon = require('@/assets/images/calendar.png');
 
 interface WingCheckRolesStepProps {
   userId: string;
@@ -130,7 +128,11 @@ interface Task {
   title: string;
   type: 'task' | 'event';
   status: string;
-  scheduled_date?: string;
+  due_date?: string;
+  start_date?: string;
+  start_time?: string;
+  end_time?: string;
+  is_anytime?: boolean;
   one_thing?: boolean;
 }
 
@@ -214,6 +216,7 @@ export function WingCheckRolesStep({
   const [oneThingSaveType, setOneThingSaveType] = useState<'task' | 'event'>('task');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('09:00');
+  const [selectedEndTime, setSelectedEndTime] = useState('10:00');
   const [existingOneThingTask, setExistingOneThingTask] = useState<Task | null>(null);
   
   // Capture inputs
@@ -391,13 +394,13 @@ export function WingCheckRolesStep({
       if (taskIds.length > 0) {
         const { data: oneThingTask } = await supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, status, scheduled_date, one_thing')
+          .select('id, title, type, status, due_date, start_date, start_time, end_time, is_anytime, one_thing')
           .eq('user_id', userId)
           .in('id', taskIds)
           .eq('one_thing', true)
           .is('deleted_at', null)
           .not('status', 'in', '(completed,cancelled)')
-          .gte('scheduled_date', weekStartDate)
+          .or(`due_date.gte.${weekStartDate},start_date.gte.${weekStartDate}`)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -623,7 +626,23 @@ export function WingCheckRolesStep({
     // Default to today's date
     const today = formatLocalDate(new Date());
     setSelectedDate(today);
-    setSelectedTime('09:00');
+    // Smart default times: next 15-min interval + 15 min buffer, then +1hr end
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const nextQuarter = Math.ceil((minutes + 15) / 15) * 15;
+    const startDate = new Date(now);
+    startDate.setMinutes(nextQuarter, 0, 0);
+    if (nextQuarter >= 60) {
+      startDate.setHours(startDate.getHours() + Math.floor(nextQuarter / 60));
+      startDate.setMinutes(nextQuarter % 60);
+    }
+    const startH = String(startDate.getHours()).padStart(2, '0');
+    const startM = String(startDate.getMinutes()).padStart(2, '0');
+    setSelectedTime(`${startH}:${startM}`);
+    const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+    const endH = String(endDate.getHours()).padStart(2, '0');
+    const endM = String(endDate.getMinutes()).padStart(2, '0');
+    setSelectedEndTime(`${endH}:${endM}`);
     setShowDatePicker(true);
   }
 
@@ -635,25 +654,31 @@ export function WingCheckRolesStep({
     try {
       const supabase = getSupabaseClient();
 
-      // Build scheduled_date (with time for events)
-      let scheduledDate = selectedDate;
-      if (oneThingSaveType === 'event') {
-        scheduledDate = `${selectedDate}T${selectedTime}:00`;
+      // Build insert data using proper columns
+      const insertData: Record<string, any> = {
+        user_id: userId,
+        title: oneThingText.trim(),
+        type: oneThingSaveType,
+        status: 'pending',
+        one_thing: true,
+      };
+
+      if (oneThingSaveType === 'task') {
+        insertData.due_date = selectedDate;
+        insertData.is_anytime = true;
+      } else {
+        // Event: use start_date + start_time + end_time
+        insertData.start_date = selectedDate;
+        insertData.start_time = `${selectedTime}:00`;
+        insertData.end_time = `${selectedEndTime}:00`;
+        insertData.is_anytime = false;
       }
 
       // Insert into tasks
       const { data: newTask, error: insertError } = await supabase
         .from('0008-ap-tasks')
-        .insert({
-          user_id: userId,
-          title: oneThingText.trim(),
-          type: oneThingSaveType,
-          status: 'pending',
-          scheduled_date: scheduledDate,
-          one_thing: true,
-          is_anytime: oneThingSaveType === 'task' ? true : false,
-        })
-        .select('id, title, type, status, scheduled_date, one_thing')
+        .insert(insertData)
+        .select('id, title, type, status, due_date, start_date, start_time, end_time, is_anytime, one_thing')
         .single();
 
       if (insertError) throw insertError;
@@ -1357,7 +1382,10 @@ export function WingCheckRolesStep({
             {/* ===== SECTION 1: ONE Thing This Week ===== */}
             <View style={[styles.card, { backgroundColor: `${categoryColor}08`, borderColor: `${categoryColor}30` }]}>
               <View style={styles.cardHeader}>
-                <Text style={[styles.cardLabel, { color: categoryColor }]}>ONE THING THIS WEEK</Text>
+                <View style={styles.cardHeaderLeft}>
+                  <Image source={CompassGoalsIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                  <Text style={[styles.cardLabel, { color: categoryColor, marginLeft: 6 }]}>ONE THING THIS WEEK</Text>
+                </View>
                 {renderSavedBadge('oneThing')}
               </View>
               
@@ -1369,18 +1397,21 @@ export function WingCheckRolesStep({
                 <View style={[styles.existingItemCard, { backgroundColor: colors.surface, borderColor: `${categoryColor}30` }]}>
                   <View style={styles.existingItemRow}>
                     {existingOneThingTask.type === 'event' ? (
-                      <Calendar size={16} color={categoryColor} />
+                      <Image source={CalendarIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                     ) : (
-                      <CheckSquare size={16} color={categoryColor} />
+                      <Image source={TaskListIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                     )}
                     <Text style={[styles.existingItemText, { color: colors.text }]} numberOfLines={2}>
                       {existingOneThingTask.title}
                     </Text>
                   </View>
-                  {existingOneThingTask.scheduled_date && (
+                  {(existingOneThingTask.due_date || existingOneThingTask.start_date) && (
                     <Text style={[styles.existingItemMeta, { color: colors.textSecondary }]}>
-                      {formatShortDate(existingOneThingTask.scheduled_date.split('T')[0])}
-                      {existingOneThingTask.type === 'event' ? ` • ${existingOneThingTask.type}` : ' • task'}
+                      {formatShortDate((existingOneThingTask.due_date || existingOneThingTask.start_date || '').split('T')[0])}
+                      {existingOneThingTask.type === 'event' && existingOneThingTask.start_time
+                        ? ` • ${existingOneThingTask.start_time.slice(0, 5)}–${(existingOneThingTask.end_time || '').slice(0, 5)}`
+                        : ''}
+                      {` • ${existingOneThingTask.type}`}
                     </Text>
                   )}
                 </View>
@@ -1407,7 +1438,7 @@ export function WingCheckRolesStep({
                       disabled={savingOneThing || !oneThingText.trim()}
                       activeOpacity={0.7}
                     >
-                      <CheckSquare size={18} color="#3B82F6" />
+                      <Image source={TaskListIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
                       <Text style={[styles.saveAsButtonText, { color: '#3B82F6' }]}>Task</Text>
                     </TouchableOpacity>
                     
@@ -1417,7 +1448,7 @@ export function WingCheckRolesStep({
                       disabled={savingOneThing || !oneThingText.trim()}
                       activeOpacity={0.7}
                     >
-                      <Calendar size={18} color="#8B5CF6" />
+                      <Image source={CalendarIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
                       <Text style={[styles.saveAsButtonText, { color: '#8B5CF6' }]}>Event</Text>
                     </TouchableOpacity>
                   </View>
@@ -1433,7 +1464,7 @@ export function WingCheckRolesStep({
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <Lightbulb size={16} color="#F59E0B" />
+                  <Image source={DepositIdeaIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   <Text style={[styles.cardLabel, { color: '#F59E0B', marginLeft: 6 }]}>CAPTURE AN IDEA</Text>
                 </View>
                 {renderSavedBadge('idea')}
@@ -1463,7 +1494,7 @@ export function WingCheckRolesStep({
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <Flower2 size={16} color={ROSE_COLOR} />
+                  <Image source={RoseIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   <Text style={[styles.cardLabel, { color: ROSE_COLOR, marginLeft: 6 }]}>ROSES</Text>
                 </View>
                 {renderSavedBadge('rose')}
@@ -1493,7 +1524,7 @@ export function WingCheckRolesStep({
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <AlertTriangle size={16} color={THORN_COLOR} />
+                  <Image source={ThornIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   <Text style={[styles.cardLabel, { color: THORN_COLOR, marginLeft: 6 }]}>THORNS</Text>
                 </View>
                 {renderSavedBadge('thorn')}
@@ -1523,7 +1554,7 @@ export function WingCheckRolesStep({
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <BookOpen size={16} color="#10B981" />
+                  <Image source={ReflectionsIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   <Text style={[styles.cardLabel, { color: '#10B981', marginLeft: 6 }]}>CAPTURE A THOUGHT</Text>
                 </View>
                 {renderSavedBadge('thought')}
@@ -1790,7 +1821,7 @@ export function WingCheckRolesStep({
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
-                  <Users size={16} color={categoryColor} />
+                  <Image source={CompassRolesIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   <Text style={[styles.cardLabel, { color: categoryColor, marginLeft: 6 }]}>KEY RELATIONSHIPS</Text>
                 </View>
               </View>
@@ -1893,18 +1924,79 @@ export function WingCheckRolesStep({
               {/* Time selection (events only) */}
               {oneThingSaveType === 'event' && (
                 <View style={styles.timeRow}>
-                  <Clock size={16} color={colors.textSecondary} />
-                  <TextInput
-                    style={[styles.timeInput, { color: colors.text, borderColor: colors.border }]}
-                    value={selectedTime}
-                    onChangeText={setSelectedTime}
-                    placeholder="09:00"
-                    placeholderTextColor={colors.textSecondary}
-                    keyboardType="numbers-and-punctuation"
-                  />
-                  <Text style={[styles.timeHint, { color: colors.textSecondary }]}>
-                    (24h format, e.g. 14:30)
-                  </Text>
+                  <View style={styles.timePickerRow}>
+                    <Text style={[styles.timePickerLabel, { color: colors.textSecondary }]}>Start</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.timeScroller}
+                      contentContainerStyle={styles.timeScrollerContent}
+                    >
+                      {Array.from({ length: 48 }, (_, i) => {
+                        const h = String(Math.floor(i / 2)).padStart(2, '0');
+                        const m = i % 2 === 0 ? '00' : '30';
+                        const val = `${h}:${m}`;
+                        const isSelected = selectedTime === val;
+                        return (
+                          <TouchableOpacity
+                            key={val}
+                            style={[
+                              styles.timeChip,
+                              {
+                                backgroundColor: isSelected ? categoryColor : colors.surface,
+                                borderColor: isSelected ? categoryColor : colors.border,
+                              },
+                            ]}
+                            onPress={() => {
+                              setSelectedTime(val);
+                              // Auto-advance end time to +1hr
+                              const endH = String((Math.floor(i / 2) + 1) % 24).padStart(2, '0');
+                              setSelectedEndTime(`${endH}:${m}`);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
+                              {val}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                  <View style={styles.timePickerRow}>
+                    <Text style={[styles.timePickerLabel, { color: colors.textSecondary }]}>End</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.timeScroller}
+                      contentContainerStyle={styles.timeScrollerContent}
+                    >
+                      {Array.from({ length: 48 }, (_, i) => {
+                        const h = String(Math.floor(i / 2)).padStart(2, '0');
+                        const m = i % 2 === 0 ? '00' : '30';
+                        const val = `${h}:${m}`;
+                        const isSelected = selectedEndTime === val;
+                        return (
+                          <TouchableOpacity
+                            key={val}
+                            style={[
+                              styles.timeChip,
+                              {
+                                backgroundColor: isSelected ? categoryColor : colors.surface,
+                                borderColor: isSelected ? categoryColor : colors.border,
+                              },
+                            ]}
+                            onPress={() => setSelectedEndTime(val)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
+                              {val}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
                 </View>
               )}
 
@@ -2659,10 +2751,37 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   timeRow: {
+    flexDirection: 'column',
+    gap: 8,
+    marginBottom: 16,
+  },
+  timePickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+  },
+  timePickerLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    width: 36,
+  },
+  timeScroller: {
+    flex: 1,
+    maxHeight: 36,
+  },
+  timeScrollerContent: {
+    gap: 6,
+    paddingRight: 8,
+  },
+  timeChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  timeChipText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   timeInput: {
     borderWidth: 1,
