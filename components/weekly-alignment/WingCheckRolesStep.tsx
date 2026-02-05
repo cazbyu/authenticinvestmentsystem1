@@ -962,6 +962,10 @@ async function loadRoleItemsData(role: Role) {
 
       setThornText('');
       showSavedFeedback('thorn');
+      // Refresh lists
+      if (selectedReflectionRole) {
+        loadRoleItemsData(selectedReflectionRole);
+      }
     } catch (error) {
       console.error('Error saving thorn:', error);
       showErrorAlert('Failed to save thorn.');
