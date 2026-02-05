@@ -1558,7 +1558,33 @@ export function WingCheckRolesStep({
                 />
               </View>
               
-              {renderSaveButton(saveRose, savingRose, !roseText.trim(), ROSE_COLOR, 'Save Rose')}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  alignSelf: 'flex-start',
+                  gap: 8,
+                  backgroundColor: '#FFFFFF',
+                  borderColor: ROSE_COLOR,
+                  borderWidth: 1.5,
+                  borderRadius: 10,
+                  paddingVertical: 12,
+                  paddingHorizontal: 20,
+                  opacity: savingRose ? 0.7 : (!roseText.trim() ? 0.5 : 1),
+                }}
+                onPress={saveRose}
+                disabled={savingRose || !roseText.trim()}
+                activeOpacity={0.7}
+              >
+                {savingRose ? (
+                  <ActivityIndicator size="small" color={ROSE_COLOR} />
+                ) : (
+                  <>
+                    <Image source={RoseIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                    <Text style={{ color: ROSE_COLOR, fontSize: 15, fontWeight: '600' }}>Save Rose</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* ===== SECTION 4: Thorns ===== */}
