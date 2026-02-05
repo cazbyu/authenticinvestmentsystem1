@@ -868,6 +868,10 @@ async function loadRoleItemsData(role: Role) {
 
       setIdeaText('');
       showSavedFeedback('idea');
+      // Refresh ideas list
+      if (selectedReflectionRole) {
+        loadRoleItemsData(selectedReflectionRole);
+      }
     } catch (error) {
       console.error('Error saving deposit idea:', error);
       showErrorAlert('Failed to save idea.');
