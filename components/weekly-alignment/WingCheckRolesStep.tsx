@@ -1614,7 +1614,33 @@ export function WingCheckRolesStep({
                 />
               </View>
               
-              {renderSaveButton(saveThorn, savingThorn, !thornText.trim(), THORN_COLOR, 'Save Thorn')}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  alignSelf: 'flex-start',
+                  gap: 8,
+                  backgroundColor: '#FFFFFF',
+                  borderColor: THORN_COLOR,
+                  borderWidth: 1.5,
+                  borderRadius: 10,
+                  paddingVertical: 12,
+                  paddingHorizontal: 20,
+                  opacity: savingThorn ? 0.7 : (!thornText.trim() ? 0.5 : 1),
+                }}
+                onPress={saveThorn}
+                disabled={savingThorn || !thornText.trim()}
+                activeOpacity={0.7}
+              >
+                {savingThorn ? (
+                  <ActivityIndicator size="small" color={THORN_COLOR} />
+                ) : (
+                  <>
+                    <Image source={ThornIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
+                    <Text style={{ color: THORN_COLOR, fontSize: 15, fontWeight: '600' }}>Save Thorn</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* ===== SECTION 5: Capture a Thought ===== */}
