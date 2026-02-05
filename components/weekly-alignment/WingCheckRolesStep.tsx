@@ -1524,7 +1524,7 @@ export function WingCheckRolesStep({
                   <ActivityIndicator size="small" color="#F59E0B" />
                 ) : (
                   <>
-                    <Image source={DepositIdeaIcon} style={{ width: 18, height:  }} resizeMode="contain" />
+                    <Image source={DepositIdeaIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
                     <Text style={{ color: '#F59E0B', fontSize: 15, fontWeight: '600' }}>Save Idea</Text>
                   </>
                 )}
