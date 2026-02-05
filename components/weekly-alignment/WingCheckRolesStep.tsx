@@ -915,6 +915,10 @@ async function loadRoleItemsData(role: Role) {
 
       setRoseText('');
       showSavedFeedback('rose');
+      // Refresh lists
+      if (selectedReflectionRole) {
+        loadRoleItemsData(selectedReflectionRole);
+      }
     } catch (error) {
       console.error('Error saving rose:', error);
       showErrorAlert('Failed to save rose.');
