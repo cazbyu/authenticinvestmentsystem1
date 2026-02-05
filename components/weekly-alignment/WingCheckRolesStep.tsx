@@ -683,13 +683,28 @@ export function WingCheckRolesStep({
       if (insertError) throw insertError;
 
       // Link to role via join table
-      const { error: joinError } = await supabase
+      // DEBUG: Check auth state before join insert
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('DEBUG-AUTH-CHECK:', {
+        hasSession: !!session,
+        authUserId: session?.user?.id,
+        propUserId: userId,
+        match: session?.user?.id === userId,
+      });
+
+      const joinPayload = {
+        parent_type: 'task',
+        parent_id: newTask.id,
+        role_id: selectedReflectionRole.id,
+        user_id: userId,
+      };
+      console.log('DEBUG-JOIN-INSERT-V3:', JSON.stringify(joinPayload));
+      
+      const { error: joinError, status: joinStatus, statusText: joinStatusText } = await supabase
         .from('0008-ap-universal-roles-join')
-        .insert({
-          parent_type: 'task',
-          parent_id: newTask.id,
-          role_id: selectedReflectionRole.id,
-        });
+        .insert(joinPayload);
+
+      console.log('DEBUG-JOIN-RESULT:', { joinStatus, joinStatusText, joinError });
 
       if (joinError) throw joinError;
 
@@ -698,7 +713,7 @@ export function WingCheckRolesStep({
 
     } catch (error) {
       console.error('Error saving ONE Thing:', error);
-      showErrorAlert('Failed to save ONE Thing.');
+      showErrorAlert('Failed to save ONE Thing (v3 debug).');
     } finally {
       setSavingOneThing(false);
     }
@@ -731,6 +746,7 @@ export function WingCheckRolesStep({
           parent_type: 'depositIdea',
           parent_id: newIdea.id,
           role_id: selectedReflectionRole.id,
+          user_id: userId,
         });
 
       if (joinError) throw joinError;
@@ -773,6 +789,7 @@ export function WingCheckRolesStep({
           parent_type: 'reflection',
           parent_id: newReflection.id,
           role_id: selectedReflectionRole.id,
+          user_id: userId,
         });
 
       if (joinError) throw joinError;
@@ -815,6 +832,7 @@ export function WingCheckRolesStep({
           parent_type: 'reflection',
           parent_id: newReflection.id,
           role_id: selectedReflectionRole.id,
+          user_id: userId,
         });
 
       if (joinError) throw joinError;
@@ -857,6 +875,7 @@ export function WingCheckRolesStep({
           parent_type: 'reflection',
           parent_id: newReflection.id,
           role_id: selectedReflectionRole.id,
+          user_id: userId,
         });
 
       if (joinError) throw joinError;
