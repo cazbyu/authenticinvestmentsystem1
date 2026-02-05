@@ -1398,15 +1398,27 @@ export function WingCheckRolesStep({
 
               {existingOneThingTask ? (
                 <View style={[styles.existingItemCard, { backgroundColor: colors.surface, borderColor: `${categoryColor}30` }]}>
-                  <View style={styles.existingItemRow}>
-                    {existingOneThingTask.type === 'event' ? (
-                      <Image source={CalendarIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                    ) : (
-                      <Image source={TaskListIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                    )}
-                    <Text style={[styles.existingItemText, { color: colors.text }]} numberOfLines={2}>
-                      {existingOneThingTask.title}
-                    </Text>
+                  <View style={[styles.existingItemRow, { justifyContent: 'space-between' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
+                      {existingOneThingTask.type === 'event' ? (
+                        <Image source={CalendarIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                      ) : (
+                        <Image source={TaskListIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
+                      )}
+                      <Text style={[styles.existingItemText, { color: colors.text }]} numberOfLines={2}>
+                        {existingOneThingTask.title}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setExistingOneThingTask(null);
+                        setOneThingText(existingOneThingTask.title || '');
+                      }}
+                      hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                      style={{ marginLeft: 8 }}
+                    >
+                      <Pencil size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
                   </View>
                   {(existingOneThingTask.due_date || existingOneThingTask.start_date) && (
                     <Text style={[styles.existingItemMeta, { color: colors.textSecondary }]}>
