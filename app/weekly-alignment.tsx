@@ -16,6 +16,7 @@ import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X } from 'lucide-reac
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
+import { recordNorthStarVisit } from '@/lib/northStarVisits';
 
 // Step Components
 import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarStep';
@@ -127,9 +128,12 @@ export default function WeeklyAlignmentScreen() {
 
   function goToNextStep() {
     if (currentStep < STEPS.length - 1) {
+      if (currentStep === 0) {
+        recordNorthStarVisit('weekly_alignment_step');
+      }
       setCurrentStep(prev => prev + 1);
-      setStepBackHandler(null); // Clear handler when moving to next step
-      
+      setStepBackHandler(null);
+
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
@@ -138,9 +142,12 @@ export default function WeeklyAlignmentScreen() {
 
   function goToStep(stepIndex: number) {
     if (stepIndex >= 0 && stepIndex < STEPS.length && stepIndex !== currentStep) {
+      if (currentStep === 0 && stepIndex > 0) {
+        recordNorthStarVisit('weekly_alignment_step');
+      }
       setCurrentStep(stepIndex);
-      setStepBackHandler(null); // Clear handler when jumping steps
-      
+      setStepBackHandler(null);
+
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
