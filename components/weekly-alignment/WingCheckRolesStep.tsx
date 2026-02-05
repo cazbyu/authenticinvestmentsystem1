@@ -17,7 +17,6 @@
 // - Section 6: My Dream for this Role + Deeper Introspection (vision)
 // - Section 7: My Purpose in this Role + Deeper Introspection (mission)
 // - Section 8: Key Relationships (placeholder)
-// - Section 9: [Role] Journal (JournalView)
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -45,14 +44,12 @@ import {
   ChevronUp,
   Pencil,
   Plus,
-  MessageCircle,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
 import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
-import { JournalView } from '@/components/journal/JournalView';
 
 // Helper function to get Monday of current week
 function getWeekStartDate(date: Date): Date {
@@ -154,6 +151,7 @@ interface QuestionResponse {
   question_id: string;
   response_text: string;
   created_at: string;
+  question_text?: string;
 }
 
 // Flow states for the step
@@ -490,7 +488,11 @@ export function WingCheckRolesStep({
 
         if (existingResponses) {
           answeredIds = new Set(existingResponses.map(r => r.question_id));
-          responses = existingResponses;
+          const questionMap = new Map(allQuestions.map(q => [q.id, q.question_text]));
+          responses = existingResponses.map(r => ({
+            ...r,
+            question_text: questionMap.get(r.question_id) || undefined,
+          }));
         }
       }
 
@@ -1512,8 +1514,7 @@ async function loadRoleItemsData(role: Role) {
                     • Roses & Thorns — note what's going well and what's challenging.{'\n'}
                     • Capture a Thought — record any insight or reflection.{'\n'}
                     • Dream & Purpose — define the bigger picture for this role, and use Deeper Introspection to explore it further.{'\n'}
-                    • Key Relationships — track the people who matter most in this role.{'\n'}
-                    • Journal — a dedicated space for ongoing notes about this role.
+                    • Key Relationships — track the people who matter most in this role.
                   </Text>
                 </View>
               )}
@@ -1782,7 +1783,7 @@ async function loadRoleItemsData(role: Role) {
             {/* ===== SECTION 3: Roses / Thorns / Reflections (Tabbed) ===== */}
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {/* Tab Header */}
-              <View style={{ flexDirection: 'row', marginBottom: 16, borderRadius: 8, backgroundColor: colors.background, padding: 4 }}>
+              <View style={{ flexDirection: 'row', marginBottom: 16, borderRadius: 10, backgroundColor: colors.background, padding: 4, gap: 4 }}>
                 <TouchableOpacity
                   style={{
                     flex: 1,
@@ -1791,16 +1792,18 @@ async function loadRoleItemsData(role: Role) {
                     justifyContent: 'center',
                     gap: 6,
                     paddingVertical: 10,
-                    borderRadius: 6,
-                    backgroundColor: activeReflectionTab === 'rose' ? '#FFFFFF' : 'transparent',
+                    borderRadius: 8,
+                    backgroundColor: activeReflectionTab === 'rose' ? ROSE_COLOR : 'transparent',
+                    borderWidth: activeReflectionTab === 'rose' ? 0 : 1,
+                    borderColor: activeReflectionTab === 'rose' ? 'transparent' : `${ROSE_COLOR}30`,
                   }}
                   onPress={() => setActiveReflectionTab('rose')}
                   activeOpacity={0.7}
                 >
-                  <Image source={RoseIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                  <Text style={{ color: ROSE_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'rose' ? '700' : '500' }}>Rose</Text>
+                  <Image source={RoseIcon} style={{ width: 16, height: 16, opacity: activeReflectionTab === 'rose' ? 1 : 0.6 }} resizeMode="contain" />
+                  <Text style={{ color: activeReflectionTab === 'rose' ? '#FFFFFF' : ROSE_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'rose' ? '700' : '500' }}>Rose</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={{
                     flex: 1,
@@ -1809,16 +1812,18 @@ async function loadRoleItemsData(role: Role) {
                     justifyContent: 'center',
                     gap: 6,
                     paddingVertical: 10,
-                    borderRadius: 6,
-                    backgroundColor: activeReflectionTab === 'thorn' ? '#FFFFFF' : 'transparent',
+                    borderRadius: 8,
+                    backgroundColor: activeReflectionTab === 'thorn' ? '#4B5563' : 'transparent',
+                    borderWidth: activeReflectionTab === 'thorn' ? 0 : 1,
+                    borderColor: activeReflectionTab === 'thorn' ? 'transparent' : `${THORN_COLOR}30`,
                   }}
                   onPress={() => setActiveReflectionTab('thorn')}
                   activeOpacity={0.7}
                 >
-                  <Image source={ThornIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                  <Text style={{ color: THORN_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'thorn' ? '700' : '500' }}>Thorn</Text>
+                  <Image source={ThornIcon} style={{ width: 16, height: 16, opacity: activeReflectionTab === 'thorn' ? 1 : 0.6 }} resizeMode="contain" />
+                  <Text style={{ color: activeReflectionTab === 'thorn' ? '#FFFFFF' : THORN_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'thorn' ? '700' : '500' }}>Thorn</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={{
                     flex: 1,
@@ -1827,14 +1832,16 @@ async function loadRoleItemsData(role: Role) {
                     justifyContent: 'center',
                     gap: 6,
                     paddingVertical: 10,
-                    borderRadius: 6,
-                    backgroundColor: activeReflectionTab === 'reflection' ? '#FFFFFF' : 'transparent',
+                    borderRadius: 8,
+                    backgroundColor: activeReflectionTab === 'reflection' ? '#10B981' : 'transparent',
+                    borderWidth: activeReflectionTab === 'reflection' ? 0 : 1,
+                    borderColor: activeReflectionTab === 'reflection' ? 'transparent' : '#10B98130',
                   }}
                   onPress={() => setActiveReflectionTab('reflection')}
                   activeOpacity={0.7}
                 >
-                  <Image source={ReflectionsIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                  <Text style={{ color: '#10B981', fontSize: 13, fontWeight: activeReflectionTab === 'reflection' ? '700' : '500' }}>Reflect</Text>
+                  <Image source={ReflectionsIcon} style={{ width: 16, height: 16, opacity: activeReflectionTab === 'reflection' ? 1 : 0.6 }} resizeMode="contain" />
+                  <Text style={{ color: activeReflectionTab === 'reflection' ? '#FFFFFF' : '#10B981', fontSize: 13, fontWeight: activeReflectionTab === 'reflection' ? '700' : '500' }}>Reflect</Text>
                 </TouchableOpacity>
               </View>
 
@@ -2141,6 +2148,11 @@ async function loadRoleItemsData(role: Role) {
                       </Text>
                       {visionResponses.slice(0, 5).map((resp) => (
                         <View key={resp.id} style={[styles.journalEntry, { borderColor: colors.border }]}>
+                          {resp.question_text && (
+                            <Text style={{ color: categoryColor, fontSize: 13, fontWeight: '600', marginBottom: 4, fontStyle: 'italic' }}>
+                              {resp.question_text}
+                            </Text>
+                          )}
                           <Text style={[styles.journalEntryText, { color: colors.text }]} numberOfLines={3}>
                             {resp.response_text}
                           </Text>
@@ -2259,6 +2271,11 @@ async function loadRoleItemsData(role: Role) {
                       </Text>
                       {missionResponses.slice(0, 5).map((resp) => (
                         <View key={resp.id} style={[styles.journalEntry, { borderColor: colors.border }]}>
+                          {resp.question_text && (
+                            <Text style={{ color: categoryColor, fontSize: 13, fontWeight: '600', marginBottom: 4, fontStyle: 'italic' }}>
+                              {resp.question_text}
+                            </Text>
+                          )}
                           <Text style={[styles.journalEntryText, { color: colors.text }]} numberOfLines={3}>
                             {resp.response_text}
                           </Text>
@@ -2299,24 +2316,6 @@ async function loadRoleItemsData(role: Role) {
                   Add Key Relationship
                 </Text>
               </TouchableOpacity>
-            </View>
-
-            {/* ===== SECTION 9: [Role] Journal ===== */}
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderLeft}>
-                  <MessageCircle size={16} color={categoryColor} />
-                  <Text style={[styles.cardLabel, { color: categoryColor, marginLeft: 6 }]}>
-                    {selectedReflectionRole.label.toUpperCase()} JOURNAL
-                  </Text>
-                </View>
-              </View>
-              
-              <JournalView
-                userId={userId}
-                colors={colors}
-                scope={{ type: 'role', id: selectedReflectionRole.id, name: selectedReflectionRole.label }}
-              />
             </View>
 
             {/* Back to Roles Button */}
