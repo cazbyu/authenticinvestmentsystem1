@@ -348,7 +348,6 @@ export function WingCheckRolesStep({
     setShowTasksList(false);
     setRoleTasks([]);
   }
-  }
 
   async function loadData() {
     try {
