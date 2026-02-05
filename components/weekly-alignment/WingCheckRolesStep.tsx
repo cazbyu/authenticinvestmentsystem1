@@ -249,6 +249,9 @@ export function WingCheckRolesStep({
   const [missionAnswer, setMissionAnswer] = useState('');
   const [savingVisionAnswer, setSavingVisionAnswer] = useState(false);
   const [savingMissionAnswer, setSavingMissionAnswer] = useState(false);
+  const [editingResponseId, setEditingResponseId] = useState<string | null>(null);
+  const [editingResponseText, setEditingResponseText] = useState('');
+  const [savingEditResponse, setSavingEditResponse] = useState(false);
   const [visionIntrospectionOpen, setVisionIntrospectionOpen] = useState(false);
   const [missionIntrospectionOpen, setMissionIntrospectionOpen] = useState(false);
   const [visionResponses, setVisionResponses] = useState<QuestionResponse[]>([]);
@@ -1059,6 +1062,29 @@ async function loadRoleItemsData(role: Role) {
       showErrorAlert('Failed to save response.');
     } finally {
       setSavingFn(false);
+    }
+  }
+
+  async function updateIntrospectionAnswer(responseId: string, strategyType: 'vision' | 'mission') {
+    if (!editingResponseText.trim() || !selectedReflectionRole) return;
+    setSavingEditResponse(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-question-responses')
+        .update({ response_text: editingResponseText.trim() })
+        .eq('id', responseId)
+        .eq('user_id', userId);
+      if (error) throw error;
+      setEditingResponseId(null);
+      setEditingResponseText('');
+      await loadIntrospectionData(selectedReflectionRole, strategyType);
+      showSavedFeedback(`${strategyType}Edit`);
+    } catch (error) {
+      console.error('Error updating response:', error);
+      showErrorAlert('Failed to update response.');
+    } finally {
+      setSavingEditResponse(false);
     }
   }
 
@@ -2148,17 +2174,55 @@ async function loadRoleItemsData(role: Role) {
                       </Text>
                       {visionResponses.slice(0, 5).map((resp) => (
                         <View key={resp.id} style={[styles.journalEntry, { borderColor: colors.border }]}>
-                          {resp.question_text && (
-                            <Text style={{ color: categoryColor, fontSize: 13, fontWeight: '600', marginBottom: 4, fontStyle: 'italic' }}>
-                              {resp.question_text}
-                            </Text>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            {resp.question_text ? (
+                              <Text style={{ color: categoryColor, fontSize: 13, fontWeight: '600', marginBottom: 4, fontStyle: 'italic', flex: 1, marginRight: 8 }}>
+                                {resp.question_text}
+                              </Text>
+                            ) : <View style={{ flex: 1 }} />}
+                            {editingResponseId !== resp.id && (
+                              <TouchableOpacity
+                                onPress={() => { setEditingResponseId(resp.id); setEditingResponseText(resp.response_text); }}
+                                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                              >
+                                <Pencil size={14} color={colors.textSecondary} />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                          {editingResponseId === resp.id ? (
+                            <View style={{ marginTop: 4 }}>
+                              <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                <TextInput
+                                  style={[styles.textInputSmall, { color: colors.text }]}
+                                  value={editingResponseText}
+                                  onChangeText={setEditingResponseText}
+                                  multiline
+                                  numberOfLines={3}
+                                  textAlignVertical="top"
+                                  autoFocus
+                                />
+                              </View>
+                              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                                {renderSaveButton(() => updateIntrospectionAnswer(resp.id, 'vision'), savingEditResponse, !editingResponseText.trim(), categoryColor, 'Update')}
+                                <TouchableOpacity
+                                  style={{ paddingVertical: 10, paddingHorizontal: 16 }}
+                                  onPress={() => { setEditingResponseId(null); setEditingResponseText(''); }}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          ) : (
+                            <>
+                              <Text style={[styles.journalEntryText, { color: colors.text }]} numberOfLines={3}>
+                                {resp.response_text}
+                              </Text>
+                              <Text style={[styles.journalEntryDate, { color: colors.textSecondary }]}>
+                                {new Date(resp.created_at).toLocaleDateString()}
+                              </Text>
+                            </>
                           )}
-                          <Text style={[styles.journalEntryText, { color: colors.text }]} numberOfLines={3}>
-                            {resp.response_text}
-                          </Text>
-                          <Text style={[styles.journalEntryDate, { color: colors.textSecondary }]}>
-                            {new Date(resp.created_at).toLocaleDateString()}
-                          </Text>
                         </View>
                       ))}
                     </View>
@@ -2271,17 +2335,55 @@ async function loadRoleItemsData(role: Role) {
                       </Text>
                       {missionResponses.slice(0, 5).map((resp) => (
                         <View key={resp.id} style={[styles.journalEntry, { borderColor: colors.border }]}>
-                          {resp.question_text && (
-                            <Text style={{ color: categoryColor, fontSize: 13, fontWeight: '600', marginBottom: 4, fontStyle: 'italic' }}>
-                              {resp.question_text}
-                            </Text>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            {resp.question_text ? (
+                              <Text style={{ color: categoryColor, fontSize: 13, fontWeight: '600', marginBottom: 4, fontStyle: 'italic', flex: 1, marginRight: 8 }}>
+                                {resp.question_text}
+                              </Text>
+                            ) : <View style={{ flex: 1 }} />}
+                            {editingResponseId !== resp.id && (
+                              <TouchableOpacity
+                                onPress={() => { setEditingResponseId(resp.id); setEditingResponseText(resp.response_text); }}
+                                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                              >
+                                <Pencil size={14} color={colors.textSecondary} />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                          {editingResponseId === resp.id ? (
+                            <View style={{ marginTop: 4 }}>
+                              <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                                <TextInput
+                                  style={[styles.textInputSmall, { color: colors.text }]}
+                                  value={editingResponseText}
+                                  onChangeText={setEditingResponseText}
+                                  multiline
+                                  numberOfLines={3}
+                                  textAlignVertical="top"
+                                  autoFocus
+                                />
+                              </View>
+                              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                                {renderSaveButton(() => updateIntrospectionAnswer(resp.id, 'mission'), savingEditResponse, !editingResponseText.trim(), categoryColor, 'Update')}
+                                <TouchableOpacity
+                                  style={{ paddingVertical: 10, paddingHorizontal: 16 }}
+                                  onPress={() => { setEditingResponseId(null); setEditingResponseText(''); }}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>Cancel</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          ) : (
+                            <>
+                              <Text style={[styles.journalEntryText, { color: colors.text }]} numberOfLines={3}>
+                                {resp.response_text}
+                              </Text>
+                              <Text style={[styles.journalEntryDate, { color: colors.textSecondary }]}>
+                                {new Date(resp.created_at).toLocaleDateString()}
+                              </Text>
+                            </>
                           )}
-                          <Text style={[styles.journalEntryText, { color: colors.text }]} numberOfLines={3}>
-                            {resp.response_text}
-                          </Text>
-                          <Text style={[styles.journalEntryDate, { color: colors.textSecondary }]}>
-                            {new Date(resp.created_at).toLocaleDateString()}
-                          </Text>
                         </View>
                       ))}
                     </View>
