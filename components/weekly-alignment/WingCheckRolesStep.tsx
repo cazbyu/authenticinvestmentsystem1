@@ -122,6 +122,7 @@ interface Role {
   dream?: string;
   is_active: boolean;
   priority_order?: number | null;
+  preset_role_id?: string | null;
 }
 
 interface Task {
@@ -338,7 +339,7 @@ export function WingCheckRolesStep({
       // Load all active roles (including dream field)
       const { data: rolesData, error: rolesError } = await supabase
         .from('0008-ap-roles')
-        .select('id, label, category, icon, color, purpose, dream, is_active, priority_order')
+        .select('id, label, category, icon, color, purpose, dream, is_active, priority_order, preset_role_id')
         .eq('user_id', userId)
         .eq('is_active', true)
         .order('priority_order', { ascending: true, nullsFirst: false })
@@ -424,14 +425,21 @@ export function WingCheckRolesStep({
     try {
       const supabase = getSupabaseClient();
 
-      // Get all power questions for this strategy_type that match this role
-      // Match by role_id directly, or by role_category/role_name for preset questions
+      // Get power questions for this strategy_type that match this role
+      // Primary match: role_id matches the role's preset_role_id (for preset roles)
+      // Fallback match: role_name matches role label (for custom roles without preset)
+      const matchConditions: string[] = [];
+      if (role.preset_role_id) {
+        matchConditions.push(`role_id.eq.${role.preset_role_id}`);
+      }
+      matchConditions.push(`role_name.eq.${role.label}`);
+
       const { data: questions } = await supabase
         .from('0008-ap-power-questions')
         .select('id, question_text, question_context, ob_priority, strategy_type')
         .eq('strategy_type', strategyType)
         .eq('is_active', true)
-        .or(`role_id.eq.${role.id},role_name.eq.${role.label},role_category.eq.${role.category}`)
+        .or(matchConditions.join(','))
         .order('ob_priority', { ascending: true, nullsFirst: false });
 
       const allQuestions = questions || [];
