@@ -337,6 +337,17 @@ export function WingCheckRolesStep({
     setAllMissionAnswered(false);
     setSavedItems({});
     setSelectedReflectionRole(null);
+    // Reset new consolidated states
+    setActiveReflectionTab('rose');
+    setShowReflectionsList(false);
+    setWeekRoses([]);
+    setWeekThorns([]);
+    setWeekReflections([]);
+    setShowIdeasList(false);
+    setRoleIdeas([]);
+    setShowTasksList(false);
+    setRoleTasks([]);
+  }
   }
 
   async function loadData() {
@@ -495,6 +506,105 @@ export function WingCheckRolesStep({
       }
     } catch (error) {
       console.error(`Error loading ${strategyType} introspection:`, error);
+    }
+  }
+
+async function loadRoleItemsData(role: Role) {
+    if (!weekStartDate) return;
+    
+    try {
+      const supabase = getSupabaseClient();
+      
+      // Calculate week end date
+      const weekEnd = new Date(weekStartDate + 'T12:00:00');
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      const weekEndStr = formatLocalDate(weekEnd);
+
+      // 1. Get all reflection IDs linked to this role
+      const { data: reflectionJoins } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id')
+        .eq('parent_type', 'reflection')
+        .eq('role_id', role.id);
+
+      const reflectionIds = reflectionJoins?.map(rj => rj.parent_id) || [];
+
+      if (reflectionIds.length > 0) {
+        // Fetch roses for this week
+        const { data: roses } = await supabase
+          .from('0008-ap-reflections')
+          .select('id, content, created_at')
+          .in('id', reflectionIds)
+          .eq('reflection_type', 'rose')
+          .gte('created_at', weekStartDate)
+          .lt('created_at', weekEndStr)
+          .order('created_at', { ascending: false });
+        setWeekRoses(roses || []);
+
+        // Fetch thorns for this week
+        const { data: thorns } = await supabase
+          .from('0008-ap-reflections')
+          .select('id, content, created_at')
+          .in('id', reflectionIds)
+          .eq('reflection_type', 'thorn')
+          .gte('created_at', weekStartDate)
+          .lt('created_at', weekEndStr)
+          .order('created_at', { ascending: false });
+        setWeekThorns(thorns || []);
+
+        // Fetch reflections for this week
+        const { data: reflections } = await supabase
+          .from('0008-ap-reflections')
+          .select('id, content, created_at')
+          .in('id', reflectionIds)
+          .eq('reflection_type', 'reflection')
+          .gte('created_at', weekStartDate)
+          .lt('created_at', weekEndStr)
+          .order('created_at', { ascending: false });
+        setWeekReflections(reflections || []);
+      }
+
+      // 2. Get deposit ideas for this role (all pending, not just this week)
+      const { data: ideaJoins } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id')
+        .eq('parent_type', 'depositIdea')
+        .eq('role_id', role.id);
+
+      const ideaIds = ideaJoins?.map(ij => ij.parent_id) || [];
+
+      if (ideaIds.length > 0) {
+        const { data: ideas } = await supabase
+          .from('0008-ap-deposit-ideas')
+          .select('id, title, one_thing')
+          .in('id', ideaIds)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+        setRoleIdeas(ideas || []);
+      }
+
+      // 3. Get tasks/events for this role (pending only)
+      const { data: taskJoins } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id')
+        .eq('parent_type', 'task')
+        .eq('role_id', role.id);
+
+      const taskIds = taskJoins?.map(tj => tj.parent_id) || [];
+
+      if (taskIds.length > 0) {
+        const { data: tasks } = await supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, status, due_date, start_date, start_time, end_time, is_anytime, one_thing')
+          .in('id', taskIds)
+          .is('deleted_at', null)
+          .not('status', 'in', '(completed,cancelled)')
+          .order('created_at', { ascending: false });
+        setRoleTasks(tasks || []);
+      }
+
+    } catch (error) {
+      console.error('Error loading role items data:', error);
     }
   }
 
