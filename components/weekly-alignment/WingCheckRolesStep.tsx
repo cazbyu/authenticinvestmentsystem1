@@ -1008,6 +1008,10 @@ async function loadRoleItemsData(role: Role) {
 
       setThoughtText('');
       showSavedFeedback('thought');
+      // Refresh lists
+      if (selectedReflectionRole) {
+        loadRoleItemsData(selectedReflectionRole);
+      }
     } catch (error) {
       console.error('Error saving thought:', error);
       showErrorAlert('Failed to save thought.');
