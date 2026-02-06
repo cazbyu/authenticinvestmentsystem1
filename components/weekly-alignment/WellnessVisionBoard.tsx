@@ -18,8 +18,6 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
-  Plus,
-  Users,
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 
@@ -1358,25 +1356,6 @@ export function WellnessVisionBoard({
           )}
         </View>
 
-        {/* SECTION 6: KEY RELATIONSHIPS */}
-        <View style={[st.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={st.cardHeader}>
-            <View style={st.cardHeaderLeft}>
-              <Users size={16} color={zoneColor} />
-              <Text style={[st.cardLabel, { color: zoneColor, marginLeft: 6 }]}>KEY RELATIONSHIPS</Text>
-            </View>
-          </View>
-
-          <Text style={[st.hintText, { color: colors.textSecondary }]}>
-            Who are the key people important to your {zone.name.toLowerCase()} well-being?
-          </Text>
-
-          <TouchableOpacity style={[st.placeholderButton, { borderColor: zoneColor }]} activeOpacity={0.7}>
-            <Plus size={16} color={zoneColor} />
-            <Text style={[st.placeholderButtonText, { color: zoneColor }]}>Add Key Relationship</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Back to Zones */}
         <TouchableOpacity
           style={[st.secondaryButton, { borderColor: zoneColor }]}
@@ -1614,8 +1593,6 @@ const st = StyleSheet.create({
   inlineSaveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   secondaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 12, borderWidth: 2, marginTop: 16 },
   secondaryButtonText: { fontSize: 16, fontWeight: '600' },
-  placeholderButton: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: 10, borderWidth: 1.5, borderStyle: 'dashed' },
-  placeholderButtonText: { fontSize: 15, fontWeight: '600' },
   introspectionToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, marginTop: 16, borderTopWidth: 1 },
   introspectionToggleText: { fontSize: 14, fontWeight: '600' },
   introspectionContent: { paddingTop: 12 },
