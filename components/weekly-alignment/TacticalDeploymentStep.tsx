@@ -10,28 +10,30 @@ import {
   Platform,
   Alert,
   Image,
+  Modal,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { 
-  CheckCircle2, 
-  Calendar, 
-  CheckSquare, 
-  Clock, 
-  Edit3, 
-  Award,
+import {
+  Crosshair,
+  Target,
   Sparkles,
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  Target,
   HelpCircle,
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { toLocalISOString } from '@/lib/dateUtils';
+import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
+import TacticalDayRows, { EnrichedItem, WeekDay } from './TacticalDayRows';
+import TacticalDelegateCard, { DelegateContact } from './TacticalDelegateCard';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
 
-// Compass icon for Step 5 header
-// const CompassDeployIcon = require('@/assets/images/compass-deploy.png');
-const CompassDeployIcon = null; // Temporarily disabled - image missing
+const CalendarImage = require('@/assets/images/calendar.png');
+const TaskListImage = require('@/assets/images/task-list.png');
+
+const DEPLOY_COLOR = '#FFD700';
+const DEPLOY_COLOR_LIGHT = '#FFD70015';
+const DEPLOY_COLOR_BORDER = '#FFD70040';
 
 interface TacticalDeploymentStepProps {
   userId: string;
@@ -45,45 +47,18 @@ interface TacticalDeploymentStepProps {
     flaggedWellnessZones?: string[];
     laggingGoals?: string[];
     keyFocusGoal?: string;
-    // NEW: Collected ONE thing responses
-    wellnessZoneFocus?: Array<{
-      zoneId: string;
-      zoneName: string;
-      focusText: string;
-    }>;
-    roleFocus?: Array<{
-      roleId: string;
-      roleLabel: string;
-      focusText: string;
-    }>;
+    wellnessZoneFocus?: Array<{ zoneId: string; zoneName: string; focusText: string }>;
+    roleFocus?: Array<{ roleId: string; roleLabel: string; focusText: string }>;
   };
 }
 
-interface WeeklyContractData {
-  keystone_focus: string;
+export interface WeeklyContractData {
   committed_tasks: string[];
   committed_events: string[];
-  delegation_reminders: string[];
+  delegated_tasks: string[];
   personal_commitment: string;
   signed_at: string;
 }
-
-interface ScheduledItem {
-  id: string;
-  title: string;
-  type: 'task' | 'event';
-  due_date?: string;
-  start_date?: string;
-  start_time?: string;
-  is_urgent?: boolean;
-  is_important?: boolean;
-  points?: number;
-}
-
-// Brand color for Deployment (gold/yellow)
-const DEPLOY_COLOR = '#FFD700';
-const DEPLOY_COLOR_LIGHT = '#FFD70015';
-const DEPLOY_COLOR_BORDER = '#FFD70040';
 
 export function TacticalDeploymentStep({
   userId,
@@ -94,42 +69,43 @@ export function TacticalDeploymentStep({
   capturedData,
 }: TacticalDeploymentStepProps) {
   const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<ScheduledItem[]>([]);
-  const [events, setEvents] = useState<ScheduledItem[]>([]);
-  const [delegations, setDelegations] = useState<any[]>([]);
-  
-  const [keystoneFocus, setKeystoneFocus] = useState('');
+  const [enrichedTasks, setEnrichedTasks] = useState<EnrichedItem[]>([]);
+  const [enrichedEvents, setEnrichedEvents] = useState<EnrichedItem[]>([]);
+  const [weekDays, setWeekDays] = useState<WeekDay[]>([]);
+  const [delegates, setDelegates] = useState<DelegateContact[]>([]);
+
   const [committedTaskIds, setCommittedTaskIds] = useState<Set<string>>(new Set());
   const [committedEventIds, setCommittedEventIds] = useState<Set<string>>(new Set());
+  const [delegatedMap, setDelegatedMap] = useState<
+    Map<string, { delegateId: string; delegateName: string }>
+  >(new Map());
   const [personalCommitment, setPersonalCommitment] = useState('');
   const [isSigning, setIsSigning] = useState(false);
-  
-  // Collapsible sections
+
   const [showFocusAreas, setShowFocusAreas] = useState(true);
-  const [showTasks, setShowTasks] = useState(true);
   const [showEvents, setShowEvents] = useState(true);
-  const [showDelegations, setShowDelegations] = useState(false);
+  const [showTasks, setShowTasks] = useState(true);
   const [showTooltip, setShowTooltip] = useState(false);
+
+  const [editingItem, setEditingItem] = useState<EnrichedItem | null>(null);
+
+  const [goalCount, setGoalCount] = useState(0);
+  const [supportingActionCount, setSupportingActionCount] = useState(0);
 
   useEffect(() => {
     loadWeekData();
   }, []);
 
-  // Register back handler
   useEffect(() => {
     if (onRegisterBackHandler) {
-      onRegisterBackHandler(() => {
-        // Step 5 has no sub-states, just go back
-        return false;
-      });
+      onRegisterBackHandler(() => false);
     }
   }, []);
 
   async function loadWeekData() {
     try {
       const supabase = getSupabaseClient();
-      
-      // Get this week's date range
+
       const today = new Date();
       const dayOfWeek = today.getDay();
       const startOfWeek = new Date(today);
@@ -140,55 +116,209 @@ export function TacticalDeploymentStep({
       const startStr = toLocalISOString(startOfWeek).split('T')[0];
       const endStr = toLocalISOString(endOfWeek).split('T')[0];
 
-      // Load tasks due this week
-      const { data: taskData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, due_date, start_time, is_urgent, is_important')
-        .eq('user_id', userId)
-        .eq('type', 'task')
-        .is('completed_at', null)
-        .is('deleted_at', null)
-        .gte('due_date', startStr)
-        .lte('due_date', endStr)
-        .order('is_urgent', { ascending: false })
-        .order('is_important', { ascending: false })
-        .order('due_date', { ascending: true });
+      const days: WeekDay[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(startOfWeek);
+        d.setDate(startOfWeek.getDate() + i);
+        days.push({
+          date: formatLocalDate(d),
+          label: d.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          }),
+        });
+      }
+      setWeekDays(days);
 
-      // Load events this week
-      const { data: eventData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, start_date, start_time')
-        .eq('user_id', userId)
-        .eq('type', 'event')
-        .is('completed_at', null)
-        .is('deleted_at', null)
-        .gte('start_date', startStr)
-        .lte('start_date', endStr)
-        .order('start_date', { ascending: true })
-        .order('start_time', { ascending: true });
+      const [taskRes, eventRes] = await Promise.all([
+        supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, due_date, start_time, is_urgent, is_important')
+          .eq('user_id', userId)
+          .eq('type', 'task')
+          .is('completed_at', null)
+          .is('deleted_at', null)
+          .gte('due_date', startStr)
+          .lte('due_date', endStr)
+          .order('due_date', { ascending: true }),
+        supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, start_date, start_time, end_time')
+          .eq('user_id', userId)
+          .eq('type', 'event')
+          .is('completed_at', null)
+          .is('deleted_at', null)
+          .gte('start_date', startStr)
+          .lte('start_date', endStr)
+          .order('start_date', { ascending: true })
+          .order('start_time', { ascending: true }),
+      ]);
 
-      // Load pending delegations
-      const { data: delegationData } = await supabase
-        .from('v_morning_spark_delegations')
-        .select('*')
-        .eq('user_id', userId);
+      const rawTasks = taskRes.data || [];
+      const rawEvents = eventRes.data || [];
+      const allIds = [...rawTasks.map((t) => t.id), ...rawEvents.map((e) => e.id)];
 
-      setTasks((taskData || []).map(t => ({ ...t, type: 'task' as const })));
-      setEvents((eventData || []).map(e => ({ ...e, type: 'event' as const })));
-      setDelegations(delegationData || []);
+      let roleJoins: any[] = [];
+      let domainJoins: any[] = [];
+      let goalJoins: any[] = [];
+      let delegateJoins: any[] = [];
+      let allRoles: any[] = [];
+      let allDomains: any[] = [];
+      let allDelegates: any[] = [];
 
-      // Pre-select urgent/important tasks
-      const urgentImportantIds = new Set(
-        (taskData || [])
-          .filter(t => t.is_urgent && t.is_important)
-          .map(t => t.id)
+      if (allIds.length > 0) {
+        const [rj, dj, gj, dlj] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id, role_id')
+            .eq('parent_type', 'task')
+            .in('parent_id', allIds),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id, domain_id')
+            .eq('parent_type', 'task')
+            .in('parent_id', allIds),
+          supabase
+            .from('0008-ap-universal-goals-join')
+            .select('parent_id, twelve_wk_goal_id, custom_goal_id')
+            .in('parent_id', allIds),
+          supabase
+            .from('0008-ap-universal-delegates-join')
+            .select('parent_id, delegate_id')
+            .eq('parent_type', 'task')
+            .in('parent_id', allIds),
+        ]);
+        roleJoins = rj.data || [];
+        domainJoins = dj.data || [];
+        goalJoins = gj.data || [];
+        delegateJoins = dlj.data || [];
+      }
+
+      const roleIds = [...new Set(roleJoins.map((r: any) => r.role_id).filter(Boolean))];
+      const domainIds = [...new Set(domainJoins.map((d: any) => d.domain_id).filter(Boolean))];
+      const goalIds12 = [
+        ...new Set(goalJoins.map((g: any) => g.twelve_wk_goal_id).filter(Boolean)),
+      ];
+      const goalIdsCustom = [
+        ...new Set(goalJoins.map((g: any) => g.custom_goal_id).filter(Boolean)),
+      ];
+      const delegateIdsList = [
+        ...new Set(delegateJoins.map((d: any) => d.delegate_id).filter(Boolean)),
+      ];
+
+      const [rolesRes, domainsRes, goals12Res, goalsCustomRes, delegatesJoinedRes, delegatesRes] =
+        await Promise.all([
+          roleIds.length > 0
+            ? supabase.from('0008-ap-roles').select('id, label, color').in('id', roleIds)
+            : { data: [] },
+          domainIds.length > 0
+            ? supabase.from('0008-ap-domains').select('id, name').in('id', domainIds)
+            : { data: [] },
+          goalIds12.length > 0
+            ? supabase.from('0008-ap-goals-12wk').select('id, title').in('id', goalIds12)
+            : { data: [] },
+          goalIdsCustom.length > 0
+            ? supabase.from('0008-ap-goals-custom').select('id, title').in('id', goalIdsCustom)
+            : { data: [] },
+          delegateIdsList.length > 0
+            ? supabase.from('0008-ap-delegates').select('id, name').in('id', delegateIdsList)
+            : { data: [] },
+          supabase
+            .from('0008-ap-delegates')
+            .select('id, name, email, phone')
+            .eq('user_id', userId)
+            .order('name', { ascending: true }),
+        ]);
+
+      allRoles = rolesRes.data || [];
+      allDomains = domainsRes.data || [];
+      allDelegates = delegatesRes.data || [];
+
+      const rolesById = new Map(allRoles.map((r: any) => [r.id, r]));
+      const domainsById = new Map(allDomains.map((d: any) => [d.id, d]));
+      const goalsById = new Map<string, { id: string; title: string }>();
+      for (const g of goals12Res.data || []) goalsById.set(g.id, g);
+      for (const g of goalsCustomRes.data || []) goalsById.set(g.id, g);
+      const delegatesById = new Map(
+        (delegatesJoinedRes.data || []).map((d: any) => [d.id, d])
       );
-      setCommittedTaskIds(urgentImportantIds);
 
-      // Pre-select all events
-      const allEventIds = new Set((eventData || []).map(e => e.id));
-      setCommittedEventIds(allEventIds);
+      const rolesByParent = new Map<string, any[]>();
+      for (const rj of roleJoins) {
+        const list = rolesByParent.get(rj.parent_id) || [];
+        const role = rolesById.get(rj.role_id);
+        if (role) list.push(role);
+        rolesByParent.set(rj.parent_id, list);
+      }
 
+      const domainsByParent = new Map<string, any[]>();
+      for (const dj of domainJoins) {
+        const list = domainsByParent.get(dj.parent_id) || [];
+        const domain = domainsById.get(dj.domain_id);
+        if (domain) list.push(domain);
+        domainsByParent.set(dj.parent_id, list);
+      }
+
+      const goalsByParent = new Map<string, any[]>();
+      for (const gj of goalJoins) {
+        const list = goalsByParent.get(gj.parent_id) || [];
+        const goal =
+          goalsById.get(gj.twelve_wk_goal_id) || goalsById.get(gj.custom_goal_id);
+        if (goal) list.push(goal);
+        goalsByParent.set(gj.parent_id, list);
+      }
+
+      const delegatesByParent = new Map<string, any[]>();
+      for (const dlj of delegateJoins) {
+        const list = delegatesByParent.get(dlj.parent_id) || [];
+        const del = delegatesById.get(dlj.delegate_id);
+        if (del) list.push(del);
+        delegatesByParent.set(dlj.parent_id, list);
+      }
+
+      function enrichItem(raw: any, type: 'task' | 'event'): EnrichedItem {
+        const delegates = delegatesByParent.get(raw.id) || [];
+        return {
+          ...raw,
+          type,
+          roles: rolesByParent.get(raw.id) || [],
+          domains: domainsByParent.get(raw.id) || [],
+          goals: goalsByParent.get(raw.id) || [],
+          has_delegates: delegates.length > 0,
+          delegateName: delegates[0]?.name,
+        };
+      }
+
+      const eTasks = rawTasks.map((t) => enrichItem(t, 'task'));
+      const eEvents = rawEvents.map((e) => enrichItem(e, 'event'));
+
+      setEnrichedTasks(eTasks);
+      setEnrichedEvents(eEvents);
+
+      const urgentImportant = new Set(
+        rawTasks.filter((t) => t.is_urgent && t.is_important).map((t) => t.id)
+      );
+      setCommittedTaskIds(urgentImportant);
+      setCommittedEventIds(new Set(rawEvents.map((e) => e.id)));
+
+      const uniqueDelegates = new Map<string, DelegateContact>();
+      for (const d of allDelegates) {
+        if (!uniqueDelegates.has(d.name)) {
+          uniqueDelegates.set(d.name, d);
+        }
+      }
+      setDelegates(Array.from(uniqueDelegates.values()));
+
+      const allGoalIds = new Set<string>();
+      let actionsWithGoals = 0;
+      for (const id of allIds) {
+        const goals = goalsByParent.get(id) || [];
+        if (goals.length > 0) actionsWithGoals++;
+        for (const g of goals) allGoalIds.add(g.id);
+      }
+      setGoalCount(allGoalIds.size);
+      setSupportingActionCount(actionsWithGoals);
     } catch (error) {
       console.error('Error loading week data:', error);
     } finally {
@@ -197,78 +327,97 @@ export function TacticalDeploymentStep({
   }
 
   function toggleTask(taskId: string) {
-    setCommittedTaskIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(taskId)) {
-        newSet.delete(taskId);
-      } else {
-        newSet.add(taskId);
-      }
-      return newSet;
+    setCommittedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
     });
-
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
   function toggleEvent(eventId: string) {
-    setCommittedEventIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(eventId)) {
-        newSet.delete(eventId);
-      } else {
-        newSet.add(eventId);
-      }
-      return newSet;
+    setCommittedEventIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
     });
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
 
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  async function handleDelegateTask(taskId: string, delegateName: string, delegateEmail?: string) {
+    const supabase = getSupabaseClient();
+    const task = enrichedTasks.find((t) => t.id === taskId);
+
+    const { data: assignment } = await supabase
+      .from('0008-ap-delegates')
+      .insert({
+        user_id: userId,
+        name: delegateName,
+        email: delegateEmail || null,
+        task_id: taskId,
+        due_date: task?.due_date || null,
+        status: 'pending',
+      })
+      .select('id')
+      .single();
+
+    if (!assignment) return;
+
+    await Promise.all([
+      supabase.from('0008-ap-universal-delegates-join').insert({
+        parent_id: taskId,
+        parent_type: 'task',
+        delegate_id: assignment.id,
+        user_id: userId,
+      }),
+      supabase.from('0008-ap-tasks').update({ delegated_to: assignment.id }).eq('id', taskId),
+    ]);
+
+    setDelegatedMap((prev) => {
+      const next = new Map(prev);
+      next.set(taskId, { delegateId: assignment.id, delegateName });
+      return next;
+    });
+  }
+
+  async function refreshDelegates() {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase
+      .from('0008-ap-delegates')
+      .select('id, name, email, phone')
+      .eq('user_id', userId)
+      .order('name', { ascending: true });
+
+    const unique = new Map<string, DelegateContact>();
+    for (const d of data || []) {
+      if (!unique.has(d.name)) unique.set(d.name, d);
     }
+    setDelegates(Array.from(unique.values()));
   }
 
-  function getPriorityColor(item: ScheduledItem): string {
-    if (item.is_urgent && item.is_important) return '#EF4444';
-    if (!item.is_urgent && item.is_important) return '#10B981';
-    if (item.is_urgent && !item.is_important) return '#F59E0B';
-    return '#6B7280';
+  function handleEditItem(item: EnrichedItem) {
+    setEditingItem(item);
   }
 
-  function formatDate(dateStr?: string): string {
-    if (!dateStr) return '';
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  }
-
-  function formatTime(timeStr?: string): string {
-    if (!timeStr) return '';
-    return new Date(`2000-01-01T${timeStr}`).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
+  function handleEditComplete() {
+    setEditingItem(null);
+    loadWeekData();
   }
 
   async function handleSignContract() {
-    if (!keystoneFocus.trim()) {
-      Alert.alert('Keystone Required', 'Please enter your keystone focus for the week.');
-      return;
-    }
-
     if (committedTaskIds.size === 0 && committedEventIds.size === 0) {
-      Alert.alert('Commitment Required', 'Please commit to at least one task or event for the week.');
+      Alert.alert('Commitment Required', 'Please commit to at least one task or event.');
       return;
     }
 
     setIsSigning(true);
-
     try {
       const contractData: WeeklyContractData = {
-        keystone_focus: keystoneFocus.trim(),
         committed_tasks: Array.from(committedTaskIds),
         committed_events: Array.from(committedEventIds),
-        delegation_reminders: delegations.map(d => d.delegation_id),
+        delegated_tasks: Array.from(delegatedMap.keys()),
         personal_commitment: personalCommitment.trim(),
         signed_at: new Date().toISOString(),
       };
@@ -276,7 +425,6 @@ export function TacticalDeploymentStep({
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-
       onComplete(contractData);
     } catch (error) {
       console.error('Error signing contract:', error);
@@ -286,11 +434,9 @@ export function TacticalDeploymentStep({
     }
   }
 
-  // Get combined focus areas from capturedData
   const wellnessZoneFocuses = capturedData.wellnessZoneFocus || [];
   const roleFocuses = capturedData.roleFocus || [];
   const hasFocusAreas = wellnessZoneFocuses.length > 0 || roleFocuses.length > 0;
-
   const totalCommitments = committedTaskIds.size + committedEventIds.size;
 
   if (loading) {
@@ -307,21 +453,21 @@ export function TacticalDeploymentStep({
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header - Matching other steps */}
+      {/* Header */}
       <View style={styles.headerSection}>
         <View style={styles.headerRow}>
-          <View style={[styles.compassContainer, { backgroundColor: DEPLOY_COLOR_LIGHT }]}>
-            <Image source={CompassDeployIcon} style={styles.compassIcon} resizeMode="contain" />
+          <View style={[styles.iconContainer, { backgroundColor: DEPLOY_COLOR_LIGHT }]}>
+            <Crosshair size={36} color={DEPLOY_COLOR} strokeWidth={1.8} />
           </View>
-          <View style={styles.headerTextContainer}>
+          <View style={styles.headerTextWrap}>
             <Text style={[styles.stepLabel, { color: DEPLOY_COLOR }]}>Step 5</Text>
             <Text style={[styles.stepTitle, { color: colors.text }]}>Tactical Deployment</Text>
           </View>
           <TouchableOpacity
-            style={styles.tooltipButton}
+            style={styles.tooltipBtn}
             onPress={() => setShowTooltip(!showTooltip)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -330,24 +476,29 @@ export function TacticalDeploymentStep({
         </View>
 
         {showTooltip && (
-          <View style={[styles.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.tooltipBox,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
             <Text style={[styles.tooltipText, { color: colors.text }]}>
-              Your weekly contract transforms intentions into commitments.
-              {'\n\n'}
-              <Text style={{ fontWeight: '600' }}>Keystone Focus</Text> — The ONE thing that makes everything else easier.
-              {'\n\n'}
-              <Text style={{ fontWeight: '600' }}>Commitments</Text> — Tasks and events you're promising to complete.
-              {'\n\n'}
-              💡 Focus on fewer, higher-impact items for better results.
+              Review your calendar, delegate what others can own, commit to what you will do, and
+              check your goal coverage.
             </Text>
           </View>
         )}
       </View>
 
-      {/* Weekly Focus Areas - From Previous Steps */}
+      {/* Focus Areas */}
       {hasFocusAreas && (
-        <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: DEPLOY_COLOR_BORDER }]}>
-          <TouchableOpacity 
+        <View
+          style={[
+            styles.sectionCard,
+            { backgroundColor: colors.surface, borderColor: DEPLOY_COLOR_BORDER },
+          ]}
+        >
+          <TouchableOpacity
             style={styles.sectionHeader}
             onPress={() => setShowFocusAreas(!showFocusAreas)}
           >
@@ -368,42 +519,43 @@ export function TacticalDeploymentStep({
           </TouchableOpacity>
 
           {showFocusAreas && (
-            <View style={styles.focusAreasList}>
-              {/* Wellness Zone Focuses */}
-              {wellnessZoneFocuses.map((wz, index) => (
-                <View 
-                  key={`wz-${wz.zoneId}`} 
-                  style={[styles.focusAreaItem, { backgroundColor: '#39b54a10', borderColor: '#39b54a40' }]}
+            <View style={styles.focusList}>
+              {wellnessZoneFocuses.map((wz) => (
+                <View
+                  key={`wz-${wz.zoneId}`}
+                  style={[
+                    styles.focusItem,
+                    { backgroundColor: '#39b54a10', borderColor: '#39b54a40' },
+                  ]}
                 >
-                  <View style={styles.focusAreaHeader}>
-                    <View style={[styles.focusAreaBadge, { backgroundColor: '#39b54a' }]}>
-                      <Text style={styles.focusAreaBadgeText}>WZ</Text>
+                  <View style={styles.focusItemHeader}>
+                    <View style={[styles.focusBadge, { backgroundColor: '#39b54a' }]}>
+                      <Text style={styles.focusBadgeText}>WZ</Text>
                     </View>
-                    <Text style={[styles.focusAreaLabel, { color: colors.text }]}>
-                      {wz.zoneName}
-                    </Text>
+                    <Text style={[styles.focusLabel, { color: colors.text }]}>{wz.zoneName}</Text>
                   </View>
-                  <Text style={[styles.focusAreaText, { color: colors.textSecondary }]}>
+                  <Text style={[styles.focusText, { color: colors.textSecondary }]}>
                     "{wz.focusText}"
                   </Text>
                 </View>
               ))}
-
-              {/* Role Focuses */}
-              {roleFocuses.map((role, index) => (
-                <View 
-                  key={`role-${role.roleId}`} 
-                  style={[styles.focusAreaItem, { backgroundColor: '#9370DB10', borderColor: '#9370DB40' }]}
+              {roleFocuses.map((role) => (
+                <View
+                  key={`role-${role.roleId}`}
+                  style={[
+                    styles.focusItem,
+                    { backgroundColor: '#9370DB10', borderColor: '#9370DB40' },
+                  ]}
                 >
-                  <View style={styles.focusAreaHeader}>
-                    <View style={[styles.focusAreaBadge, { backgroundColor: '#9370DB' }]}>
-                      <Text style={styles.focusAreaBadgeText}>R</Text>
+                  <View style={styles.focusItemHeader}>
+                    <View style={[styles.focusBadge, { backgroundColor: '#9370DB' }]}>
+                      <Text style={styles.focusBadgeText}>R</Text>
                     </View>
-                    <Text style={[styles.focusAreaLabel, { color: colors.text }]}>
+                    <Text style={[styles.focusLabel, { color: colors.text }]}>
                       {role.roleLabel}
                     </Text>
                   </View>
-                  <Text style={[styles.focusAreaText, { color: colors.textSecondary }]}>
+                  <Text style={[styles.focusText, { color: colors.textSecondary }]}>
                     "{role.focusText}"
                   </Text>
                 </View>
@@ -413,114 +565,15 @@ export function TacticalDeploymentStep({
         </View>
       )}
 
-      {/* Keystone Focus */}
-      <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: DEPLOY_COLOR }]}>
-        <View style={styles.sectionHeader}>
-          <Award size={20} color={DEPLOY_COLOR} />
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Keystone Focus *
-          </Text>
-        </View>
-        <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
-          What is the ONE thing that, if accomplished this week, would make everything else easier or unnecessary?
-        </Text>
-        <TextInput
-          style={[
-            styles.keystoneInput,
-            {
-              backgroundColor: colors.background,
-              color: colors.text,
-              borderColor: keystoneFocus ? DEPLOY_COLOR : colors.border,
-            },
-          ]}
-          placeholder="Enter your keystone focus..."
-          placeholderTextColor={colors.textSecondary}
-          value={keystoneFocus}
-          onChangeText={setKeystoneFocus}
-          multiline
-          numberOfLines={2}
-        />
-      </View>
-
-      {/* Tasks Section */}
-      <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity 
-          style={styles.sectionHeader}
-          onPress={() => setShowTasks(!showTasks)}
-        >
-          <CheckSquare size={20} color="#3B82F6" />
-          <Text style={[styles.sectionTitle, { color: colors.text, flex: 1 }]}>
-            Tasks This Week ({tasks.length})
-          </Text>
-          <Text style={[styles.commitCount, { color: '#10B981' }]}>
-            {committedTaskIds.size} committed
-          </Text>
-          {showTasks ? (
-            <ChevronUp size={20} color={colors.textSecondary} />
-          ) : (
-            <ChevronDown size={20} color={colors.textSecondary} />
-          )}
-        </TouchableOpacity>
-
-        {showTasks && (
-          <View style={styles.itemsList}>
-            {tasks.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No tasks scheduled for this week
-              </Text>
-            ) : (
-              tasks.map(task => {
-                const isCommitted = committedTaskIds.has(task.id);
-                return (
-                  <TouchableOpacity
-                    key={task.id}
-                    style={[
-                      styles.itemRow,
-                      { 
-                        backgroundColor: isCommitted ? '#10B98110' : colors.background,
-                        borderColor: isCommitted ? '#10B981' : colors.border,
-                      },
-                    ]}
-                    onPress={() => toggleTask(task.id)}
-                  >
-                    <View style={[styles.checkbox, { borderColor: isCommitted ? '#10B981' : colors.border }]}>
-                      {isCommitted && <CheckCircle2 size={18} color="#10B981" />}
-                    </View>
-                    <View style={styles.itemContent}>
-                      <Text 
-                        style={[
-                          styles.itemTitle, 
-                          { color: colors.text },
-                          isCommitted && styles.itemTitleCommitted,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {task.title}
-                      </Text>
-                      <View style={styles.itemMeta}>
-                        <View style={[styles.priorityDot, { backgroundColor: getPriorityColor(task) }]} />
-                        <Text style={[styles.itemDate, { color: colors.textSecondary }]}>
-                          {formatDate(task.due_date)}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
-        )}
-      </View>
-
       {/* Events Section */}
       <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.sectionHeader}
           onPress={() => setShowEvents(!showEvents)}
         >
-          <Calendar size={20} color="#9370DB" />
+          <Image source={CalendarImage} style={styles.sectionImage} resizeMode="contain" />
           <Text style={[styles.sectionTitle, { color: colors.text, flex: 1 }]}>
-            Events This Week ({events.length})
+            Events This Week ({enrichedEvents.length})
           </Text>
           <Text style={[styles.commitCount, { color: '#10B981' }]}>
             {committedEventIds.size} committed
@@ -533,95 +586,78 @@ export function TacticalDeploymentStep({
         </TouchableOpacity>
 
         {showEvents && (
-          <View style={styles.itemsList}>
-            {events.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No events scheduled for this week
-              </Text>
-            ) : (
-              events.map(event => {
-                const isCommitted = committedEventIds.has(event.id);
-                return (
-                  <TouchableOpacity
-                    key={event.id}
-                    style={[
-                      styles.itemRow,
-                      { 
-                        backgroundColor: isCommitted ? '#10B98110' : colors.background,
-                        borderColor: isCommitted ? '#10B981' : colors.border,
-                      },
-                    ]}
-                    onPress={() => toggleEvent(event.id)}
-                  >
-                    <View style={[styles.checkbox, { borderColor: isCommitted ? '#10B981' : colors.border }]}>
-                      {isCommitted && <CheckCircle2 size={18} color="#10B981" />}
-                    </View>
-                    <View style={styles.itemContent}>
-                      <Text 
-                        style={[
-                          styles.itemTitle, 
-                          { color: colors.text },
-                          isCommitted && styles.itemTitleCommitted,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {event.title}
-                      </Text>
-                      <View style={styles.itemMeta}>
-                        <Clock size={12} color={colors.textSecondary} />
-                        <Text style={[styles.itemDate, { color: colors.textSecondary }]}>
-                          {formatDate(event.start_date)} {event.start_time && `at ${formatTime(event.start_time)}`}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
+          <TacticalDayRows
+            items={enrichedEvents}
+            dateField="start_date"
+            weekDays={weekDays}
+            committedIds={committedEventIds}
+            onToggleCommit={toggleEvent}
+            onEditItem={handleEditItem}
+            colors={colors}
+          />
         )}
       </View>
 
-      {/* Delegations Reminder */}
-      {delegations.length > 0 && (
-        <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <TouchableOpacity 
-            style={styles.sectionHeader}
-            onPress={() => setShowDelegations(!showDelegations)}
-          >
-            <Edit3 size={20} color="#F59E0B" />
-            <Text style={[styles.sectionTitle, { color: colors.text, flex: 1 }]}>
-              Pending Delegations ({delegations.length})
-            </Text>
-            {showDelegations ? (
-              <ChevronUp size={20} color={colors.textSecondary} />
-            ) : (
-              <ChevronDown size={20} color={colors.textSecondary} />
-            )}
-          </TouchableOpacity>
+      {/* Delegate Section */}
+      <TacticalDelegateCard
+        tasks={enrichedTasks.map((t) => ({ id: t.id, title: t.title, due_date: t.due_date }))}
+        delegates={delegates}
+        userId={userId}
+        colors={colors}
+        onDelegateTask={handleDelegateTask}
+        delegatedMap={delegatedMap}
+        onDelegatesRefresh={refreshDelegates}
+      />
 
-          {showDelegations && (
-            <View style={styles.itemsList}>
-              {delegations.map(delegation => (
-                <View
-                  key={delegation.delegation_id}
-                  style={[styles.delegationRow, { backgroundColor: colors.background, borderColor: colors.border }]}
-                >
-                  <Text style={[styles.delegationTitle, { color: colors.text }]}>
-                    {delegation.task_title}
-                  </Text>
-                  <Text style={[styles.delegationMeta, { color: colors.textSecondary }]}>
-                    → {delegation.delegate_name}
-                    {delegation.due_date && ` • Due ${formatDate(delegation.due_date)}`}
-                  </Text>
-                </View>
-              ))}
-            </View>
+      {/* Tasks Section */}
+      <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={() => setShowTasks(!showTasks)}
+        >
+          <Image source={TaskListImage} style={styles.sectionImage} resizeMode="contain" />
+          <Text style={[styles.sectionTitle, { color: colors.text, flex: 1 }]}>
+            Tasks This Week ({enrichedTasks.length})
+          </Text>
+          <Text style={[styles.commitCount, { color: '#10B981' }]}>
+            {committedTaskIds.size} committed
+          </Text>
+          {showTasks ? (
+            <ChevronUp size={20} color={colors.textSecondary} />
+          ) : (
+            <ChevronDown size={20} color={colors.textSecondary} />
           )}
-        </View>
-      )}
+        </TouchableOpacity>
 
-      {/* Personal Commitment (Optional) */}
+        {showTasks && (
+          <TacticalDayRows
+            items={enrichedTasks}
+            dateField="due_date"
+            weekDays={weekDays}
+            committedIds={committedTaskIds}
+            onToggleCommit={toggleTask}
+            onEditItem={handleEditItem}
+            colors={colors}
+            showPriority
+          />
+        )}
+      </View>
+
+      {/* Goal Summary */}
+      <View
+        style={[
+          styles.goalCard,
+          { backgroundColor: '#3B82F608', borderColor: '#3B82F640' },
+        ]}
+      >
+        <Target size={20} color="#3B82F6" />
+        <Text style={[styles.goalText, { color: colors.text }]}>
+          {goalCount} {goalCount === 1 ? 'Goal' : 'Goals'} and {supportingActionCount} Supporting{' '}
+          {supportingActionCount === 1 ? 'Action' : 'Actions'} Scheduled
+        </Text>
+      </View>
+
+      {/* Personal Commitment */}
       <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.sectionHeader}>
           <Sparkles size={20} color="#10B981" />
@@ -629,17 +665,13 @@ export function TacticalDeploymentStep({
             Personal Commitment (Optional)
           </Text>
         </View>
-        <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
+        <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
           Any personal promise you want to make to yourself this week?
         </Text>
         <TextInput
           style={[
-            styles.commitmentInput,
-            {
-              backgroundColor: colors.background,
-              color: colors.text,
-              borderColor: colors.border,
-            },
+            styles.commitInput,
+            { backgroundColor: colors.background, color: colors.text, borderColor: colors.border },
           ]}
           placeholder="e.g., I will prioritize sleep over screens..."
           placeholderTextColor={colors.textSecondary}
@@ -651,45 +683,54 @@ export function TacticalDeploymentStep({
       </View>
 
       {/* Contract Summary */}
-      <View style={[styles.contractSummary, { backgroundColor: DEPLOY_COLOR_LIGHT, borderColor: DEPLOY_COLOR_BORDER }]}>
-        <Text style={[styles.contractSummaryTitle, { color: colors.text }]}>
-          📜 Weekly Contract Summary
-        </Text>
+      <View
+        style={[
+          styles.contractBox,
+          { backgroundColor: DEPLOY_COLOR_LIGHT, borderColor: DEPLOY_COLOR_BORDER },
+        ]}
+      >
+        <Text style={[styles.contractTitle, { color: colors.text }]}>Weekly Contract Summary</Text>
         <View style={styles.summaryRow}>
-          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Keystone:</Text>
-          <Text style={[styles.summaryValue, { color: keystoneFocus ? colors.text : colors.textSecondary }]} numberOfLines={1}>
-            {keystoneFocus || 'Not set'}
+          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+            Total Commitments:
           </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Commitments:</Text>
           <Text style={[styles.summaryValue, { color: '#10B981' }]}>
             {totalCommitments} items
           </Text>
         </View>
-        {hasFocusAreas && (
+        {delegatedMap.size > 0 && (
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Focus Areas:</Text>
-            <Text style={[styles.summaryValue, { color: DEPLOY_COLOR }]}>
-              {wellnessZoneFocuses.length + roleFocuses.length} defined ✓
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+              Delegated Tasks:
+            </Text>
+            <Text style={[styles.summaryValue, { color: '#3B82F6' }]}>
+              {delegatedMap.size} delegated
             </Text>
           </View>
         )}
-        {capturedData.keyFocusGoal && (
+        {goalCount > 0 && (
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Key Focus Goal:</Text>
-            <Text style={[styles.summaryValue, { color: '#4169E1' }]}>Selected ✓</Text>
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+              Goals Covered:
+            </Text>
+            <Text style={[styles.summaryValue, { color: '#3B82F6' }]}>{goalCount}</Text>
+          </View>
+        )}
+        {hasFocusAreas && (
+          <View style={styles.summaryRow}>
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+              Focus Areas:
+            </Text>
+            <Text style={[styles.summaryValue, { color: DEPLOY_COLOR }]}>
+              {wellnessZoneFocuses.length + roleFocuses.length} defined
+            </Text>
           </View>
         )}
       </View>
 
-      {/* Sign Contract Button */}
+      {/* Sign Button */}
       <TouchableOpacity
-        style={[
-          styles.signButton,
-          { backgroundColor: DEPLOY_COLOR },
-          isSigning && styles.signButtonDisabled,
-        ]}
+        style={[styles.signBtn, { backgroundColor: DEPLOY_COLOR }, isSigning && styles.signDisabled]}
         onPress={handleSignContract}
         disabled={isSigning}
         activeOpacity={0.8}
@@ -698,7 +739,7 @@ export function TacticalDeploymentStep({
           <ActivityIndicator size="small" color="#000000" />
         ) : (
           <>
-            <Text style={styles.signButtonText}>✍️ Sign Weekly Contract</Text>
+            <Text style={styles.signText}>Sign Weekly Contract</Text>
             <ChevronRight size={24} color="#000000" />
           </>
         )}
@@ -709,6 +750,24 @@ export function TacticalDeploymentStep({
       </Text>
 
       <View style={{ height: 40 }} />
+
+      {/* Edit Modal */}
+      {editingItem && (
+        <Modal visible animationType="slide" presentationStyle="fullScreen">
+          <TaskEventForm
+            mode="edit"
+            initialData={{
+              ...editingItem,
+              type: editingItem.type,
+              roles: editingItem.roles,
+              domains: editingItem.domains,
+              goals: editingItem.goals,
+            }}
+            onClose={() => setEditingItem(null)}
+            onSubmitSuccess={handleEditComplete}
+          />
+        </Modal>
+      )}
     </ScrollView>
   );
 }
@@ -717,7 +776,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  contentContainer: {
+  content: {
     padding: 20,
   },
   loadingContainer: {
@@ -730,8 +789,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
-  
-  // Header - Matching other steps
   headerSection: {
     marginBottom: 20,
   },
@@ -740,18 +797,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  compassContainer: {
+  iconContainer: {
     width: 72,
     height: 72,
     borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  compassIcon: {
-    width: 56,
-    height: 56,
-  },
-  headerTextContainer: {
+  headerTextWrap: {
     flex: 1,
   },
   stepLabel: {
@@ -764,10 +817,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
   },
-  tooltipButton: {
+  tooltipBtn: {
     padding: 8,
   },
-  tooltipContent: {
+  tooltipBox: {
     marginTop: 12,
     padding: 16,
     borderRadius: 12,
@@ -777,8 +830,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
   },
-
-  // Section Card
   sectionCard: {
     padding: 16,
     borderRadius: 12,
@@ -790,11 +841,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  sectionImage: {
+    width: 24,
+    height: 24,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
   },
-  sectionDescription: {
+  sectionDesc: {
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
@@ -816,137 +871,71 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-
-  // Focus Areas
-  focusAreasList: {
+  focusList: {
     marginTop: 12,
     gap: 10,
   },
-  focusAreaItem: {
+  focusItem: {
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
   },
-  focusAreaHeader: {
+  focusItemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 6,
   },
-  focusAreaBadge: {
+  focusBadge: {
     width: 24,
     height: 24,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  focusAreaBadgeText: {
+  focusBadgeText: {
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '700',
   },
-  focusAreaLabel: {
+  focusLabel: {
     fontSize: 15,
     fontWeight: '600',
   },
-  focusAreaText: {
+  focusText: {
     fontSize: 14,
     fontStyle: 'italic',
     lineHeight: 20,
   },
-
-  // Inputs
-  keystoneInput: {
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  commitmentInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-
-  // Items List
-  itemsList: {
-    marginTop: 12,
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    textAlign: 'center',
-    paddingVertical: 16,
-  },
-  itemRow: {
+  goalCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
     gap: 12,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
+    padding: 16,
     borderRadius: 12,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderWidth: 1,
+    marginBottom: 16,
   },
-  itemContent: {
+  goalText: {
+    fontSize: 15,
+    fontWeight: '600',
     flex: 1,
   },
-  itemTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  itemTitleCommitted: {
-    fontWeight: '600',
-  },
-  itemMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  priorityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  itemDate: {
-    fontSize: 12,
-  },
-
-  // Delegations
-  delegationRow: {
-    padding: 12,
-    borderRadius: 8,
+  commitInput: {
     borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    minHeight: 60,
+    textAlignVertical: 'top',
   },
-  delegationTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  delegationMeta: {
-    fontSize: 13,
-  },
-
-  // Contract Summary
-  contractSummary: {
+  contractBox: {
     padding: 20,
     borderRadius: 16,
     borderWidth: 2,
     marginBottom: 24,
   },
-  contractSummaryTitle: {
+  contractTitle: {
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
@@ -965,9 +954,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
-
-  // Sign Button
-  signButton: {
+  signBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -975,10 +962,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
-  signButtonDisabled: {
+  signDisabled: {
     opacity: 0.6,
   },
-  signButtonText: {
+  signText: {
     color: '#000000',
     fontSize: 20,
     fontWeight: '700',

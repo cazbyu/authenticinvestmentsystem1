@@ -49,10 +49,9 @@ interface WeeklyAlignmentData {
   keyFocusGoal?: string;
   
   // Step 5: Tactical Deployment
-  keystoneFocus?: string;
   committedTasks?: string[];
   committedEvents?: string[];
-  delegationReminders?: string[];
+  delegatedTasks?: string[];
   personalCommitment?: string;
 }
 
@@ -200,25 +199,15 @@ export default function WeeklyAlignmentScreen() {
       const weekStart = toLocalISOString(startOfWeek).split('T')[0];
       const weekEnd = toLocalISOString(endOfWeek).split('T')[0];
 
-      // Create or update weekly alignment record
       const alignmentRecord = {
         user_id: userId,
         week_start_date: weekStart,
         week_end_date: weekEnd,
-        keystone_focus: contractData.keystone_focus,
         committed_tasks: contractData.committed_tasks,
         committed_events: contractData.committed_events,
-        delegation_reminders: contractData.delegation_reminders,
+        delegated_tasks: contractData.delegated_tasks,
         personal_commitment: contractData.personal_commitment,
-        
-        // Captured data from steps
-        mission_reflection: alignmentData.missionReflection,
-        role_health_flags: alignmentData.roleHealthFlags,
-        flagged_wellness_zones: alignmentData.flaggedWellnessZones,
-        lagging_goals: alignmentData.laggingGoals,
-        key_focus_goal: alignmentData.keyFocusGoal,
-        
-        signed_at: new Date().toISOString(),
+        signed_at: contractData.signed_at,
         completed_at: new Date().toISOString(),
       };
 
@@ -348,10 +337,10 @@ export default function WeeklyAlignmentScreen() {
 
           <View style={[styles.completionCard, { backgroundColor: colors.surface, borderColor: '#10B981' }]}>
             <Text style={[styles.completionKeystoneLabel, { color: colors.textSecondary }]}>
-              Your Keystone Focus:
+              Your Commitment:
             </Text>
             <Text style={[styles.completionKeystone, { color: colors.text }]}>
-              "{alignmentData.keystoneFocus || 'Make this week count'}"
+              {(alignmentData.committedTasks?.length || 0) + (alignmentData.committedEvents?.length || 0)} items committed this week
             </Text>
           </View>
 
