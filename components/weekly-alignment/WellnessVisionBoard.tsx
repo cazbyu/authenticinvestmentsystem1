@@ -17,7 +17,6 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
-  ChevronRight,
   Pencil,
   Plus,
   Users,
@@ -164,7 +163,7 @@ export function WellnessVisionBoard({
   const [oneThingText, setOneThingText] = useState('');
   const [existingOneThingTask, setExistingOneThingTask] = useState<Task | null>(null);
   const [savingOneThing, setSavingOneThing] = useState(false);
-  const [oneThingSaveType, setOneThingSaveType] = useState<'task' | 'event'>('task');
+  const [takeActionType, setTakeActionType] = useState<'task' | 'event' | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('09:00');
@@ -399,8 +398,8 @@ export function WellnessVisionBoard({
     }
   }
 
-  function handleOneThingSaveAs(type: 'task' | 'event') {
-    setOneThingSaveType(type);
+  function openDatePicker(type: 'task' | 'event') {
+    setTakeActionType(type);
     setSelectedDate(weekDates[0]?.value || '');
     setSelectedTime('09:00');
     setSelectedEndTime('10:00');
@@ -408,17 +407,17 @@ export function WellnessVisionBoard({
   }
 
   async function confirmSaveOneThing() {
-    if (!oneThingText.trim() || !selectedDate) return;
+    if (!oneThingText.trim() || !selectedDate || !takeActionType) return;
     setSavingOneThing(true);
     setShowDatePicker(false);
     try {
       const supabase = getSupabaseClient();
-      const isEvent = oneThingSaveType === 'event';
+      const isEvent = takeActionType === 'event';
 
       const taskPayload: Record<string, any> = {
         user_id: userId,
         title: oneThingText.trim(),
-        type: oneThingSaveType,
+        type: takeActionType,
         one_thing: true,
         status: 'pending',
       };
@@ -429,6 +428,7 @@ export function WellnessVisionBoard({
         taskPayload.end_time = selectedEndTime;
       } else {
         taskPayload.due_date = selectedDate;
+        taskPayload.is_anytime = true;
       }
 
       const { data: newTask, error: taskError } = await supabase
@@ -452,6 +452,7 @@ export function WellnessVisionBoard({
 
       setExistingOneThingTask(newTask);
       setOneThingText('');
+      setTakeActionType(null);
       showSavedFeedback('oneThing');
       await loadZoneItemsData();
     } catch (error) {
@@ -773,35 +774,36 @@ export function WellnessVisionBoard({
   function renderSavedBadge(key: string) {
     if (!savedItems[key]) return null;
     return (
-      <View style={[s.savedBadge, { backgroundColor: '#10b981' }]}>
+      <View style={[st.savedBadge, { backgroundColor: '#10b981' }]}>
         <Check size={12} color="#FFFFFF" />
-        <Text style={s.savedBadgeText}>Saved</Text>
+        <Text style={st.savedBadgeText}>Saved</Text>
       </View>
     );
   }
 
-  function renderSaveButton(
-    onPress: () => void,
-    isSaving: boolean,
-    isDisabled: boolean,
+  function renderCircleAction(
+    icon: any,
+    label: string,
     color: string,
-    label: string = 'Save',
+    onPress: () => void,
+    disabled: boolean,
+    saving?: boolean,
   ) {
     return (
       <TouchableOpacity
-        style={[s.inlineSaveButton, {
-          backgroundColor: !isDisabled ? color : colors.border,
-          opacity: isSaving ? 0.7 : 1,
-        }]}
+        style={[st.circleActionWrap, { opacity: disabled ? 0.4 : 1 }]}
         onPress={onPress}
-        disabled={isSaving || isDisabled}
-        activeOpacity={0.8}
+        disabled={disabled || saving}
+        activeOpacity={0.7}
       >
-        {isSaving ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
-        ) : (
-          <Text style={s.inlineSaveButtonText}>{label}</Text>
-        )}
+        <View style={[st.circleIcon, { borderColor: color, backgroundColor: `${color}10` }]}>
+          {saving ? (
+            <ActivityIndicator size="small" color={color} />
+          ) : (
+            <Image source={icon} style={st.circleIconImage} resizeMode="contain" />
+          )}
+        </View>
+        <Text style={[st.circleActionLabel, { color }]}>{label}</Text>
       </TouchableOpacity>
     );
   }
@@ -820,29 +822,29 @@ export function WellnessVisionBoard({
     return (
       <>
         <TouchableOpacity
-          style={[s.introspectionToggle, { borderColor: colors.border }]}
+          style={[st.introspectionToggle, { borderColor: colors.border }]}
           onPress={() => setOpen(!isOpen)}
           activeOpacity={0.7}
         >
-          <Text style={[s.introspectionToggleText, { color: zoneColor }]}>Deeper Introspection</Text>
+          <Text style={[st.introspectionToggleText, { color: zoneColor }]}>Deeper Introspection</Text>
           {isOpen ? <ChevronUp size={18} color={zoneColor} /> : <ChevronDown size={18} color={zoneColor} />}
         </TouchableOpacity>
 
         {isOpen && (
-          <View style={s.introspectionContent}>
+          <View style={st.introspectionContent}>
             {allAnswered ? (
-              <Text style={[s.allAnsweredText, { color: colors.textSecondary }]}>
-                You have answered all introspection questions for this zone's {strategyType} -- review your responses regularly to stay aligned.
+              <Text style={[st.allAnsweredText, { color: colors.textSecondary }]}>
+                You have answered all introspection questions for this zone's {strategyType}.
               </Text>
             ) : question ? (
               <>
-                <Text style={[s.introspectionQuestion, { color: colors.text }]}>{question.question_text}</Text>
+                <Text style={[st.introspectionQuestion, { color: colors.text }]}>{question.question_text}</Text>
                 {question.question_context && (
-                  <Text style={[s.introspectionContext, { color: colors.textSecondary }]}>{question.question_context}</Text>
+                  <Text style={[st.introspectionContext, { color: colors.textSecondary }]}>{question.question_context}</Text>
                 )}
-                <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <TextInput
-                    style={[s.textInputSmall, { color: colors.text }]}
+                    style={[st.textInputSmall, { color: colors.text }]}
                     placeholder="Your reflection..."
                     placeholderTextColor={colors.textSecondary}
                     value={answer}
@@ -852,22 +854,31 @@ export function WellnessVisionBoard({
                     textAlignVertical="top"
                   />
                 </View>
-                {renderSaveButton(() => saveIntrospectionAnswer(strategyType), saving, !answer.trim(), zoneColor, 'Save Response')}
+                <TouchableOpacity
+                  style={[st.inlineSaveButton, { backgroundColor: answer.trim() ? zoneColor : colors.border, opacity: saving ? 0.7 : 1 }]}
+                  onPress={() => saveIntrospectionAnswer(strategyType)}
+                  disabled={saving || !answer.trim()}
+                  activeOpacity={0.8}
+                >
+                  {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
+                    <Text style={st.inlineSaveButtonText}>Save Response</Text>
+                  )}
+                </TouchableOpacity>
                 {renderSavedBadge(`${strategyType}Answer`)}
               </>
             ) : (
-              <Text style={[s.allAnsweredText, { color: colors.textSecondary }]}>
+              <Text style={[st.allAnsweredText, { color: colors.textSecondary }]}>
                 No introspection questions available for this zone yet.
               </Text>
             )}
 
             {responses.length > 0 && (
-              <View style={s.introspectionJournal}>
-                <Text style={[s.journalSubheader, { color: zoneColor }]}>
+              <View style={st.introspectionJournal}>
+                <Text style={[st.journalSubheader, { color: zoneColor }]}>
                   {zone.name} {strategyType === 'vision' ? 'Vision' : 'Purpose'} Reflections
                 </Text>
                 {responses.map((resp) => (
-                  <View key={resp.id} style={[s.journalEntry, { borderColor: colors.border }]}>
+                  <View key={resp.id} style={[st.journalEntry, { borderColor: colors.border }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       {resp.question_text ? (
                         <Text style={{ color: zoneColor, fontSize: 13, fontWeight: '600', marginBottom: 4, fontStyle: 'italic', flex: 1, marginRight: 8 }}>
@@ -885,9 +896,9 @@ export function WellnessVisionBoard({
                     </View>
                     {editingResponseId === resp.id ? (
                       <View style={{ marginTop: 4 }}>
-                        <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                           <TextInput
-                            style={[s.textInputSmall, { color: colors.text }]}
+                            style={[st.textInputSmall, { color: colors.text }]}
                             value={editingResponseText}
                             onChangeText={setEditingResponseText}
                             multiline
@@ -897,7 +908,16 @@ export function WellnessVisionBoard({
                           />
                         </View>
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                          {renderSaveButton(() => updateIntrospectionAnswer(resp.id, strategyType), savingEditResponse, !editingResponseText.trim(), zoneColor, 'Update')}
+                          <TouchableOpacity
+                            style={[st.inlineSaveButton, { backgroundColor: editingResponseText.trim() ? zoneColor : colors.border, opacity: savingEditResponse ? 0.7 : 1 }]}
+                            onPress={() => updateIntrospectionAnswer(resp.id, strategyType)}
+                            disabled={savingEditResponse || !editingResponseText.trim()}
+                            activeOpacity={0.8}
+                          >
+                            {savingEditResponse ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
+                              <Text style={st.inlineSaveButtonText}>Update</Text>
+                            )}
+                          </TouchableOpacity>
                           <TouchableOpacity
                             style={{ paddingVertical: 10, paddingHorizontal: 16 }}
                             onPress={() => { setEditingResponseId(null); setEditingResponseText(''); }}
@@ -909,8 +929,8 @@ export function WellnessVisionBoard({
                       </View>
                     ) : (
                       <>
-                        <Text style={[s.journalEntryText, { color: colors.text }]} numberOfLines={3}>{resp.response_text}</Text>
-                        <Text style={[s.journalEntryDate, { color: colors.textSecondary }]}>{new Date(resp.created_at).toLocaleDateString()}</Text>
+                        <Text style={[st.journalEntryText, { color: colors.text }]} numberOfLines={3}>{resp.response_text}</Text>
+                        <Text style={[st.journalEntryDate, { color: colors.textSecondary }]}>{new Date(resp.created_at).toLocaleDateString()}</Text>
                       </>
                     )}
                   </View>
@@ -923,35 +943,82 @@ export function WellnessVisionBoard({
     );
   }
 
+  function renderCollapsibleList(
+    items: { id: string; content?: string; title?: string; created_at?: string }[],
+    label: string,
+    isOpen: boolean,
+    toggle: () => void,
+    emptyLabel: string,
+    icon?: any,
+    badgeColor?: string,
+  ) {
+    return (
+      <>
+        <TouchableOpacity
+          style={[st.collapsibleHeader, { borderTopColor: colors.border }]}
+          onPress={toggle}
+          activeOpacity={0.7}
+        >
+          <Text style={[st.collapsibleLabel, { color: colors.textSecondary }]}>
+            {label} ({items.length})
+          </Text>
+          {isOpen ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
+        </TouchableOpacity>
+
+        {isOpen && (
+          <View style={{ marginTop: 8 }}>
+            {items.length === 0 ? (
+              <Text style={[st.emptyListText, { color: colors.textSecondary }]}>{emptyLabel}</Text>
+            ) : (
+              items.map((item) => (
+                <View key={item.id} style={[st.listRow, { borderBottomColor: colors.border }]}>
+                  {icon && <Image source={icon} style={{ width: 16, height: 16 }} resizeMode="contain" />}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.listRowText, { color: colors.text }]}>{item.title || item.content}</Text>
+                    {item.created_at && (
+                      <Text style={[st.listRowMeta, { color: colors.textSecondary }]}>
+                        {new Date(item.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+      </>
+    );
+  }
+
   if (loading) {
     return (
-      <View style={s.loadingContainer}>
+      <View style={st.loadingContainer}>
         <ActivityIndicator size="large" color={zoneColor} />
-        <Text style={[s.loadingText, { color: colors.textSecondary }]}>Loading...</Text>
+        <Text style={[st.loadingText, { color: colors.textSecondary }]}>Loading...</Text>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={st.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
-        style={s.container}
-        contentContainerStyle={s.contentContainer}
+        style={st.container}
+        contentContainerStyle={st.contentContainer}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         {/* Header */}
-        <View style={s.headerSection}>
-          <View style={s.headerRow}>
-            <View style={[s.compassContainer, { backgroundColor: `${zoneColor}15` }]}>
-              <Text style={s.largeEmoji}>{getZoneEmoji(zone.name)}</Text>
+        <View style={st.headerSection}>
+          <View style={st.headerRow}>
+            <View style={[st.compassContainer, { backgroundColor: `${zoneColor}15` }]}>
+              <Text style={st.largeEmoji}>{getZoneEmoji(zone.name)}</Text>
             </View>
-            <View style={s.headerTextContainer}>
-              <Text style={[s.stepLabel, { color: zoneColor }]}>My Living Vision Board</Text>
-              <Text style={[s.stepTitle, { color: colors.text }]}>{zone.name}</Text>
+            <View style={st.headerTextContainer}>
+              <Text style={[st.stepLabel, { color: zoneColor }]}>My Living Vision Board</Text>
+              <Text style={[st.stepTitle, { color: colors.text }]}>{zone.name}</Text>
             </View>
             <TouchableOpacity
-              style={s.tooltipButton}
+              style={st.tooltipButton}
               onPress={() => setShowTooltip(!showTooltip)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -960,35 +1027,30 @@ export function WellnessVisionBoard({
           </View>
 
           {showTooltip && (
-            <View style={[s.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[s.tooltipText, { color: colors.text }]}>
-                This is your Living Vision Board for {zone.name} wellness. Use it to stay intentional each week:{'\n\n'}
-                {'\u2022'} ONE Thing -- pick the single most important action for this zone this week.{'\n'}
-                {'\u2022'} Capture an Idea -- save ideas you can't act on yet.{'\n'}
-                {'\u2022'} Roses & Thorns -- note what's going well and what's challenging.{'\n'}
-                {'\u2022'} Capture a Thought -- record any insight or reflection.{'\n'}
-                {'\u2022'} Dream & Purpose -- define the bigger picture for this zone.
+            <View style={[st.tooltipContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[st.tooltipText, { color: colors.text }]}>
+                Use this board to stay intentional about your {zone.name.toLowerCase()} wellness each week.
               </Text>
             </View>
           )}
         </View>
 
-        {/* SECTION 1: ONE Thing This Week */}
-        <View style={[s.card, { backgroundColor: `${zoneColor}08`, borderColor: `${zoneColor}30` }]}>
-          <View style={s.cardHeader}>
-            <View style={s.cardHeaderLeft}>
+        {/* SECTION 1: ONE THING THIS WEEK */}
+        <View style={[st.card, { backgroundColor: `${zoneColor}08`, borderColor: `${zoneColor}30` }]}>
+          <View style={st.cardHeader}>
+            <View style={st.cardHeaderLeft}>
               <Image source={TaskListIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-              <Text style={[s.cardLabel, { color: zoneColor, marginLeft: 6 }]}>ONE THING THIS WEEK</Text>
+              <Text style={[st.cardLabel, { color: zoneColor, marginLeft: 6 }]}>ONE THING THIS WEEK</Text>
             </View>
             {renderSavedBadge('oneThing')}
           </View>
 
-          <Text style={[s.questionText, { color: colors.text }]}>
+          <Text style={[st.questionText, { color: colors.text }]}>
             What is the ONE thing I can do for my {zone.name.toLowerCase()} well-being this week?
           </Text>
 
           {existingOneThingTask ? (
-            <View style={[s.existingItemCard, { backgroundColor: colors.surface, borderColor: `${zoneColor}30` }]}>
+            <View style={[st.existingItemCard, { backgroundColor: colors.surface, borderColor: `${zoneColor}30` }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
                   {existingOneThingTask.type === 'event' ? (
@@ -996,7 +1058,7 @@ export function WellnessVisionBoard({
                   ) : (
                     <Image source={TaskListIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
                   )}
-                  <Text style={[s.existingItemText, { color: colors.text }]} numberOfLines={2}>
+                  <Text style={[st.existingItemText, { color: colors.text }]} numberOfLines={2}>
                     {existingOneThingTask.title}
                   </Text>
                 </View>
@@ -1012,7 +1074,7 @@ export function WellnessVisionBoard({
                 </TouchableOpacity>
               </View>
               {(existingOneThingTask.due_date || existingOneThingTask.start_date) && (
-                <Text style={[s.existingItemMeta, { color: colors.textSecondary }]}>
+                <Text style={[st.existingItemMeta, { color: colors.textSecondary }]}>
                   {formatShortDate((existingOneThingTask.due_date || existingOneThingTask.start_date || '').split('T')[0])}
                   {existingOneThingTask.type === 'event' && existingOneThingTask.start_time
                     ? ` \u2022 ${existingOneThingTask.start_time.slice(0, 5)}\u2013${(existingOneThingTask.end_time || '').slice(0, 5)}`
@@ -1023,9 +1085,9 @@ export function WellnessVisionBoard({
             </View>
           ) : (
             <>
-              <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <TextInput
-                  style={[s.textInput, { color: colors.text }]}
+                  style={[st.textInput, { color: colors.text }]}
                   placeholder="My ONE thing this week is..."
                   placeholderTextColor={colors.textSecondary}
                   value={oneThingText}
@@ -1036,97 +1098,41 @@ export function WellnessVisionBoard({
                 />
               </View>
 
-              <Text style={[s.saveAsLabel, { color: colors.textSecondary }]}>Save as:</Text>
-              <View style={s.saveAsRow}>
-                <TouchableOpacity
-                  style={[s.saveAsButton, { backgroundColor: '#3B82F615', borderColor: '#3B82F640' }]}
-                  onPress={() => handleOneThingSaveAs('task')}
-                  disabled={savingOneThing || !oneThingText.trim()}
-                  activeOpacity={0.7}
-                >
-                  <Image source={TaskListIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                  <Text style={[s.saveAsButtonText, { color: '#3B82F6' }]}>Task</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[s.saveAsButton, { backgroundColor: '#8B5CF615', borderColor: '#8B5CF640' }]}
-                  onPress={() => handleOneThingSaveAs('event')}
-                  disabled={savingOneThing || !oneThingText.trim()}
-                  activeOpacity={0.7}
-                >
-                  <Image source={CalendarIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                  <Text style={[s.saveAsButtonText, { color: '#8B5CF6' }]}>Event</Text>
-                </TouchableOpacity>
+              <Text style={[st.sectionDividerLabel, { color: colors.textSecondary }]}>TAKE ACTION</Text>
+              <View style={st.circleActionsRow}>
+                {renderCircleAction(TaskListIcon, 'Task', '#3B82F6', () => openDatePicker('task'), !oneThingText.trim(), savingOneThing)}
+                {renderCircleAction(CalendarIcon, 'Event', '#8B5CF6', () => openDatePicker('event'), !oneThingText.trim(), savingOneThing)}
               </View>
-
-              {savingOneThing && <ActivityIndicator size="small" color={zoneColor} style={{ marginTop: 8 }} />}
             </>
           )}
 
-          {/* Collapsible Tasks List */}
-          <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border }}
-            onPress={() => setShowTasksList(!showTasksList)}
-            activeOpacity={0.7}
-          >
-            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
-              Pending Tasks & Events ({zoneTasks.length})
-            </Text>
-            {showTasksList ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
-          </TouchableOpacity>
-
-          {showTasksList && (
-            <View style={{ marginTop: 8 }}>
-              {zoneTasks.length === 0 ? (
-                <Text style={{ color: colors.textSecondary, fontSize: 14, fontStyle: 'italic', paddingVertical: 8 }}>
-                  No pending tasks or events for this zone.
-                </Text>
-              ) : (
-                zoneTasks.map((task) => (
-                  <View key={task.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 }}>
-                    {task.type === 'event' ? (
-                      <Image source={CalendarIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                    ) : (
-                      <Image source={TaskListIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontSize: 14 }}>{task.title}</Text>
-                      {(task.due_date || task.start_date) && (
-                        <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
-                          {formatShortDate((task.due_date || task.start_date || '').split('T')[0])}
-                          {task.type === 'event' && task.start_time ? ` \u2022 ${task.start_time.slice(0, 5)}` : ''}
-                        </Text>
-                      )}
-                    </View>
-                    {task.one_thing && (
-                      <View style={{ backgroundColor: zoneColor, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>1</Text>
-                      </View>
-                    )}
-                  </View>
-                ))
-              )}
-            </View>
+          {renderCollapsibleList(
+            zoneTasks.map(t => ({ id: t.id, title: t.title, created_at: t.due_date || t.start_date })),
+            'Pending Tasks & Events',
+            showTasksList,
+            () => setShowTasksList(!showTasksList),
+            'No pending tasks or events for this zone.',
+            TaskListIcon,
           )}
         </View>
 
-        {/* SECTION 2: Capture an Idea */}
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={s.cardHeader}>
-            <View style={s.cardHeaderLeft}>
+        {/* SECTION 2: ADD IDEA */}
+        <View style={[st.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={st.cardHeader}>
+            <View style={st.cardHeaderLeft}>
               <Image source={DepositIdeaIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-              <Text style={[s.cardLabel, { color: '#F59E0B', marginLeft: 6 }]}>CAPTURE AN IDEA</Text>
+              <Text style={[st.cardLabel, { color: '#F59E0B', marginLeft: 6 }]}>ADD IDEA</Text>
             </View>
             {renderSavedBadge('idea')}
           </View>
 
-          <Text style={[s.hintText, { color: colors.textSecondary }]}>
-            Is there an idea you'd like to capture for your {zone.name.toLowerCase()} wellness?
+          <Text style={[st.questionText, { color: colors.text }]}>
+            Put down an idea that you are unable to do this week, but would like to in the future!
           </Text>
 
-          <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <TextInput
-              style={[s.textInputSmall, { color: colors.text }]}
+              style={[st.textInputSmall, { color: colors.text }]}
               placeholder="Capture your idea..."
               placeholderTextColor={colors.textSecondary}
               value={ideaText}
@@ -1137,225 +1143,122 @@ export function WellnessVisionBoard({
             />
           </View>
 
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 8,
-              backgroundColor: '#FFFFFF', borderColor: '#F59E0B', borderWidth: 1.5, borderRadius: 10,
-              paddingVertical: 12, paddingHorizontal: 20,
-              opacity: savingIdea ? 0.7 : (!ideaText.trim() ? 0.5 : 1),
-            }}
-            onPress={saveDepositIdea}
-            disabled={savingIdea || !ideaText.trim()}
-            activeOpacity={0.7}
-          >
-            {savingIdea ? (
-              <ActivityIndicator size="small" color="#F59E0B" />
-            ) : (
-              <>
-                <Image source={DepositIdeaIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                <Text style={{ color: '#F59E0B', fontSize: 15, fontWeight: '600' }}>Save Idea</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          <View style={st.circleActionsRow}>
+            {renderCircleAction(DepositIdeaIcon, 'Save Idea', '#F59E0B', saveDepositIdea, !ideaText.trim(), savingIdea)}
+          </View>
 
-          {/* Collapsible Ideas List */}
-          <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border }}
-            onPress={() => setShowIdeasList(!showIdeasList)}
-            activeOpacity={0.7}
-          >
-            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
-              Pending Ideas ({zoneIdeas.length})
-            </Text>
-            {showIdeasList ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
-          </TouchableOpacity>
-
-          {showIdeasList && (
-            <View style={{ marginTop: 8 }}>
-              {zoneIdeas.length === 0 ? (
-                <Text style={{ color: colors.textSecondary, fontSize: 14, fontStyle: 'italic', paddingVertical: 8 }}>
-                  No ideas captured for this zone yet.
-                </Text>
-              ) : (
-                zoneIdeas.map((idea) => (
-                  <View key={idea.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 }}>
-                    <Image source={DepositIdeaIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
-                    <Text style={{ color: colors.text, fontSize: 14, flex: 1 }}>{idea.title}</Text>
-                    {idea.one_thing && (
-                      <View style={{ backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>1</Text>
-                      </View>
-                    )}
-                  </View>
-                ))
-              )}
-            </View>
+          {renderCollapsibleList(
+            zoneIdeas.map(i => ({ id: i.id, title: i.title })),
+            'Pending Ideas',
+            showIdeasList,
+            () => setShowIdeasList(!showIdeasList),
+            'No ideas captured for this zone yet.',
+            DepositIdeaIcon,
           )}
         </View>
 
-        {/* SECTION 3: Roses / Thorns / Reflections (Tabbed) */}
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={{ flexDirection: 'row', marginBottom: 16, borderRadius: 10, backgroundColor: colors.background, padding: 4, gap: 4 }}>
+        {/* SECTION 3: ROSES / THORNS / REFLECT (3 tabs) */}
+        <View style={[st.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[st.reflectionTabBar, { backgroundColor: colors.background }]}>
             <TouchableOpacity
-              style={{
-                flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-                paddingVertical: 10, borderRadius: 8,
-                backgroundColor: activeReflectionTab === 'rose' ? ROSE_COLOR : 'transparent',
-                borderWidth: activeReflectionTab === 'rose' ? 0 : 1,
-                borderColor: activeReflectionTab === 'rose' ? 'transparent' : `${ROSE_COLOR}30`,
-              }}
+              style={[
+                st.reflectionTab,
+                activeReflectionTab === 'rose' && { backgroundColor: ROSE_COLOR },
+                activeReflectionTab !== 'rose' && { borderWidth: 1, borderColor: `${ROSE_COLOR}30` },
+              ]}
               onPress={() => setActiveReflectionTab('rose')}
               activeOpacity={0.7}
             >
-              <Image source={RoseIcon} style={{ width: 16, height: 16, opacity: activeReflectionTab === 'rose' ? 1 : 0.6 }} resizeMode="contain" />
-              <Text style={{ color: activeReflectionTab === 'rose' ? '#FFFFFF' : ROSE_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'rose' ? '700' : '500' }}>Rose</Text>
+              <Image source={RoseIcon} style={[st.reflectionTabIcon, { opacity: activeReflectionTab === 'rose' ? 1 : 0.6 }]} resizeMode="contain" />
+              <Text style={[st.reflectionTabText, { color: activeReflectionTab === 'rose' ? '#FFFFFF' : ROSE_COLOR, fontWeight: activeReflectionTab === 'rose' ? '700' : '500' }]}>Rose</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={{
-                flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-                paddingVertical: 10, borderRadius: 8,
-                backgroundColor: activeReflectionTab === 'thorn' ? '#4B5563' : 'transparent',
-                borderWidth: activeReflectionTab === 'thorn' ? 0 : 1,
-                borderColor: activeReflectionTab === 'thorn' ? 'transparent' : `${THORN_COLOR}30`,
-              }}
+              style={[
+                st.reflectionTab,
+                activeReflectionTab === 'thorn' && { backgroundColor: '#4B5563' },
+                activeReflectionTab !== 'thorn' && { borderWidth: 1, borderColor: `${THORN_COLOR}30` },
+              ]}
               onPress={() => setActiveReflectionTab('thorn')}
               activeOpacity={0.7}
             >
-              <Image source={ThornIcon} style={{ width: 16, height: 16, opacity: activeReflectionTab === 'thorn' ? 1 : 0.6 }} resizeMode="contain" />
-              <Text style={{ color: activeReflectionTab === 'thorn' ? '#FFFFFF' : THORN_COLOR, fontSize: 13, fontWeight: activeReflectionTab === 'thorn' ? '700' : '500' }}>Thorn</Text>
+              <Image source={ThornIcon} style={[st.reflectionTabIcon, { opacity: activeReflectionTab === 'thorn' ? 1 : 0.6 }]} resizeMode="contain" />
+              <Text style={[st.reflectionTabText, { color: activeReflectionTab === 'thorn' ? '#FFFFFF' : THORN_COLOR, fontWeight: activeReflectionTab === 'thorn' ? '700' : '500' }]}>Thorn</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={{
-                flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-                paddingVertical: 10, borderRadius: 8,
-                backgroundColor: activeReflectionTab === 'reflection' ? '#10B981' : 'transparent',
-                borderWidth: activeReflectionTab === 'reflection' ? 0 : 1,
-                borderColor: activeReflectionTab === 'reflection' ? 'transparent' : '#10B98130',
-              }}
+              style={[
+                st.reflectionTab,
+                activeReflectionTab === 'reflection' && { backgroundColor: '#10B981' },
+                activeReflectionTab !== 'reflection' && { borderWidth: 1, borderColor: '#10B98130' },
+              ]}
               onPress={() => setActiveReflectionTab('reflection')}
               activeOpacity={0.7}
             >
-              <Image source={ReflectionsIcon} style={{ width: 16, height: 16, opacity: activeReflectionTab === 'reflection' ? 1 : 0.6 }} resizeMode="contain" />
-              <Text style={{ color: activeReflectionTab === 'reflection' ? '#FFFFFF' : '#10B981', fontSize: 13, fontWeight: activeReflectionTab === 'reflection' ? '700' : '500' }}>Reflect</Text>
+              <Image source={ReflectionsIcon} style={[st.reflectionTabIcon, { opacity: activeReflectionTab === 'reflection' ? 1 : 0.6 }]} resizeMode="contain" />
+              <Text style={[st.reflectionTabText, { color: activeReflectionTab === 'reflection' ? '#FFFFFF' : '#10B981', fontWeight: activeReflectionTab === 'reflection' ? '700' : '500' }]}>Reflect</Text>
             </TouchableOpacity>
           </View>
 
           {activeReflectionTab === 'rose' && (
             <View>
-              <View style={s.cardHeader}>
-                <Text style={[s.cardLabel, { color: ROSE_COLOR }]}>CAPTURE A ROSE</Text>
-                {renderSavedBadge('rose')}
-              </View>
-              <Text style={[s.hintText, { color: colors.textSecondary }]}>
+              <Text style={[st.hintText, { color: colors.textSecondary }]}>
                 What's going well in your {zone.name.toLowerCase()} wellness?
               </Text>
-              <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput style={[s.textInputSmall, { color: colors.text }]} placeholder="What's going well..." placeholderTextColor={colors.textSecondary} value={roseText} onChangeText={setRoseText} multiline numberOfLines={2} textAlignVertical="top" />
+              <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput style={[st.textInputSmall, { color: colors.text }]} placeholder="What's going well..." placeholderTextColor={colors.textSecondary} value={roseText} onChangeText={setRoseText} multiline numberOfLines={2} textAlignVertical="top" />
               </View>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 8, backgroundColor: '#FFFFFF', borderColor: ROSE_COLOR, borderWidth: 1.5, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20, opacity: savingRose ? 0.7 : (!roseText.trim() ? 0.5 : 1) }}
-                onPress={saveRose} disabled={savingRose || !roseText.trim()} activeOpacity={0.7}
-              >
-                {savingRose ? <ActivityIndicator size="small" color={ROSE_COLOR} /> : (
-                  <>
-                    <Image source={RoseIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                    <Text style={{ color: ROSE_COLOR, fontSize: 15, fontWeight: '600' }}>Save Rose</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <View style={st.circleActionsRow}>
+                {renderCircleAction(RoseIcon, 'Save Rose', ROSE_COLOR, saveRose, !roseText.trim(), savingRose)}
+              </View>
+              {renderSavedBadge('rose')}
             </View>
           )}
 
           {activeReflectionTab === 'thorn' && (
             <View>
-              <View style={s.cardHeader}>
-                <Text style={[s.cardLabel, { color: THORN_COLOR }]}>CAPTURE A THORN</Text>
-                {renderSavedBadge('thorn')}
-              </View>
-              <Text style={[s.hintText, { color: colors.textSecondary }]}>
+              <Text style={[st.hintText, { color: colors.textSecondary }]}>
                 What's been challenging in your {zone.name.toLowerCase()} wellness?
               </Text>
-              <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput style={[s.textInputSmall, { color: colors.text }]} placeholder="What's been challenging..." placeholderTextColor={colors.textSecondary} value={thornText} onChangeText={setThornText} multiline numberOfLines={2} textAlignVertical="top" />
+              <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput style={[st.textInputSmall, { color: colors.text }]} placeholder="What's been challenging..." placeholderTextColor={colors.textSecondary} value={thornText} onChangeText={setThornText} multiline numberOfLines={2} textAlignVertical="top" />
               </View>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 8, backgroundColor: '#FFFFFF', borderColor: THORN_COLOR, borderWidth: 1.5, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20, opacity: savingThorn ? 0.7 : (!thornText.trim() ? 0.5 : 1) }}
-                onPress={saveThorn} disabled={savingThorn || !thornText.trim()} activeOpacity={0.7}
-              >
-                {savingThorn ? <ActivityIndicator size="small" color={THORN_COLOR} /> : (
-                  <>
-                    <Image source={ThornIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                    <Text style={{ color: THORN_COLOR, fontSize: 15, fontWeight: '600' }}>Save Thorn</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <View style={st.circleActionsRow}>
+                {renderCircleAction(ThornIcon, 'Save Thorn', '#4B5563', saveThorn, !thornText.trim(), savingThorn)}
+              </View>
+              {renderSavedBadge('thorn')}
             </View>
           )}
 
           {activeReflectionTab === 'reflection' && (
             <View>
-              <View style={s.cardHeader}>
-                <Text style={[s.cardLabel, { color: '#10B981' }]}>CAPTURE A THOUGHT</Text>
-                {renderSavedBadge('thought')}
-              </View>
-              <Text style={[s.hintText, { color: colors.textSecondary }]}>
+              <Text style={[st.hintText, { color: colors.textSecondary }]}>
                 Any other insights about your {zone.name.toLowerCase()} wellness?
               </Text>
-              <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <TextInput style={[s.textInputSmall, { color: colors.text }]} placeholder="Your thoughts..." placeholderTextColor={colors.textSecondary} value={thoughtText} onChangeText={setThoughtText} multiline numberOfLines={2} textAlignVertical="top" />
+              <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <TextInput style={[st.textInputSmall, { color: colors.text }]} placeholder="Your thoughts..." placeholderTextColor={colors.textSecondary} value={thoughtText} onChangeText={setThoughtText} multiline numberOfLines={2} textAlignVertical="top" />
               </View>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 8, backgroundColor: '#FFFFFF', borderColor: '#10B981', borderWidth: 1.5, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20, opacity: savingThought ? 0.7 : (!thoughtText.trim() ? 0.5 : 1) }}
-                onPress={saveThought} disabled={savingThought || !thoughtText.trim()} activeOpacity={0.7}
-              >
-                {savingThought ? <ActivityIndicator size="small" color="#10B981" /> : (
-                  <>
-                    <Image source={ReflectionsIcon} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                    <Text style={{ color: '#10B981', fontSize: 15, fontWeight: '600' }}>Save Thought</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <View style={st.circleActionsRow}>
+                {renderCircleAction(ReflectionsIcon, 'Save Thought', '#10B981', saveThought, !thoughtText.trim(), savingThought)}
+              </View>
+              {renderSavedBadge('thought')}
             </View>
           )}
 
-          {/* Collapsible Reflections List */}
-          <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border }}
-            onPress={() => setShowReflectionsList(!showReflectionsList)}
-            activeOpacity={0.7}
-          >
-            <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
-              This Week's {activeReflectionTab === 'rose' ? 'Roses' : activeReflectionTab === 'thorn' ? 'Thorns' : 'Reflections'} ({activeReflectionTab === 'rose' ? weekRoses.length : activeReflectionTab === 'thorn' ? weekThorns.length : weekReflections.length})
-            </Text>
-            {showReflectionsList ? <ChevronUp size={18} color={colors.textSecondary} /> : <ChevronDown size={18} color={colors.textSecondary} />}
-          </TouchableOpacity>
-
-          {showReflectionsList && (
-            <View style={{ marginTop: 8 }}>
-              {(activeReflectionTab === 'rose' ? weekRoses : activeReflectionTab === 'thorn' ? weekThorns : weekReflections).length === 0 ? (
-                <Text style={{ color: colors.textSecondary, fontSize: 14, fontStyle: 'italic', paddingVertical: 8 }}>
-                  No {activeReflectionTab === 'rose' ? 'roses' : activeReflectionTab === 'thorn' ? 'thorns' : 'reflections'} captured this week yet.
-                </Text>
-              ) : (
-                (activeReflectionTab === 'rose' ? weekRoses : activeReflectionTab === 'thorn' ? weekThorns : weekReflections).map((item) => (
-                  <View key={item.id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                    <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{item.content}</Text>
-                    <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4 }}>
-                      {new Date(item.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </Text>
-                  </View>
-                ))
-              )}
-            </View>
+          {renderCollapsibleList(
+            (activeReflectionTab === 'rose' ? weekRoses : activeReflectionTab === 'thorn' ? weekThorns : weekReflections)
+              .map(r => ({ id: r.id, content: r.content, created_at: r.created_at })),
+            `This Week's ${activeReflectionTab === 'rose' ? 'Roses' : activeReflectionTab === 'thorn' ? 'Thorns' : 'Reflections'}`,
+            showReflectionsList,
+            () => setShowReflectionsList(!showReflectionsList),
+            `No ${activeReflectionTab === 'rose' ? 'roses' : activeReflectionTab === 'thorn' ? 'thorns' : 'reflections'} captured this week yet.`,
           )}
         </View>
 
-        {/* SECTION 4: My Dream for This Zone */}
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={s.cardHeader}>
-            <Text style={[s.cardLabel, { color: zoneColor }]}>MY DREAM FOR THIS ZONE</Text>
+        {/* SECTION 4: MY DREAM */}
+        <View style={[st.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={st.cardHeader}>
+            <Text style={[st.cardLabel, { color: zoneColor }]}>MY DREAM FOR THIS ZONE</Text>
             {localZone.dream && !editingDream && (
               <TouchableOpacity onPress={() => { setEditingDream(true); setDreamResponse(localZone.dream || ''); }} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <Pencil size={16} color={colors.textSecondary} />
@@ -1364,17 +1267,17 @@ export function WellnessVisionBoard({
             {renderSavedBadge('dream')}
           </View>
 
-          <Text style={[s.questionText, { color: colors.text, marginBottom: 12 }]}>
+          <Text style={[st.questionText, { color: colors.text, marginBottom: 12 }]}>
             What is your dream for your {zone.name.toLowerCase()} well-being?
           </Text>
 
           {localZone.dream && !editingDream ? (
-            <Text style={[s.statementText, { color: colors.text }]}>"{localZone.dream}"</Text>
+            <Text style={[st.statementText, { color: colors.text }]}>"{localZone.dream}"</Text>
           ) : (
             <>
-              <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <TextInput
-                  style={[s.textInput, { color: colors.text }]}
+                  style={[st.textInput, { color: colors.text }]}
                   placeholder="My dream for this zone is..."
                   placeholderTextColor={colors.textSecondary}
                   value={dreamResponse}
@@ -1384,7 +1287,16 @@ export function WellnessVisionBoard({
                   textAlignVertical="top"
                 />
               </View>
-              {renderSaveButton(saveZoneDream, savingDream, !dreamResponse.trim(), zoneColor, 'Save Dream')}
+              <TouchableOpacity
+                style={[st.inlineSaveButton, { backgroundColor: dreamResponse.trim() ? zoneColor : colors.border, opacity: savingDream ? 0.7 : 1 }]}
+                onPress={saveZoneDream}
+                disabled={savingDream || !dreamResponse.trim()}
+                activeOpacity={0.8}
+              >
+                {savingDream ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
+                  <Text style={st.inlineSaveButtonText}>Save Dream</Text>
+                )}
+              </TouchableOpacity>
             </>
           )}
 
@@ -1395,10 +1307,10 @@ export function WellnessVisionBoard({
           )}
         </View>
 
-        {/* SECTION 5: My Purpose in This Zone */}
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={s.cardHeader}>
-            <Text style={[s.cardLabel, { color: zoneColor }]}>MY PURPOSE IN THIS ZONE</Text>
+        {/* SECTION 5: MY PURPOSE */}
+        <View style={[st.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={st.cardHeader}>
+            <Text style={[st.cardLabel, { color: zoneColor }]}>MY PURPOSE IN THIS ZONE</Text>
             {localZone.purpose && !editingPurpose && (
               <TouchableOpacity onPress={() => { setEditingPurpose(true); setPurposeResponse(localZone.purpose || ''); }} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <Pencil size={16} color={colors.textSecondary} />
@@ -1408,15 +1320,15 @@ export function WellnessVisionBoard({
           </View>
 
           {localZone.purpose && !editingPurpose ? (
-            <Text style={[s.statementText, { color: colors.text }]}>"{localZone.purpose}"</Text>
+            <Text style={[st.statementText, { color: colors.text }]}>"{localZone.purpose}"</Text>
           ) : (
             <>
-              <Text style={[s.hintText, { color: colors.textSecondary, marginBottom: 12 }]}>
+              <Text style={[st.hintText, { color: colors.textSecondary, marginBottom: 12 }]}>
                 Describe what success looks like in this zone.
               </Text>
-              <View style={[s.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <TextInput
-                  style={[s.textInput, { color: colors.text }]}
+                  style={[st.textInput, { color: colors.text }]}
                   placeholder="My purpose in this zone is to..."
                   placeholderTextColor={colors.textSecondary}
                   value={purposeResponse}
@@ -1426,7 +1338,16 @@ export function WellnessVisionBoard({
                   textAlignVertical="top"
                 />
               </View>
-              {renderSaveButton(saveZonePurpose, savingPurpose, !purposeResponse.trim(), zoneColor, 'Save Purpose')}
+              <TouchableOpacity
+                style={[st.inlineSaveButton, { backgroundColor: purposeResponse.trim() ? zoneColor : colors.border, opacity: savingPurpose ? 0.7 : 1 }]}
+                onPress={saveZonePurpose}
+                disabled={savingPurpose || !purposeResponse.trim()}
+                activeOpacity={0.8}
+              >
+                {savingPurpose ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
+                  <Text style={st.inlineSaveButtonText}>Save Purpose</Text>
+                )}
+              </TouchableOpacity>
             </>
           )}
 
@@ -1437,35 +1358,32 @@ export function WellnessVisionBoard({
           )}
         </View>
 
-        {/* SECTION 6: Key Relationships */}
-        <View style={[s.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={s.cardHeader}>
-            <View style={s.cardHeaderLeft}>
+        {/* SECTION 6: KEY RELATIONSHIPS */}
+        <View style={[st.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={st.cardHeader}>
+            <View style={st.cardHeaderLeft}>
               <Users size={16} color={zoneColor} />
-              <Text style={[s.cardLabel, { color: zoneColor, marginLeft: 6 }]}>KEY RELATIONSHIPS</Text>
+              <Text style={[st.cardLabel, { color: zoneColor, marginLeft: 6 }]}>KEY RELATIONSHIPS</Text>
             </View>
           </View>
 
-          <Text style={[s.hintText, { color: colors.textSecondary }]}>
+          <Text style={[st.hintText, { color: colors.textSecondary }]}>
             Who are the key people important to your {zone.name.toLowerCase()} well-being?
           </Text>
 
-          <TouchableOpacity
-            style={[s.placeholderButton, { borderColor: zoneColor }]}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity style={[st.placeholderButton, { borderColor: zoneColor }]} activeOpacity={0.7}>
             <Plus size={16} color={zoneColor} />
-            <Text style={[s.placeholderButtonText, { color: zoneColor }]}>Add Key Relationship</Text>
+            <Text style={[st.placeholderButtonText, { color: zoneColor }]}>Add Key Relationship</Text>
           </TouchableOpacity>
         </View>
 
         {/* Back to Zones */}
         <TouchableOpacity
-          style={[s.secondaryButton, { borderColor: zoneColor }]}
+          style={[st.secondaryButton, { borderColor: zoneColor }]}
           onPress={onBack}
           activeOpacity={0.7}
         >
-          <Text style={[s.secondaryButtonText, { color: zoneColor }]}>Back to Zones</Text>
+          <Text style={[st.secondaryButtonText, { color: zoneColor }]}>Back to Zones</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -1473,31 +1391,31 @@ export function WellnessVisionBoard({
 
       {/* DATE PICKER MODAL */}
       <Modal visible={showDatePicker} transparent animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalContent, { backgroundColor: colors.surface }]}>
-            <Text style={[s.modalTitle, { color: colors.text }]}>
-              {oneThingSaveType === 'event' ? 'Pick Day & Time' : 'Pick a Day'}
+        <View style={st.modalOverlay}>
+          <View style={[st.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[st.modalTitle, { color: colors.text }]}>
+              {takeActionType === 'event' ? 'Pick Day & Time' : 'Pick a Day'}
             </Text>
-            <Text style={[s.modalSubtitle, { color: colors.textSecondary }]}>"{oneThingText}"</Text>
+            <Text style={[st.modalSubtitle, { color: colors.textSecondary }]}>"{oneThingText}"</Text>
 
-            <View style={s.dayGrid}>
+            <View style={st.dayGrid}>
               {weekDates.map((d) => (
                 <TouchableOpacity
                   key={d.value}
-                  style={[s.dayButton, { backgroundColor: selectedDate === d.value ? zoneColor : colors.surface, borderColor: selectedDate === d.value ? zoneColor : colors.border }]}
+                  style={[st.dayButton, { backgroundColor: selectedDate === d.value ? zoneColor : colors.surface, borderColor: selectedDate === d.value ? zoneColor : colors.border }]}
                   onPress={() => setSelectedDate(d.value)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[s.dayButtonText, { color: selectedDate === d.value ? '#FFFFFF' : colors.text }]}>{d.label}</Text>
+                  <Text style={[st.dayButtonText, { color: selectedDate === d.value ? '#FFFFFF' : colors.text }]}>{d.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {oneThingSaveType === 'event' && (
-              <View style={s.timeRow}>
-                <View style={s.timePickerRow}>
-                  <Text style={[s.timePickerLabel, { color: colors.textSecondary }]}>Start</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.timeScroller} contentContainerStyle={s.timeScrollerContent}>
+            {takeActionType === 'event' && (
+              <View style={st.timeRow}>
+                <View style={st.timePickerRow}>
+                  <Text style={[st.timePickerLabel, { color: colors.textSecondary }]}>Start</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.timeScroller} contentContainerStyle={st.timeScrollerContent}>
                     {Array.from({ length: 48 }, (_, i) => {
                       const h = String(Math.floor(i / 2)).padStart(2, '0');
                       const m = i % 2 === 0 ? '00' : '30';
@@ -1506,7 +1424,7 @@ export function WellnessVisionBoard({
                       return (
                         <TouchableOpacity
                           key={val}
-                          style={[s.timeChip, { backgroundColor: isSelected ? zoneColor : colors.surface, borderColor: isSelected ? zoneColor : colors.border }]}
+                          style={[st.timeChip, { backgroundColor: isSelected ? zoneColor : colors.surface, borderColor: isSelected ? zoneColor : colors.border }]}
                           onPress={() => {
                             setSelectedTime(val);
                             const endH = String((Math.floor(i / 2) + 1) % 24).padStart(2, '0');
@@ -1514,15 +1432,15 @@ export function WellnessVisionBoard({
                           }}
                           activeOpacity={0.7}
                         >
-                          <Text style={[s.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>{val}</Text>
+                          <Text style={[st.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>{val}</Text>
                         </TouchableOpacity>
                       );
                     })}
                   </ScrollView>
                 </View>
-                <View style={s.timePickerRow}>
-                  <Text style={[s.timePickerLabel, { color: colors.textSecondary }]}>End</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.timeScroller} contentContainerStyle={s.timeScrollerContent}>
+                <View style={st.timePickerRow}>
+                  <Text style={[st.timePickerLabel, { color: colors.textSecondary }]}>End</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.timeScroller} contentContainerStyle={st.timeScrollerContent}>
                     {Array.from({ length: 48 }, (_, i) => {
                       const h = String(Math.floor(i / 2)).padStart(2, '0');
                       const m = i % 2 === 0 ? '00' : '30';
@@ -1531,11 +1449,11 @@ export function WellnessVisionBoard({
                       return (
                         <TouchableOpacity
                           key={val}
-                          style={[s.timeChip, { backgroundColor: isSelected ? zoneColor : colors.surface, borderColor: isSelected ? zoneColor : colors.border }]}
+                          style={[st.timeChip, { backgroundColor: isSelected ? zoneColor : colors.surface, borderColor: isSelected ? zoneColor : colors.border }]}
                           onPress={() => setSelectedEndTime(val)}
                           activeOpacity={0.7}
                         >
-                          <Text style={[s.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>{val}</Text>
+                          <Text style={[st.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>{val}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -1544,12 +1462,12 @@ export function WellnessVisionBoard({
               </View>
             )}
 
-            <View style={s.modalButtons}>
-              <TouchableOpacity style={[s.modalCancelButton, { borderColor: colors.border }]} onPress={() => setShowDatePicker(false)} activeOpacity={0.7}>
+            <View style={st.modalButtons}>
+              <TouchableOpacity style={[st.modalCancelButton, { borderColor: colors.border }]} onPress={() => setShowDatePicker(false)} activeOpacity={0.7}>
                 <Text style={{ color: colors.textSecondary, fontSize: 16, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.modalConfirmButton, { backgroundColor: selectedDate ? zoneColor : colors.border }]}
+                style={[st.modalConfirmButton, { backgroundColor: selectedDate ? zoneColor : colors.border }]}
                 onPress={confirmSaveOneThing}
                 disabled={!selectedDate || savingOneThing}
                 activeOpacity={0.8}
@@ -1558,7 +1476,7 @@ export function WellnessVisionBoard({
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
-                    Save {oneThingSaveType === 'event' ? 'Event' : 'Task'}
+                    Save {takeActionType === 'event' ? 'Event' : 'Task'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -1570,7 +1488,7 @@ export function WellnessVisionBoard({
   );
 }
 
-const s = StyleSheet.create({
+const st = StyleSheet.create({
   container: { flex: 1 },
   contentContainer: { padding: 20 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
@@ -1595,15 +1513,103 @@ const s = StyleSheet.create({
   inputContainer: { borderRadius: 8, borderWidth: 1, marginBottom: 12 },
   textInput: { padding: 12, fontSize: 16, minHeight: 80 },
   textInputSmall: { padding: 12, fontSize: 15, minHeight: 60 },
-  saveAsLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8 },
-  saveAsRow: { flexDirection: 'row', gap: 12 },
-  saveAsButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10, borderWidth: 1.5 },
-  saveAsButtonText: { fontSize: 15, fontWeight: '600' },
   existingItemCard: { padding: 12, borderRadius: 10, borderWidth: 1 },
   existingItemText: { fontSize: 15, fontWeight: '500' },
   existingItemMeta: { fontSize: 12, marginTop: 6 },
-  savedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  savedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginTop: 4 },
   savedBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+
+  sectionDividerLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  circleActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 32,
+    paddingVertical: 4,
+  },
+  circleActionWrap: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  circleIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  circleIconImage: {
+    width: 26,
+    height: 26,
+  },
+  circleActionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  reflectionTabBar: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    borderRadius: 10,
+    padding: 4,
+    gap: 4,
+  },
+  reflectionTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  reflectionTabIcon: {
+    width: 16,
+    height: 16,
+  },
+  reflectionTabText: {
+    fontSize: 13,
+  },
+
+  collapsibleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    marginTop: 16,
+    borderTopWidth: 1,
+  },
+  collapsibleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyListText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    paddingVertical: 8,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  listRowText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  listRowMeta: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+
   inlineSaveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10, alignSelf: 'flex-start' },
   inlineSaveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   secondaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 12, borderWidth: 2, marginTop: 16 },
