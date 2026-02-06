@@ -26,6 +26,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
 import TacticalDayRows, { EnrichedItem, WeekDay } from './TacticalDayRows';
 import TacticalDelegateCard, { DelegateContact } from './TacticalDelegateCard';
+import GoalCampaignsCard from './GoalCampaignsCard';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 
 const CalendarImage = require('@/assets/images/calendar.png');
@@ -88,9 +89,6 @@ export function TacticalDeploymentStep({
   const [showTooltip, setShowTooltip] = useState(false);
 
   const [editingItem, setEditingItem] = useState<EnrichedItem | null>(null);
-
-  const [goalCount, setGoalCount] = useState(0);
-  const [supportingActionCount, setSupportingActionCount] = useState(0);
 
   useEffect(() => {
     loadWeekData();
@@ -310,15 +308,6 @@ export function TacticalDeploymentStep({
       }
       setDelegates(Array.from(uniqueDelegates.values()));
 
-      const allGoalIds = new Set<string>();
-      let actionsWithGoals = 0;
-      for (const id of allIds) {
-        const goals = goalsByParent.get(id) || [];
-        if (goals.length > 0) actionsWithGoals++;
-        for (const g of goals) allGoalIds.add(g.id);
-      }
-      setGoalCount(allGoalIds.size);
-      setSupportingActionCount(actionsWithGoals);
     } catch (error) {
       console.error('Error loading week data:', error);
     } finally {
@@ -444,7 +433,7 @@ export function TacticalDeploymentStep({
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={DEPLOY_COLOR} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Preparing your tactical deployment...
+          Preparing your deployment...
         </Text>
       </View>
     );
@@ -464,7 +453,7 @@ export function TacticalDeploymentStep({
           </View>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.stepLabel, { color: DEPLOY_COLOR }]}>Step 5</Text>
-            <Text style={[styles.stepTitle, { color: colors.text }]}>Tactical Deployment</Text>
+            <Text style={[styles.stepTitle, { color: colors.text }]}>Deployment</Text>
           </View>
           <TouchableOpacity
             style={styles.tooltipBtn}
@@ -643,19 +632,8 @@ export function TacticalDeploymentStep({
         )}
       </View>
 
-      {/* Goal Summary */}
-      <View
-        style={[
-          styles.goalCard,
-          { backgroundColor: '#3B82F608', borderColor: '#3B82F640' },
-        ]}
-      >
-        <Target size={20} color="#3B82F6" />
-        <Text style={[styles.goalText, { color: colors.text }]}>
-          {goalCount} {goalCount === 1 ? 'Goal' : 'Goals'} and {supportingActionCount} Supporting{' '}
-          {supportingActionCount === 1 ? 'Action' : 'Actions'} Scheduled
-        </Text>
-      </View>
+      {/* Goal Campaigns */}
+      <GoalCampaignsCard userId={userId} colors={colors} />
 
       {/* Personal Commitment */}
       <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -706,14 +684,6 @@ export function TacticalDeploymentStep({
             <Text style={[styles.summaryValue, { color: '#3B82F6' }]}>
               {delegatedMap.size} delegated
             </Text>
-          </View>
-        )}
-        {goalCount > 0 && (
-          <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-              Goals Covered:
-            </Text>
-            <Text style={[styles.summaryValue, { color: '#3B82F6' }]}>{goalCount}</Text>
           </View>
         )}
         {hasFocusAreas && (
@@ -906,20 +876,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     lineHeight: 20,
-  },
-  goalCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  goalText: {
-    fontSize: 15,
-    fontWeight: '600',
-    flex: 1,
   },
   commitInput: {
     borderWidth: 1,
