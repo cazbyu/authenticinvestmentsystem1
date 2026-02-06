@@ -136,6 +136,10 @@ export default function GoalCampaignsCard({ userId, colors }: GoalCampaignsCardP
   }
 
   const totalActions = campaigns.reduce((sum, c) => sum + c.actions.length, 0);
+  const totalSessions = campaigns.reduce(
+    (sum, c) => sum + c.actions.reduce((s, a) => s + a.targetDays, 0),
+    0
+  );
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: GOAL_BLUE_BORDER }]}>
@@ -147,6 +151,7 @@ export default function GoalCampaignsCard({ userId, colors }: GoalCampaignsCardP
         {totalActions > 0 && (
           <Text style={[styles.actionCount, { color: GOAL_BLUE }]}>
             {totalActions} {totalActions === 1 ? 'action' : 'actions'}
+            {totalSessions > 0 ? ` (${totalSessions} sessions)` : ''}
           </Text>
         )}
         {expanded ? (
@@ -237,6 +242,10 @@ export default function GoalCampaignsCard({ userId, colors }: GoalCampaignsCardP
                           >
                             {campaign.actions.length}{' '}
                             {campaign.actions.length === 1 ? 'action' : 'actions'}
+                            {(() => {
+                              const sessions = campaign.actions.reduce((s, a) => s + a.targetDays, 0);
+                              return sessions > 0 ? ` (${sessions} sessions)` : '';
+                            })()}
                           </Text>
                           {isExpanded ? (
                             <ChevronUp size={16} color={colors.textSecondary} />
