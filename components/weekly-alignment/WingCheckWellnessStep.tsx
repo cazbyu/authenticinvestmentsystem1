@@ -32,8 +32,6 @@ interface WingCheckWellnessStepProps {
   onNext: () => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
-  guidedModeEnabled?: boolean;
-  weekPlan?: any;
   onDataCapture: (data: {
     wellnessReviewed: boolean;
     zonesChecked: string[];
@@ -106,8 +104,6 @@ export function WingCheckWellnessStep({
   onNext,
   onBack,
   onRegisterBackHandler,
-  guidedModeEnabled = false,
-  weekPlan,
   onDataCapture,
   guidedModeEnabled = true,
   weekPlanItems = [],

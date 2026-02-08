@@ -45,8 +45,6 @@ interface SixCheckStepProps {
   onNext: () => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
-  guidedModeEnabled?: boolean;
-  weekPlan?: any;
   onDataCapture: (data: {
     goalsReviewed: boolean;
     annualGoalsCount: number;
@@ -211,8 +209,6 @@ export function SixCheckStep({
   onNext,
   onBack,
   onRegisterBackHandler,
-  guidedModeEnabled = false,
-  weekPlan,
   onDataCapture,
   guidedModeEnabled = true,
   weekPlanItems = [],
