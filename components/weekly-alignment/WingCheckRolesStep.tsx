@@ -284,6 +284,13 @@ export function WingCheckRolesStep({
   // Animation
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  // Refs for escort scroll-to-section behavior
+  const reflectionScrollRef = useRef<ScrollView>(null);
+  const oneThingSectionY = useRef<number>(0);
+  const ideaSectionY = useRef<number>(0);
+  const oneThingInputRef = useRef<TextInput>(null);
+  const ideaInputRef = useRef<TextInput>(null);
+
   // Refs for back handler
   const flowStateRef = useRef<FlowState>(flowState);
 
@@ -1533,6 +1540,40 @@ async function loadRoleItemsData(role: Role) {
     );
   }
 
+  // ===== ESCORT HELPERS: scroll to section & focus input =====
+  function escortScrollToOneThing() {
+    // If a ONE Thing task already exists, clear it so the input shows
+    if (existingOneThingTask) {
+      setOneThingText(existingOneThingTask.title || '');
+      setExistingOneThingTask(null);
+    }
+    // Scroll to the ONE Thing section after a short delay for layout
+    setTimeout(() => {
+      reflectionScrollRef.current?.scrollTo({
+        y: oneThingSectionY.current,
+        animated: true,
+      });
+      // Focus the input after scroll completes
+      setTimeout(() => {
+        oneThingInputRef.current?.focus();
+      }, 350);
+    }, 100);
+  }
+
+  function escortScrollToIdea() {
+    // Scroll to the Idea section
+    setTimeout(() => {
+      reflectionScrollRef.current?.scrollTo({
+        y: ideaSectionY.current,
+        animated: true,
+      });
+      // Focus the input after scroll completes
+      setTimeout(() => {
+        ideaInputRef.current?.focus();
+      }, 350);
+    }, 100);
+  }
+
   // ===== RENDER: ROLE REFLECTION STATE ("My Living Vision Board") =====
   if (flowState === 'role-reflection' && selectedReflectionRole) {
     const categoryColor = getCategoryColor(selectedReflectionRole.category);
@@ -1545,6 +1586,7 @@ async function loadRoleItemsData(role: Role) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <ScrollView
+            ref={reflectionScrollRef}
             style={styles.container}
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
@@ -1606,13 +1648,12 @@ async function loadRoleItemsData(role: Role) {
                 actionLabel2="Capture an Idea"
                 stepColor={ROLES_COLOR}
                 onAction={() => {
-                  if (onAddWeekPlanItem) {
-                    // The user will create via existing ONE Thing form - just dismiss escort
-                  }
                   setEscortDismissed(prev => ({ ...prev, [`step2-role-${selectedReflectionRole.id}`]: true }));
+                  escortScrollToOneThing();
                 }}
                 onAction2={() => {
                   setEscortDismissed(prev => ({ ...prev, [`step2-role-${selectedReflectionRole.id}`]: true }));
+                  escortScrollToIdea();
                 }}
                 onDismiss={() => setEscortDismissed(prev => ({ ...prev, [`step2-role-${selectedReflectionRole.id}`]: true }))}
               />
@@ -1627,13 +1668,17 @@ async function loadRoleItemsData(role: Role) {
                 stepColor={ROLES_COLOR}
                 onAction={() => {
                   setEscortDismissed(prev => ({ ...prev, [`step2-role-attention-${selectedReflectionRole.id}`]: true }));
+                  escortScrollToOneThing();
                 }}
                 onDismiss={() => setEscortDismissed(prev => ({ ...prev, [`step2-role-attention-${selectedReflectionRole.id}`]: true }))}
               />
             )}
 
             {/* ===== SECTION 1: ONE Thing This Week ===== */}
-            <View style={[styles.card, { backgroundColor: `${categoryColor}08`, borderColor: `${categoryColor}30` }]}>
+            <View
+              onLayout={(e) => { oneThingSectionY.current = e.nativeEvent.layout.y; }}
+              style={[styles.card, { backgroundColor: `${categoryColor}08`, borderColor: `${categoryColor}30` }]}
+            >
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
                   <RolesIcon size={16} color={categoryColor} />
@@ -1684,6 +1729,7 @@ async function loadRoleItemsData(role: Role) {
                 <>
                   <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <TextInput
+                      ref={oneThingInputRef}
                       style={[styles.textInput, { color: colors.text }]}
                       placeholder="My ONE thing this week is..."
                       placeholderTextColor={colors.textSecondary}
@@ -1784,7 +1830,10 @@ async function loadRoleItemsData(role: Role) {
             </View>
 
             {/* ===== SECTION 2: Capture an Idea ===== */}
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View
+              onLayout={(e) => { ideaSectionY.current = e.nativeEvent.layout.y; }}
+              style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderLeft}>
                   <Image source={DepositIdeaIcon} style={{ width: 16, height: 16 }} resizeMode="contain" />
@@ -1799,6 +1848,7 @@ async function loadRoleItemsData(role: Role) {
               
               <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <TextInput
+                  ref={ideaInputRef}
                   style={[styles.textInputSmall, { color: colors.text }]}
                   placeholder="Capture your idea..."
                   placeholderTextColor={colors.textSecondary}
