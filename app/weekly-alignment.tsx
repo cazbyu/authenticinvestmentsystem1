@@ -253,8 +253,29 @@ export default function WeeklyAlignmentScreen() {
           .insert(alignmentRecord);
       }
 
-      // Track items created during ritual
-      // (tasks, ideas, reflections would be tracked via 0008-ap-ritual-items)
+      // Track week plan items created during ritual in 0008-ap-ritual-items
+      if (weekPlanItems.length > 0) {
+        try {
+          const ritualItems = weekPlanItems.map(item => ({
+            user_id: userId,
+            ritual_type: 'weekly_alignment',
+            item_type: item.type,
+            title: item.title,
+            source_step: item.source_step,
+            source_context: item.source_context,
+            aligned_to: item.aligned_to || null,
+            week_start_date: weekStart,
+            created_at: item.created_at,
+          }));
+
+          await supabase
+            .from('0008-ap-ritual-items')
+            .insert(ritualItems);
+        } catch (ritualError) {
+          // Non-critical - log but don't block completion
+          console.error('Error saving ritual items:', ritualError);
+        }
+      }
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
