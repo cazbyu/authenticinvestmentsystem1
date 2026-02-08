@@ -227,19 +227,43 @@ export default function WeeklyAlignmentScreen() {
         completed_at: new Date().toISOString(),
       };
 
+      let alignmentId = existingAlignment?.id;
+
       if (existingAlignment) {
         await supabase
           .from('0008-ap-weekly-alignments')
           .update(alignmentRecord)
           .eq('id', existingAlignment.id);
       } else {
-        await supabase
+        const { data: newAlignment } = await supabase
           .from('0008-ap-weekly-alignments')
-          .insert(alignmentRecord);
+          .insert(alignmentRecord)
+          .select('id')
+          .single();
+
+        if (newAlignment) {
+          alignmentId = newAlignment.id;
+        }
       }
 
-      // Track items created during ritual
-      // (tasks, ideas, reflections would be tracked via 0008-ap-ritual-items)
+      // Save week plan items from Alignment Escort
+      if (guidedModeEnabled && weekPlan && weekPlan.itemCount > 0 && alignmentId) {
+        const weekPlanRecords = weekPlan.items.map((item: any) => ({
+          user_id: userId,
+          alignment_id: alignmentId,
+          item_type: item.type,
+          item_id: item.item_id,
+          title: item.title,
+          source_step: item.source_step,
+          source_context: item.source_context,
+          aligned_to: item.aligned_to,
+          is_committed: item.is_committed || false,
+        }));
+
+        await supabase
+          .from('0008-ap-week-plan-items')
+          .insert(weekPlanRecords);
+      }
 
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -356,7 +380,9 @@ export default function WeeklyAlignmentScreen() {
               Your Commitment:
             </Text>
             <Text style={[styles.completionKeystone, { color: colors.text }]}>
-              {(alignmentData.committedTasks?.length || 0) + (alignmentData.committedEvents?.length || 0)} items committed this week
+              {guidedModeEnabled && weekPlan && weekPlan.itemCount > 0
+                ? `${weekPlan.committedCount} of ${weekPlan.itemCount} aligned actions committed`
+                : `${(alignmentData.committedTasks?.length || 0) + (alignmentData.committedEvents?.length || 0)} items committed this week`}
             </Text>
           </View>
 

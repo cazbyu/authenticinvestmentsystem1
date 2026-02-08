@@ -36,6 +36,7 @@ const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
 
 // Goal icon for card headers (matches app-wide icon)
 import { GoalIcon } from '@/components/icons/CustomIcons';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
 
 interface SixCheckStepProps {
   userId: string;
@@ -43,6 +44,8 @@ interface SixCheckStepProps {
   onNext: () => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
+  guidedModeEnabled?: boolean;
+  weekPlan?: any;
   onDataCapture: (data: {
     goalsReviewed: boolean;
     annualGoalsCount: number;
@@ -204,6 +207,8 @@ export function SixCheckStep({
   onNext,
   onBack,
   onRegisterBackHandler,
+  guidedModeEnabled = false,
+  weekPlan,
   onDataCapture,
 }: SixCheckStepProps) {
   // Flow state
@@ -1043,6 +1048,22 @@ export function SixCheckStep({
                   </TouchableOpacity>
                 );
               })}
+
+              {guidedModeEnabled && annualGoals.length > 0 && (
+                <View style={{ marginVertical: 12 }}>
+                  <AlignmentEscortCard
+                    type="nudge"
+                    icon="compass"
+                    message="These are the mountains you're climbing. Which one gets your focus this week?"
+                    colors={{
+                      background: GOALS_COLOR_LIGHT,
+                      text: colors.text,
+                      accent: GOALS_COLOR,
+                      border: GOALS_COLOR_BORDER,
+                    }}
+                  />
+                </View>
+              )}
 
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: GOALS_COLOR }]}

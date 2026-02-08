@@ -28,6 +28,8 @@ import TacticalDayRows, { EnrichedItem, WeekDay } from './TacticalDayRows';
 import TacticalDelegateCard, { DelegateContact } from './TacticalDelegateCard';
 import GoalCampaignsCard from './GoalCampaignsCard';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
+import { WeekPlanReview } from './WeekPlanReview';
 
 const CalendarImage = require('@/assets/images/calendar.png');
 const TaskListImage = require('@/assets/images/task-list.png');
@@ -42,6 +44,8 @@ interface TacticalDeploymentStepProps {
   onComplete: (contractData: WeeklyContractData) => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
+  guidedModeEnabled?: boolean;
+  weekPlan?: any;
   capturedData: {
     missionReflection?: string;
     roleHealthFlags?: Record<string, string>;
@@ -67,6 +71,8 @@ export function TacticalDeploymentStep({
   onComplete,
   onBack,
   onRegisterBackHandler,
+  guidedModeEnabled = false,
+  weekPlan,
   capturedData,
 }: TacticalDeploymentStepProps) {
   const [loading, setLoading] = useState(true);
@@ -479,6 +485,58 @@ export function TacticalDeploymentStep({
         )}
       </View>
 
+      {/* Week Plan Review - Alignment Escort */}
+      {guidedModeEnabled && weekPlan && weekPlan.itemCount > 0 && (
+        <View style={styles.weekPlanSection}>
+          <AlignmentEscortCard
+            type="celebrate"
+            icon="sparkles"
+            message={`You've captured ${weekPlan.itemCount} aligned action${weekPlan.itemCount !== 1 ? 's' : ''} across your roles, wellness, and goals. Let's review your week and lock it in.`}
+            colors={{
+              background: colors.surface,
+              text: colors.text,
+              accent: DEPLOY_COLOR,
+              border: DEPLOY_COLOR_BORDER,
+            }}
+          />
+
+          <WeekPlanReview
+            items={weekPlan.items}
+            colors={colors}
+            onToggleCommit={(itemId) => {
+              const item = weekPlan.items.find((i: any) => i.id === itemId);
+              if (item) {
+                weekPlan.updateItem(itemId, {
+                  is_committed: !item.is_committed,
+                });
+              }
+            }}
+            onEditItem={(item) => {
+              setEditingItem(item as any);
+            }}
+            onRemoveItem={(itemId) => {
+              weekPlan.removeItem(itemId);
+            }}
+          />
+        </View>
+      )}
+
+      {guidedModeEnabled && weekPlan && weekPlan.itemCount === 0 && (
+        <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+          <AlignmentEscortCard
+            type="nudge"
+            icon="compass"
+            message="Before you sign off on your week, take a moment to add at least a few tasks or events that connect to what you've reflected on."
+            colors={{
+              background: colors.surface,
+              text: colors.text,
+              accent: '#0ea5e9',
+              border: '#bae6fd',
+            }}
+          />
+        </View>
+      )}
+
       {/* Focus Areas */}
       {hasFocusAreas && (
         <View
@@ -760,6 +818,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   headerSection: {
+    marginBottom: 20,
+  },
+  weekPlanSection: {
     marginBottom: 20,
   },
   headerRow: {
