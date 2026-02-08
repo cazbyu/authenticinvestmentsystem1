@@ -587,17 +587,6 @@ export function TacticalDeploymentStep({
         )}
       </View>
 
-      {/* Delegate Section */}
-      <TacticalDelegateCard
-        tasks={enrichedTasks.map((t) => ({ id: t.id, title: t.title, due_date: t.due_date }))}
-        delegates={delegates}
-        userId={userId}
-        colors={colors}
-        onDelegateTask={handleDelegateTask}
-        delegatedMap={delegatedMap}
-        onDelegatesRefresh={refreshDelegates}
-      />
-
       {/* Tasks Section */}
       <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchableOpacity
@@ -631,6 +620,17 @@ export function TacticalDeploymentStep({
           />
         )}
       </View>
+
+      {/* Delegate Section */}
+      <TacticalDelegateCard
+        tasks={enrichedTasks.map((t) => ({ id: t.id, title: t.title, due_date: t.due_date }))}
+        delegates={delegates}
+        userId={userId}
+        colors={colors}
+        onDelegateTask={handleDelegateTask}
+        delegatedMap={delegatedMap}
+        onDelegatesRefresh={refreshDelegates}
+      />
 
       {/* Goal Campaigns */}
       <GoalCampaignsCard userId={userId} colors={colors} />
