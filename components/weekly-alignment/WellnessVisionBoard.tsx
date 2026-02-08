@@ -837,9 +837,6 @@ export function WellnessVisionBoard({
             ) : question ? (
               <>
                 <Text style={[st.introspectionQuestion, { color: colors.text }]}>{question.question_text}</Text>
-                {question.question_context && (
-                  <Text style={[st.introspectionContext, { color: colors.textSecondary }]}>{question.question_context}</Text>
-                )}
                 <View style={[st.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <TextInput
                     style={[st.textInputSmall, { color: colors.text }]}

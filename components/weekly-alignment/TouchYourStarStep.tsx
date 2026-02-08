@@ -1904,13 +1904,7 @@ export function TouchYourStarStep({
             <Text style={[styles.questionText, { color: colors.text }]}>
               {currentQuestion.question_text}
             </Text>
-            
-            {currentQuestion.question_context && (
-              <Text style={[styles.questionContext, { color: colors.textSecondary }]}>
-                💭 {currentQuestion.question_context}
-              </Text>
-            )}
-            
+
             <TextInput
               style={[
                 styles.answerInput,

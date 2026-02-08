@@ -2134,11 +2134,6 @@ async function loadRoleItemsData(role: Role) {
                       <Text style={[styles.introspectionQuestion, { color: colors.text }]}>
                         {visionQuestion.question_text}
                       </Text>
-                      {visionQuestion.question_context && (
-                        <Text style={[styles.introspectionContext, { color: colors.textSecondary }]}>
-                          {visionQuestion.question_context}
-                        </Text>
-                      )}
                       <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <TextInput
                           style={[styles.textInputSmall, { color: colors.text }]}
@@ -2295,11 +2290,6 @@ async function loadRoleItemsData(role: Role) {
                       <Text style={[styles.introspectionQuestion, { color: colors.text }]}>
                         {missionQuestion.question_text}
                       </Text>
-                      {missionQuestion.question_context && (
-                        <Text style={[styles.introspectionContext, { color: colors.textSecondary }]}>
-                          {missionQuestion.question_context}
-                        </Text>
-                      )}
                       <View style={[styles.inputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         <TextInput
                           style={[styles.textInputSmall, { color: colors.text }]}
