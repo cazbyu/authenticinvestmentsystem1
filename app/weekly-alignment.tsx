@@ -18,6 +18,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
 import { recordNorthStarVisit } from '@/lib/northStarVisits';
 import { useWeekPlan } from '@/hooks/useWeekPlan';
+import { getUserPreferences } from '@/lib/userPreferences';
 
 // Step Components
 import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarStep';
@@ -116,16 +117,10 @@ export default function WeeklyAlignmentScreen() {
         // Could show a "continue" or "review" mode
       }
 
-      // Load guided mode setting
-      const { data: ritualSettings } = await supabase
-        .from('0008-ap-user-ritual-settings')
-        .select('guided_mode_enabled')
-        .eq('user_id', user.id)
-        .eq('ritual_type', 'weekly_alignment')
-        .maybeSingle();
-
-      if (ritualSettings) {
-        setGuidedModeEnabled(ritualSettings.guided_mode_enabled ?? true);
+      // Load Alignment Guide preference
+      const prefs = await getUserPreferences(user.id);
+      if (prefs) {
+        setGuidedModeEnabled(prefs.alignment_guide_enabled ?? true);
       }
     } catch (error) {
       console.error('Error loading initial data:', error);

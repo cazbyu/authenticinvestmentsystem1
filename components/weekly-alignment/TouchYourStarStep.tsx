@@ -15,17 +15,20 @@ import { ChevronRight, ChevronLeft, Edit3, Lightbulb, HelpCircle } from 'lucide-
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
-import { 
-  trackQuestionShown, 
-  trackQuestionAnswered, 
-  trackQuestionSkipped 
+import {
+  trackQuestionShown,
+  trackQuestionAnswered,
+  trackQuestionSkipped
 } from '@/lib/analytics';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
 
 interface TouchYourStarStepProps {
   userId: string;
   colors: any;
   onNext: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
+  guidedModeEnabled?: boolean;
+  weekPlan?: any;
   onDataCapture: (data: {
     missionReflection?: string;
     visionAcknowledged?: boolean;
@@ -102,6 +105,8 @@ export function TouchYourStarStep({
   colors,
   onNext,
   onRegisterBackHandler,
+  guidedModeEnabled = false,
+  weekPlan,
   onDataCapture,
 }: TouchYourStarStepProps) {
   // Core state
@@ -1333,6 +1338,23 @@ export function TouchYourStarStep({
           )}
         </View>
 
+        {/* Alignment Guide Welcome */}
+        {guidedModeEnabled && !resumePrompt && (
+          <View style={{ marginBottom: 16 }}>
+            <AlignmentEscortCard
+              type="welcome"
+              icon="compass"
+              message="Welcome back. Before we design your week, let's reconnect with what you're building toward."
+              colors={{
+                background: colors.surface,
+                text: colors.text,
+                accent: '#ed1c24',
+                border: '#ed1c2440',
+              }}
+            />
+          </View>
+        )}
+
         {/* Resume Prompt */}
         {resumePrompt && (
           <View style={[styles.resumeCard, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
@@ -1404,6 +1426,23 @@ export function TouchYourStarStep({
             </View>
             <ChevronRight size={20} color={hasMission ? '#059669' : colors.textSecondary} />
           </TouchableOpacity>
+
+          {/* Encouragement after Mission */}
+          {guidedModeEnabled && hasMission && (
+            <View style={{ marginVertical: 8 }}>
+              <AlignmentEscortCard
+                type="encouragement"
+                icon="heart"
+                message="This is your compass. Let it guide what you say yes to this week."
+                colors={{
+                  background: '#d1fae5',
+                  text: colors.text,
+                  accent: '#10b981',
+                  border: '#10b981',
+                }}
+              />
+            </View>
+          )}
 
           {/* Vision */}
           <TouchableOpacity
