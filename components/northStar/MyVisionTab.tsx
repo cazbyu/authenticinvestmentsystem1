@@ -5,6 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { 
   FileText, 
@@ -14,6 +16,8 @@ import {
   ChevronDown,
   Plus,
   Edit3,
+  X,
+  Check,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -60,6 +64,11 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
   const [northStarData, setNorthStarData] = useState<NorthStarData | null>(null);
   const [oneYearGoals, setOneYearGoals] = useState<OneYearGoal[]>([]);
   const [expandedGoals, setExpandedGoals] = useState<Set<string>>(new Set());
+
+  // Inline edit state
+  const [editingField, setEditingField] = useState<'mission' | 'vision' | null>(null);
+  const [editText, setEditText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Fetch North Star data (Mission, Vision, Values)
   const fetchNorthStarData = useCallback(async () => {
@@ -174,21 +183,67 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     });
   }, []);
 
-  // Navigate to editor
+  // Inline edit handlers
   const handleEditMission = useCallback(() => {
-    router.push('/north-star/edit?section=mission');
-  }, [router]);
+    setEditText(northStarData?.mission_statement?.trim() || '');
+    setEditingField('mission');
+  }, [northStarData]);
 
   const handleEditVision = useCallback(() => {
-    router.push('/north-star/edit?section=vision');
-  }, [router]);
+    setEditText(northStarData?.five_year_vision?.trim() || '');
+    setEditingField('vision');
+  }, [northStarData]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingField(null);
+    setEditText('');
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editingField || !editText.trim()) return;
+    setSavingEdit(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
+
+      const { data: existing } = await supabase
+        .from('0008-ap-north-star')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('0008-ap-north-star')
+          .update({ [fieldName]: editText.trim() })
+          .eq('user_id', user.id);
+      } else {
+        await supabase
+          .from('0008-ap-north-star')
+          .insert({ user_id: user.id, [fieldName]: editText.trim() });
+      }
+
+      // Refresh data
+      await fetchNorthStarData();
+      setEditingField(null);
+      setEditText('');
+    } catch (error) {
+      console.error('Error saving edit:', error);
+      Alert.alert('Error', 'Failed to save. Please try again.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [editingField, editText, fetchNorthStarData]);
 
   const handleManageGoals = useCallback(() => {
-    router.push('/north-star/edit?section=goals');
+    router.push('/(tabs)/goals');
   }, [router]);
 
   const handleAddGoal = useCallback(() => {
-    router.push('/goals/create-1y-goal');
+    router.push('/(tabs)/goals');
   }, [router]);
 
   // Get status color
@@ -227,18 +282,54 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
               Mission Statement
             </Text>
           </View>
-          <TouchableOpacity 
-            onPress={handleEditMission}
-            style={[styles.editButton, { backgroundColor: colors.background }]}
-          >
-            <Edit3 size={14} color={colors.textSecondary} />
-            <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
-              Edit
-            </Text>
-          </TouchableOpacity>
+          {editingField !== 'mission' && (
+            <TouchableOpacity 
+              onPress={handleEditMission}
+              style={[styles.editButton, { backgroundColor: colors.background }]}
+            >
+              <Edit3 size={14} color={colors.textSecondary} />
+              <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
+                Edit
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {hasMission ? (
+        {editingField === 'mission' ? (
+          <View style={styles.inlineEditContainer}>
+            <TextInput
+              style={[styles.inlineEditInput, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
+              value={editText}
+              onChangeText={setEditText}
+              placeholder="My mission is to..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.inlineEditButtons}>
+              <TouchableOpacity style={[styles.inlineEditCancel, { borderColor: colors.border }]} onPress={handleCancelEdit}>
+                <X size={16} color={colors.textSecondary} />
+                <Text style={[styles.inlineEditCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.inlineEditSave, { backgroundColor: '#0078d4', opacity: editText.trim() ? 1 : 0.5 }]}
+                onPress={handleSaveEdit}
+                disabled={!editText.trim() || savingEdit}
+              >
+                {savingEdit ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Check size={16} color="#FFFFFF" />
+                    <Text style={styles.inlineEditSaveText}>Save</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : hasMission ? (
           <Text 
             style={[styles.cardContent, { color: colors.text }]} 
             numberOfLines={6}
@@ -269,18 +360,54 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
               5-Year Vision
             </Text>
           </View>
-          <TouchableOpacity 
-            onPress={handleEditVision}
-            style={[styles.editButton, { backgroundColor: colors.background }]}
-          >
-            <Edit3 size={14} color={colors.textSecondary} />
-            <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
-              Edit
-            </Text>
-          </TouchableOpacity>
+          {editingField !== 'vision' && (
+            <TouchableOpacity 
+              onPress={handleEditVision}
+              style={[styles.editButton, { backgroundColor: colors.background }]}
+            >
+              <Edit3 size={14} color={colors.textSecondary} />
+              <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
+                Edit
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {hasVision ? (
+        {editingField === 'vision' ? (
+          <View style={styles.inlineEditContainer}>
+            <TextInput
+              style={[styles.inlineEditInput, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
+              value={editText}
+              onChangeText={setEditText}
+              placeholder="In 5 years, I envision..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.inlineEditButtons}>
+              <TouchableOpacity style={[styles.inlineEditCancel, { borderColor: colors.border }]} onPress={handleCancelEdit}>
+                <X size={16} color={colors.textSecondary} />
+                <Text style={[styles.inlineEditCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.inlineEditSave, { backgroundColor: '#16a34a', opacity: editText.trim() ? 1 : 0.5 }]}
+                onPress={handleSaveEdit}
+                disabled={!editText.trim() || savingEdit}
+              >
+                {savingEdit ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Check size={16} color="#FFFFFF" />
+                    <Text style={styles.inlineEditSaveText}>Save</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : hasVision ? (
           <Text 
             style={[styles.cardContent, { color: colors.text }]} 
             numberOfLines={6}
@@ -650,5 +777,49 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     width: 36,
     textAlign: 'right',
+  },
+  // Inline edit styles
+  inlineEditContainer: {
+    gap: 12,
+  },
+  inlineEditInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    minHeight: 100,
+    lineHeight: 22,
+  },
+  inlineEditButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  inlineEditCancel: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  inlineEditCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  inlineEditSave: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  inlineEditSaveText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
