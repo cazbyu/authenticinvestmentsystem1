@@ -32,6 +32,8 @@ interface WingCheckWellnessStepProps {
   onNext: () => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
+  guidedModeEnabled?: boolean;
+  weekPlan?: any;
   onDataCapture: (data: {
     wellnessReviewed: boolean;
     zonesChecked: string[];
@@ -104,6 +106,8 @@ export function WingCheckWellnessStep({
   onNext,
   onBack,
   onRegisterBackHandler,
+  guidedModeEnabled = false,
+  weekPlan,
   onDataCapture,
   guidedModeEnabled = true,
   weekPlanItems = [],
@@ -617,6 +621,22 @@ export function WingCheckWellnessStep({
               </TouchableOpacity>
             );
           })}
+
+          {guidedModeEnabled && (
+            <View style={{ marginVertical: 12 }}>
+              <AlignmentEscortCard
+                type="nudge"
+                icon="sparkles"
+                message="Your roles only thrive when YOU are sustained. As you check each zone, notice where you could invest a little this week."
+                colors={{
+                  background: WELLNESS_COLOR_LIGHT,
+                  text: colors.text,
+                  accent: WELLNESS_COLOR,
+                  border: WELLNESS_COLOR_BORDER,
+                }}
+              />
+            </View>
+          )}
 
           {/* Done Reviewing Button */}
           <TouchableOpacity

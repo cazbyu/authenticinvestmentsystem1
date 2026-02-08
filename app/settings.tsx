@@ -1212,6 +1212,36 @@ export default function SettingsScreen() {
                 <Text style={[styles.timeSummary, { color: colors.textSecondary }]}>
                   Available: {convertTo12Hour(ritualSettings.weekly_alignment?.available_from || '00:00:00')} - {convertTo12Hour(ritualSettings.weekly_alignment?.available_until || '23:59:59')}
                 </Text>
+
+                {/* Alignment Guide Toggle */}
+                <View style={[styles.guideSettingCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                  <View style={styles.guideSettingRow}>
+                    <View style={styles.guideSettingInfo}>
+                      <Text style={[styles.guideSettingLabel, { color: colors.text }]}>✨ Alignment Guide</Text>
+                      <Text style={[styles.guideSettingDescription, { color: colors.textSecondary }]}>
+                        Show coaching prompts and track aligned actions during the ritual
+                      </Text>
+                    </View>
+                    <Switch
+                      value={userPreferences?.alignment_guide_enabled ?? true}
+                      onValueChange={async (value) => {
+                        const supabase = getSupabaseClient();
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (!user) return;
+
+                        const success = await updateUserPreferences(user.id, {
+                          alignment_guide_enabled: value
+                        });
+
+                        if (success) {
+                          setUserPreferences(prev => prev ? { ...prev, alignment_guide_enabled: value } : null);
+                        }
+                      }}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor={colors.surface}
+                    />
+                  </View>
+                </View>
               </View>
             )}
           </View>
@@ -1645,6 +1675,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  guideSettingCard: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  guideSettingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  guideSettingInfo: {
+    flex: 1,
+  },
+  guideSettingLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  guideSettingDescription: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   saveButton: {
     paddingVertical: 14,

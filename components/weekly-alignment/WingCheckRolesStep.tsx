@@ -101,6 +101,8 @@ interface WingCheckRolesStepProps {
   onNext: () => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
+  guidedModeEnabled?: boolean;
+  weekPlan?: any;
   onDataCapture: (data: {
     rolesReviewed: string[];
     roleHealthFlags: Record<string, 'thriving' | 'stable' | 'needs_attention'>;
@@ -183,6 +185,8 @@ export function WingCheckRolesStep({
   onNext,
   onBack,
   onRegisterBackHandler,
+  guidedModeEnabled = false,
+  weekPlan,
   onDataCapture,
   onOpenTaskForm,
   guidedModeEnabled = true,
@@ -1525,6 +1529,22 @@ async function loadRoleItemsData(role: Role) {
               </TouchableOpacity>
             );
           })}
+
+          {guidedModeEnabled && (
+            <View style={{ marginVertical: 12 }}>
+              <AlignmentEscortCard
+                type="prompt"
+                icon="lightbulb"
+                message="You've got your roles in focus. As you reflect on each one, think: what's ONE thing you could do this week to show up well in this role?"
+                colors={{
+                  background: ROLES_COLOR_LIGHT,
+                  text: colors.text,
+                  accent: ROLES_COLOR,
+                  border: ROLES_COLOR_BORDER,
+                }}
+              />
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.secondaryButton, { borderColor: ROLES_COLOR }]}
