@@ -90,6 +90,7 @@ interface WellnessVisionBoardProps {
   priorityIndex: number;
   onBack: () => void;
   onZoneUpdated: (zone: WellnessZone) => void;
+  onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
 }
 
 function getZoneColor(zoneName: string): string {
@@ -150,6 +151,7 @@ export function WellnessVisionBoard({
   priorityIndex,
   onBack,
   onZoneUpdated,
+  onAddWeekPlanItem,
 }: WellnessVisionBoardProps) {
   const zoneColor = getZoneColor(zone.name);
   const weekDates = weekStartDate ? getWeekDates(weekStartDate) : [];
@@ -453,6 +455,17 @@ export function WellnessVisionBoard({
       setTakeActionType(null);
       showSavedFeedback('oneThing');
       await loadZoneItemsData();
+
+      // Track in week plan accumulator
+      if (onAddWeekPlanItem) {
+        onAddWeekPlanItem({
+          type: isEvent ? 'event' : 'task',
+          title: oneThingText.trim(),
+          source_step: 3,
+          source_context: `Wellness: ${zone.name}`,
+          aligned_to: zone.fulfillment_vision || undefined,
+        });
+      }
     } catch (error) {
       console.error('Error saving ONE Thing:', error);
       showErrorAlert('Failed to save. Please try again.');
@@ -490,6 +503,17 @@ export function WellnessVisionBoard({
         });
 
       if (joinError) throw joinError;
+
+      // Track in week plan accumulator
+      if (onAddWeekPlanItem) {
+        onAddWeekPlanItem({
+          type: 'idea',
+          title: ideaText.trim(),
+          source_step: 3,
+          source_context: `Wellness: ${zone.name}`,
+          aligned_to: zone.fulfillment_vision || undefined,
+        });
+      }
 
       setIdeaText('');
       showSavedFeedback('idea');

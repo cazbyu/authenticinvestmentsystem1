@@ -39,6 +39,9 @@ interface WingCheckWellnessStepProps {
     zonesChecked: string[];
     flaggedWellnessZones: string[];
   }) => void;
+  guidedModeEnabled?: boolean;
+  weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
+  onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
 }
 
 interface WellnessZone {
@@ -106,6 +109,9 @@ export function WingCheckWellnessStep({
   guidedModeEnabled = false,
   weekPlan,
   onDataCapture,
+  guidedModeEnabled = true,
+  weekPlanItems = [],
+  onAddWeekPlanItem,
 }: WingCheckWellnessStepProps) {
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -119,6 +125,9 @@ export function WingCheckWellnessStep({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+
+  // Escort card dismissed state
+  const [escortDismissed, setEscortDismissed] = useState<Record<string, boolean>>({});
   
   // Zone reflection state
   const [selectedReflectionZone, setSelectedReflectionZone] = useState<WellnessZone | null>(null);
@@ -543,6 +552,17 @@ export function WingCheckWellnessStep({
             </Text>
           </View>
 
+          {/* Escort: After reviewing wellness zones */}
+          {guidedModeEnabled && !escortDismissed['step3-zones-review'] && (
+            <AlignmentEscortCard
+              type="nudge"
+              message="Your roles only thrive when YOU are sustained. As you check each zone, notice where you could invest a little this week."
+              icon="compass"
+              stepColor={WELLNESS_COLOR}
+              onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step3-zones-review': true }))}
+            />
+          )}
+
           {/* All Zones List - Prioritized first, then alphabetical */}
           {allZonesSorted.map((zone) => {
             const zoneColor = getZoneColor(zone.name);
@@ -658,6 +678,7 @@ export function WingCheckWellnessStep({
               z.id === updatedZone.id ? updatedZone : z
             ));
           }}
+          onAddWeekPlanItem={onAddWeekPlanItem}
         />
       </Animated.View>
     );

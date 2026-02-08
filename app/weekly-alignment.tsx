@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X, ClipboardList } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
 import { recordNorthStarVisit } from '@/lib/northStarVisits';
-import { useWeekPlan } from '@/hooks/useWeekPlan';
-import { getUserPreferences } from '@/lib/userPreferences';
+import type { WeekPlanItem } from '@/types/weekPlan';
 
 // Step Components
 import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarStep';
@@ -26,6 +25,7 @@ import { WingCheckRolesStep } from '@/components/weekly-alignment/WingCheckRoles
 import { WingCheckWellnessStep } from '@/components/weekly-alignment/WingCheckWellnessStep';
 import { SixCheckStep } from '@/components/weekly-alignment/SixCheckStep';
 import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
+import { WeekPlanBadge } from '@/components/weekly-alignment/WeekPlanBadge';
 // Note: StepIndicatorCompact removed - using inline clickable version
 
 // Types
@@ -77,9 +77,24 @@ export default function WeeklyAlignmentScreen() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [completionAnimation] = useState(new Animated.Value(0));
   const [stepBackHandler, setStepBackHandler] = useState<(() => boolean) | null>(null);
-  const [guidedModeEnabled, setGuidedModeEnabled] = useState(true);
 
-  const weekPlan = useWeekPlan();
+  // Alignment Escort state
+  const [guidedModeEnabled, setGuidedModeEnabled] = useState(true);
+  const [weekPlanItems, setWeekPlanItems] = useState<WeekPlanItem[]>([]);
+
+  // Week Plan accumulator callbacks
+  const addWeekPlanItem = useCallback((item: Omit<WeekPlanItem, 'id' | 'created_at'>) => {
+    const newItem: WeekPlanItem = {
+      ...item,
+      id: `wp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      created_at: new Date().toISOString(),
+    };
+    setWeekPlanItems(prev => [...prev, newItem]);
+  }, []);
+
+  const removeWeekPlanItem = useCallback((id: string) => {
+    setWeekPlanItems(prev => prev.filter(item => item.id !== id));
+  }, []);
 
   useEffect(() => {
     loadInitialData();
@@ -98,6 +113,17 @@ export default function WeeklyAlignmentScreen() {
 
       setUserId(user.id);
 
+      // Load guided mode preference
+      const { data: prefs } = await supabase
+        .from('0008-ap-user-preferences')
+        .select('guided_mode_enabled')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (prefs !== null && prefs.guided_mode_enabled !== undefined) {
+        setGuidedModeEnabled(prefs.guided_mode_enabled);
+      }
+
       // Check if there's already a weekly alignment for this week
       const today = new Date();
       const dayOfWeek = today.getDay();
@@ -115,12 +141,6 @@ export default function WeeklyAlignmentScreen() {
       if (existing) {
         setExistingAlignment(existing);
         // Could show a "continue" or "review" mode
-      }
-
-      // Load Alignment Guide preference
-      const prefs = await getUserPreferences(user.id);
-      if (prefs) {
-        setGuidedModeEnabled(prefs.alignment_guide_enabled ?? true);
       }
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -222,42 +242,39 @@ export default function WeeklyAlignmentScreen() {
         completed_at: new Date().toISOString(),
       };
 
-      let alignmentId = existingAlignment?.id;
-
       if (existingAlignment) {
         await supabase
           .from('0008-ap-weekly-alignments')
           .update(alignmentRecord)
           .eq('id', existingAlignment.id);
       } else {
-        const { data: newAlignment } = await supabase
+        await supabase
           .from('0008-ap-weekly-alignments')
-          .insert(alignmentRecord)
-          .select('id')
-          .single();
-
-        if (newAlignment) {
-          alignmentId = newAlignment.id;
-        }
+          .insert(alignmentRecord);
       }
 
-      // Save week plan items from Alignment Escort
-      if (guidedModeEnabled && weekPlan && weekPlan.itemCount > 0 && alignmentId) {
-        const weekPlanRecords = weekPlan.items.map((item: any) => ({
-          user_id: userId,
-          alignment_id: alignmentId,
-          item_type: item.type,
-          item_id: item.item_id,
-          title: item.title,
-          source_step: item.source_step,
-          source_context: item.source_context,
-          aligned_to: item.aligned_to,
-          is_committed: item.is_committed || false,
-        }));
+      // Track week plan items created during ritual in 0008-ap-ritual-items
+      if (weekPlanItems.length > 0) {
+        try {
+          const ritualItems = weekPlanItems.map(item => ({
+            user_id: userId,
+            ritual_type: 'weekly_alignment',
+            item_type: item.type,
+            title: item.title,
+            source_step: item.source_step,
+            source_context: item.source_context,
+            aligned_to: item.aligned_to || null,
+            week_start_date: weekStart,
+            created_at: item.created_at,
+          }));
 
-        await supabase
-          .from('0008-ap-week-plan-items')
-          .insert(weekPlanRecords);
+          await supabase
+            .from('0008-ap-ritual-items')
+            .insert(ritualItems);
+        } catch (ritualError) {
+          // Non-critical - log but don't block completion
+          console.error('Error saving ritual items:', ritualError);
+        }
       }
 
       if (Platform.OS !== 'web') {
@@ -308,6 +325,7 @@ export default function WeeklyAlignmentScreen() {
         setCurrentStep(0);
         setAlignmentData({});
         setExistingAlignment(null);
+        setWeekPlanItems([]);
       } catch (error) {
         console.error('Reset error:', error);
         if (Platform.OS === 'web') {
@@ -367,7 +385,10 @@ export default function WeeklyAlignmentScreen() {
           </Text>
           
           <Text style={[styles.completionSubtitle, { color: colors.textSecondary }]}>
-            You're aligned and ready to conquer this week.
+            {weekPlanItems.length > 0
+              ? `Your week is aligned. ${weekPlanItems.length} action${weekPlanItems.length !== 1 ? 's' : ''}, all connected to your purpose. Go make it happen.`
+              : "You're aligned and ready to conquer this week."
+            }
           </Text>
 
           <View style={[styles.completionCard, { backgroundColor: colors.surface, borderColor: '#10B981' }]}>
@@ -375,9 +396,10 @@ export default function WeeklyAlignmentScreen() {
               Your Commitment:
             </Text>
             <Text style={[styles.completionKeystone, { color: colors.text }]}>
-              {guidedModeEnabled && weekPlan && weekPlan.itemCount > 0
-                ? `${weekPlan.committedCount} of ${weekPlan.itemCount} aligned actions committed`
-                : `${(alignmentData.committedTasks?.length || 0) + (alignmentData.committedEvents?.length || 0)} items committed this week`}
+              {weekPlanItems.length > 0
+                ? `${weekPlanItems.length} aligned actions, all connected to your purpose`
+                : `${(alignmentData.committedTasks?.length || 0) + (alignmentData.committedEvents?.length || 0)} items committed this week`
+              }
             </Text>
           </View>
 
@@ -434,11 +456,11 @@ export default function WeeklyAlignmentScreen() {
             <Text style={[styles.headerTitle, { color: colors.text }]}>
               Weekly Alignment
             </Text>
-            {guidedModeEnabled && weekPlan.itemCount > 0 && currentStep > 0 && (
-              <View style={[styles.weekPlanBadge, { backgroundColor: currentStepData.color }]}>
-                <ClipboardList size={14} color="#ffffff" />
-                <Text style={styles.weekPlanBadgeText}>{weekPlan.itemCount}</Text>
-              </View>
+            {currentStep >= 1 && guidedModeEnabled && (
+              <WeekPlanBadge
+                count={weekPlanItems.length}
+                color={currentStepData.color}
+              />
             )}
           </View>
           {renderStepDots()}
@@ -476,7 +498,6 @@ export default function WeeklyAlignmentScreen() {
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
             guidedModeEnabled={guidedModeEnabled}
-            weekPlan={weekPlan}
           />
         )}
 
@@ -489,7 +510,8 @@ export default function WeeklyAlignmentScreen() {
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
             guidedModeEnabled={guidedModeEnabled}
-            weekPlan={weekPlan}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
           />
         )}
 
@@ -502,7 +524,8 @@ export default function WeeklyAlignmentScreen() {
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
             guidedModeEnabled={guidedModeEnabled}
-            weekPlan={weekPlan}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
           />
         )}
 
@@ -515,7 +538,8 @@ export default function WeeklyAlignmentScreen() {
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
             guidedModeEnabled={guidedModeEnabled}
-            weekPlan={weekPlan}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
           />
         )}
 
@@ -526,8 +550,6 @@ export default function WeeklyAlignmentScreen() {
             onComplete={handleComplete}
             onBack={goToPreviousStep}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
-            guidedModeEnabled={guidedModeEnabled}
-            weekPlan={weekPlan}
             capturedData={{
               missionReflection: alignmentData.missionReflection,
               roleHealthFlags: alignmentData.roleHealthFlags,
@@ -535,6 +557,10 @@ export default function WeeklyAlignmentScreen() {
               laggingGoals: alignmentData.laggingGoals,
               keyFocusGoal: alignmentData.keyFocusGoal,
             }}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
+            onRemoveWeekPlanItem={removeWeekPlanItem}
           />
         )}
       </View>
@@ -584,19 +610,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-  },
-  weekPlanBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  weekPlanBadgeText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
   },
   nextButton: {
     padding: 8,

@@ -15,25 +15,24 @@ import { ChevronRight, ChevronLeft, Edit3, Lightbulb, HelpCircle } from 'lucide-
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
-import {
-  trackQuestionShown,
-  trackQuestionAnswered,
-  trackQuestionSkipped
-} from '@/lib/analytics';
 import { AlignmentEscortCard } from './AlignmentEscortCard';
+import { 
+  trackQuestionShown, 
+  trackQuestionAnswered, 
+  trackQuestionSkipped 
+} from '@/lib/analytics';
 
 interface TouchYourStarStepProps {
   userId: string;
   colors: any;
   onNext: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
-  guidedModeEnabled?: boolean;
-  weekPlan?: any;
   onDataCapture: (data: {
     missionReflection?: string;
     visionAcknowledged?: boolean;
     valuesAcknowledged?: boolean;
   }) => void;
+  guidedModeEnabled?: boolean;
 }
 
 interface NorthStarData {
@@ -105,9 +104,8 @@ export function TouchYourStarStep({
   colors,
   onNext,
   onRegisterBackHandler,
-  guidedModeEnabled = false,
-  weekPlan,
   onDataCapture,
+  guidedModeEnabled = true,
 }: TouchYourStarStepProps) {
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -165,6 +163,9 @@ export function TouchYourStarStep({
   // UI state
   const [saving, setSaving] = useState(false);
   const [resumePrompt, setResumePrompt] = useState<{ domain: DomainType; hasResponses: boolean } | null>(null);
+
+  // Escort card dismissed state
+  const [escortDismissed, setEscortDismissed] = useState<Record<string, boolean>>({});
 
   // Custom input ref for auto-focus
   const customInputRef = useRef<TextInput>(null);
@@ -1178,6 +1179,17 @@ export function TouchYourStarStep({
               )}
             </View>
 
+            {/* Escort: Opening nudge for Step 1 */}
+            {guidedModeEnabled && !escortDismissed['step1-opening'] && (
+              <AlignmentEscortCard
+                type="nudge"
+                message="Before we plan your week, let's reconnect with who you are and where you're headed. Everything we build this week flows from here."
+                icon="compass"
+                stepColor="#ed1c24"
+                onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step1-opening': true }))}
+              />
+            )}
+
             {/* Hero Question Card */}
             <View style={[styles.heroQuestionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {/* North Star Icon - 75% smaller (was 48, now 36) */}
@@ -1338,21 +1350,15 @@ export function TouchYourStarStep({
           )}
         </View>
 
-        {/* Alignment Guide Welcome */}
-        {guidedModeEnabled && !resumePrompt && (
-          <View style={{ marginBottom: 16 }}>
-            <AlignmentEscortCard
-              type="welcome"
-              icon="compass"
-              message="Welcome back. Before we design your week, let's reconnect with what you're building toward."
-              colors={{
-                background: colors.surface,
-                text: colors.text,
-                accent: '#ed1c24',
-                border: '#ed1c2440',
-              }}
-            />
-          </View>
+        {/* Escort: Returning user nudge */}
+        {guidedModeEnabled && !escortDismissed['step1-returning'] && (hasMission || hasVision || hasValues) && (
+          <AlignmentEscortCard
+            type="nudge"
+            message="Take a moment — does your mission still feel true? Has anything shifted since last week?"
+            icon="star"
+            stepColor="#ed1c24"
+            onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step1-returning': true }))}
+          />
         )}
 
         {/* Resume Prompt */}
@@ -1426,23 +1432,6 @@ export function TouchYourStarStep({
             </View>
             <ChevronRight size={20} color={hasMission ? '#059669' : colors.textSecondary} />
           </TouchableOpacity>
-
-          {/* Encouragement after Mission */}
-          {guidedModeEnabled && hasMission && (
-            <View style={{ marginVertical: 8 }}>
-              <AlignmentEscortCard
-                type="encouragement"
-                icon="heart"
-                message="This is your compass. Let it guide what you say yes to this week."
-                colors={{
-                  background: '#d1fae5',
-                  text: colors.text,
-                  accent: '#10b981',
-                  border: '#10b981',
-                }}
-              />
-            </View>
-          )}
 
           {/* Vision */}
           <TouchableOpacity

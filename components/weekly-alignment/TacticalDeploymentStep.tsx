@@ -44,8 +44,6 @@ interface TacticalDeploymentStepProps {
   onComplete: (contractData: WeeklyContractData) => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
-  guidedModeEnabled?: boolean;
-  weekPlan?: any;
   capturedData: {
     missionReflection?: string;
     roleHealthFlags?: Record<string, string>;
@@ -55,6 +53,10 @@ interface TacticalDeploymentStepProps {
     wellnessZoneFocus?: Array<{ zoneId: string; zoneName: string; focusText: string }>;
     roleFocus?: Array<{ roleId: string; roleLabel: string; focusText: string }>;
   };
+  guidedModeEnabled?: boolean;
+  weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
+  onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
+  onRemoveWeekPlanItem?: (id: string) => void;
 }
 
 export interface WeeklyContractData {
@@ -71,9 +73,11 @@ export function TacticalDeploymentStep({
   onComplete,
   onBack,
   onRegisterBackHandler,
-  guidedModeEnabled = false,
-  weekPlan,
   capturedData,
+  guidedModeEnabled = true,
+  weekPlanItems = [],
+  onAddWeekPlanItem,
+  onRemoveWeekPlanItem,
 }: TacticalDeploymentStepProps) {
   const [loading, setLoading] = useState(true);
   const [enrichedTasks, setEnrichedTasks] = useState<EnrichedItem[]>([]);
@@ -485,56 +489,36 @@ export function TacticalDeploymentStep({
         )}
       </View>
 
-      {/* Week Plan Review - Alignment Escort */}
-      {guidedModeEnabled && weekPlan && weekPlan.itemCount > 0 && (
-        <View style={styles.weekPlanSection}>
-          <AlignmentEscortCard
-            type="celebrate"
-            icon="sparkles"
-            message={`You've captured ${weekPlan.itemCount} aligned action${weekPlan.itemCount !== 1 ? 's' : ''} across your roles, wellness, and goals. Let's review your week and lock it in.`}
-            colors={{
-              background: colors.surface,
-              text: colors.text,
-              accent: DEPLOY_COLOR,
-              border: DEPLOY_COLOR_BORDER,
-            }}
-          />
-
-          <WeekPlanReview
-            items={weekPlan.items}
-            colors={colors}
-            onToggleCommit={(itemId) => {
-              const item = weekPlan.items.find((i: any) => i.id === itemId);
-              if (item) {
-                weekPlan.updateItem(itemId, {
-                  is_committed: !item.is_committed,
-                });
-              }
-            }}
-            onEditItem={(item) => {
-              setEditingItem(item as any);
-            }}
-            onRemoveItem={(itemId) => {
-              weekPlan.removeItem(itemId);
-            }}
-          />
-        </View>
+      {/* Escort: Opening message for Step 5 */}
+      {guidedModeEnabled && weekPlanItems.length > 0 && (
+        <AlignmentEscortCard
+          type="celebrate"
+          message={`You've captured ${weekPlanItems.length} aligned action${weekPlanItems.length !== 1 ? 's' : ''} across your roles, wellness, and goals. Let's review your week and lock it in.`}
+          stepColor="#f5a623"
+        />
+      )}
+      {guidedModeEnabled && weekPlanItems.length === 0 && (
+        <AlignmentEscortCard
+          type="nudge"
+          message="Before you sign off on your week, take a moment to add at least a few tasks or events that connect to what you've reflected on."
+          actionLabel="Add Actions Now"
+          stepColor="#f5a623"
+          onAction={() => {
+            // Could open a task form - for now just dismiss
+          }}
+        />
       )}
 
-      {guidedModeEnabled && weekPlan && weekPlan.itemCount === 0 && (
-        <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
-          <AlignmentEscortCard
-            type="nudge"
-            icon="compass"
-            message="Before you sign off on your week, take a moment to add at least a few tasks or events that connect to what you've reflected on."
-            colors={{
-              background: colors.surface,
-              text: colors.text,
-              accent: '#0ea5e9',
-              border: '#bae6fd',
-            }}
-          />
-        </View>
+      {/* Week Plan Review - Show accumulated items from steps 2-4 */}
+      {guidedModeEnabled && weekPlanItems.length > 0 && onRemoveWeekPlanItem && (
+        <WeekPlanReview
+          items={weekPlanItems}
+          onRemoveItem={onRemoveWeekPlanItem}
+          onAddMore={() => {
+            // Could open a task form
+          }}
+          colors={colors}
+        />
       )}
 
       {/* Focus Areas */}
@@ -818,9 +802,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   headerSection: {
-    marginBottom: 20,
-  },
-  weekPlanSection: {
     marginBottom: 20,
   },
   headerRow: {
