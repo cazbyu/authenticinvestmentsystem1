@@ -100,6 +100,52 @@ export function TacticalDeploymentStep({
 
   const [editingItem, setEditingItem] = useState<EnrichedItem | null>(null);
 
+  // Quick-add inline form state
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAddTitle, setQuickAddTitle] = useState('');
+  const [savingQuickAdd, setSavingQuickAdd] = useState(false);
+
+  async function handleQuickAdd(type: 'task' | 'event') {
+    if (!quickAddTitle.trim() || !userId) return;
+    setSavingQuickAdd(true);
+    try {
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      const insertData: Record<string, any> = {
+        user_id: userId,
+        title: quickAddTitle.trim(),
+        type,
+        status: 'pending',
+      };
+
+      if (type === 'task') {
+        insertData.due_date = today;
+        insertData.is_anytime = true;
+      } else {
+        insertData.start_date = today;
+        insertData.is_anytime = false;
+      }
+
+      await supabase.from('0008-ap-tasks').insert(insertData);
+
+      if (onAddWeekPlanItem) {
+        onAddWeekPlanItem({
+          type,
+          title: quickAddTitle.trim(),
+          source_step: 5,
+          source_context: 'Quick add from Deployment',
+        });
+      }
+
+      setQuickAddTitle('');
+    } catch (error) {
+      console.error('Error quick-adding item:', error);
+    } finally {
+      setSavingQuickAdd(false);
+    }
+  }
+
   useEffect(() => {
     loadWeekData();
   }, []);
@@ -497,16 +543,45 @@ export function TacticalDeploymentStep({
           stepColor="#f5a623"
         />
       )}
-      {guidedModeEnabled && weekPlanItems.length === 0 && (
+      {guidedModeEnabled && weekPlanItems.length === 0 && !showQuickAdd && (
         <AlignmentEscortCard
           type="nudge"
           message="Before you sign off on your week, take a moment to add at least a few tasks or events that connect to what you've reflected on."
           actionLabel="Add Actions Now"
           stepColor="#f5a623"
-          onAction={() => {
-            // Could open a task form - for now just dismiss
-          }}
+          onAction={() => setShowQuickAdd(true)}
         />
+      )}
+
+      {/* Inline Quick-Add Form */}
+      {showQuickAdd && (
+        <View style={[quickAddStyles.container, { backgroundColor: colors.surface, borderColor: DEPLOY_COLOR_BORDER }]}>
+          <TextInput
+            style={[quickAddStyles.input, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
+            placeholder="What do you want to do this week?"
+            placeholderTextColor={colors.textSecondary}
+            value={quickAddTitle}
+            onChangeText={setQuickAddTitle}
+            autoFocus
+          />
+          <View style={quickAddStyles.buttonRow}>
+            <TouchableOpacity
+              style={[quickAddStyles.saveButton, { backgroundColor: DEPLOY_COLOR, opacity: quickAddTitle.trim() ? 1 : 0.5 }]}
+              onPress={() => handleQuickAdd('task')}
+              disabled={!quickAddTitle.trim() || savingQuickAdd}
+            >
+              <Text style={quickAddStyles.saveButtonText}>Save as Task</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[quickAddStyles.saveButton, { backgroundColor: '#8B5CF6', opacity: quickAddTitle.trim() ? 1 : 0.5 }]}
+              onPress={() => handleQuickAdd('event')}
+              disabled={!quickAddTitle.trim() || savingQuickAdd}
+            >
+              <Text style={quickAddStyles.saveButtonText}>Save as Event</Text>
+            </TouchableOpacity>
+          </View>
+          {savingQuickAdd && <ActivityIndicator size="small" color={DEPLOY_COLOR} style={{ marginTop: 8 }} />}
+        </View>
       )}
 
       {/* Week Plan Review - Show accumulated items from steps 2-4 */}
@@ -514,9 +589,7 @@ export function TacticalDeploymentStep({
         <WeekPlanReview
           items={weekPlanItems}
           onRemoveItem={onRemoveWeekPlanItem}
-          onAddMore={() => {
-            // Could open a task form
-          }}
+          onAddMore={() => setShowQuickAdd(true)}
           colors={colors}
         />
       )}
@@ -973,6 +1046,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     fontStyle: 'italic',
+  },
+});
+
+const quickAddStyles = StyleSheet.create({
+  container: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    gap: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
 
