@@ -2,15 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate } from '@/lib/dateUtils';
 
-interface AttentionState {
+export interface AttentionState {
   needsAttention: boolean;
+  weeklyAlignmentOverdue: boolean;
+  morningSparkDue: boolean;
   showOnboardingArrow: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
+  skipWeeklyAlignment: () => Promise<void>;
+  skipMorningSpark: () => Promise<void>;
 }
 
 export function useAttentionState(): AttentionState {
-  const [needsAttention, setNeedsAttention] = useState(false);
+  const [weeklyAlignmentOverdue, setWeeklyAlignmentOverdue] = useState(false);
+  const [morningSparkDue, setMorningSparkDue] = useState(false);
   const [showOnboardingArrow, setShowOnboardingArrow] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -23,92 +28,42 @@ export function useAttentionState(): AttentionState {
         return;
       }
 
-      let shouldSpin = false;
+      // === CHECK 1: Weekly Alignment for current week ===
+      // Calculate the start of the current week (Sunday)
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - dayOfWeek);
+      startOfWeek.setHours(0, 0, 0, 0);
+      const weekStartStr = formatLocalDate(startOfWeek);
 
-      // === CONDITION 1: MVV Status ===
-      const { data: northStar } = await supabase
-        .from('0008-ap-north-star')
-        .select('mission_statement, 5yr_vision, core_values')
+      const { data: thisWeekAlignment } = await supabase
+        .from('0008-ap-weekly-alignments')
+        .select('id, signed_at, skipped_at')
         .eq('user_id', user.id)
+        .eq('week_start_date', weekStartStr)
         .maybeSingle();
 
-      const hasMission = !!(northStar?.mission_statement?.trim());
-      const hasVision = !!(northStar?.['5yr_vision']?.trim());
-      const hasValues = northStar?.core_values && 
-        Array.isArray(northStar.core_values) && 
-        northStar.core_values.length > 0;
-      const mvvComplete = hasMission && hasVision && hasValues;
+      // Overdue if no record, or record exists but not signed and not skipped
+      const waComplete = !!(thisWeekAlignment?.signed_at);
+      const waSkipped = !!(thisWeekAlignment?.skipped_at);
+      const isWeeklyOverdue = !waComplete && !waSkipped;
+      setWeeklyAlignmentOverdue(isWeeklyOverdue);
 
-      // Check for recent MVV-related visits (72hr pause for incomplete, 30 days for complete)
-      const pauseHours = mvvComplete ? 720 : 72; // 720 hours = 30 days
-      const cutoff = new Date();
-      cutoff.setHours(cutoff.getHours() - pauseHours);
-
-      const { data: recentVisits } = await supabase
-        .from('0008-ap-north-star-visits')
-        .select('id')
-        .eq('user_id', user.id)
-        .in('visit_type', [
-          'mission_edit', 
-          'vision_edit', 
-          'values_edit', 
-          'weekly_alignment_step', 
-          'morning_spark_step'
-        ])
-        .gte('visited_at', cutoff.toISOString())
-        .limit(1);
-
-      const hasRecentVisit = recentVisits && recentVisits.length > 0;
-
-      // Condition 1a: MVV incomplete and no 72hr pause
-      if (!mvvComplete && !hasRecentVisit) {
-        shouldSpin = true;
-      }
-
-      // Condition 1b: MVV complete but stale (no review in 30 days)
-      if (mvvComplete && !hasRecentVisit) {
-        shouldSpin = true;
-      }
-
-      // === CONDITION 2: Weekly Alignment Overdue (7+ days) ===
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      const { data: recentAlignment } = await supabase
-        .from('0008-ap-weekly-alignments')
-        .select('id')
-        .eq('user_id', user.id)
-        .gte('signed_at', sevenDaysAgo.toISOString())
-        .limit(1);
-
-      if (!recentAlignment || recentAlignment.length === 0) {
-        shouldSpin = true;
-      }
-
-      // === CONDITION 3: Morning Spark Streak Broken (3+ consecutive days) ===
-      const today = new Date();
+      // === CHECK 2: Morning Spark for today ===
       const todayStr = formatLocalDate(today);
-      
-      // Check the last 3 days (today, yesterday, day before)
-      const sparkDates: string[] = [];
-      for (let i = 0; i < 3; i++) {
-        const checkDate = new Date(today);
-        checkDate.setDate(today.getDate() - i);
-        sparkDates.push(formatLocalDate(checkDate));
-      }
 
-      const { data: recentSparks } = await supabase
+      const { data: todaySpark } = await supabase
         .from('0008-ap-daily-sparks')
-        .select('spark_date')
+        .select('id, skipped')
         .eq('user_id', user.id)
-        .in('spark_date', sparkDates);
+        .eq('spark_date', todayStr)
+        .maybeSingle();
 
-      const foundSparkDates = new Set(recentSparks?.map(s => s.spark_date) || []);
-      const missedDays = sparkDates.filter(d => !foundSparkDates.has(d)).length;
-
-      if (missedDays >= 3) {
-        shouldSpin = true;
-      }
+      const sparkComplete = !!todaySpark;
+      const sparkSkipped = !!(todaySpark?.skipped);
+      const isSparkDue = !sparkComplete;
+      setMorningSparkDue(isSparkDue);
 
       // === CHECK ONBOARDING STATUS (for arrow) ===
       const { data: onboarding } = await supabase
@@ -118,16 +73,79 @@ export function useAttentionState(): AttentionState {
         .maybeSingle();
 
       const onboardingComplete = !!onboarding?.completed_at;
-
-      setNeedsAttention(shouldSpin);
       setShowOnboardingArrow(!onboardingComplete);
       setLoading(false);
 
     } catch (error) {
       console.error('Error checking attention state:', error);
-      setNeedsAttention(false);
+      setWeeklyAlignmentOverdue(false);
+      setMorningSparkDue(false);
       setShowOnboardingArrow(false);
       setLoading(false);
+    }
+  }, []);
+
+  // Skip Weekly Alignment for this week
+  const skipWeeklyAlignment = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - dayOfWeek);
+      const weekStartStr = formatLocalDate(startOfWeek);
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      const weekEndStr = formatLocalDate(endOfWeek);
+
+      // Upsert: create or update with skipped_at
+      await supabase
+        .from('0008-ap-weekly-alignments')
+        .upsert({
+          user_id: user.id,
+          week_start_date: weekStartStr,
+          week_end_date: weekEndStr,
+          skipped_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,week_start_date',
+        });
+
+      setWeeklyAlignmentOverdue(false);
+    } catch (error) {
+      console.error('Error skipping weekly alignment:', error);
+    }
+  }, []);
+
+  // Skip Morning Spark for today
+  const skipMorningSpark = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const todayStr = formatLocalDate(new Date());
+
+      // Insert a minimal spark record marked as skipped
+      await supabase
+        .from('0008-ap-daily-sparks')
+        .upsert({
+          user_id: user.id,
+          spark_date: todayStr,
+          fuel_level: 2,
+          mode: 'Steady',
+          initial_target_score: 35,
+          skipped: true,
+        }, {
+          onConflict: 'user_id,spark_date',
+        });
+
+      setMorningSparkDue(false);
+    } catch (error) {
+      console.error('Error skipping morning spark:', error);
     }
   }, []);
 
@@ -135,10 +153,17 @@ export function useAttentionState(): AttentionState {
     checkAttentionState();
   }, [checkAttentionState]);
 
+  // Derived: needsAttention is true when either is overdue (backward compat)
+  const needsAttention = weeklyAlignmentOverdue || morningSparkDue;
+
   return {
     needsAttention,
+    weeklyAlignmentOverdue,
+    morningSparkDue,
     showOnboardingArrow,
     loading,
     refresh: checkAttentionState,
+    skipWeeklyAlignment,
+    skipMorningSpark,
   };
 }
