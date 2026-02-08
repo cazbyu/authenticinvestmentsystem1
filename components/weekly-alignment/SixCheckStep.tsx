@@ -37,7 +37,6 @@ const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
 
 // Goal icon for card headers (matches app-wide icon)
 import { GoalIcon } from '@/components/icons/CustomIcons';
-import { AlignmentEscortCard } from './AlignmentEscortCard';
 
 interface SixCheckStepProps {
   userId: string;
