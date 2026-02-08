@@ -12,11 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X, ClipboardList } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
 import { recordNorthStarVisit } from '@/lib/northStarVisits';
+import { useWeekPlan } from '@/hooks/useWeekPlan';
 
 // Step Components
 import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarStep';
@@ -75,6 +76,9 @@ export default function WeeklyAlignmentScreen() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [completionAnimation] = useState(new Animated.Value(0));
   const [stepBackHandler, setStepBackHandler] = useState<(() => boolean) | null>(null);
+  const [guidedModeEnabled, setGuidedModeEnabled] = useState(true);
+
+  const weekPlan = useWeekPlan();
 
   useEffect(() => {
     loadInitialData();
@@ -110,6 +114,18 @@ export default function WeeklyAlignmentScreen() {
       if (existing) {
         setExistingAlignment(existing);
         // Could show a "continue" or "review" mode
+      }
+
+      // Load guided mode setting
+      const { data: ritualSettings } = await supabase
+        .from('0008-ap-user-ritual-settings')
+        .select('guided_mode_enabled')
+        .eq('user_id', user.id)
+        .eq('ritual_type', 'weekly_alignment')
+        .maybeSingle();
+
+      if (ritualSettings) {
+        setGuidedModeEnabled(ritualSettings.guided_mode_enabled ?? true);
       }
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -393,9 +409,17 @@ export default function WeeklyAlignmentScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
-            Weekly Alignment
-          </Text>
+          <View style={styles.headerTitleRow}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>
+              Weekly Alignment
+            </Text>
+            {guidedModeEnabled && weekPlan.itemCount > 0 && currentStep > 0 && (
+              <View style={[styles.weekPlanBadge, { backgroundColor: currentStepData.color }]}>
+                <ClipboardList size={14} color="#ffffff" />
+                <Text style={styles.weekPlanBadgeText}>{weekPlan.itemCount}</Text>
+              </View>
+            )}
+          </View>
           {renderStepDots()}
         </View>
 
@@ -430,6 +454,8 @@ export default function WeeklyAlignmentScreen() {
             onNext={goToNextStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlan={weekPlan}
           />
         )}
 
@@ -441,6 +467,8 @@ export default function WeeklyAlignmentScreen() {
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlan={weekPlan}
           />
         )}
 
@@ -452,6 +480,8 @@ export default function WeeklyAlignmentScreen() {
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlan={weekPlan}
           />
         )}
 
@@ -463,6 +493,8 @@ export default function WeeklyAlignmentScreen() {
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlan={weekPlan}
           />
         )}
 
@@ -473,6 +505,8 @@ export default function WeeklyAlignmentScreen() {
             onComplete={handleComplete}
             onBack={goToPreviousStep}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlan={weekPlan}
             capturedData={{
               missionReflection: alignmentData.missionReflection,
               roleHealthFlags: alignmentData.roleHealthFlags,
@@ -521,9 +555,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  weekPlanBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  weekPlanBadgeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   nextButton: {
     padding: 8,
