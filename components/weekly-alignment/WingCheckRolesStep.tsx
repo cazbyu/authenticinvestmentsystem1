@@ -86,6 +86,28 @@ function getWeekDates(weekStart: string): { label: string; value: string }[] {
   return dates;
 }
 
+// Time picker helpers
+function format12Hour(val: string): string {
+  const [hStr, mStr] = val.split(':');
+  let h = parseInt(hStr, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${mStr} ${ampm}`;
+}
+
+function generateTimeSlots(): string[] {
+  const slots: string[] = [];
+  for (let i = 0; i < 96; i++) {
+    const h = String(Math.floor(i / 4)).padStart(2, '0');
+    const m = String((i % 4) * 15).padStart(2, '0');
+    slots.push(`${h}:${m}`);
+  }
+  return slots;
+}
+
+const TIME_SLOTS = generateTimeSlots();
+
 // Compass Roles icon for Step 2 header (matches Step 1 sizing: 56x56 in 72x72 container)
 const CompassRolesIcon = require('@/assets/images/compass-roles.png');
 const DepositIdeaIcon = require('@/assets/images/deposit-idea.png');
@@ -290,6 +312,10 @@ export function WingCheckRolesStep({
   const ideaSectionY = useRef<number>(0);
   const oneThingInputRef = useRef<TextInput>(null);
   const ideaInputRef = useRef<TextInput>(null);
+
+  // Refs for time picker auto-scroll
+  const startTimeScrollRef = useRef<ScrollView>(null);
+  const endTimeScrollRef = useRef<ScrollView>(null);
 
   // Refs for back handler
   const flowStateRef = useRef<FlowState>(flowState);
@@ -2610,42 +2636,46 @@ async function loadRoleItemsData(role: Role) {
                 ))}
               </View>
 
-              {/* Time selection (events only) */}
+              {/* Time selection (events only) — vertical 15-min increments, 12-hour format */}
               {oneThingSaveType === 'event' && (
                 <View style={styles.timeRow}>
                   <View style={styles.timePickerRow}>
                     <Text style={[styles.timePickerLabel, { color: colors.textSecondary }]}>Start</Text>
                     <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.timeScroller}
-                      contentContainerStyle={styles.timeScrollerContent}
+                      ref={startTimeScrollRef}
+                      style={styles.verticalTimeScroller}
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={styles.verticalTimeContent}
+                      onLayout={() => {
+                        const idx = TIME_SLOTS.indexOf(selectedTime);
+                        if (idx >= 0) {
+                          startTimeScrollRef.current?.scrollTo({ y: Math.max(0, idx * 48 - 48), animated: false });
+                        }
+                      }}
                     >
-                      {Array.from({ length: 48 }, (_, i) => {
-                        const h = String(Math.floor(i / 2)).padStart(2, '0');
-                        const m = i % 2 === 0 ? '00' : '30';
-                        const val = `${h}:${m}`;
+                      {TIME_SLOTS.map((val, idx) => {
                         const isSelected = selectedTime === val;
                         return (
                           <TouchableOpacity
                             key={val}
                             style={[
-                              styles.timeChip,
+                              styles.timeRow12h,
                               {
-                                backgroundColor: isSelected ? categoryColor : colors.surface,
-                                borderColor: isSelected ? categoryColor : colors.border,
+                                backgroundColor: isSelected ? categoryColor : 'transparent',
+                                borderColor: isSelected ? categoryColor : 'transparent',
                               },
                             ]}
                             onPress={() => {
                               setSelectedTime(val);
-                              // Auto-advance end time to +1hr
-                              const endH = String((Math.floor(i / 2) + 1) % 24).padStart(2, '0');
-                              setSelectedEndTime(`${endH}:${m}`);
+                              // Auto-advance end time to +1hr, validate
+                              const startIdx = idx;
+                              const endIdx = Math.min(startIdx + 4, TIME_SLOTS.length - 1);
+                              setSelectedEndTime(TIME_SLOTS[endIdx]);
                             }}
                             activeOpacity={0.7}
                           >
-                            <Text style={[styles.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
-                              {val}
+                            <Text style={[styles.timeRow12hText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
+                              {format12Hour(val)}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -2655,31 +2685,40 @@ async function loadRoleItemsData(role: Role) {
                   <View style={styles.timePickerRow}>
                     <Text style={[styles.timePickerLabel, { color: colors.textSecondary }]}>End</Text>
                     <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.timeScroller}
-                      contentContainerStyle={styles.timeScrollerContent}
+                      ref={endTimeScrollRef}
+                      style={styles.verticalTimeScroller}
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={styles.verticalTimeContent}
+                      onLayout={() => {
+                        const idx = TIME_SLOTS.indexOf(selectedEndTime);
+                        if (idx >= 0) {
+                          endTimeScrollRef.current?.scrollTo({ y: Math.max(0, idx * 48 - 48), animated: false });
+                        }
+                      }}
                     >
-                      {Array.from({ length: 48 }, (_, i) => {
-                        const h = String(Math.floor(i / 2)).padStart(2, '0');
-                        const m = i % 2 === 0 ? '00' : '30';
-                        const val = `${h}:${m}`;
+                      {TIME_SLOTS.map((val) => {
                         const isSelected = selectedEndTime === val;
+                        // Disable times at or before start
+                        const isDisabled = val <= selectedTime;
                         return (
                           <TouchableOpacity
                             key={val}
                             style={[
-                              styles.timeChip,
+                              styles.timeRow12h,
                               {
-                                backgroundColor: isSelected ? categoryColor : colors.surface,
-                                borderColor: isSelected ? categoryColor : colors.border,
+                                backgroundColor: isSelected ? categoryColor : 'transparent',
+                                borderColor: isSelected ? categoryColor : 'transparent',
+                                opacity: isDisabled ? 0.3 : 1,
                               },
                             ]}
-                            onPress={() => setSelectedEndTime(val)}
+                            onPress={() => {
+                              if (!isDisabled) setSelectedEndTime(val);
+                            }}
+                            disabled={isDisabled}
                             activeOpacity={0.7}
                           >
-                            <Text style={[styles.timeChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
-                              {val}
+                            <Text style={[styles.timeRow12hText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
+                              {format12Hour(val)}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -3454,14 +3493,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   timeRow: {
-    flexDirection: 'column',
-    gap: 8,
+    flexDirection: 'row',
+    gap: 12,
     marginBottom: 16,
   },
   timePickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    flex: 1,
+    alignItems: 'stretch',
+    gap: 6,
   },
   timePickerLabel: {
     fontSize: 13,
@@ -3485,6 +3524,25 @@ const styles = StyleSheet.create({
   timeChipText: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  verticalTimeScroller: {
+    flex: 1,
+    maxHeight: 192,
+  },
+  verticalTimeContent: {
+    paddingVertical: 4,
+  },
+  timeRow12h: {
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 2,
+  },
+  timeRow12hText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   timeInput: {
     borderWidth: 1,
