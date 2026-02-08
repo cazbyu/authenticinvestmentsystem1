@@ -101,8 +101,6 @@ interface WingCheckRolesStepProps {
   onNext: () => void;
   onBack: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
-  guidedModeEnabled?: boolean;
-  weekPlan?: any;
   onDataCapture: (data: {
     rolesReviewed: string[];
     roleHealthFlags: Record<string, 'thriving' | 'stable' | 'needs_attention'>;
@@ -185,8 +183,6 @@ export function WingCheckRolesStep({
   onNext,
   onBack,
   onRegisterBackHandler,
-  guidedModeEnabled = false,
-  weekPlan,
   onDataCapture,
   onOpenTaskForm,
   guidedModeEnabled = true,
