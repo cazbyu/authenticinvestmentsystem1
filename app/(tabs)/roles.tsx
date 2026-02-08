@@ -21,7 +21,7 @@ import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetai
 import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
 import { getSupabaseClient } from '@/lib/supabase';
 import { AnalyticsView } from '@/components/analytics/AnalyticsView';
-import { Plus, Users, UserX, Ban, Menu, CreditCard as Edit2, Pencil } from 'lucide-react-native';
+import { Plus, Users, UserX, Ban, Menu, CreditCard as Edit2, Pencil, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
@@ -107,6 +107,8 @@ const { headerColor } = useHeaderColor();
   const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const fetchAbortController = useRef<AbortController | null>(null);
+  const krScrollRef = useRef<ScrollView>(null);
+  const [krScrollOffset, setKrScrollOffset] = useState(0);
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
   const previousRoleIdRef = useRef<string | null>(null);
   const fetchInProgressRef = useRef<boolean>(false);
@@ -1688,7 +1690,7 @@ const { headerColor } = useHeaderColor();
                 onPress={() => handleAddKR(selectedRole.id)}
                 disabled={krLoading}
               >
-                <Plus size={16} color="#0078d4" />
+                <Plus size={14} color="#0078d4" />
                 <Text style={styles.addKRButtonText}>KR</Text>
               </TouchableOpacity>
             </View>
@@ -1696,37 +1698,61 @@ const { headerColor } = useHeaderColor();
               <View style={styles.krLoadingContainer}>
                 <Text style={styles.krLoadingText}>Loading key relationships...</Text>
               </View>
-            ) : keyRelationships.length === 0 ? (
+            ) : keyRelationships.filter(kr => kr.role_id === selectedRole.id).length === 0 ? (
               <View style={styles.emptyKRContainer}>
                 <Text style={styles.emptyKRText}>No key relationships yet</Text>
               </View>
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.keyRelationshipsList}>
+              <View style={styles.krScrollWrapper}>
+                <TouchableOpacity
+                  style={styles.krScrollArrow}
+                  onPress={() => {
+                    const newOffset = Math.max(0, krScrollOffset - 200);
+                    krScrollRef.current?.scrollTo({ x: newOffset, animated: true });
+                  }}
+                >
+                  <ChevronLeft size={18} color="#6b7280" />
+                </TouchableOpacity>
+                <ScrollView
+                  ref={krScrollRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.krScrollContent}
+                  onScroll={(e) => setKrScrollOffset(e.nativeEvent.contentOffset.x)}
+                  scrollEventThrottle={16}
+                >
                   {keyRelationships.filter(kr => kr.role_id === selectedRole.id).map(kr => (
                     <TouchableOpacity
                       key={kr.id}
-                      style={styles.keyRelationshipCard}
+                      style={styles.krCircleItem}
                       onPress={() => setSelectedKR(kr)}
                     >
                       {kr.image_path && krImageUrls[kr.id] ? (
                         <Image
                           source={{ uri: krImageUrls[kr.id] || undefined }}
-                          style={styles.krImage}
+                          style={styles.krCircleImg}
                           onError={(error) => {
                             console.error('[RoleBank] Failed to load KR image:', kr.image_path, error.nativeEvent.error);
                           }}
                         />
                       ) : (
-                        <View style={styles.krImagePlaceholder}>
-                          <Users size={24} color="#6b7280" />
+                        <View style={styles.krCircleImgPlaceholder}>
+                          <Users size={22} color="#9ca3af" />
                         </View>
                       )}
-                      <Text style={styles.krName} numberOfLines={2}>{kr.name}</Text>
+                      <Text style={styles.krCircleLabel} numberOfLines={1}>{kr.name}</Text>
                     </TouchableOpacity>
                   ))}
-                </View>
-              </ScrollView>
+                </ScrollView>
+                <TouchableOpacity
+                  style={styles.krScrollArrow}
+                  onPress={() => {
+                    krScrollRef.current?.scrollTo({ x: krScrollOffset + 200, animated: true });
+                  }}
+                >
+                  <ChevronRight size={18} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </View>
@@ -2103,10 +2129,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
-    paddingVertical: 16,
+    paddingVertical: 10,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1f2937',
   },
@@ -2114,7 +2140,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
     paddingHorizontal: 16,
   },
   addKRButton: {
@@ -2134,7 +2160,7 @@ const styles = StyleSheet.create({
     color: '#0078d4',
   },
   emptyKRContainer: {
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
   },
@@ -2145,7 +2171,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   krLoadingContainer: {
-    paddingVertical: 20,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
   },
@@ -2154,41 +2180,50 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontStyle: 'italic',
   },
-  keyRelationshipsList: {
+  krScrollWrapper: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  keyRelationshipCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    padding: 12,
     alignItems: 'center',
-    width: 100,
+    paddingHorizontal: 4,
+  },
+  krScrollArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  krScrollContent: {
+    paddingHorizontal: 8,
+    gap: 14,
+    alignItems: 'center',
+  },
+  krCircleItem: {
+    alignItems: 'center',
+    width: 64,
+  },
+  krCircleImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginBottom: 4,
+  },
+  krCircleImgPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  krImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginBottom: 8,
-  },
-  krImagePlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#e5e7eb',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  krName: {
-    fontSize: 12,
+  krCircleLabel: {
+    fontSize: 11,
     fontWeight: '500',
-    color: '#1f2937',
+    color: '#374151',
     textAlign: 'center',
-    lineHeight: 16,
   },
   loadingContainer: {
     padding: 40,
