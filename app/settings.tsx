@@ -1227,6 +1227,42 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Alignment Guide Section */}
+        <View style={[styles.section, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Alignment Guide</Text>
+          <Text style={[styles.settingDescription, { color: colors.textSecondary, marginBottom: 12 }]}>
+            The Alignment Guide coaches you through the Weekly Alignment ritual, helping you create purpose-aligned tasks, events, and ideas as you reflect.
+          </Text>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>Alignment Guide</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                {userPreferences?.guided_mode_enabled !== false
+                  ? 'Coaching nudges appear during Weekly Alignment'
+                  : 'Coaching nudges are hidden — you know the way'}
+              </Text>
+            </View>
+            <Switch
+              value={userPreferences?.guided_mode_enabled !== false}
+              onValueChange={async (value) => {
+                setUserPreferences(prev => prev ? { ...prev, guided_mode_enabled: value } : null);
+                try {
+                  const supabase = getSupabaseClient();
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (user) {
+                    await updateUserPreferences(user.id, { guided_mode_enabled: value });
+                  }
+                } catch (error) {
+                  console.error('Error updating guided mode:', error);
+                }
+              }}
+              trackColor={{ false: colors.border, true: '#ed1c24' }}
+              thumbColor={colors.surface}
+            />
+          </View>
+        </View>
+
         {/* Appearance Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
