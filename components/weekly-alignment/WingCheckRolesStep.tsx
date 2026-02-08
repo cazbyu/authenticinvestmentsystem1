@@ -51,6 +51,7 @@ import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
 import { EditKRModal } from '@/components/settings/EditKRModal';
 import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
 
 // Helper function to get Monday of current week
 function getWeekStartDate(date: Date): Date {
@@ -105,6 +106,9 @@ interface WingCheckRolesStepProps {
     roleHealthFlags: Record<string, 'thriving' | 'stable' | 'needs_attention'>;
   }) => void;
   onOpenTaskForm?: (initialData: any) => void;
+  guidedModeEnabled?: boolean;
+  weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
+  onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
 }
 
 interface Role {
@@ -181,6 +185,9 @@ export function WingCheckRolesStep({
   onRegisterBackHandler,
   onDataCapture,
   onOpenTaskForm,
+  guidedModeEnabled = true,
+  weekPlanItems = [],
+  onAddWeekPlanItem,
 }: WingCheckRolesStepProps) {
   const router = useRouter();
   
@@ -197,6 +204,9 @@ export function WingCheckRolesStep({
   const [saving, setSaving] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showAddKRModal, setShowAddKRModal] = useState(false);
+
+  // Escort card dismissed state
+  const [escortDismissed, setEscortDismissed] = useState<Record<string, boolean>>({});
   
   // Role reflection state
   const [selectedReflectionRole, setSelectedReflectionRole] = useState<Role | null>(null);
@@ -1421,6 +1431,16 @@ async function loadRoleItemsData(role: Role) {
             </Text>
           </View>
 
+          {/* Escort: After reviewing prioritized roles */}
+          {guidedModeEnabled && !escortDismissed['step2-roles-reviewed'] && (
+            <AlignmentEscortCard
+              type="prompt"
+              message="You've got your roles in focus. As you reflect on each one, think: what's ONE thing you could do this week to show up well in this role?"
+              stepColor={ROLES_COLOR}
+              onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step2-roles-reviewed': true }))}
+            />
+          )}
+
           {/* All Roles List - NO R1/R2/R3 badges, priority sort maintained */}
           {allRolesSorted.map((role) => {
             const categoryColor = getCategoryColor(role.category);
@@ -1553,6 +1573,41 @@ async function loadRoleItemsData(role: Role) {
                 <ActivityIndicator size="small" color={categoryColor} />
                 <Text style={[styles.loadingText, { color: colors.textSecondary, marginTop: 4 }]}>Loading...</Text>
               </View>
+            )}
+
+            {/* Escort: After reflecting on a specific role's purpose */}
+            {guidedModeEnabled && !escortDismissed[`step2-role-${selectedReflectionRole.id}`] && selectedReflectionRole.purpose && (
+              <AlignmentEscortCard
+                type="prompt"
+                message={`That's a meaningful purpose for your role as ${selectedReflectionRole.label}. Want to turn that into something concrete for this week?`}
+                actionLabel="Create a Task"
+                actionLabel2="Capture an Idea"
+                stepColor={ROLES_COLOR}
+                onAction={() => {
+                  if (onAddWeekPlanItem) {
+                    // The user will create via existing ONE Thing form - just dismiss escort
+                  }
+                  setEscortDismissed(prev => ({ ...prev, [`step2-role-${selectedReflectionRole.id}`]: true }));
+                }}
+                onAction2={() => {
+                  setEscortDismissed(prev => ({ ...prev, [`step2-role-${selectedReflectionRole.id}`]: true }));
+                }}
+                onDismiss={() => setEscortDismissed(prev => ({ ...prev, [`step2-role-${selectedReflectionRole.id}`]: true }))}
+              />
+            )}
+
+            {/* Escort: Role flagged as needs attention (no purpose defined) */}
+            {guidedModeEnabled && !escortDismissed[`step2-role-attention-${selectedReflectionRole.id}`] && !selectedReflectionRole.purpose && !selectedReflectionRole.dream && (
+              <AlignmentEscortCard
+                type="prompt"
+                message={`Your ${selectedReflectionRole.label} role could use some attention. Even a small step counts. What could you do this week?`}
+                actionLabel="Add Something Small"
+                stepColor={ROLES_COLOR}
+                onAction={() => {
+                  setEscortDismissed(prev => ({ ...prev, [`step2-role-attention-${selectedReflectionRole.id}`]: true }));
+                }}
+                onDismiss={() => setEscortDismissed(prev => ({ ...prev, [`step2-role-attention-${selectedReflectionRole.id}`]: true }))}
+              />
             )}
 
             {/* ===== SECTION 1: ONE Thing This Week ===== */}

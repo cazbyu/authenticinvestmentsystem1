@@ -15,6 +15,7 @@ import { ChevronRight, ChevronLeft, Edit3, Lightbulb, HelpCircle } from 'lucide-
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
 import { 
   trackQuestionShown, 
   trackQuestionAnswered, 
@@ -31,6 +32,7 @@ interface TouchYourStarStepProps {
     visionAcknowledged?: boolean;
     valuesAcknowledged?: boolean;
   }) => void;
+  guidedModeEnabled?: boolean;
 }
 
 interface NorthStarData {
@@ -103,6 +105,7 @@ export function TouchYourStarStep({
   onNext,
   onRegisterBackHandler,
   onDataCapture,
+  guidedModeEnabled = true,
 }: TouchYourStarStepProps) {
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -160,6 +163,9 @@ export function TouchYourStarStep({
   // UI state
   const [saving, setSaving] = useState(false);
   const [resumePrompt, setResumePrompt] = useState<{ domain: DomainType; hasResponses: boolean } | null>(null);
+
+  // Escort card dismissed state
+  const [escortDismissed, setEscortDismissed] = useState<Record<string, boolean>>({});
 
   // Custom input ref for auto-focus
   const customInputRef = useRef<TextInput>(null);
@@ -1173,6 +1179,17 @@ export function TouchYourStarStep({
               )}
             </View>
 
+            {/* Escort: Opening nudge for Step 1 */}
+            {guidedModeEnabled && !escortDismissed['step1-opening'] && (
+              <AlignmentEscortCard
+                type="nudge"
+                message="Before we plan your week, let's reconnect with who you are and where you're headed. Everything we build this week flows from here."
+                icon="compass"
+                stepColor="#ed1c24"
+                onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step1-opening': true }))}
+              />
+            )}
+
             {/* Hero Question Card */}
             <View style={[styles.heroQuestionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {/* North Star Icon - 75% smaller (was 48, now 36) */}
@@ -1332,6 +1349,17 @@ export function TouchYourStarStep({
             </View>
           )}
         </View>
+
+        {/* Escort: Returning user nudge */}
+        {guidedModeEnabled && !escortDismissed['step1-returning'] && (hasMission || hasVision || hasValues) && (
+          <AlignmentEscortCard
+            type="nudge"
+            message="Take a moment — does your mission still feel true? Has anything shifted since last week?"
+            icon="star"
+            stepColor="#ed1c24"
+            onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step1-returning': true }))}
+          />
+        )}
 
         {/* Resume Prompt */}
         {resumePrompt && (

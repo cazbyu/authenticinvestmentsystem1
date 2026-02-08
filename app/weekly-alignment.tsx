@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
 import { recordNorthStarVisit } from '@/lib/northStarVisits';
+import type { WeekPlanItem } from '@/types/weekPlan';
 
 // Step Components
 import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarStep';
@@ -24,6 +25,7 @@ import { WingCheckRolesStep } from '@/components/weekly-alignment/WingCheckRoles
 import { WingCheckWellnessStep } from '@/components/weekly-alignment/WingCheckWellnessStep';
 import { SixCheckStep } from '@/components/weekly-alignment/SixCheckStep';
 import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
+import { WeekPlanBadge } from '@/components/weekly-alignment/WeekPlanBadge';
 // Note: StepIndicatorCompact removed - using inline clickable version
 
 // Types
@@ -76,6 +78,24 @@ export default function WeeklyAlignmentScreen() {
   const [completionAnimation] = useState(new Animated.Value(0));
   const [stepBackHandler, setStepBackHandler] = useState<(() => boolean) | null>(null);
 
+  // Alignment Escort state
+  const [guidedModeEnabled, setGuidedModeEnabled] = useState(true);
+  const [weekPlanItems, setWeekPlanItems] = useState<WeekPlanItem[]>([]);
+
+  // Week Plan accumulator callbacks
+  const addWeekPlanItem = useCallback((item: Omit<WeekPlanItem, 'id' | 'created_at'>) => {
+    const newItem: WeekPlanItem = {
+      ...item,
+      id: `wp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      created_at: new Date().toISOString(),
+    };
+    setWeekPlanItems(prev => [...prev, newItem]);
+  }, []);
+
+  const removeWeekPlanItem = useCallback((id: string) => {
+    setWeekPlanItems(prev => prev.filter(item => item.id !== id));
+  }, []);
+
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -92,6 +112,17 @@ export default function WeeklyAlignmentScreen() {
       }
 
       setUserId(user.id);
+
+      // Load guided mode preference
+      const { data: prefs } = await supabase
+        .from('0008-ap-user-preferences')
+        .select('guided_mode_enabled')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (prefs !== null && prefs.guided_mode_enabled !== undefined) {
+        setGuidedModeEnabled(prefs.guided_mode_enabled);
+      }
 
       // Check if there's already a weekly alignment for this week
       const today = new Date();
@@ -273,6 +304,7 @@ export default function WeeklyAlignmentScreen() {
         setCurrentStep(0);
         setAlignmentData({});
         setExistingAlignment(null);
+        setWeekPlanItems([]);
       } catch (error) {
         console.error('Reset error:', error);
         if (Platform.OS === 'web') {
@@ -340,7 +372,10 @@ export default function WeeklyAlignmentScreen() {
               Your Commitment:
             </Text>
             <Text style={[styles.completionKeystone, { color: colors.text }]}>
-              {(alignmentData.committedTasks?.length || 0) + (alignmentData.committedEvents?.length || 0)} items committed this week
+              {weekPlanItems.length > 0
+                ? `${weekPlanItems.length} aligned actions, all connected to your purpose`
+                : `${(alignmentData.committedTasks?.length || 0) + (alignmentData.committedEvents?.length || 0)} items committed this week`
+              }
             </Text>
           </View>
 
@@ -393,9 +428,17 @@ export default function WeeklyAlignmentScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
-            Weekly Alignment
-          </Text>
+          <View style={styles.headerTitleRow}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>
+              Weekly Alignment
+            </Text>
+            {currentStep >= 1 && guidedModeEnabled && (
+              <WeekPlanBadge
+                count={weekPlanItems.length}
+                color={currentStepData.color}
+              />
+            )}
+          </View>
           {renderStepDots()}
         </View>
 
@@ -430,6 +473,7 @@ export default function WeeklyAlignmentScreen() {
             onNext={goToNextStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
           />
         )}
 
@@ -441,6 +485,9 @@ export default function WeeklyAlignmentScreen() {
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
           />
         )}
 
@@ -452,6 +499,9 @@ export default function WeeklyAlignmentScreen() {
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
           />
         )}
 
@@ -463,6 +513,9 @@ export default function WeeklyAlignmentScreen() {
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
           />
         )}
 
@@ -480,6 +533,10 @@ export default function WeeklyAlignmentScreen() {
               laggingGoals: alignmentData.laggingGoals,
               keyFocusGoal: alignmentData.keyFocusGoal,
             }}
+            guidedModeEnabled={guidedModeEnabled}
+            weekPlanItems={weekPlanItems}
+            onAddWeekPlanItem={addWeekPlanItem}
+            onRemoveWeekPlanItem={removeWeekPlanItem}
           />
         )}
       </View>
@@ -518,6 +575,11 @@ const styles = StyleSheet.create({
   },
   headerCenter: {
     flex: 1,
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },

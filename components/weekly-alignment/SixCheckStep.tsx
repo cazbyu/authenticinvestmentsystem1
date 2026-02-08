@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 import { ChevronRight, Check, HelpCircle, TrendingUp, Calendar, ChevronDown, ChevronUp, Repeat, Rocket, Plus } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
 import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchPlannedActionsforWeek';
 import { parseLocalDate } from '@/lib/dateUtils';
 import { useGoals, Timeline } from '@/hooks/useGoals';
@@ -53,6 +54,9 @@ interface SixCheckStepProps {
     weekNumber?: number;
     keyFocusGoal?: string;
   }) => void;
+  guidedModeEnabled?: boolean;
+  weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
+  onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
 }
 
 interface AnnualGoal {
@@ -205,6 +209,9 @@ export function SixCheckStep({
   onBack,
   onRegisterBackHandler,
   onDataCapture,
+  guidedModeEnabled = true,
+  weekPlanItems = [],
+  onAddWeekPlanItem,
 }: SixCheckStepProps) {
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -218,6 +225,9 @@ export function SixCheckStep({
   
   // Planned actions state (from new helper)
   const [plannedActionsData, setPlannedActionsData] = useState<PlannedActionsResult | null>(null);
+
+  // Escort card dismissed state
+  const [escortDismissed, setEscortDismissed] = useState<Record<string, boolean>>({});
   
   // UI state
   const [loading, setLoading] = useState(true);
@@ -1499,6 +1509,31 @@ export function SixCheckStep({
           </View>
         </View>
       </View>
+
+      {/* Escort: When reviewing active campaigns */}
+      {guidedModeEnabled && !escortDismissed['step4-campaigns'] && (
+        <AlignmentEscortCard
+          type="nudge"
+          message="These are the mountains you're climbing. Which one gets your focus this week?"
+          icon="compass"
+          stepColor={GOALS_COLOR}
+          onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step4-campaigns': true }))}
+        />
+      )}
+
+      {/* Escort: If no items created yet by Step 4 */}
+      {guidedModeEnabled && !escortDismissed['step4-no-items'] && weekPlanItems.length === 0 && (
+        <AlignmentEscortCard
+          type="nudge"
+          message="You've done great reflection work so far. Before we move to your commitment, let's turn some of that thinking into action items for this week."
+          actionLabel="Start Adding Actions"
+          stepColor={GOALS_COLOR}
+          onAction={() => {
+            setEscortDismissed(prev => ({ ...prev, 'step4-no-items': true }));
+          }}
+          onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step4-no-items': true }))}
+        />
+      )}
 
       {/* Action Buttons */}
       <View style={styles.actionButtonsSection}>

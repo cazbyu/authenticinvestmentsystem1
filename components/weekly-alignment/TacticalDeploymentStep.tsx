@@ -28,6 +28,8 @@ import TacticalDayRows, { EnrichedItem, WeekDay } from './TacticalDayRows';
 import TacticalDelegateCard, { DelegateContact } from './TacticalDelegateCard';
 import GoalCampaignsCard from './GoalCampaignsCard';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
+import { WeekPlanReview } from './WeekPlanReview';
 
 const CalendarImage = require('@/assets/images/calendar.png');
 const TaskListImage = require('@/assets/images/task-list.png');
@@ -51,6 +53,10 @@ interface TacticalDeploymentStepProps {
     wellnessZoneFocus?: Array<{ zoneId: string; zoneName: string; focusText: string }>;
     roleFocus?: Array<{ roleId: string; roleLabel: string; focusText: string }>;
   };
+  guidedModeEnabled?: boolean;
+  weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
+  onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
+  onRemoveWeekPlanItem?: (id: string) => void;
 }
 
 export interface WeeklyContractData {
@@ -68,6 +74,10 @@ export function TacticalDeploymentStep({
   onBack,
   onRegisterBackHandler,
   capturedData,
+  guidedModeEnabled = true,
+  weekPlanItems = [],
+  onAddWeekPlanItem,
+  onRemoveWeekPlanItem,
 }: TacticalDeploymentStepProps) {
   const [loading, setLoading] = useState(true);
   const [enrichedTasks, setEnrichedTasks] = useState<EnrichedItem[]>([]);
@@ -478,6 +488,38 @@ export function TacticalDeploymentStep({
           </View>
         )}
       </View>
+
+      {/* Escort: Opening message for Step 5 */}
+      {guidedModeEnabled && weekPlanItems.length > 0 && (
+        <AlignmentEscortCard
+          type="celebrate"
+          message={`You've captured ${weekPlanItems.length} aligned action${weekPlanItems.length !== 1 ? 's' : ''} across your roles, wellness, and goals. Let's review your week and lock it in.`}
+          stepColor="#f5a623"
+        />
+      )}
+      {guidedModeEnabled && weekPlanItems.length === 0 && (
+        <AlignmentEscortCard
+          type="nudge"
+          message="Before you sign off on your week, take a moment to add at least a few tasks or events that connect to what you've reflected on."
+          actionLabel="Add Actions Now"
+          stepColor="#f5a623"
+          onAction={() => {
+            // Could open a task form - for now just dismiss
+          }}
+        />
+      )}
+
+      {/* Week Plan Review - Show accumulated items from steps 2-4 */}
+      {guidedModeEnabled && weekPlanItems.length > 0 && onRemoveWeekPlanItem && (
+        <WeekPlanReview
+          items={weekPlanItems}
+          onRemoveItem={onRemoveWeekPlanItem}
+          onAddMore={() => {
+            // Could open a task form
+          }}
+          colors={colors}
+        />
+      )}
 
       {/* Focus Areas */}
       {hasFocusAreas && (
