@@ -658,6 +658,7 @@ export function WingCheckWellnessStep({
               z.id === updatedZone.id ? updatedZone : z
             ));
           }}
+          onAddWeekPlanItem={onAddWeekPlanItem}
         />
       </Animated.View>
     );

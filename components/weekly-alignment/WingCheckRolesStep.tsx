@@ -842,6 +842,17 @@ async function loadRoleItemsData(role: Role) {
       setExistingOneThingTask(newTask);
       showSavedFeedback('oneThing');
 
+      // Track in week plan accumulator
+      if (onAddWeekPlanItem && selectedReflectionRole) {
+        onAddWeekPlanItem({
+          type: oneThingSaveType === 'event' ? 'event' : 'task',
+          title: oneThingText.trim(),
+          source_step: 2,
+          source_context: `Role: ${selectedReflectionRole.label}`,
+          aligned_to: selectedReflectionRole.purpose || undefined,
+        });
+      }
+
     } catch (error) {
       console.error('Error saving ONE Thing:', error);
       showErrorAlert('Failed to save ONE Thing.');
@@ -881,6 +892,17 @@ async function loadRoleItemsData(role: Role) {
         });
 
       if (joinError) throw joinError;
+
+      // Track in week plan accumulator
+      if (onAddWeekPlanItem && selectedReflectionRole) {
+        onAddWeekPlanItem({
+          type: 'idea',
+          title: ideaText.trim(),
+          source_step: 2,
+          source_context: `Role: ${selectedReflectionRole.label}`,
+          aligned_to: selectedReflectionRole.purpose || undefined,
+        });
+      }
 
       setIdeaText('');
       showSavedFeedback('idea');
