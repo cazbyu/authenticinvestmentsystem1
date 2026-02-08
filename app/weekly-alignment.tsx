@@ -385,7 +385,10 @@ export default function WeeklyAlignmentScreen() {
           </Text>
           
           <Text style={[styles.completionSubtitle, { color: colors.textSecondary }]}>
-            You're aligned and ready to conquer this week.
+            {weekPlanItems.length > 0
+              ? `Your week is aligned. ${weekPlanItems.length} action${weekPlanItems.length !== 1 ? 's' : ''}, all connected to your purpose. Go make it happen.`
+              : "You're aligned and ready to conquer this week."
+            }
           </Text>
 
           <View style={[styles.completionCard, { backgroundColor: colors.surface, borderColor: '#10B981' }]}>

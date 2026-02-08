@@ -19,7 +19,7 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { X, Compass, Lightbulb, Star, PartyPopper } from 'lucide-react-native';
+import { X, Compass, Lightbulb, Star, Sparkles } from 'lucide-react-native';
 import type { AlignmentEscortCardProps } from '@/types/weekPlan';
 
 const BRAND_COLOR = '#ed1c24';
@@ -62,7 +62,7 @@ function getIcon(type: AlignmentEscortCardProps['type'], iconName?: string) {
     case 'prompt':
       return Lightbulb;
     case 'celebrate':
-      return PartyPopper;
+      return Sparkles;
   }
 }
 
