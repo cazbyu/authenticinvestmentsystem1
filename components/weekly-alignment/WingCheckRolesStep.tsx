@@ -49,6 +49,7 @@ import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
+import { EditKRModal } from '@/components/settings/EditKRModal';
 import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 
 // Helper function to get Monday of current week
@@ -195,6 +196,7 @@ export function WingCheckRolesStep({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showAddKRModal, setShowAddKRModal] = useState(false);
   
   // Role reflection state
   const [selectedReflectionRole, setSelectedReflectionRole] = useState<Role | null>(null);
@@ -2397,10 +2399,7 @@ async function loadRoleItemsData(role: Role) {
               
               <TouchableOpacity
                 style={[styles.placeholderButton, { borderColor: categoryColor }]}
-                onPress={() => {
-                  // TODO: Trigger standard Key Relationship creation flow
-                  router.push('/(tabs)/roles');
-                }}
+                onPress={() => setShowAddKRModal(true)}
                 activeOpacity={0.7}
               >
                 <Plus size={16} color={categoryColor} />
@@ -2570,6 +2569,20 @@ async function loadRoleItemsData(role: Role) {
             </View>
           </View>
         </Modal>
+
+        <EditKRModal
+          visible={showAddKRModal}
+          onClose={() => setShowAddKRModal(false)}
+          onUpdate={() => {
+            if (selectedReflectionRole) {
+              loadRoleItemsData(selectedReflectionRole);
+            }
+          }}
+          keyRelationship={null}
+          roleName={selectedReflectionRole?.label}
+          mode="add"
+          addRoleId={selectedReflectionRole?.id}
+        />
       </Animated.View>
     );
   }

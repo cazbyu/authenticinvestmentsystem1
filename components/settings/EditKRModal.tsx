@@ -28,9 +28,12 @@ interface EditKRModalProps {
     role_id: string;
   } | null;
   roleName?: string;
+  mode?: 'edit' | 'add';
+  addRoleId?: string;
 }
 
-export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleName }: EditKRModalProps) {
+export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleName, mode = 'edit', addRoleId }: EditKRModalProps) {
+  const isAddMode = mode === 'add';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -39,12 +42,18 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (isAddMode) {
+      setName('');
+      setDescription('');
+      setImagePath(null);
+      setImageUrl(null);
+      return;
+    }
     if (keyRelationship) {
       setName(keyRelationship.name || '');
       setDescription(keyRelationship.description || '');
       setImagePath(keyRelationship.image_path || null);
 
-      // Get public URL if image path exists
       if (keyRelationship.image_path) {
         try {
           const supabase = getSupabaseClient();
@@ -66,7 +75,7 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
       setImagePath(null);
       setImageUrl(null);
     }
-  }, [keyRelationship]);
+  }, [keyRelationship, isAddMode, visible]);
 
   const pickImage = async () => {
     try {
@@ -147,8 +156,7 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
       const response = await fetch(uri);
       const blob = await response.blob();
       
-      // Create unique filename
-      const fileName = `${user.id}/${keyRelationship?.id || 'temp'}_${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/${keyRelationship?.id || 'new'}_${Date.now()}.${fileExt}`;
 
       // Remove old image if exists
       if (imagePath) {
@@ -202,30 +210,56 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
   };
 
   const handleSave = async () => {
-    if (!keyRelationship || !name.trim()) return;
+    if (!name.trim()) return;
 
     try {
       setSaving(true);
-
       const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('0008-ap-key-relationships')
-        .update({
-          name: name.trim(),
-          description: description.trim() || null,
-          image_path: imagePath,
-          updated_at: toLocalISOString(new Date())
-        })
-        .eq('id', keyRelationship.id);
 
-      if (error) throw error;
+      if (isAddMode) {
+        const roleId = addRoleId;
+        if (!roleId) throw new Error('No role selected');
 
-      Alert.alert('Success', 'Key relationship updated successfully');
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('No user found');
+
+        const { error } = await supabase
+          .from('0008-ap-key-relationships')
+          .insert({
+            name: name.trim(),
+            description: description.trim() || null,
+            image_path: imagePath,
+            role_id: roleId,
+            user_id: user.id,
+            updated_at: toLocalISOString(new Date()),
+          });
+
+        if (error) throw error;
+
+        Alert.alert('Success', 'Key relationship added successfully');
+      } else {
+        if (!keyRelationship) return;
+
+        const { error } = await supabase
+          .from('0008-ap-key-relationships')
+          .update({
+            name: name.trim(),
+            description: description.trim() || null,
+            image_path: imagePath,
+            updated_at: toLocalISOString(new Date())
+          })
+          .eq('id', keyRelationship.id);
+
+        if (error) throw error;
+
+        Alert.alert('Success', 'Key relationship updated successfully');
+      }
+
       onUpdate();
       onClose();
     } catch (error) {
-      console.error('Error updating key relationship:', error);
-      Alert.alert('Error', (error as Error).message || 'Failed to update key relationship');
+      console.error('Error saving key relationship:', error);
+      Alert.alert('Error', (error as Error).message || 'Failed to save key relationship');
     } finally {
       setSaving(false);
     }
@@ -271,13 +305,13 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
     );
   };
 
-  if (!keyRelationship) return null;
+  if (!isAddMode && !keyRelationship) return null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Edit Key Relationship</Text>
+          <Text style={styles.headerTitle}>{isAddMode ? 'Add Key Relationship' : 'Edit Key Relationship'}</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <X size={24} color="#1f2937" />
           </TouchableOpacity>
@@ -349,8 +383,9 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
                 style={styles.input}
                 value={name}
                 onChangeText={setName}
-                placeholder="Enter relationship name"
+                placeholder={isAddMode ? "Add the name here..." : "Enter relationship name"}
                 placeholderTextColor="#9ca3af"
+                autoFocus={isAddMode}
               />
             </View>
 
@@ -371,15 +406,17 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
         </ScrollView>
 
         <View style={styles.actions}>
-          <TouchableOpacity 
-            style={styles.deleteButton}
-            onPress={handleDelete}
-          >
-            <Trash2 size={16} color="#ffffff" />
-            <Text style={styles.deleteButtonText}>Delete</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
+          {!isAddMode && (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDelete}
+            >
+              <Trash2 size={16} color="#ffffff" />
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
             style={[styles.saveButton, (!name.trim() || saving) && styles.saveButtonDisabled]}
             onPress={handleSave}
             disabled={!name.trim() || saving}
@@ -387,7 +424,7 @@ export function EditKRModal({ visible, onClose, onUpdate, keyRelationship, roleN
             {saving ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+              <Text style={styles.saveButtonText}>{isAddMode ? 'Add Relationship' : 'Save Changes'}</Text>
             )}
           </TouchableOpacity>
         </View>
