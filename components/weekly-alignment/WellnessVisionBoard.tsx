@@ -1035,6 +1035,25 @@ export function WellnessVisionBoard({
             <View style={st.headerTextContainer}>
               <Text style={[st.stepLabel, { color: zoneColor }]}>My Living Vision Board</Text>
               <Text style={[st.stepTitle, { color: colors.text }]}>{zone.name}</Text>
+              {(() => {
+                const userPurpose = zone.purpose || zone.fulfillment_vision;
+                const defaultDescriptions: Record<string, string> = {
+                  physical: 'Nourishing my body through movement, rest, and nutrition',
+                  emotional: 'Processing feelings with honesty and building resilience',
+                  intellectual: 'Growing my mind through learning and curiosity',
+                  social: 'Building meaningful connections and community',
+                  spiritual: 'Deepening my relationship with God and living with purpose',
+                  financial: 'Managing resources wisely to support what matters most',
+                  recreational: 'Making time for play, hobbies, and renewal',
+                  community: 'Contributing to something bigger than myself',
+                };
+                const text = userPurpose || defaultDescriptions[zone.name.toLowerCase()];
+                return text ? (
+                  <Text style={{ fontSize: 14, fontStyle: 'italic', color: '#666666', marginTop: 4 }}>
+                    "{text}"
+                  </Text>
+                ) : null;
+              })()}
             </View>
             <TouchableOpacity
               style={st.tooltipButton}
