@@ -1649,6 +1649,11 @@ async function loadRoleItemsData(role: Role) {
                   <Text style={[styles.stepTitle, { color: colors.text }]}>
                     {selectedReflectionRole.label}
                   </Text>
+                  {selectedReflectionRole.purpose ? (
+                    <Text style={{ fontSize: 14, fontStyle: 'italic', color: '#666666', marginTop: 4 }}>
+                      "{selectedReflectionRole.purpose}"
+                    </Text>
+                  ) : null}
                 </View>
                 <TouchableOpacity
                   style={styles.tooltipButton}
