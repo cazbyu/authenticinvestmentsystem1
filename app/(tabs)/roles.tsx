@@ -82,6 +82,8 @@ const { headerColor } = useHeaderColor();
   const [manageRolesVisible, setManageRolesVisible] = useState(false);
   const [editRoleVisible, setEditRoleVisible] = useState(false);
   const [editKRVisible, setEditKRVisible] = useState(false);
+  const [addKRMode, setAddKRMode] = useState(false);
+  const [addKRRoleId, setAddKRRoleId] = useState<string | null>(null);
   const [taskFormVisible, setTaskFormVisible] = useState(false);
   const [taskDetailVisible, setTaskDetailVisible] = useState(false);
   const [depositIdeaDetailVisible, setDepositIdeaDetailVisible] = useState(false);
@@ -1225,6 +1227,8 @@ const { headerColor } = useHeaderColor();
   };
 
   const handleEditKR = (kr: KeyRelationship) => {
+    setAddKRMode(false);
+    setAddKRRoleId(null);
     setEditingKR(kr);
     setEditKRVisible(true);
   };
@@ -1243,51 +1247,25 @@ const { headerColor } = useHeaderColor();
     if (selectedRole) {
       fetchKeyRelationships(selectedRole.id);
     }
+    if (addKRRoleId) {
+      fetchKeyRelationships(addKRRoleId);
+    }
     fetchAllKeyRelationships();
     setEditKRVisible(false);
     setEditingKR(null);
+    setAddKRMode(false);
+    setAddKRRoleId(null);
   };
 
-  const handleAddKR = async (roleId: string) => {
-    try {
-      // Validate role_id before creating KR
-      if (!roleId) {
-        Alert.alert('Error', 'A valid role must be selected to create a key relationship.');
-        return;
-      }
-
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Create new KR with role_id - this permanently links the KR to the role
-      const { data, error } = await supabase
-        .from('0008-ap-key-relationships')
-        .insert({
-          name: 'New Key Relationship',
-          role_id: roleId, // Critical: KR is permanently linked to this role
-          user_id: user.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Find and set the selected role
-      const role = roles.find(r => r.id === roleId);
-      if (role && !selectedRole) {
-        setSelectedRole(role);
-      }
-
-      // Refresh KRs - will only fetch KRs for this specific roleId
-      await fetchKeyRelationships(roleId);
-      await fetchAllKeyRelationships();
-      setEditingKR(data);
-      setEditKRVisible(true);
-    } catch (error) {
-      console.error('Error creating key relationship:', error);
-      Alert.alert('Error', (error as Error).message);
+  const handleAddKR = (roleId: string) => {
+    if (!roleId) {
+      Alert.alert('Error', 'A valid role must be selected to create a key relationship.');
+      return;
     }
+    setAddKRMode(true);
+    setAddKRRoleId(roleId);
+    setEditingKR(null);
+    setEditKRVisible(true);
   };
 
   // Speed Dial FAB handler - creates activity with context-aware role/KR pre-selection
@@ -1711,7 +1689,7 @@ const { headerColor } = useHeaderColor();
                 disabled={krLoading}
               >
                 <Plus size={16} color="#0078d4" />
-                <Text style={styles.addKRButtonText}>Add KR</Text>
+                <Text style={styles.addKRButtonText}>KR</Text>
               </TouchableOpacity>
             </View>
             {krLoading ? (
@@ -1812,7 +1790,7 @@ const { headerColor } = useHeaderColor();
                           onPress={() => handleAddKR(role.id)}
                         >
                           <Plus size={16} color="#0078d4" />
-                          <Text style={styles.krAddButtonText}>Add KR</Text>
+                          <Text style={styles.krAddButtonText}>KR</Text>
                         </TouchableOpacity>
                       </View>
                       {roleKRs.length === 0 ? (
@@ -1820,46 +1798,32 @@ const { headerColor } = useHeaderColor();
                           <Text style={styles.krEmptyText}>No key relationships yet</Text>
                         </View>
                       ) : (
-                        <View style={styles.krItems}>
-                          {roleKRs.map(kr => (
-                            <TouchableOpacity
-                              key={kr.id}
-                              style={styles.krItem}
-                              onPress={() => {
-                                setSelectedRole(role);
-                                setSelectedKR(kr);
-                              }}
-                            >
-                              {kr.image_path && krImageUrls[kr.id] ? (
-                                <Image
-                                  source={{ uri: krImageUrls[kr.id] || undefined }}
-                                  style={styles.krItemImage}
-                                />
-                              ) : (
-                                <View style={styles.krItemImagePlaceholder}>
-                                  <Users size={20} color="#6b7280" />
-                                </View>
-                              )}
-                              <View style={styles.krItemInfo}>
-                                <Text style={styles.krItemName}>{kr.name}</Text>
-                                {kr.description && (
-                                  <Text style={styles.krItemDescription} numberOfLines={1}>
-                                    {kr.description}
-                                  </Text>
-                                )}
-                              </View>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          <View style={styles.krCircleList}>
+                            {roleKRs.map(kr => (
                               <TouchableOpacity
-                                style={styles.krItemEditButton}
-                                onPress={(e) => {
-                                  e.stopPropagation();
-                                  handleEditKR(kr);
+                                key={kr.id}
+                                style={styles.krCircleCard}
+                                onPress={() => {
+                                  setSelectedRole(role);
+                                  setSelectedKR(kr);
                                 }}
                               >
-                                <Pencil size={16} color="#6b7280" />
+                                {kr.image_path && krImageUrls[kr.id] ? (
+                                  <Image
+                                    source={{ uri: krImageUrls[kr.id] || undefined }}
+                                    style={styles.krCircleImage}
+                                  />
+                                ) : (
+                                  <View style={styles.krCirclePlaceholder}>
+                                    <Users size={24} color="#6b7280" />
+                                  </View>
+                                )}
+                                <Text style={styles.krCircleName} numberOfLines={2}>{kr.name}</Text>
                               </TouchableOpacity>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
+                            ))}
+                          </View>
+                        </ScrollView>
                       )}
                     </View>
                   );
@@ -1896,10 +1860,16 @@ const { headerColor } = useHeaderColor();
 
       <EditKRModal
         visible={editKRVisible}
-        onClose={() => setEditKRVisible(false)}
+        onClose={() => {
+          setEditKRVisible(false);
+          setAddKRMode(false);
+          setAddKRRoleId(null);
+        }}
         onUpdate={handleKRUpdate}
         keyRelationship={editingKR}
-        roleName={selectedRole?.label}
+        roleName={addKRMode ? roles.find(r => r.id === addKRRoleId)?.label : selectedRole?.label}
+        mode={addKRMode ? 'add' : 'edit'}
+        addRoleId={addKRRoleId || undefined}
       />
 
       <Modal visible={taskFormVisible} animationType="slide" presentationStyle="pageSheet">
@@ -2513,6 +2483,37 @@ const styles = StyleSheet.create({
   },
   krItemEditButton: {
     padding: 8,
+  },
+  krCircleList: {
+    flexDirection: 'row',
+    gap: 16,
+    paddingVertical: 4,
+  },
+  krCircleCard: {
+    alignItems: 'center',
+    width: 72,
+  },
+  krCircleImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginBottom: 6,
+  },
+  krCirclePlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  krCircleName: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#1f2937',
+    textAlign: 'center',
+    lineHeight: 14,
   },
   // Role Bank Sub-Header Styles
   roleBankSubHeader: {
