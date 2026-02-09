@@ -99,27 +99,32 @@ export function useAttentionState(): AttentionState {
       }
 
       // === CONDITION 3: Morning Spark Streak Broken (3+ consecutive days) ===
-      const todayStr = formatLocalDate(today);
-      
-      // Check the last 3 days (today, yesterday, day before)
-      const sparkDates: string[] = [];
-      for (let i = 0; i < 3; i++) {
-        const checkDate = new Date(today);
-        checkDate.setDate(today.getDate() - i);
-        sparkDates.push(formatLocalDate(checkDate));
-      }
+      // Skip if user already completed Step 1 of Weekly Alignment this week
+      const hasCompletedStep1ThisWeek = currentWeekAlignment && currentWeekAlignment.length > 0;
 
-      const { data: recentSparks } = await supabase
-        .from('0008-ap-daily-sparks')
-        .select('spark_date')
-        .eq('user_id', user.id)
-        .in('spark_date', sparkDates);
+      if (!hasCompletedStep1ThisWeek) {
+        const todayStr = formatLocalDate(today);
+        
+        // Check the last 3 days (today, yesterday, day before)
+        const sparkDates: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          const checkDate = new Date(today);
+          checkDate.setDate(today.getDate() - i);
+          sparkDates.push(formatLocalDate(checkDate));
+        }
 
-      const foundSparkDates = new Set(recentSparks?.map(s => s.spark_date) || []);
-      const missedDays = sparkDates.filter(d => !foundSparkDates.has(d)).length;
+        const { data: recentSparks } = await supabase
+          .from('0008-ap-daily-sparks')
+          .select('spark_date')
+          .eq('user_id', user.id)
+          .in('spark_date', sparkDates);
 
-      if (missedDays >= 3) {
-        shouldSpin = true;
+        const foundSparkDates = new Set(recentSparks?.map(s => s.spark_date) || []);
+        const missedDays = sparkDates.filter(d => !foundSparkDates.has(d)).length;
+
+        if (missedDays >= 3) {
+          shouldSpin = true;
+        }
       }
 
       // === CHECK ONBOARDING STATUS (for arrow) ===
