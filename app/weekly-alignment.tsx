@@ -234,12 +234,25 @@ export default function WeeklyAlignmentScreen() {
         user_id: userId,
         week_start_date: weekStart,
         week_end_date: weekEnd,
-        committed_tasks: contractData.committed_tasks,
-        committed_events: contractData.committed_events,
-        delegated_tasks: contractData.delegated_tasks,
-        personal_commitment: contractData.personal_commitment,
+        
+        // Contract data from Step 5 - convert to jsonb
+        committed_tasks: JSON.stringify(contractData.committed_tasks || []),
+        committed_events: JSON.stringify(contractData.committed_events || []),
+        delegated_tasks: JSON.stringify(contractData.delegated_tasks || []),
+        personal_commitment: contractData.personal_commitment || '',
+        
+        // Step data captured during the flow - convert to jsonb
+        roles_reviewed: JSON.stringify(alignmentData.roleHealthFlags || {}),
+        wellness_zones_reviewed: JSON.stringify(alignmentData.flaggedWellnessZones || []),
+        goals_reviewed: JSON.stringify({
+          lagging: alignmentData.laggingGoals || [],
+          focusGoalId: alignmentData.keyFocusGoal || null,
+        }),
+        
+        // Timestamps
         signed_at: contractData.signed_at,
         completed_at: new Date().toISOString(),
+        step_5_ended: new Date().toISOString(),
       };
 
       if (existingAlignment) {
