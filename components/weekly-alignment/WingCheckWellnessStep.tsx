@@ -132,8 +132,7 @@ export function WingCheckWellnessStep({
   
   // Zone reflection state
   const [selectedReflectionZone, setSelectedReflectionZone] = useState<WellnessZone | null>(null);
-  const [weekStartDate, setWeekStartDate] = useState<string>('');
-  const [weekStartDay, setWeekStartDay] = useState<'sunday' | 'monday'>('sunday');
+  
   
   // Animation
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -146,13 +145,7 @@ export function WingCheckWellnessStep({
   }, [flowState]);
 
   // Calculate week start date after we have user preference
-  useEffect(() => {
-    if (weekStartDay) {
-      const weekStart = getWeekStart(new Date(), weekStartDay);
-      setWeekStartDate(formatLocalDate(weekStart));
-    }
-  }, [weekStartDay]);
-
+  
   // Back handler for parent component
   useEffect(() => {
     if (onRegisterBackHandler) {
@@ -194,16 +187,7 @@ export function WingCheckWellnessStep({
       const supabase = getSupabaseClient();
 
       // Load user's week start preference
-      const { data: userData } = await supabase
-        .from('0008-ap-users')
-        .select('week_start_day')
-        .eq('id', userId)
-        .single();
       
-      if (userData?.week_start_day) {
-        setWeekStartDay(userData.week_start_day as 'sunday' | 'monday');
-      }
-
       // Load all wellness zones from domains table
       const { data: domainsData, error: domainsError } = await supabase
         .from('0008-ap-domains')
