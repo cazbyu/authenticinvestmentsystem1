@@ -146,65 +146,6 @@ function getDaysUntilYearEnd(): { months: number; days: number } {
   return { months, days };
 }
 
-// Helper to get the current week's date range based on user's preferred week start day
-// weekStartDay: 0 = Sunday, 1 = Monday, etc.
-function getCurrentWeekDateRange(weekStartDay: number = 1): string {
-  const now = new Date();
-  const currentDayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  
-  // Calculate the start of the week based on user preference
-  let daysToStart = currentDayOfWeek - weekStartDay;
-  if (daysToStart < 0) daysToStart += 7;
-  
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - daysToStart);
-  
-  // Calculate end of week (6 days after start)
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  
-  // Format as "Feb 3 - 9" or "Jan 27 - Feb 2" if spans months
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const startMonth = monthNames[weekStart.getMonth()];
-  const endMonth = monthNames[weekEnd.getMonth()];
-  
-  if (startMonth === endMonth) {
-    return `${startMonth} ${weekStart.getDate()} - ${weekEnd.getDate()}`;
-  } else {
-    return `${startMonth} ${weekStart.getDate()} - ${endMonth} ${weekEnd.getDate()}`;
-  }
-}
-
-// Convert week_start_day to number - handles string names, numbers, or numeric strings
-function parseWeekStartDay(weekStartDay: string | number | null | undefined): number {
-  if (weekStartDay === null || weekStartDay === undefined) return 1; // Default to Monday
-  
-  // If it's already a number
-  if (typeof weekStartDay === 'number') {
-    return weekStartDay >= 0 && weekStartDay <= 6 ? weekStartDay : 1;
-  }
-  
-  // If it's a numeric string like "0" or "1"
-  const numericValue = parseInt(weekStartDay, 10);
-  if (!isNaN(numericValue) && numericValue >= 0 && numericValue <= 6) {
-    return numericValue;
-  }
-  
-  // If it's a day name string
-  const dayMap: Record<string, number> = {
-    'sunday': 0, 'sun': 0,
-    'monday': 1, 'mon': 1,
-    'tuesday': 2, 'tue': 2,
-    'wednesday': 3, 'wed': 3,
-    'thursday': 4, 'thu': 4,
-    'friday': 5, 'fri': 5,
-    'saturday': 6, 'sat': 6,
-  };
-  
-  const normalized = weekStartDay.toString().toLowerCase().trim();
-  return dayMap[normalized] ?? 1; // Default to Monday if unrecognized
-}
-
 export function SixCheckStep({
   userId,
   colors,
@@ -226,7 +167,6 @@ export function SixCheckStep({
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [topWellnessZones, setTopWellnessZones] = useState<WellnessZone[]>([]);
   const [topRoles, setTopRoles] = useState<Role[]>([]);
-  const [weekStartDay, setWeekStartDay] = useState<number>(1); // Default Monday
   
   // Planned actions state (from new helper)
   const [plannedActionsData, setPlannedActionsData] = useState<PlannedActionsResult | null>(null);
@@ -321,23 +261,6 @@ export function SixCheckStep({
       if (fetchedTimeline) {
         setTimeline(fetchedTimeline);
         console.log('[SixCheckStep] Timeline loaded:', fetchedTimeline.id, fetchedTimeline.source);
-      }
-
-      // Load user preferences for week_start_day from main users table
-      const { data: userData, error: userError } = await supabase
-        .from('0008-ap-users')
-        .select('week_start_day')
-        .eq('id', userId)
-        .single();
-
-      console.log('[SixCheckStep] Week start day from users table:', { userData, userError });
-      
-      if (!userError && userData?.week_start_day !== undefined && userData?.week_start_day !== null) {
-        const parsedDay = parseWeekStartDay(userData.week_start_day);
-        console.log('[SixCheckStep] Parsed week_start_day:', { raw: userData.week_start_day, parsed: parsedDay });
-        setWeekStartDay(parsedDay);
-      } else {
-        console.log('[SixCheckStep] Using default week_start_day: 1 (Monday)');
       }
 
       // Load annual goals
@@ -634,7 +557,7 @@ export function SixCheckStep({
   // Current week info - use actual dates from timeline data
   const currentWeekNumber = plannedActionsData?.week?.weekNumber;
   
-  // Use actual timeline week dates if available, otherwise calculate
+  // Use actual timeline week dates if available, otherwise use props
   const currentWeekDateRange = (() => {
     const weekData = plannedActionsData?.week;
     if (weekData?.startDate && weekData?.endDate) {
@@ -652,8 +575,22 @@ export function SixCheckStep({
         return `${startMonth} ${startDate.getDate()} - ${endMonth} ${endDate.getDate()}`;
       }
     }
-    // Fallback to calculation if no timeline data
-    return getCurrentWeekDateRange(weekStartDay);
+    // Fallback to props if no timeline data
+    if (weekStartDate && weekEndDate) {
+      const startDate = parseLocalDate(weekStartDate);
+      const endDate = parseLocalDate(weekEndDate);
+      
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const startMonth = monthNames[startDate.getMonth()];
+      const endMonth = monthNames[endDate.getMonth()];
+      
+      if (startMonth === endMonth) {
+        return `${startMonth} ${startDate.getDate()} - ${endDate.getDate()}`;
+      } else {
+        return `${startMonth} ${startDate.getDate()} - ${endMonth} ${endDate.getDate()}`;
+      }
+    }
+    return 'This Week';
   })();
 
   const { months: monthsLeft, days: daysLeft } = getDaysUntilYearEnd();

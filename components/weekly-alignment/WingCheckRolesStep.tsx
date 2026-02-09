@@ -50,19 +50,9 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
 import { EditKRModal } from '@/components/settings/EditKRModal';
-import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate } from '@/lib/dateUtils';
 import { AlignmentEscortCard } from './AlignmentEscortCard';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
-
-// Helper function to get Monday of current week
-function getWeekStartDate(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 // Format a date as "Mon, Feb 3"
 function formatShortDate(dateStr: string): string {
@@ -298,10 +288,6 @@ export function WingCheckRolesStep({
   const [allVisionAnswered, setAllVisionAnswered] = useState(false);
   const [allMissionAnswered, setAllMissionAnswered] = useState(false);
   
-  // Week tracking
-  const [weekStartDate, setWeekStartDate] = useState<string>('');
-  const [weekStartDay, setWeekStartDay] = useState<'sunday' | 'monday'>('sunday');
-  
   // Loading
   const [loadingRoleData, setLoadingRoleData] = useState(false);
   
@@ -328,14 +314,6 @@ export function WingCheckRolesStep({
   useEffect(() => {
     flowStateRef.current = flowState;
   }, [flowState]);
-
-  // Calculate week start date
-  useEffect(() => {
-    if (weekStartDay) {
-      const weekStart = getWeekStart(new Date(), weekStartDay);
-      setWeekStartDate(formatLocalDate(weekStart));
-    }
-  }, [weekStartDay]);
 
   // Back handler for parent component
   useEffect(() => {
@@ -410,17 +388,6 @@ export function WingCheckRolesStep({
   async function loadData() {
     try {
       const supabase = getSupabaseClient();
-
-      // Load user's week start preference
-      const { data: userData } = await supabase
-        .from('0008-ap-users')
-        .select('week_start_day')
-        .eq('id', userId)
-        .single();
-      
-      if (userData?.week_start_day) {
-        setWeekStartDay(userData.week_start_day as 'sunday' | 'monday');
-      }
 
       // Load all active roles (including dream field)
       const { data: rolesData, error: rolesError } = await supabase
