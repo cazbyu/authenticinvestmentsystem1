@@ -105,40 +105,117 @@ export function TacticalDeploymentStep({
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [savingQuickAdd, setSavingQuickAdd] = useState(false);
 
+  // Quick-tag panel state
+  const [pendingTaskTitle, setPendingTaskTitle] = useState('');
+  const [pendingTaskType, setPendingTaskType] = useState<'task' | 'event' | null>(null);
+  const [showQuickTagPanel, setShowQuickTagPanel] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [selectedWellnessZone, setSelectedWellnessZone] = useState<string | null>(null);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [userRoles, setUserRoles] = useState<Array<{ id: string; label: string; color?: string }>>([]);
+  const [userDomains, setUserDomains] = useState<Array<{ id: string; name: string }>>([]);
+  const [userGoals, setUserGoals] = useState<Array<{ id: string; title: string; goal_type: '12week' | 'custom' }>>([]);
+
   async function handleQuickAdd(type: 'task' | 'event') {
     if (!quickAddTitle.trim() || !userId) return;
+    
+    // Instead of saving immediately, show the quick-tag panel
+    setPendingTaskTitle(quickAddTitle.trim());
+    setPendingTaskType(type);
+    setShowQuickTagPanel(true);
+    
+    // Reset selections to defaults
+    const today = toLocalISOString(new Date()).split('T')[0];
+    setSelectedDate(today);
+    setSelectedRoleId(null);
+    setSelectedWellnessZone(null);
+    setSelectedGoalId(null);
+  }
+
+  async function handleConfirmQuickTag() {
+    if (!pendingTaskTitle.trim() || !pendingTaskType || !userId) return;
     setSavingQuickAdd(true);
     try {
       const supabase = getSupabaseClient();
-      const today = toLocalISOString(new Date()).split('T')[0];
 
       const insertData: Record<string, any> = {
         user_id: userId,
-        title: quickAddTitle.trim(),
-        type,
+        title: pendingTaskTitle.trim(),
+        type: pendingTaskType,
         status: 'pending',
       };
 
-      if (type === 'task') {
-        insertData.due_date = today;
+      if (pendingTaskType === 'task') {
+        insertData.due_date = selectedDate;
         insertData.is_anytime = true;
       } else {
-        insertData.start_date = today;
+        insertData.start_date = selectedDate;
         insertData.is_anytime = false;
       }
 
-      await supabase.from('0008-ap-tasks').insert(insertData);
+      const { data: taskData, error: taskError } = await supabase
+        .from('0008-ap-tasks')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (taskError) throw taskError;
+
+      const taskId = taskData.id;
+
+      // Handle role join
+      if (selectedRoleId) {
+        await supabase.from('0008-ap-universal-roles-join').insert({
+          parent_id: taskId,
+          parent_type: 'task',
+          role_id: selectedRoleId,
+          user_id: userId,
+        });
+      }
+
+      // Handle wellness zone (domain) join
+      if (selectedWellnessZone) {
+        await supabase.from('0008-ap-universal-domains-join').insert({
+          parent_id: taskId,
+          parent_type: 'task',
+          domain_id: selectedWellnessZone,
+          user_id: userId,
+        });
+      }
+
+      // Handle goal join
+      if (selectedGoalId) {
+        const selectedGoal = userGoals.find(g => g.id === selectedGoalId);
+        if (selectedGoal) {
+          await supabase.from('0008-ap-universal-goals-join').insert({
+            parent_id: taskId,
+            parent_type: 'task',
+            goal_type: selectedGoal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
+            twelve_wk_goal_id: selectedGoal.goal_type === '12week' ? selectedGoalId : null,
+            custom_goal_id: selectedGoal.goal_type === 'custom' ? selectedGoalId : null,
+            user_id: userId,
+          });
+        }
+      }
 
       if (onAddWeekPlanItem) {
         onAddWeekPlanItem({
-          type,
-          title: quickAddTitle.trim(),
+          type: pendingTaskType,
+          title: pendingTaskTitle.trim(),
           source_step: 5,
           source_context: 'Quick add from Deployment',
         });
       }
 
+      // Clear the input and hide the panel
       setQuickAddTitle('');
+      setPendingTaskTitle('');
+      setPendingTaskType(null);
+      setShowQuickTagPanel(false);
+
+      // Refresh the week data to show the new task
+      await loadWeekData();
     } catch (error) {
       console.error('Error quick-adding item:', error);
     } finally {
@@ -146,8 +223,20 @@ export function TacticalDeploymentStep({
     }
   }
 
+  function handleCancelQuickTag() {
+    setShowQuickTagPanel(false);
+    setPendingTaskTitle('');
+    setPendingTaskType(null);
+    setSelectedRoleId(null);
+    setSelectedWellnessZone(null);
+    setSelectedGoalId(null);
+  }
+
   useEffect(() => {
     loadWeekData();
+    // Set default selected date to today
+    const today = toLocalISOString(new Date()).split('T')[0];
+    setSelectedDate(today);
   }, []);
 
   useEffect(() => {
@@ -363,6 +452,40 @@ export function TacticalDeploymentStep({
         }
       }
       setDelegates(Array.from(uniqueDelegates.values()));
+
+      // Load roles, domains, and goals for quick-tag panel
+      const [rolesForTagRes, domainsForTagRes, goalsForTagRes, customGoalsRes] = await Promise.all([
+        supabase
+          .from('0008-ap-roles')
+          .select('id, label, color')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('priority_order', { ascending: true }),
+        supabase
+          .from('0008-ap-domains')
+          .select('id, name')
+          .order('name', { ascending: true }),
+        supabase
+          .from('0008-ap-goals-12wk')
+          .select('id, title')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .is('archived', false)
+          .order('start_date', { ascending: true }),
+        supabase
+          .from('0008-ap-goals-custom')
+          .select('id, title')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .order('title', { ascending: true }),
+      ]);
+
+      setUserRoles(rolesForTagRes.data || []);
+      setUserDomains(domainsForTagRes.data || []);
+      
+      const combined12WeekGoals = (goalsForTagRes.data || []).map(g => ({ ...g, goal_type: '12week' as const }));
+      const combinedCustomGoals = (customGoalsRes.data || []).map(g => ({ ...g, goal_type: 'custom' as const }));
+      setUserGoals([...combined12WeekGoals, ...combinedCustomGoals]);
 
     } catch (error) {
       console.error('Error loading week data:', error);
@@ -580,7 +703,194 @@ export function TacticalDeploymentStep({
               <Text style={quickAddStyles.saveButtonText}>Save as Event</Text>
             </TouchableOpacity>
           </View>
-          {savingQuickAdd && <ActivityIndicator size="small" color={DEPLOY_COLOR} style={{ marginTop: 8 }} />}
+
+          {/* Quick Tag Panel */}
+          {showQuickTagPanel && (
+            <View style={[quickAddStyles.tagPanel, { backgroundColor: colors.background, borderColor: DEPLOY_COLOR_BORDER }]}>
+              {/* Date Picker Row */}
+              <View style={quickAddStyles.tagSection}>
+                <Text style={[quickAddStyles.tagLabel, { color: colors.text }]}>📅 Date:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={quickAddStyles.dateScroll}>
+                  <View style={quickAddStyles.dateChipsRow}>
+                    {weekDays.map((day) => {
+                      const isSelected = selectedDate === day.date;
+                      return (
+                        <TouchableOpacity
+                          key={day.date}
+                          style={[
+                            quickAddStyles.dateChip,
+                            {
+                              backgroundColor: isSelected ? DEPLOY_COLOR : 'transparent',
+                              borderColor: isSelected ? DEPLOY_COLOR : colors.border,
+                            },
+                          ]}
+                          onPress={() => setSelectedDate(day.date)}
+                        >
+                          <Text style={[quickAddStyles.dateChipText, { color: isSelected ? '#000000' : colors.text }]}>
+                            {day.label.split(',')[0]}
+                          </Text>
+                          <Text style={[quickAddStyles.dateChipDay, { color: isSelected ? '#000000' : colors.textSecondary }]}>
+                            {day.label.split(' ')[2]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Role Dropdown */}
+              <View style={quickAddStyles.tagSection}>
+                <Text style={[quickAddStyles.tagLabel, { color: colors.text }]}>👤 Role (optional):</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={quickAddStyles.optionsRow}>
+                    <TouchableOpacity
+                      style={[
+                        quickAddStyles.optionChip,
+                        {
+                          backgroundColor: selectedRoleId === null ? DEPLOY_COLOR : 'transparent',
+                          borderColor: selectedRoleId === null ? DEPLOY_COLOR : colors.border,
+                        },
+                      ]}
+                      onPress={() => setSelectedRoleId(null)}
+                    >
+                      <Text style={[quickAddStyles.optionText, { color: selectedRoleId === null ? '#000000' : colors.text }]}>
+                        None
+                      </Text>
+                    </TouchableOpacity>
+                    {userRoles.map((role) => {
+                      const isSelected = selectedRoleId === role.id;
+                      return (
+                        <TouchableOpacity
+                          key={role.id}
+                          style={[
+                            quickAddStyles.optionChip,
+                            {
+                              backgroundColor: isSelected ? DEPLOY_COLOR : 'transparent',
+                              borderColor: isSelected ? DEPLOY_COLOR : colors.border,
+                            },
+                          ]}
+                          onPress={() => setSelectedRoleId(role.id)}
+                        >
+                          <Text style={[quickAddStyles.optionText, { color: isSelected ? '#000000' : colors.text }]}>
+                            {role.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Wellness Zone Dropdown */}
+              <View style={quickAddStyles.tagSection}>
+                <Text style={[quickAddStyles.tagLabel, { color: colors.text }]}>🌿 Wellness (optional):</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={quickAddStyles.optionsRow}>
+                    <TouchableOpacity
+                      style={[
+                        quickAddStyles.optionChip,
+                        {
+                          backgroundColor: selectedWellnessZone === null ? DEPLOY_COLOR : 'transparent',
+                          borderColor: selectedWellnessZone === null ? DEPLOY_COLOR : colors.border,
+                        },
+                      ]}
+                      onPress={() => setSelectedWellnessZone(null)}
+                    >
+                      <Text style={[quickAddStyles.optionText, { color: selectedWellnessZone === null ? '#000000' : colors.text }]}>
+                        None
+                      </Text>
+                    </TouchableOpacity>
+                    {userDomains.map((domain) => {
+                      const isSelected = selectedWellnessZone === domain.id;
+                      return (
+                        <TouchableOpacity
+                          key={domain.id}
+                          style={[
+                            quickAddStyles.optionChip,
+                            {
+                              backgroundColor: isSelected ? DEPLOY_COLOR : 'transparent',
+                              borderColor: isSelected ? DEPLOY_COLOR : colors.border,
+                            },
+                          ]}
+                          onPress={() => setSelectedWellnessZone(domain.id)}
+                        >
+                          <Text style={[quickAddStyles.optionText, { color: isSelected ? '#000000' : colors.text }]}>
+                            {domain.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Goal Dropdown */}
+              <View style={quickAddStyles.tagSection}>
+                <Text style={[quickAddStyles.tagLabel, { color: colors.text }]}>🎯 Goal (optional):</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={quickAddStyles.optionsRow}>
+                    <TouchableOpacity
+                      style={[
+                        quickAddStyles.optionChip,
+                        {
+                          backgroundColor: selectedGoalId === null ? DEPLOY_COLOR : 'transparent',
+                          borderColor: selectedGoalId === null ? DEPLOY_COLOR : colors.border,
+                        },
+                      ]}
+                      onPress={() => setSelectedGoalId(null)}
+                    >
+                      <Text style={[quickAddStyles.optionText, { color: selectedGoalId === null ? '#000000' : colors.text }]}>
+                        None
+                      </Text>
+                    </TouchableOpacity>
+                    {userGoals.map((goal) => {
+                      const isSelected = selectedGoalId === goal.id;
+                      return (
+                        <TouchableOpacity
+                          key={goal.id}
+                          style={[
+                            quickAddStyles.optionChip,
+                            {
+                              backgroundColor: isSelected ? DEPLOY_COLOR : 'transparent',
+                              borderColor: isSelected ? DEPLOY_COLOR : colors.border,
+                            },
+                          ]}
+                          onPress={() => setSelectedGoalId(goal.id)}
+                        >
+                          <Text style={[quickAddStyles.optionText, { color: isSelected ? '#000000' : colors.text }]}>
+                            {goal.title}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Confirm and Cancel Buttons */}
+              <View style={quickAddStyles.tagButtonRow}>
+                <TouchableOpacity
+                  style={[quickAddStyles.cancelButton, { borderColor: colors.border }]}
+                  onPress={handleCancelQuickTag}
+                  disabled={savingQuickAdd}
+                >
+                  <Text style={[quickAddStyles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[quickAddStyles.confirmButton, { backgroundColor: DEPLOY_COLOR }]}
+                  onPress={handleConfirmQuickTag}
+                  disabled={savingQuickAdd}
+                >
+                  {savingQuickAdd ? (
+                    <ActivityIndicator size="small" color="#000000" />
+                  ) : (
+                    <Text style={quickAddStyles.confirmButtonText}>✓ Confirm</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -1076,6 +1386,89 @@ const quickAddStyles = StyleSheet.create({
   saveButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  tagPanel: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 16,
+  },
+  tagSection: {
+    gap: 8,
+  },
+  tagLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  dateScroll: {
+    marginHorizontal: -4,
+  },
+  dateChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  dateChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  dateChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  dateChipDay: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  optionChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  optionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tagButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  confirmButton: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmButtonText: {
+    color: '#000000',
+    fontSize: 15,
     fontWeight: '700',
   },
 });
