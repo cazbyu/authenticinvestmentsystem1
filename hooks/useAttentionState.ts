@@ -99,7 +99,6 @@ export function useAttentionState(): AttentionState {
       }
 
       // === CONDITION 3: Morning Spark Streak Broken (3+ consecutive days) ===
-      const today = new Date();
       const todayStr = formatLocalDate(today);
       
       // Check the last 3 days (today, yesterday, day before)
