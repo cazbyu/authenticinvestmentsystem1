@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, getWeekStart } from '@/lib/dateUtils';
 
 interface AttentionState {
   needsAttention: boolean;
@@ -70,18 +70,31 @@ export function useAttentionState(): AttentionState {
         shouldSpin = true;
       }
 
-      // === CONDITION 2: Weekly Alignment Overdue (7+ days) ===
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // === CONDITION 2: Weekly Alignment - Check if step_1_completed exists for current week ===
+      // Get user's week start preference
+      const { data: userData } = await supabase
+        .from('0008-ap-users')
+        .select('week_start_day')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      const weekStartDay = (userData?.week_start_day === 'monday' ? 'monday' : 'sunday') as 'sunday' | 'monday';
+      
+      // Calculate current week's start date
+      const today = new Date();
+      const startOfWeek = getWeekStart(today, weekStartDay);
+      const currentWeekStartDate = formatLocalDate(startOfWeek);
 
-      const { data: recentAlignment } = await supabase
+      // Check if step_1_completed exists for current week
+      const { data: currentWeekAlignment } = await supabase
         .from('0008-ap-weekly-alignments')
-        .select('id')
+        .select('step_1_completed')
         .eq('user_id', user.id)
-        .gte('signed_at', sevenDaysAgo.toISOString())
+        .eq('week_start_date', currentWeekStartDate)
+        .not('step_1_completed', 'is', null)
         .limit(1);
 
-      if (!recentAlignment || recentAlignment.length === 0) {
+      if (!currentWeekAlignment || currentWeekAlignment.length === 0) {
         shouldSpin = true;
       }
 
