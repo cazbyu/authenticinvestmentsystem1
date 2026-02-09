@@ -52,6 +52,7 @@ import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
 import { EditKRModal } from '@/components/settings/EditKRModal';
 import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 import { AlignmentEscortCard } from './AlignmentEscortCard';
+import { updateStepTimestamp } from '@/lib/weeklyAlignment';
 
 // Helper function to get Monday of current week
 function getWeekStartDate(date: Date): Date {
@@ -131,6 +132,8 @@ interface WingCheckRolesStepProps {
   guidedModeEnabled?: boolean;
   weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
+  weekStartDate: string;
+  weekEndDate: string;
 }
 
 interface Role {
@@ -210,6 +213,8 @@ export function WingCheckRolesStep({
   guidedModeEnabled = true,
   weekPlanItems = [],
   onAddWeekPlanItem,
+  weekStartDate,
+  weekEndDate,
 }: WingCheckRolesStepProps) {
   const router = useRouter();
   
@@ -359,6 +364,13 @@ export function WingCheckRolesStep({
   useEffect(() => {
     loadData();
   }, []);
+
+  // Write step_2_started on mount
+  useEffect(() => {
+    if (userId && weekStartDate && weekEndDate) {
+      updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_2_started');
+    }
+  }, [userId, weekStartDate, weekEndDate]);
 
   function resetReflectionState() {
     setPurposeResponse('');
@@ -1177,6 +1189,8 @@ async function loadRoleItemsData(role: Role) {
       rolesReviewed: selectedRoleIds,
       roleHealthFlags: {},
     });
+    // Write step_2_ended before advancing
+    updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_2_ended');
     onNext();
   }
 

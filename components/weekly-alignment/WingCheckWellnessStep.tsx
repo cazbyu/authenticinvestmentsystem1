@@ -23,6 +23,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 import { WellnessVisionBoard } from './WellnessVisionBoard';
 import { AlignmentEscortCard } from './AlignmentEscortCard';
+import { updateStepTimestamp } from '@/lib/weeklyAlignment';
 
 const CompassWellnessIcon = require('@/assets/images/compass-wellness-zones.png');
 
@@ -40,6 +41,8 @@ interface WingCheckWellnessStepProps {
   guidedModeEnabled?: boolean;
   weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
+  weekStartDate: string;
+  weekEndDate: string;
 }
 
 interface WellnessZone {
@@ -108,6 +111,8 @@ export function WingCheckWellnessStep({
   guidedModeEnabled = true,
   weekPlanItems = [],
   onAddWeekPlanItem,
+  weekStartDate,
+  weekEndDate,
 }: WingCheckWellnessStepProps) {
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -176,6 +181,13 @@ export function WingCheckWellnessStep({
   useEffect(() => {
     loadData();
   }, []);
+
+  // Write step_3_started on mount
+  useEffect(() => {
+    if (userId && weekStartDate && weekEndDate) {
+      updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_3_started');
+    }
+  }, [userId, weekStartDate, weekEndDate]);
 
  async function loadData() {
     try {
@@ -349,6 +361,8 @@ export function WingCheckWellnessStep({
       zonesChecked: selectedZoneIds,
       flaggedWellnessZones: [], // Could add flagging feature later
     });
+    // Write step_3_ended before advancing
+    updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_3_ended');
     onNext();
   }
 

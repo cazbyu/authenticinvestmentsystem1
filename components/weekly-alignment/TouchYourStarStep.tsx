@@ -21,6 +21,7 @@ import {
   trackQuestionAnswered, 
   trackQuestionSkipped 
 } from '@/lib/analytics';
+import { updateStepTimestamp } from '@/lib/weeklyAlignment';
 
 interface TouchYourStarStepProps {
   userId: string;
@@ -33,6 +34,8 @@ interface TouchYourStarStepProps {
     valuesAcknowledged?: boolean;
   }) => void;
   guidedModeEnabled?: boolean;
+  weekStartDate: string;
+  weekEndDate: string;
 }
 
 interface NorthStarData {
@@ -106,6 +109,8 @@ export function TouchYourStarStep({
   onRegisterBackHandler,
   onDataCapture,
   guidedModeEnabled = true,
+  weekStartDate,
+  weekEndDate,
 }: TouchYourStarStepProps) {
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -243,6 +248,13 @@ export function TouchYourStarStep({
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Write step_1_started on mount
+  useEffect(() => {
+    if (userId && weekStartDate && weekEndDate) {
+      updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_1_started');
+    }
+  }, [userId, weekStartDate, weekEndDate]);
 
   // Animate confirmation text and button when identity selected
   useEffect(() => {
@@ -938,6 +950,8 @@ export function TouchYourStarStep({
       visionAcknowledged: !!northStarData.vision,
       valuesAcknowledged: !!(northStarData.values && northStarData.values.length > 0),
     });
+    // Write step_1_completed before advancing
+    updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_1_completed');
     onNext();
   }
 
@@ -1635,6 +1649,8 @@ export function TouchYourStarStep({
                 visionAcknowledged: hasVision,
                 valuesAcknowledged: hasValues,
               });
+              // Write step_1_completed before advancing
+              updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_1_completed');
               onNext();
             }}
             activeOpacity={0.8}

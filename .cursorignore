@@ -1,0 +1,14 @@
+android/
+ios/
+.expo/
+node_modules/
+assets/images/
+assets/fonts/
+supabase/migrations/
+dist/
+build/
+*.png
+*.jpg
+*.mp4
+*.ttf
+.env

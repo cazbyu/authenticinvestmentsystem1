@@ -15,7 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { toLocalISOString } from '@/lib/dateUtils';
+import { toLocalISOString, getWeekStart, getWeekEnd, formatLocalDate } from '@/lib/dateUtils';
 import { recordNorthStarVisit } from '@/lib/northStarVisits';
 import type { WeekPlanItem } from '@/types/weekPlan';
 
@@ -81,6 +81,10 @@ export default function WeeklyAlignmentScreen() {
   // Alignment Escort state
   const [guidedModeEnabled, setGuidedModeEnabled] = useState(true);
   const [weekPlanItems, setWeekPlanItems] = useState<WeekPlanItem[]>([]);
+  
+  // Week dates state
+  const [weekStartDate, setWeekStartDate] = useState<string>('');
+  const [weekEndDate, setWeekEndDate] = useState<string>('');
 
   // Week Plan accumulator callbacks
   const addWeekPlanItem = useCallback((item: Omit<WeekPlanItem, 'id' | 'created_at'>) => {
@@ -113,7 +117,15 @@ export default function WeeklyAlignmentScreen() {
 
       setUserId(user.id);
 
-      // Load guided mode preference
+      // Load user preferences (guided mode and week start day)
+      const { data: userData } = await supabase
+        .from('0008-ap-users')
+        .select('week_start_day')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      const weekStartDay = (userData?.week_start_day === 'monday' ? 'monday' : 'sunday') as 'sunday' | 'monday';
+
       const { data: prefs } = await supabase
         .from('0008-ap-user-preferences')
         .select('guided_mode_enabled')
@@ -124,13 +136,17 @@ export default function WeeklyAlignmentScreen() {
         setGuidedModeEnabled(prefs.guided_mode_enabled);
       }
 
-      // Check if there's already a weekly alignment for this week
+      // Calculate week dates using user's week start preference
       const today = new Date();
-      const dayOfWeek = today.getDay();
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - dayOfWeek);
-      const weekStart = toLocalISOString(startOfWeek).split('T')[0];
+      const startOfWeek = getWeekStart(today, weekStartDay);
+      const endOfWeek = getWeekEnd(today, weekStartDay);
+      const weekStart = formatLocalDate(startOfWeek);
+      const weekEnd = formatLocalDate(endOfWeek);
+      
+      setWeekStartDate(weekStart);
+      setWeekEndDate(weekEnd);
 
+      // Check if there's already a weekly alignment for this week
       const { data: existing } = await supabase
         .from('0008-ap-weekly-alignments')
         .select('*')
@@ -219,16 +235,9 @@ export default function WeeklyAlignmentScreen() {
     try {
       const supabase = getSupabaseClient();
       
-      // Calculate week boundaries
-      const today = new Date();
-      const dayOfWeek = today.getDay();
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - dayOfWeek);
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      
-      const weekStart = toLocalISOString(startOfWeek).split('T')[0];
-      const weekEnd = toLocalISOString(endOfWeek).split('T')[0];
+      // Use week dates from state (already calculated with user preference)
+      const weekStart = weekStartDate;
+      const weekEnd = weekEndDate;
 
       const alignmentRecord = {
         user_id: userId,
@@ -305,11 +314,8 @@ export default function WeeklyAlignmentScreen() {
     const doReset = async () => {
       try {
         const supabase = getSupabaseClient();
-        const today = new Date();
-        const dayOfWeek = today.getDay();
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - dayOfWeek);
-        const weekStart = toLocalISOString(startOfWeek).split('T')[0];
+        // Use weekStartDate from state
+        const weekStart = weekStartDate;
         
         await supabase
           .from('0008-ap-weekly-alignments')
@@ -498,6 +504,8 @@ export default function WeeklyAlignmentScreen() {
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
             guidedModeEnabled={guidedModeEnabled}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
           />
         )}
 
@@ -512,6 +520,8 @@ export default function WeeklyAlignmentScreen() {
             guidedModeEnabled={guidedModeEnabled}
             weekPlanItems={weekPlanItems}
             onAddWeekPlanItem={addWeekPlanItem}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
           />
         )}
 
@@ -526,6 +536,8 @@ export default function WeeklyAlignmentScreen() {
             guidedModeEnabled={guidedModeEnabled}
             weekPlanItems={weekPlanItems}
             onAddWeekPlanItem={addWeekPlanItem}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
           />
         )}
 
@@ -540,6 +552,8 @@ export default function WeeklyAlignmentScreen() {
             guidedModeEnabled={guidedModeEnabled}
             weekPlanItems={weekPlanItems}
             onAddWeekPlanItem={addWeekPlanItem}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
           />
         )}
 
@@ -561,6 +575,8 @@ export default function WeeklyAlignmentScreen() {
             weekPlanItems={weekPlanItems}
             onAddWeekPlanItem={addWeekPlanItem}
             onRemoveWeekPlanItem={removeWeekPlanItem}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
           />
         )}
       </View>

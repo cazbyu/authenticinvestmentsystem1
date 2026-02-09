@@ -30,6 +30,7 @@ import GoalCampaignsCard from './GoalCampaignsCard';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { AlignmentEscortCard } from './AlignmentEscortCard';
 import { WeekPlanReview } from './WeekPlanReview';
+import { updateStepTimestamp } from '@/lib/weeklyAlignment';
 
 const CalendarImage = require('@/assets/images/calendar.png');
 const TaskListImage = require('@/assets/images/task-list.png');
@@ -57,6 +58,8 @@ interface TacticalDeploymentStepProps {
   weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
   onRemoveWeekPlanItem?: (id: string) => void;
+  weekStartDate: string;
+  weekEndDate: string;
 }
 
 export interface WeeklyContractData {
@@ -78,6 +81,8 @@ export function TacticalDeploymentStep({
   weekPlanItems = [],
   onAddWeekPlanItem,
   onRemoveWeekPlanItem,
+  weekStartDate,
+  weekEndDate,
 }: TacticalDeploymentStepProps) {
   const [loading, setLoading] = useState(true);
   const [enrichedTasks, setEnrichedTasks] = useState<EnrichedItem[]>([]);
@@ -155,6 +160,13 @@ export function TacticalDeploymentStep({
       onRegisterBackHandler(() => false);
     }
   }, []);
+
+  // Write step_5_started on mount
+  useEffect(() => {
+    if (userId && weekStartDate && weekEndDate) {
+      updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_5_started');
+    }
+  }, [userId, weekStartDate, weekEndDate]);
 
   async function loadWeekData() {
     try {
@@ -459,6 +471,9 @@ export function TacticalDeploymentStep({
 
     setIsSigning(true);
     try {
+      // Write step_5_ended when contract is signed
+      updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_5_ended');
+
       const contractData: WeeklyContractData = {
         committed_tasks: Array.from(committedTaskIds),
         committed_events: Array.from(committedEventIds),

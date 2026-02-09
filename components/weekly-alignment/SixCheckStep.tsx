@@ -31,6 +31,7 @@ import { fetchPlannedActionsForWeek, PlannedActionsResult } from '@/hooks/fetchP
 import { parseLocalDate } from '@/lib/dateUtils';
 import { useGoals, Timeline } from '@/hooks/useGoals';
 import ActionEffortModal from '@/components/goals/ActionEffortModal';
+import { updateStepTimestamp } from '@/lib/weeklyAlignment';
 
 // Compass Goals icon for Step 4 header
 const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
@@ -57,6 +58,8 @@ interface SixCheckStepProps {
   guidedModeEnabled?: boolean;
   weekPlanItems?: import('@/types/weekPlan').WeekPlanItem[];
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
+  weekStartDate: string;
+  weekEndDate: string;
 }
 
 interface AnnualGoal {
@@ -212,6 +215,8 @@ export function SixCheckStep({
   guidedModeEnabled = true,
   weekPlanItems = [],
   onAddWeekPlanItem,
+  weekStartDate,
+  weekEndDate,
 }: SixCheckStepProps) {
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -299,6 +304,13 @@ export function SixCheckStep({
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // Write step_4_started on mount
+  useEffect(() => {
+    if (userId && weekStartDate && weekEndDate) {
+      updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_4_started');
+    }
+  }, [userId, weekStartDate, weekEndDate]);
 
   async function loadAllData() {
     try {
@@ -570,6 +582,8 @@ export function SixCheckStep({
       keyFocusGoal: undefined,
     });
     
+    // Write step_4_ended before advancing
+    updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_4_ended');
     onNext();
   }
 
