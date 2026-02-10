@@ -17,7 +17,7 @@ import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
 import { SpeedDialFab } from '@/components/SpeedDialFab';
 import { ActivityConfig } from '@/lib/activityConfig';
-import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString, getWeekStart } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
@@ -36,7 +36,6 @@ import { CompassIcon } from '@/components/icons/CustomIcons';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { FlashingArrow } from '@/components/compass/FlashingArrow';
 import { useAttentionState } from '@/hooks/useAttentionState';
-import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 
 type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
