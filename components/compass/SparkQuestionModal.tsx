@@ -30,7 +30,7 @@ const CARDINAL_THEMES = {
     color: '#ed1c24',
     Icon: Star,
     bankLabel: 'View North Star',
-    bankRoute: '/(sidebar)/north-star'
+    bankRoute: '/north-star'
   },
   east: {
     title: 'Wellness',

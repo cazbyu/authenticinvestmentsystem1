@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Modal, Text } from 'react-native';
 import { AspirationalQuote } from './AspirationalQuote';
 import { LifeCompass } from './LifeCompass';
 import { useTheme } from '@/contexts/ThemeContext';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
 import JournalForm from '@/components/reflections/JournalForm';
+import { getSupabaseClient } from '@/lib/supabase';
 
 export function CompassView() {
   const { colors } = useTheme();
@@ -12,6 +13,7 @@ export function CompassView() {
   const [taskEventFormType, setTaskEventFormType] = useState<'task' | 'event' | 'depositIdea'>('task');
   const [isJournalFormVisible, setIsJournalFormVisible] = useState(false);
   const [journalFormType, setJournalFormType] = useState<'rose' | 'thorn' | 'reflection'>('reflection');
+  const [firstName, setFirstName] = useState<string>('');
 
   const handleTaskFormOpen = (formType: 'task' | 'event' | 'depositIdea') => {
     setTaskEventFormType(formType);
@@ -35,6 +37,31 @@ export function CompassView() {
     setIsJournalFormVisible(false);
   };
 
+  // Fetch user's first name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: userData } = await supabase
+          .from('0008-ap-users')
+          .select('first_name')
+          .eq('id', user.id)
+          .single();
+
+        if (userData?.first_name) {
+          setFirstName(userData.first_name);
+        }
+      } catch (error) {
+        console.error('Error fetching user name:', error);
+      }
+    };
+
+    fetchUserName();
+  }, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AspirationalQuote /> 
@@ -44,6 +71,13 @@ export function CompassView() {
           onTaskFormOpen={handleTaskFormOpen}
           onJournalFormOpen={handleJournalFormOpen}
         />
+        {/* Personalized title under compass */}
+        <Text style={[styles.personalizedTitle, { color: colors.textSecondary }]}>
+          {firstName 
+            ? `${firstName}'s Authentic Life Operating System`
+            : 'Your Authentic Life Operating System'
+          }
+        </Text>
       </View>
 
       <Modal
@@ -82,5 +116,12 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 20,
     minHeight: 350,
+  },
+  personalizedTitle: {
+    fontSize: 14,
+    fontWeight: '400',
+    textAlign: 'center',
+    marginTop: 12,
+    paddingHorizontal: 20,
   },
 });

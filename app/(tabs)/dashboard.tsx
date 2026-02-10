@@ -36,6 +36,7 @@ import { CompassIcon } from '@/components/icons/CustomIcons';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { FlashingArrow } from '@/components/compass/FlashingArrow';
 import { useAttentionState } from '@/hooks/useAttentionState';
+import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 
 type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
@@ -74,6 +75,7 @@ export default function Dashboard() {
   const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
+  const [shouldHideHandEmoji, setShouldHideHandEmoji] = useState(false);
 
   // Speed Dial FAB state - tracks which activity was selected
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
@@ -587,6 +589,47 @@ export default function Dashboard() {
     }
   }, [userId]);
 
+  const checkHandEmojiVisibility = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      const supabase = getSupabaseClient();
+      
+      // Calculate current week start date (using Monday as week start)
+      const today = new Date();
+      const startOfWeek = getWeekStart(today, 'monday');
+      const currentWeekStartDate = formatLocalDate(startOfWeek);
+
+      // Check if Step 1 is completed this week
+      const { data: weeklyAlignment } = await supabase
+        .from('0008-ap-weekly-alignments')
+        .select('step_1_completed')
+        .eq('user_id', userId)
+        .eq('week_start_date', currentWeekStartDate)
+        .not('step_1_completed', 'is', null)
+        .limit(1);
+
+      const step1CompletedThisWeek = weeklyAlignment && weeklyAlignment.length > 0;
+
+      // Check if it's been 2+ days since week start
+      const daysSinceWeekStart = Math.floor((today.getTime() - startOfWeek.getTime()) / (1000 * 60 * 60 * 24));
+      const twoOrMoreDaysSinceWeekStart = daysSinceWeekStart >= 2;
+
+      // Hide hand if EITHER condition is true
+      const shouldHide = step1CompletedThisWeek || twoOrMoreDaysSinceWeekStart;
+      setShouldHideHandEmoji(shouldHide);
+
+      console.log('[Dashboard] Hand emoji logic:', {
+        step1CompletedThisWeek,
+        daysSinceWeekStart,
+        twoOrMoreDaysSinceWeekStart,
+        shouldHide
+      });
+    } catch (error) {
+      console.error('[Dashboard] Error checking hand emoji visibility:', error);
+    }
+  }, [userId]);
+
   const handleDevResetSpark = async () => {
   try {
     const supabase = getSupabaseClient();
@@ -646,15 +689,20 @@ export default function Dashboard() {
 
   useEffect(() => {
     checkRitualAvailability();
-    const interval = setInterval(checkRitualAvailability, 60000);
+    checkHandEmojiVisibility();
+    const interval = setInterval(() => {
+      checkRitualAvailability();
+      checkHandEmojiVisibility();
+    }, 60000);
 
     return () => clearInterval(interval);
-  }, [checkRitualAvailability]);
+  }, [checkRitualAvailability, checkHandEmojiVisibility]);
 
   useFocusEffect(
     useCallback(() => {
       checkRitualAvailability();
-    }, [checkRitualAvailability])
+      checkHandEmojiVisibility();
+    }, [checkRitualAvailability, checkHandEmojiVisibility])
   );
 
   useEffect(() => {
@@ -1225,7 +1273,7 @@ const renderDashboardTabs = () => (
               <Text style={{ fontSize: 24 }}>🎯</Text>
             </TouchableOpacity>
           </Animated.View>
-          <FlashingArrow visible={showOnboardingArrow} />
+          <FlashingArrow visible={showOnboardingArrow && !shouldHideHandEmoji} />
         </View>
       )}
 
