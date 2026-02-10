@@ -147,7 +147,7 @@ export function LifeCompass({
   const rotation = useSharedValue(0);
 
   const [compassState, setCompassState] = useState<CompassState>({
-    mode: 'spark',
+    mode: contextMode === 'morning_spark' ? 'spark' : 'exploration',
     bigSpindleAngle: 0,
     smallSpindleAngle: 0,
     activeZone: 'mission',
