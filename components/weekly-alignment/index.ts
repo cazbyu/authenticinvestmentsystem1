@@ -3,6 +3,7 @@ export { TouchYourStarStep } from './TouchYourStarStep';
 export { WingCheckRolesStep } from './WingCheckRolesStep';
 export { WingCheckWellnessStep } from './WingCheckWellnessStep';
 export { SixCheckStep } from './SixCheckStep';
+export { AlignmentCheckStep } from './AlignmentCheckStep';
 export { TacticalDeploymentStep } from './TacticalDeploymentStep';
 
 // Alignment Escort Components

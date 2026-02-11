@@ -24,6 +24,7 @@ import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarSt
 import { WingCheckRolesStep } from '@/components/weekly-alignment/WingCheckRolesStep';
 import { WingCheckWellnessStep } from '@/components/weekly-alignment/WingCheckWellnessStep';
 import { SixCheckStep } from '@/components/weekly-alignment/SixCheckStep';
+import { AlignmentCheckStep } from '@/components/weekly-alignment/AlignmentCheckStep';
 import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
 import { WeekPlanBadge } from '@/components/weekly-alignment/WeekPlanBadge';
 import { TourGuideBubble } from '@/components/weekly-alignment/TourGuideBubble';
@@ -51,7 +52,12 @@ interface WeeklyAlignmentData {
   onTrackGoals?: string[];
   keyFocusGoal?: string;
   
-  // Step 5: Tactical Deployment
+  // Step 5 (Alignment Check)
+  pq3Answered?: boolean;
+  pq5Answered?: boolean;
+  pq3RoleName?: string;
+  
+  // Step 6: Tactical Deployment
   committedTasks?: string[];
   committedEvents?: string[];
   delegatedTasks?: string[];
@@ -63,6 +69,7 @@ const STEPS = [
   { key: 'roles', label: 'Wing Check: Roles', icon: '👥', color: '#9370DB' },
   { key: 'wellness', label: 'Wing Check: Wellness', icon: '🌿', color: '#39b54a' },
   { key: 'goals', label: 'Six Check: Goals', icon: '🎯', color: '#4169E1' },
+  { key: 'alignment', label: 'Alignment Check', icon: '🪞', color: '#FF6B35' },
   { key: 'tactical', label: 'Tactical Deployment', icon: '🧭', color: '#FFD700' },
 ];
 
@@ -75,6 +82,7 @@ export default function WeeklyAlignmentScreen() {
   const [currentStep, setCurrentStep] = useState(0);
   const [alignmentData, setAlignmentData] = useState<WeeklyAlignmentData>({});
   const [existingAlignment, setExistingAlignment] = useState<any>(null);
+  const [weeklyAlignmentId, setWeeklyAlignmentId] = useState<string | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [completionAnimation] = useState(new Animated.Value(0));
   const [stepBackHandler, setStepBackHandler] = useState<(() => boolean) | null>(null);
@@ -161,6 +169,7 @@ export default function WeeklyAlignmentScreen() {
 
       if (existing) {
         setExistingAlignment(existing);
+        setWeeklyAlignmentId(existing.id);
         // Could show a "continue" or "review" mode
       }
     } catch (error) {
@@ -259,15 +268,19 @@ export default function WeeklyAlignmentScreen() {
         completed_at: new Date().toISOString(),
       };
 
-      if (existingAlignment) {
+      if (existingAlignment || weeklyAlignmentId) {
+        const rowId = existingAlignment?.id || weeklyAlignmentId;
         await supabase
           .from('0008-ap-weekly-alignments')
           .update(alignmentRecord)
-          .eq('id', existingAlignment.id);
+          .eq('id', rowId);
       } else {
-        await supabase
+        const { data: inserted } = await supabase
           .from('0008-ap-weekly-alignments')
-          .insert(alignmentRecord);
+          .insert(alignmentRecord)
+          .select('id')
+          .single();
+        if (inserted) setWeeklyAlignmentId(inserted.id);
       }
 
       // Track week plan items created during ritual in 0008-ap-ritual-items
@@ -339,6 +352,7 @@ export default function WeeklyAlignmentScreen() {
         setCurrentStep(0);
         setAlignmentData({});
         setExistingAlignment(null);
+        setWeeklyAlignmentId(null);
         setWeekPlanItems([]);
       } catch (error) {
         console.error('Reset error:', error);
@@ -570,6 +584,24 @@ export default function WeeklyAlignmentScreen() {
         )}
 
         {currentStep === 4 && (
+          <AlignmentCheckStep
+            userId={userId}
+            colors={colors}
+            onNext={goToNextStep}
+            onBack={goToPreviousStep}
+            onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
+            guidedModeEnabled={guidedModeEnabled}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
+            weeklyAlignmentId={weeklyAlignmentId}
+            onAlignmentRowCreated={(id: string) => {
+              setWeeklyAlignmentId(id);
+              setExistingAlignment({ id });
+            }}
+          />
+        )}
+
+        {currentStep === 5 && (
           <TacticalDeploymentStep
             userId={userId}
             colors={colors}
