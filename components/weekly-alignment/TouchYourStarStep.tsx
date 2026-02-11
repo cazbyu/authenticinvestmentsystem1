@@ -16,13 +16,16 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
 import { LifeCompass } from '@/components/compass/LifeCompass';
-import { AlignmentEscortCard } from './AlignmentEscortCard';
+import { TourGuideVoice } from '@/components/TourGuideVoice';
 import { 
   trackQuestionShown, 
   trackQuestionAnswered, 
   trackQuestionSkipped 
 } from '@/lib/analytics';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
+import { getTourGuideMessage } from '@/lib/tour-guide';
+import { buildStep1State } from '@/lib/tour-guide-state';
+import type { TourGuideResponse, TourGuideUserState } from '@/types/tour-guide';
 
 interface TouchYourStarStepProps {
   userId: string;
@@ -122,16 +125,11 @@ export function TouchYourStarStep({
   const [showCompass, setShowCompass] = useState(true);
   const [ceremonyComplete, setCeremonyComplete] = useState(false);
   
-  // Tour guide prompts state
-  const [tourGuidePrompts, setTourGuidePrompts] = useState<Array<{
-    id: string;
-    prompt_template: string;
-    prompt_type: string;
-    domain: string;
-    sequence_order: number;
-  }>>([]);
-  const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
-  const [shownPromptIds, setShownPromptIds] = useState<Set<string>>(new Set());
+  // Tour guide AI state
+  const [tourGuideMessage, setTourGuideMessage] = useState<TourGuideResponse | null>(null);
+  const [tourGuideLoading, setTourGuideLoading] = useState(false);
+  const [userState, setUserState] = useState<TourGuideUserState | null>(null);
+  const [stepStartTime, setStepStartTime] = useState<Date>(new Date());
   
   // Identity state
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
@@ -263,7 +261,43 @@ export function TouchYourStarStep({
 
   useEffect(() => {
     loadInitialData();
+    setStepStartTime(new Date());
   }, []);
+
+  // Track flow state changes and trigger tour guide on state transitions
+  useEffect(() => {
+    if (userState && guidedModeEnabled) {
+      // Determine trigger based on state
+      let trigger: 'enter' | 'complete' | 'return' = 'enter';
+      
+      if (flowState === 'identity-hub' && northStarData.identity) {
+        trigger = 'complete'; // User just saved identity
+      }
+      
+      // Call tour guide for major flow transitions
+      if (flowState === 'identity-hub' || flowState === 'synthesis') {
+        callTourGuide(trigger);
+      }
+    }
+  }, [flowState, userState]);
+
+  // Idle nudge timer
+  useEffect(() => {
+    if (!tourGuideMessage || !guidedModeEnabled) return;
+    
+    const nudgeSeconds = tourGuideMessage.next_nudge_seconds || 0;
+    if (nudgeSeconds === 0) return; // Don't nudge
+    
+    const timer = setTimeout(() => {
+      const secondsOnStep = Math.round((new Date().getTime() - stepStartTime.getTime()) / 1000);
+      
+      if (userState) {
+        callTourGuide('idle', { ...userState, current_step_time_seconds: secondsOnStep });
+      }
+    }, nudgeSeconds * 1000);
+    
+    return () => clearTimeout(timer);
+  }, [tourGuideMessage, stepStartTime]);
 
   // Write step_1_started on mount
   useEffect(() => {
@@ -373,8 +407,9 @@ export function TouchYourStarStep({
         })));
       }
 
-      // Load tour guide prompts for wa_step1
-      await loadTourGuidePrompts();
+      // Build tour guide user state for Step 1
+      const state = await buildStep1State(userId);
+      setUserState(state);
 
       // Check if user has already answered the identity prompt
       const { data: existingPromptResponse } = await supabase
@@ -449,11 +484,16 @@ export function TouchYourStarStep({
         
         setFlowState('identity-hub');
         setCeremonyComplete(true); // Skip ceremony if returning user
+        
+        // Call tour guide for returning user
+        if (guidedModeEnabled) {
+          callTourGuide('return');
+        }
       } else {
         // Show hero question with compass ceremony
         setPromptShownAt(new Date());
         setFlowState('hero-question');
-        // Compass ceremony will play automatically
+        // Compass ceremony will play automatically, then tour guide triggers
       }
 
     } catch (error) {
@@ -463,139 +503,27 @@ export function TouchYourStarStep({
   }
 
   /**
-   * Load tour guide prompts for Step 1 of Weekly Alignment
+   * Call the Tour Guide AI for personalized coaching
    */
-  async function loadTourGuidePrompts() {
-    try {
-      const supabase = getSupabaseClient();
-
-      // Fetch sequenced coaching prompts for wa_step1
-      const { data: prompts, error } = await supabase
-        .from('0008-ap-coaching-prompts')
-        .select('id, prompt_template, prompt_type, domain, sequence_order')
-        .contains('context_mode', ['weekly_alignment'])
-        .eq('sequence_group', 'wa_step1')
-        .eq('is_active', true)
-        .order('sequence_order', { ascending: true });
-
-      if (error) {
-        console.error('Error loading tour guide prompts:', error);
-        return;
-      }
-
-      if (prompts && prompts.length > 0) {
-        // Check delivery log to avoid recent repeats (last 7 days)
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-        const { data: recentlyShown } = await supabase
-          .from('0008-ap-prompt-delivery-log')
-          .select('prompt_id')
-          .eq('user_id', userId)
-          .eq('context_mode', 'weekly_alignment')
-          .gte('shown_at', sevenDaysAgo.toISOString());
-
-        const recentIds = new Set(recentlyShown?.map(r => r.prompt_id) || []);
-        
-        // Filter out recently shown, or fall back to all if all were shown
-        const available = prompts.filter(p => !recentIds.has(p.id));
-        const promptsToUse = available.length > 0 ? available : prompts;
-        
-        setTourGuidePrompts(promptsToUse);
-      }
-    } catch (err) {
-      console.error('Error in loadTourGuidePrompts:', err);
-    }
-  }
-
-  /**
-   * Track when a tour guide prompt is shown
-   */
-  async function trackPromptShown(promptId: string) {
-    if (shownPromptIds.has(promptId)) return; // Already tracked this session
+  async function callTourGuide(
+    trigger: 'enter' | 'idle' | 'complete' | 'skip' | 'return',
+    stateOverride?: TourGuideUserState
+  ) {
+    if (!guidedModeEnabled) return;
+    
+    const state = stateOverride || userState;
+    if (!state) return;
+    
+    setTourGuideLoading(true);
     
     try {
-      const supabase = getSupabaseClient();
-      
-      await supabase
-        .from('0008-ap-prompt-delivery-log')
-        .insert({
-          user_id: userId,
-          prompt_id: promptId,
-          source_type: 'coaching_prompt',
-          context_mode: 'weekly_alignment',
-          compass_slot_code: 'N-00', // North = North Star
-        });
-      
-      setShownPromptIds(prev => new Set(prev).add(promptId));
+      const response = await getTourGuideMessage('step_1', trigger, state);
+      setTourGuideMessage(response);
     } catch (err) {
-      console.error('Error tracking prompt shown:', err);
+      console.error('Tour guide call failed:', err);
+    } finally {
+      setTourGuideLoading(false);
     }
-  }
-
-  /**
-   * Get the next appropriate tour guide message based on current flow state
-   */
-  function getNextTourGuidePrompt(): { message: string; promptId?: string } | null {
-    if (!guidedModeEnabled || tourGuidePrompts.length === 0) {
-      // Fall back to hardcoded messages
-      return getHardcodedEscortMessage();
-    }
-
-    // Map sequence_order to flow moments
-    // sequence_order 1 → after ceremony (before identity or MVV review)
-    // sequence_order 2 → domain choice (all 3 cards visible)
-    // sequence_order 3 → guided questions flow
-    // sequence_order 4 → after AI synthesis
-    // sequence_order 5 → after completing one domain
-    
-    let targetSequence: number | null = null;
-    
-    if (ceremonyComplete && flowState === 'hero-question') {
-      targetSequence = 1;
-    } else if (flowState === 'identity-hub' && !northStarData.mission && !northStarData.vision && !northStarData.values) {
-      targetSequence = 1; // First time at hub
-    } else if (flowState === 'choice') {
-      targetSequence = 2;
-    } else if (flowState === 'guided-questions') {
-      targetSequence = 3;
-    } else if (flowState === 'synthesis') {
-      targetSequence = 4;
-    } else if (flowState === 'identity-hub' && (northStarData.mission || northStarData.vision || northStarData.values?.length)) {
-      targetSequence = 5;
-    }
-    
-    if (targetSequence !== null) {
-      const prompt = tourGuidePrompts.find(p => p.sequence_order === targetSequence && !shownPromptIds.has(p.id));
-      if (prompt) {
-        return { message: prompt.prompt_template, promptId: prompt.id };
-      }
-    }
-    
-    // Fall back to hardcoded
-    return getHardcodedEscortMessage();
-  }
-
-  /**
-   * Hardcoded fallback messages (existing escort card logic)
-   */
-  function getHardcodedEscortMessage(): { message: string } | null {
-    const hasMission = !!northStarData.mission;
-    const hasVision = !!northStarData.vision;
-    const hasValues = northStarData.values && northStarData.values.length > 0;
-    const isReturningUser = hasMission || hasVision;
-
-    if (flowState === 'hero-question' && ceremonyComplete && !escortDismissed['step1-opening']) {
-      return {
-        message: "Before we plan your week, let's reconnect with who you are and where you're headed. Everything we build this week flows from here."
-      };
-    } else if (flowState === 'identity-hub' && isReturningUser && !escortDismissed['step1-returning']) {
-      return {
-        message: "Take a moment — does your mission still feel true? Has anything shifted since last week?"
-      };
-    }
-    
-    return null;
   }
 
   /**
@@ -817,6 +745,14 @@ export function TouchYourStarStep({
         identity: identityValue,
       }));
       
+      // Update user state for tour guide
+      if (userState) {
+        setUserState({
+          ...userState,
+          core_identity: identityValue,
+        });
+      }
+      
       // Slide animation to identity hub
       Animated.timing(slideAnim, {
         toValue: 1,
@@ -825,6 +761,11 @@ export function TouchYourStarStep({
       }).start(() => {
         setFlowState('identity-hub');
         slideAnim.setValue(0);
+        
+        // Call tour guide after identity saved
+        if (guidedModeEnabled) {
+          callTourGuide('complete');
+        }
       });
 
     } catch (error) {
@@ -1329,9 +1270,9 @@ export function TouchYourStarStep({
                   contextMode="weekly_alignment"
                   onCeremonyComplete={() => {
                     setCeremonyComplete(true);
-                    // Track the first tour guide prompt after ceremony
-                    if (tourGuideMessage?.promptId) {
-                      trackPromptShown(tourGuideMessage.promptId);
+                    // Call tour guide after ceremony
+                    if (guidedModeEnabled) {
+                      callTourGuide('enter');
                     }
                   }}
                 />
@@ -1368,14 +1309,12 @@ export function TouchYourStarStep({
               )}
             </View>
 
-            {/* Escort: Opening nudge for Step 1 - After ceremony completes */}
-            {ceremonyComplete && guidedModeEnabled && tourGuideMessage && !escortDismissed['step1-opening'] && (
-              <AlignmentEscortCard
-                type="nudge"
+            {/* Tour Guide Voice - After ceremony completes */}
+            {ceremonyComplete && guidedModeEnabled && tourGuideMessage && (
+              <TourGuideVoice
                 message={tourGuideMessage.message}
-                icon="compass"
-                stepColor="#ed1c24"
-                onDismiss={() => setEscortDismissed(prev => ({ ...prev, 'step1-opening': true }))}
+                tone={tourGuideMessage.tone}
+                isLoading={tourGuideLoading}
               />
             )}
 
@@ -1541,18 +1480,11 @@ export function TouchYourStarStep({
         </View>
 
         {/* Escort: Returning user nudge or tour guide prompt */}
-        {guidedModeEnabled && tourGuideMessage && !escortDismissed['step1-returning'] && (
-          <AlignmentEscortCard
-            type="nudge"
+        {guidedModeEnabled && tourGuideMessage && (
+          <TourGuideVoice
             message={tourGuideMessage.message}
-            icon="star"
-            stepColor="#ed1c24"
-            onDismiss={() => {
-              setEscortDismissed(prev => ({ ...prev, 'step1-returning': true }));
-              if (tourGuideMessage.promptId) {
-                trackPromptShown(tourGuideMessage.promptId);
-              }
-            }}
+            tone={tourGuideMessage.tone}
+            isLoading={tourGuideLoading}
           />
         )}
 
