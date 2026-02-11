@@ -7,6 +7,8 @@ import Animated, {
   withTiming,
   runOnJS,
   cancelAnimation,
+  Easing,
+  withSequence,
 } from 'react-native-reanimated';
 import Svg, {
   G,
@@ -31,15 +33,16 @@ import { useAttentionState } from '@/hooks/useAttentionState';
 
 interface LifeCompassProps {
   size?: number;
-  contextMode?: 'morning_spark' | 'dashboard' | 'navigation';
+  contextMode?: 'morning_spark' | 'dashboard' | 'navigation' | 'weekly_alignment';
   onZoneChange?: (zone: 'mission' | 'wellness' | 'goals' | 'roles') => void;
   onSlotSelect?: (slotCode: string | null) => void;
   onSpinComplete?: () => void;
   onTaskFormOpen?: (formType: 'task' | 'event' | 'depositIdea') => void;
   onJournalFormOpen?: (formType: 'rose' | 'thorn' | 'reflection') => void;
+  onCeremonyComplete?: () => void;
 }
 
-type CompassMode = 'spark' | 'exploration';
+type CompassMode = 'spark' | 'exploration' | 'ceremony';
 
 interface CompassState {
   mode: CompassMode;
@@ -142,12 +145,17 @@ export function LifeCompass({
   onSpinComplete,
   onTaskFormOpen,
   onJournalFormOpen,
+  onCeremonyComplete,
 }: LifeCompassProps) {
   const router = useRouter();
   const rotation = useSharedValue(0);
 
+  // Ceremony animation shared values
+  const goldCeremonyRotation = useSharedValue(0);
+  const silverCeremonyRotation = useSharedValue(0);
+
   const [compassState, setCompassState] = useState<CompassState>({
-    mode: contextMode === 'morning_spark' ? 'spark' : 'exploration',
+    mode: contextMode === 'morning_spark' ? 'spark' : contextMode === 'weekly_alignment' ? 'ceremony' : 'exploration',
     bigSpindleAngle: 0,
     smallSpindleAngle: 0,
     activeZone: 'mission',
@@ -209,8 +217,70 @@ export function LifeCompass({
   useEffect(() => {
     return () => {
       cancelAnimation(rotation);
+      cancelAnimation(goldCeremonyRotation);
+      cancelAnimation(silverCeremonyRotation);
     };
-  }, [rotation]);
+  }, [rotation, goldCeremonyRotation, silverCeremonyRotation]);
+
+  // ========== WEEKLY ALIGNMENT CEREMONY ==========
+  useEffect(() => {
+    if (contextMode === 'weekly_alignment' && compassState.mode === 'ceremony') {
+      playCeremony();
+    }
+  }, [contextMode, compassState.mode]);
+
+  const playCeremony = useCallback(() => {
+    // Phase 1: Free spin (2 seconds)
+    // Gold spindle: 2 full rotations clockwise (720°)
+    // Silver spindle: 3 rotations counter-clockwise (-1080°)
+    goldCeremonyRotation.value = withTiming(720, {
+      duration: 2000,
+      easing: Easing.linear,
+    });
+    
+    silverCeremonyRotation.value = withTiming(-1080, {
+      duration: 2000,
+      easing: Easing.linear,
+    }, () => {
+      // Phase 2: Decelerate to North (1 second)
+      goldCeremonyRotation.value = withTiming(720, {
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+      }, () => {
+        // Ceremony complete - set state and call callback
+        runOnJS(handleCeremonyComplete)();
+      });
+      
+      silverCeremonyRotation.value = withTiming(-1080, {
+        duration: 1200,
+        easing: Easing.out(Easing.cubic),
+      });
+    });
+  }, [goldCeremonyRotation, silverCeremonyRotation]);
+
+  const handleCeremonyComplete = useCallback(() => {
+    setCompassState(prev => ({
+      ...prev,
+      mode: 'exploration',
+      bigSpindleAngle: 0,
+      smallSpindleAngle: 0,
+      activeZone: 'mission',
+    }));
+    
+    if (onCeremonyComplete) {
+      onCeremonyComplete();
+    }
+  }, [onCeremonyComplete]);
+
+  // Animated styles for ceremony spindles
+  const goldCeremonyStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${goldCeremonyRotation.value}deg` }],
+  }));
+
+  const silverCeremonyStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${silverCeremonyRotation.value}deg` }],
+  }));
+  // ========== END CEREMONY ==========
 
   const fetchSparkQuestions = useCallback(async () => {
     try {
@@ -454,6 +524,8 @@ export function LifeCompass({
   }, [currentHistoryId]);
 
   const handleCardinalPress = useCallback((cardinal: 'north' | 'east' | 'south' | 'west') => {
+    // Disable in ceremony mode
+    if (compassState.mode === 'ceremony') return;
     if (compassState.isSpinning) return;
 
     // If in Spark Mode and showing question modal, handle differently
@@ -535,6 +607,8 @@ export function LifeCompass({
   }, []);
 
   const handleHubTap = useCallback(() => {
+    // Disable in ceremony mode
+    if (compassState.mode === 'ceremony') return;
     if (compassState.isSpinning || compassState.showQuestionModal) return;
 
     if (compassState.mode === 'spark') {
@@ -707,6 +781,9 @@ export function LifeCompass({
   }, [router, onTaskFormOpen, onJournalFormOpen]);
 
   const handleDotPress = useCallback((dotAngle: number) => {
+    // Disable in ceremony mode
+    if (compassState.mode === 'ceremony') return;
+    
     if (Platform.OS !== 'web' && Haptics) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -725,7 +802,7 @@ export function LifeCompass({
         handleWaypointAction(waypoint);
       }, 300);
     }
-  }, [handleWaypointAction]);
+  }, [handleWaypointAction, compassState.mode]);
 
   const calculateDotPosition = useCallback((angle: number) => {
     const angleRad = (angle - 90) * (Math.PI / 180);
@@ -772,6 +849,9 @@ export function LifeCompass({
       }),
     [calculateAngle, handleSilverSpindleChange, rotation, lastUpdateTime]
   );
+
+  // Disable interactions in ceremony mode
+  const isInteractionDisabled = compassState.mode === 'ceremony';
 
   return (
     <View style={styles.container}>
@@ -889,7 +969,7 @@ export function LifeCompass({
           </G>
         </Svg>
 
-        {dotPositions.map(({ angle, x, y }, index) => {
+        {!isInteractionDisabled && dotPositions.map(({ angle, x, y }, index) => {
           const scale = responsiveSize / 288;
           const touchSize = 44;
 
@@ -911,97 +991,130 @@ export function LifeCompass({
           );
         })}
 
-        <GestureDetector gesture={panGesture}>
-  <View style={[styles.gestureArea, StyleSheet.absoluteFill]} pointerEvents="box-none" />
-</GestureDetector>
+        {!isInteractionDisabled && (
+          <GestureDetector gesture={panGesture}>
+            <View style={[styles.gestureArea, StyleSheet.absoluteFill]} pointerEvents="box-none" />
+          </GestureDetector>
+        )}
 
+        {/* Spindle layers - use ceremony animations if in ceremony mode */}
+        {compassState.mode === 'ceremony' ? (
+          <>
+            {/* Ceremony Gold Spindle */}
+            <Animated.View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }, goldCeremonyStyle]}>
+              <SpindleGold
+                angle={0}
+                size={responsiveSize}
+                continuousSpin={false}
+                onSnapComplete={() => {}}
+              />
+            </Animated.View>
+            
+            {/* Ceremony Silver Spindle */}
+            <Animated.View style={[styles.spindleLayer, StyleSheet.absoluteFill, silverCeremonyStyle]}>
+              <SpindleSilver
+                angle={0}
+                size={responsiveSize}
+                animated={false}
+                continuousSpin={false}
+                onAngleChange={() => {}}
+              />
+            </Animated.View>
+          </>
+        ) : (
+          <>
+            {/* Normal Gold Spindle */}
+            <View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }]}>
+              <SpindleGold
+                angle={compassState.bigSpindleAngle}
+                size={responsiveSize}
+                continuousSpin={needsAttention}
+                onSnapComplete={handleGoldSpindleSnap}
+              />
+            </View>
 
-         <View style={[styles.spindleLayer, { width: responsiveSize, height: responsiveSize }]}>
-          <SpindleGold
-            angle={compassState.bigSpindleAngle}
+            {/* Normal Silver Spindle */}
+            <View style={[styles.spindleLayer, StyleSheet.absoluteFill]}>
+              <SpindleSilver
+                angle={compassState.smallSpindleAngle}
+                size={responsiveSize}
+                animated={!compassState.isSpinning}
+                continuousSpin={needsAttention}
+                onAngleChange={handleSilverSpindleChange}
+              />
+            </View>
+          </>
+        )}
+
+        <View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 10 }} pointerEvents="none">
+          <CardinalIcons
+            activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
+            hoveredCardinal={hoveredCardinal}
             size={responsiveSize}
-            continuousSpin={needsAttention}
-            onSnapComplete={handleGoldSpindleSnap}
+            onCardinalPress={handleCardinalPress}
+            contentCounts={domainContentCounts}
           />
         </View>
 
-        <View style={[styles.spindleLayer, StyleSheet.absoluteFill]}>
-          <SpindleSilver
-            angle={compassState.smallSpindleAngle}
+        <View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 11 }} pointerEvents="none">
+          <CompassHub
             size={responsiveSize}
-            animated={!compassState.isSpinning}
-            continuousSpin={needsAttention}
-            onAngleChange={handleSilverSpindleChange}
+            isSpinning={compassState.isSpinning}
+            onTap={handleHubTap}
+            activeZone={compassState.activeZone}
+            activeCardinal={compassState.currentCardinal}
           />
         </View>
 
-<View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 10 }} pointerEvents="none">
-  <CardinalIcons
-  activeCardinal={compassState.mode === 'spark' ? compassState.currentCardinal : null}
-  hoveredCardinal={hoveredCardinal}
-  size={responsiveSize}
-  onCardinalPress={handleCardinalPress}
-  contentCounts={domainContentCounts}
-/>
-</View>
-
-<View style={{ position: 'absolute', top: 0, left: 0, width: responsiveSize, height: responsiveSize, zIndex: 11 }} pointerEvents="none">
-  <CompassHub
-    size={responsiveSize}
-    isSpinning={compassState.isSpinning}
-    onTap={handleHubTap}
-    activeZone={compassState.activeZone}
-    activeCardinal={compassState.currentCardinal}
-  />
-</View>
-
-{/* All touch targets - rendered last so they're on top */}
-<View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
-  {/* Cardinal touch targets */}
-{(['north', 'east', 'south', 'west'] as const).map((cardinal) => {
-  const positions = {
-    north: { x: 144, y: 28 },
-    east: { x: 260, y: 144 },
-    south: { x: 144, y: 260 },
-    west: { x: 28, y: 144 },
-  };
-  const pos = positions[cardinal];
-  const scale = responsiveSize / 288;
-  
-  return (
-    <Pressable
-      key={cardinal}
-      onPress={() => handleCardinalPress(cardinal)}
-      onPressIn={() => setHoveredCardinal(cardinal)}
-      onPressOut={() => setHoveredCardinal(null)}
-      onHoverIn={() => setHoveredCardinal(cardinal)}
-      onHoverOut={() => setHoveredCardinal(null)}
-      style={{
-        position: 'absolute',
-        left: pos.x * scale - 24,
-        top: pos.y * scale - 24,
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-      }}
-    />
-  );
-})}
-  
-  {/* Hub touch target */}
-  <Pressable
-    onPress={handleHubTap}
-    disabled={compassState.isSpinning}
-    style={{
-      position: 'absolute',
-      left: responsiveSize / 2 - 25,
-      top: responsiveSize / 2 - 25,
-      width: 50,
-      height: 50,
-      borderRadius: 25,
-    }}
-  />
-</View>
+        {/* All touch targets - rendered last so they're on top */}
+        {!isInteractionDisabled && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]} pointerEvents="box-none">
+            {/* Cardinal touch targets */}
+            {(['north', 'east', 'south', 'west'] as const).map((cardinal) => {
+              const positions = {
+                north: { x: 144, y: 28 },
+                east: { x: 260, y: 144 },
+                south: { x: 144, y: 260 },
+                west: { x: 28, y: 144 },
+              };
+              const pos = positions[cardinal];
+              const scale = responsiveSize / 288;
+              
+              return (
+                <Pressable
+                  key={cardinal}
+                  onPress={() => handleCardinalPress(cardinal)}
+                  onPressIn={() => setHoveredCardinal(cardinal)}
+                  onPressOut={() => setHoveredCardinal(null)}
+                  onHoverIn={() => setHoveredCardinal(cardinal)}
+                  onHoverOut={() => setHoveredCardinal(null)}
+                  style={{
+                    position: 'absolute',
+                    left: pos.x * scale - 24,
+                    top: pos.y * scale - 24,
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                  }}
+                />
+              );
+            })}
+            
+            {/* Hub touch target */}
+            <Pressable
+              onPress={handleHubTap}
+              disabled={compassState.isSpinning}
+              style={{
+                position: 'absolute',
+                left: responsiveSize / 2 - 25,
+                top: responsiveSize / 2 - 25,
+                width: 50,
+                height: 50,
+                borderRadius: 25,
+              }}
+            />
+          </View>
+        )}
     
         <SparkQuestionModal
           visible={compassState.showQuestionModal}
