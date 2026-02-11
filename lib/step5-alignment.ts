@@ -14,6 +14,7 @@ export interface PowerQuestion {
   role_category: string | null;
   is_repeatable: boolean;
   is_active: boolean;
+  ob_priority?: number | null;
 }
 
 export interface PQ3Selection {
@@ -36,22 +37,17 @@ export async function selectPQ3Question(
 
   const roleLabels = (roles || []).map((r: { label: string }) => r.label);
 
-  // 2. Get all active PQ3 questions
+  // 2. Get all active PQ3 questions ordered by ob_priority (lowest first)
   const { data: allPQ3 } = await supabase
     .from('0008-ap-power-questions')
-    .select('id, question_text, question_context, power_question, role_name, role_category, is_repeatable, is_active')
+    .select('id, question_text, question_context, power_question, role_name, role_category, is_repeatable, is_active, ob_priority')
     .eq('power_question', 3)
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .order('ob_priority', { ascending: true });
 
   if (!allPQ3 || allPQ3.length === 0) return null;
 
-  // 3. Filter to universal + user's roles
-  const universal = allPQ3.filter((q: PowerQuestion) => q.role_name === null);
-  const roleSpecific = allPQ3.filter(
-    (q: PowerQuestion) => q.role_name !== null && roleLabels.includes(q.role_name)
-  );
-
-  // 4. Exclude questions already answered this week
+  // 3. Exclude questions already answered this week
   const { data: answeredThisWeek } = await supabase
     .from('0008-ap-question-responses')
     .select('question_id')
@@ -61,28 +57,54 @@ export async function selectPQ3Question(
 
   const answeredIds = new Set((answeredThisWeek || []).map((a: { question_id: string }) => a.question_id));
 
+  // 4. Filter to eligible: universal + user's roles, excluding answered
+  const universal = allPQ3.filter((q: PowerQuestion) => q.role_name === null);
+  const roleSpecific = allPQ3.filter(
+    (q: PowerQuestion) => q.role_name !== null && roleLabels.includes(q.role_name)
+  );
   const availableUniversal = universal.filter((q: PowerQuestion) => !answeredIds.has(q.id));
   const availableRoleSpecific = roleSpecific.filter((q: PowerQuestion) => !answeredIds.has(q.id));
 
-  // 5. Weighted selection: 60% role-specific, 40% universal
+  // 5. Build eligible pool (role-specific + universal, unanswered)
+  const eligibleQuestions = [...availableRoleSpecific, ...availableUniversal];
+
+  // 6. Fallback if all answered this week: use any PQ3
+  const poolToUse = eligibleQuestions.length > 0
+    ? eligibleQuestions
+    : [...roleSpecific, ...universal];
+
+  if (poolToUse.length === 0) return null;
+
+  // 7. Find lowest ob_priority in pool
+  const lowestPriority = Math.min(
+    ...poolToUse.map((q: PowerQuestion) => q.ob_priority ?? 999)
+  );
+
+  // 8. Filter to only questions at that priority level
+  const priorityPool = poolToUse.filter(
+    (q: PowerQuestion) => (q.ob_priority ?? 999) === lowestPriority
+  );
+
+  // 9. Split by role within priority pool
+  const priorityRoleSpecific = priorityPool.filter((q: PowerQuestion) => q.role_name !== null);
+  const priorityUniversal = priorityPool.filter((q: PowerQuestion) => q.role_name === null);
+
+  // 10. Apply 60/40 weighting within this priority-level pool
   let pool: PowerQuestion[];
   let isUniversal: boolean;
 
-  if (availableRoleSpecific.length > 0 && availableUniversal.length > 0) {
+  if (priorityRoleSpecific.length > 0 && priorityUniversal.length > 0) {
     isUniversal = Math.random() > 0.6; // 40% chance universal
-    pool = isUniversal ? availableUniversal : availableRoleSpecific;
-  } else if (availableRoleSpecific.length > 0) {
-    pool = availableRoleSpecific;
+    pool = isUniversal ? priorityUniversal : priorityRoleSpecific;
+  } else if (priorityRoleSpecific.length > 0) {
+    pool = priorityRoleSpecific;
     isUniversal = false;
-  } else if (availableUniversal.length > 0) {
-    pool = availableUniversal;
+  } else if (priorityUniversal.length > 0) {
+    pool = priorityUniversal;
     isUniversal = true;
   } else {
-    // All questions answered this week — fall back to any PQ3
-    const allAvailable = [...universal, ...roleSpecific];
-    if (allAvailable.length === 0) return null;
-    pool = allAvailable;
-    isUniversal = pool[0].role_name === null;
+    pool = priorityPool;
+    isUniversal = priorityPool[0]?.role_name === null;
   }
 
   const question = pool[Math.floor(Math.random() * pool.length)];
