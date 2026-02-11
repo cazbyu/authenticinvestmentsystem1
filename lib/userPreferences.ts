@@ -36,7 +36,7 @@ export interface UserPreferences {
   share_sparks_with_coach: boolean;
   share_reviews_with_coach: boolean;
   share_reflections_with_coach: boolean;
-  guided_mode_enabled: boolean;
+  alignment_guide_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -164,6 +164,6 @@ export function getDefaultUserPreferences(userId: string): Partial<UserPreferenc
     share_sparks_with_coach: false,
     share_reviews_with_coach: false,
     share_reflections_with_coach: false,
-    guided_mode_enabled: true
+    alignment_guide_enabled: true
   };
 }

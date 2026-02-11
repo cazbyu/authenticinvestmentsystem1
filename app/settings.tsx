@@ -1268,23 +1268,23 @@ export default function SettingsScreen() {
             <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: colors.text }]}>Alignment Guide</Text>
               <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                {userPreferences?.guided_mode_enabled !== false
+                {userPreferences?.alignment_guide_enabled !== false
                   ? 'Coaching nudges appear during Weekly Alignment'
                   : 'Coaching nudges are hidden — you know the way'}
               </Text>
             </View>
             <Switch
-              value={userPreferences?.guided_mode_enabled !== false}
+              value={userPreferences?.alignment_guide_enabled !== false}
               onValueChange={async (value) => {
-                setUserPreferences(prev => prev ? { ...prev, guided_mode_enabled: value } : null);
+                setUserPreferences(prev => prev ? { ...prev, alignment_guide_enabled: value } : null);
                 try {
                   const supabase = getSupabaseClient();
                   const { data: { user } } = await supabase.auth.getUser();
                   if (user) {
-                    await updateUserPreferences(user.id, { guided_mode_enabled: value });
+                    await updateUserPreferences(user.id, { alignment_guide_enabled: value });
                   }
                 } catch (error) {
-                  console.error('Error updating guided mode:', error);
+                  console.error('Error updating alignment guide:', error);
                 }
               }}
               trackColor={{ false: colors.border, true: '#ed1c24' }}

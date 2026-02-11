@@ -227,16 +227,15 @@ export async function calculateAuthenticScore(
       totalScore += aspirationPoints;
     }
 
-    // 8. WEEKLY ALIGNMENT POINTS (sum of all weekly bonuses)
-    const { data: weeklyAlignments } = await supabase
+    // 8. WEEKLY ALIGNMENT POINTS (count of completed alignments - total_weekly_points column does not exist)
+    const { count: completedAlignmentsCount } = await supabase
       .from('0008-ap-weekly-alignments')
-      .select('total_weekly_points')
-      .eq('user_id', userId);
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .not('completed_at', 'is', null);
 
-    if (weeklyAlignments) {
-      const weeklyPoints = weeklyAlignments.reduce((sum, w) => sum + (w.total_weekly_points || 0), 0);
-      totalScore += weeklyPoints;
-    }
+    const weeklyPoints = (completedAlignmentsCount || 0) * 10; // Approximate 10 pts per completed alignment
+    totalScore += weeklyPoints;
 
     // 9. WITHDRAWALS (subtract)
     const { data: withdrawalsData } = await supabase

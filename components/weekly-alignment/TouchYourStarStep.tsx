@@ -16,7 +16,6 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
 import { LifeCompass } from '@/components/compass/LifeCompass';
-import { TourGuideVoice } from '@/components/TourGuideVoice';
 import { 
   trackQuestionShown, 
   trackQuestionAnswered, 
@@ -40,6 +39,7 @@ interface TouchYourStarStepProps {
   guidedModeEnabled?: boolean;
   weekStartDate: string;
   weekEndDate: string;
+  onTourGuideMessage?: (message: string | null, isLoading: boolean) => void;
 }
 
 interface NorthStarData {
@@ -115,6 +115,7 @@ export function TouchYourStarStep({
   guidedModeEnabled = true,
   weekStartDate,
   weekEndDate,
+  onTourGuideMessage,
 }: TouchYourStarStepProps) {
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -515,12 +516,15 @@ export function TouchYourStarStep({
     if (!state) return;
     
     setTourGuideLoading(true);
+    onTourGuideMessage?.(null, true);
     
     try {
       const response = await getTourGuideMessage('step_1', trigger, state);
       setTourGuideMessage(response);
+      onTourGuideMessage?.(response.message, false);
     } catch (err) {
       console.error('Tour guide call failed:', err);
+      onTourGuideMessage?.(null, false);
     } finally {
       setTourGuideLoading(false);
     }
@@ -1308,15 +1312,6 @@ export function TouchYourStarStep({
               )}
             </View>
 
-            {/* Tour Guide Voice - After ceremony completes */}
-            {ceremonyComplete && guidedModeEnabled && tourGuideMessage && (
-              <TourGuideVoice
-                message={tourGuideMessage.message}
-                tone={tourGuideMessage.tone}
-                isLoading={tourGuideLoading}
-              />
-            )}
-
             {/* Hero Question Card */}
             <View style={[styles.heroQuestionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {/* North Star Icon - 75% smaller (was 48, now 36) */}
@@ -1476,15 +1471,6 @@ export function TouchYourStarStep({
             </View>
           )}
         </View>
-
-        {/* Escort: Returning user nudge or tour guide prompt */}
-        {guidedModeEnabled && tourGuideMessage && (
-          <TourGuideVoice
-            message={tourGuideMessage.message}
-            tone={tourGuideMessage.tone}
-            isLoading={tourGuideLoading}
-          />
-        )}
 
         {/* Resume Prompt */}
         {resumePrompt && (

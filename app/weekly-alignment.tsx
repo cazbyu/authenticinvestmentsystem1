@@ -26,6 +26,7 @@ import { WingCheckWellnessStep } from '@/components/weekly-alignment/WingCheckWe
 import { SixCheckStep } from '@/components/weekly-alignment/SixCheckStep';
 import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
 import { WeekPlanBadge } from '@/components/weekly-alignment/WeekPlanBadge';
+import { TourGuideBubble } from '@/components/weekly-alignment/TourGuideBubble';
 // Note: StepIndicatorCompact removed - using inline clickable version
 
 // Types
@@ -81,6 +82,10 @@ export default function WeeklyAlignmentScreen() {
   // Alignment Escort state
   const [guidedModeEnabled, setGuidedModeEnabled] = useState(true);
   const [weekPlanItems, setWeekPlanItems] = useState<WeekPlanItem[]>([]);
+
+  // Tour Guide floating bubble state (lifted from steps for overlay display)
+  const [tourGuideMessage, setTourGuideMessage] = useState<string | null>(null);
+  const [tourGuideLoading, setTourGuideLoading] = useState(false);
   
   // Week dates state
   const [weekStartDate, setWeekStartDate] = useState<string>('');
@@ -128,12 +133,12 @@ export default function WeeklyAlignmentScreen() {
 
       const { data: prefs } = await supabase
         .from('0008-ap-user-preferences')
-        .select('guided_mode_enabled')
+        .select('alignment_guide_enabled')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (prefs !== null && prefs.guided_mode_enabled !== undefined) {
-        setGuidedModeEnabled(prefs.guided_mode_enabled);
+      if (prefs !== null && prefs.alignment_guide_enabled !== undefined) {
+        setGuidedModeEnabled(prefs.alignment_guide_enabled);
       }
 
       // Calculate week dates using user's week start preference
@@ -179,6 +184,7 @@ export default function WeeklyAlignmentScreen() {
       }
       setCurrentStep(prev => prev + 1);
       setStepBackHandler(null);
+      setTourGuideMessage(null); // Clear for new step
 
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -193,6 +199,7 @@ export default function WeeklyAlignmentScreen() {
       }
       setCurrentStep(stepIndex);
       setStepBackHandler(null);
+      setTourGuideMessage(null); // Clear for new step
 
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -221,6 +228,7 @@ export default function WeeklyAlignmentScreen() {
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
       setStepBackHandler(null); // Clear handler when changing steps
+      setTourGuideMessage(null); // Clear for new step
       
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -506,6 +514,10 @@ export default function WeeklyAlignmentScreen() {
             guidedModeEnabled={guidedModeEnabled}
             weekStartDate={weekStartDate}
             weekEndDate={weekEndDate}
+            onTourGuideMessage={(msg, loading) => {
+              setTourGuideMessage(msg);
+              setTourGuideLoading(loading);
+            }}
           />
         )}
 
@@ -580,6 +592,14 @@ export default function WeeklyAlignmentScreen() {
           />
         )}
       </View>
+
+      {/* Tour Guide floating bubble overlay */}
+      {guidedModeEnabled && (
+        <TourGuideBubble
+          message={tourGuideMessage}
+          isLoading={tourGuideLoading}
+        />
+      )}
     </SafeAreaView>
   );
 }
