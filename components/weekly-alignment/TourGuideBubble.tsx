@@ -14,9 +14,10 @@ import {
 } from 'react-native';
 import { Compass, X } from 'lucide-react-native';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BUBBLE_MAX_WIDTH = SCREEN_WIDTH * 0.85;
-const BUBBLE_MAX_HEIGHT = SCREEN_HEIGHT * 0.4;
+const BUBBLE_MIN_WIDTH = 280;
+const BUBBLE_SCROLL_MAX_HEIGHT = 200;
 const AUTO_MINIMIZE_MS = 15000;
 const AUTO_OPEN_DELAY_MS = 1000;
 
@@ -149,15 +150,13 @@ export function TourGuideBubble({
           pointerEvents={isOpen ? 'auto' : 'none'}
         >
           <View style={[styles.bubble, !isOpen && styles.bubbleHidden]}>
-            <View style={styles.bubbleHeader}>
-              <TouchableOpacity
-                onPress={handleClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <X size={18} color="#64748b" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={handleClose}
+              style={styles.closeButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <X size={18} color="#64748b" />
+            </TouchableOpacity>
 
             <ScrollView
               style={styles.bubbleScroll}
@@ -198,9 +197,11 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 24,
+    left: 0,
     right: 20,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'flex-end',
   },
   fab: {
     width: 48,
@@ -232,19 +233,18 @@ const styles = StyleSheet.create({
   bubbleWrapper: {
     position: 'absolute',
     bottom: 60,
-    right: 0,
-    alignSelf: 'flex-end',
+    left: 20,
+    right: 64,
+    minWidth: BUBBLE_MIN_WIDTH,
     maxWidth: BUBBLE_MAX_WIDTH,
-    maxHeight: BUBBLE_MAX_HEIGHT,
   },
   bubble: {
-    backgroundColor: '#fafafa',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    maxWidth: BUBBLE_MAX_WIDTH,
-    maxHeight: BUBBLE_MAX_HEIGHT,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
     overflow: 'hidden',
@@ -252,28 +252,29 @@ const styles = StyleSheet.create({
   bubbleHidden: {
     opacity: 0,
   },
-  bubbleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingTop: 8,
-    paddingRight: 8,
-    paddingBottom: 0,
-  },
   closeButton: {
-    padding: 4,
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    zIndex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   bubbleScroll: {
-    maxHeight: BUBBLE_MAX_HEIGHT - 60,
+    maxHeight: BUBBLE_SCROLL_MAX_HEIGHT,
   },
   bubbleContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    paddingTop: 0,
+    paddingRight: 32,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   messageText: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#334155',
+    color: '#333',
+    flexWrap: 'wrap',
   },
   loadingRow: {
     flexDirection: 'row',
@@ -288,7 +289,7 @@ const styles = StyleSheet.create({
   tail: {
     position: 'absolute',
     bottom: -10,
-    right: 20,
+    right: 24,
     width: 0,
     height: 0,
     borderLeftWidth: 12,
