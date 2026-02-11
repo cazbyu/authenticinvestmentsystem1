@@ -18,7 +18,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BUBBLE_MAX_WIDTH = SCREEN_WIDTH * 0.85;
 const BUBBLE_MIN_WIDTH = 280;
 const BUBBLE_SCROLL_MAX_HEIGHT = 200;
-const AUTO_MINIMIZE_MS = 15000;
 const AUTO_OPEN_DELAY_MS = 1000;
 
 interface TourGuideBubbleProps {
@@ -35,7 +34,6 @@ export function TourGuideBubble({
   const [isOpen, setIsOpen] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const lastMessageRef = useRef<string | null>(null);
-  const autoMinimizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // When we get a new message: show dot, auto-open after 1 second. When loading, auto-open to show "Listening..."
@@ -93,12 +91,6 @@ export function TourGuideBubble({
     setIsOpen(false);
     animateBubble(0);
     onDismiss?.();
-
-    // Clear auto-minimize timer
-    if (autoMinimizeTimerRef.current) {
-      clearTimeout(autoMinimizeTimerRef.current);
-      autoMinimizeTimerRef.current = null;
-    }
   };
 
   const handleToggle = () => {
@@ -109,24 +101,6 @@ export function TourGuideBubble({
       handleOpen();
     }
   };
-
-  // When bubble opens, start 15-second auto-minimize timer
-  useEffect(() => {
-    if (isOpen) {
-      if (autoMinimizeTimerRef.current) {
-        clearTimeout(autoMinimizeTimerRef.current);
-      }
-      autoMinimizeTimerRef.current = setTimeout(() => {
-        handleClose();
-        autoMinimizeTimerRef.current = null;
-      }, AUTO_MINIMIZE_MS);
-    }
-    return () => {
-      if (autoMinimizeTimerRef.current) {
-        clearTimeout(autoMinimizeTimerRef.current);
-      }
-    };
-  }, [isOpen]);
 
   const bubbleTranslateY = slideAnim.interpolate({
     inputRange: [0, 1],
