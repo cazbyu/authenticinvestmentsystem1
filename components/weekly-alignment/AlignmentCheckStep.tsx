@@ -155,11 +155,7 @@ export function AlignmentCheckStep({
   }
 
   async function handleBridgeContinue() {
-    const pq5 = await selectPQ5Question(
-      userId,
-      weekStartDate,
-      pq3Selection?.question.role_name
-    );
+    const pq5 = await selectPQ5Question(userId, weekStartDate);
 
     if (pq5) {
       setPq5Question(pq5);
@@ -234,18 +230,17 @@ export function AlignmentCheckStep({
     saving: boolean
   ) {
     const canSubmit = response.trim().length >= 20;
+    // Filter out "Focus: The Target..." and similar boilerplate - only show genuine context
+    const displayContext = question.question_context?.startsWith('Focus:') ||
+      question.question_context?.includes('The Target. Examples:')
+      ? null
+      : question.question_context;
+
     return (
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: ALIGNMENT_BORDER }]}>
-        {question.role_name && (
-          <View style={[styles.roleBadge, { backgroundColor: ALIGNMENT_LIGHT }]}>
-            <Text style={[styles.roleBadgeText, { color: ALIGNMENT_ACCENT }]}>
-              {question.role_name}
-            </Text>
-          </View>
-        )}
-        {question.question_context && (
+        {displayContext && (
           <Text style={[styles.contextText, { color: colors.textSecondary }]}>
-            {question.question_context}
+            {displayContext}
           </Text>
         )}
         <Text style={[styles.questionText, { color: colors.text }]}>
@@ -464,17 +459,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
-  },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 12,
-  },
-  roleBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   contextText: {
     fontSize: 14,

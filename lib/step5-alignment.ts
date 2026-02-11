@@ -28,26 +28,21 @@ export async function selectPQ3Question(
 ): Promise<PQ3Selection | null> {
   const supabase = getSupabaseClient();
 
-  // 1. Get user's active role labels
-  const { data: roles } = await supabase
-    .from('0008-ap-roles')
-    .select('label, category')
-    .eq('user_id', userId)
-    .eq('is_active', true);
-
-  const roleLabels = (roles || []).map((r: { label: string }) => r.label);
-
-  // 2. Get all active PQ3 questions ordered by ob_priority (lowest first)
+  // 1. Get universal PQ3 questions only (no role, no wellness zone)
   const { data: allPQ3 } = await supabase
     .from('0008-ap-power-questions')
     .select('id, question_text, question_context, power_question, role_name, role_category, is_repeatable, is_active, ob_priority')
     .eq('power_question', 3)
     .eq('is_active', true)
-    .order('ob_priority', { ascending: true });
+    .is('role_id', null)
+    .is('role_name', null)
+    .is('wellness_zone', null)
+    .is('wellness_zone_id', null)
+    .order('ob_priority', { ascending: true, nullsFirst: false });
 
   if (!allPQ3 || allPQ3.length === 0) return null;
 
-  // 3. Exclude questions already answered this week
+  // 2. Exclude questions already answered this week
   const { data: answeredThisWeek } = await supabase
     .from('0008-ap-question-responses')
     .select('question_id')
@@ -57,73 +52,43 @@ export async function selectPQ3Question(
 
   const answeredIds = new Set((answeredThisWeek || []).map((a: { question_id: string }) => a.question_id));
 
-  // 4. Filter to eligible: universal + user's roles, excluding answered
-  const universal = allPQ3.filter((q: PowerQuestion) => q.role_name === null);
-  const roleSpecific = allPQ3.filter(
-    (q: PowerQuestion) => q.role_name !== null && roleLabels.includes(q.role_name)
-  );
-  const availableUniversal = universal.filter((q: PowerQuestion) => !answeredIds.has(q.id));
-  const availableRoleSpecific = roleSpecific.filter((q: PowerQuestion) => !answeredIds.has(q.id));
-
-  // 5. Build eligible pool (role-specific + universal, unanswered)
-  const eligibleQuestions = [...availableRoleSpecific, ...availableUniversal];
-
-  // 6. Fallback if all answered this week: use any PQ3
-  const poolToUse = eligibleQuestions.length > 0
-    ? eligibleQuestions
-    : [...roleSpecific, ...universal];
+  // 3. Filter to unanswered, then fallback to any if all answered
+  const available = allPQ3.filter((q: PowerQuestion) => !answeredIds.has(q.id));
+  const poolToUse = available.length > 0 ? available : allPQ3;
 
   if (poolToUse.length === 0) return null;
 
-  // 7. Find lowest ob_priority in pool
+  // 4. Find lowest ob_priority and filter to that level
   const lowestPriority = Math.min(
     ...poolToUse.map((q: PowerQuestion) => q.ob_priority ?? 999)
   );
-
-  // 8. Filter to only questions at that priority level
   const priorityPool = poolToUse.filter(
     (q: PowerQuestion) => (q.ob_priority ?? 999) === lowestPriority
   );
 
-  // 9. Split by role within priority pool
-  const priorityRoleSpecific = priorityPool.filter((q: PowerQuestion) => q.role_name !== null);
-  const priorityUniversal = priorityPool.filter((q: PowerQuestion) => q.role_name === null);
-
-  // 10. Apply 60/40 weighting within this priority-level pool
-  let pool: PowerQuestion[];
-  let isUniversal: boolean;
-
-  if (priorityRoleSpecific.length > 0 && priorityUniversal.length > 0) {
-    isUniversal = Math.random() > 0.6; // 40% chance universal
-    pool = isUniversal ? priorityUniversal : priorityRoleSpecific;
-  } else if (priorityRoleSpecific.length > 0) {
-    pool = priorityRoleSpecific;
-    isUniversal = false;
-  } else if (priorityUniversal.length > 0) {
-    pool = priorityUniversal;
-    isUniversal = true;
-  } else {
-    pool = priorityPool;
-    isUniversal = priorityPool[0]?.role_name === null;
-  }
-
-  const question = pool[Math.floor(Math.random() * pool.length)];
-  return { question, isUniversal };
+  // 5. Pick randomly from that priority level (all universal)
+  const question = priorityPool[Math.floor(Math.random() * priorityPool.length)];
+  return { question, isUniversal: true };
 }
 
 export async function selectPQ5Question(
   userId: string,
-  weekStart: string,
-  pq3RoleName?: string | null
+  weekStart: string
 ): Promise<PowerQuestion | null> {
   const supabase = getSupabaseClient();
 
-  // 1. Get all active PQ5 questions
+  // 1. Get universal PQ5 questions only (no role, no wellness zone, exclude template)
   const { data: allPQ5 } = await supabase
     .from('0008-ap-power-questions')
-    .select('id, question_text, question_context, power_question, role_name, role_category, is_repeatable, is_active')
+    .select('id, question_text, question_context, power_question, role_name, role_category, is_repeatable, is_active, ob_priority')
     .eq('power_question', 5)
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .is('role_id', null)
+    .is('role_name', null)
+    .is('wellness_zone', null)
+    .is('wellness_zone_id', null)
+    .not('question_text', 'ilike', '%{role_name}%')
+    .order('ob_priority', { ascending: true, nullsFirst: false });
 
   if (!allPQ5 || allPQ5.length === 0) return null;
 
@@ -139,21 +104,19 @@ export async function selectPQ5Question(
   const available = allPQ5.filter((q: PowerQuestion) => !usedIds.has(q.id));
 
   if (available.length === 0) {
-    // Fall back to any PQ5
     const fallback = allPQ5[Math.floor(Math.random() * allPQ5.length)];
     return fallback;
   }
 
-  // 3. If PQ3 was role-specific, try to match
-  if (pq3RoleName) {
-    const roleMatched = available.filter((q: PowerQuestion) => q.role_name === pq3RoleName);
-    if (roleMatched.length > 0) {
-      return roleMatched[Math.floor(Math.random() * roleMatched.length)];
-    }
-  }
+  // 3. Prefer lowest ob_priority, pick randomly within that level
+  const lowestPriority = Math.min(
+    ...available.map((q: PowerQuestion) => q.ob_priority ?? 999)
+  );
+  const priorityPool = available.filter(
+    (q: PowerQuestion) => (q.ob_priority ?? 999) === lowestPriority
+  );
 
-  // 4. Pick any available PQ5
-  return available[Math.floor(Math.random() * available.length)];
+  return priorityPool[Math.floor(Math.random() * priorityPool.length)];
 }
 
 export async function ensureWeeklyAlignmentRow(
