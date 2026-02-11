@@ -1236,7 +1236,6 @@ export function TouchYourStarStep({
   if (flowState === 'hero-question') {
     const isCustomSelected = selectedIdentity === 'custom';
     const hasValidSelection = selectedIdentity && (selectedIdentity !== 'custom' || customIdentity.trim());
-    const tourGuideMessage = getNextTourGuidePrompt();
 
     return (
       <KeyboardAvoidingView
@@ -1442,7 +1441,6 @@ export function TouchYourStarStep({
     const completedCount = (hasMission ? 1 : 0) + (hasVision ? 1 : 0) + (hasValues ? 1 : 0);
     const allComplete = completedCount === 3;
     const identity = northStarData.identity || 'Steward';
-    const tourGuideMessage = getNextTourGuidePrompt();
 
     return (
       <ScrollView
