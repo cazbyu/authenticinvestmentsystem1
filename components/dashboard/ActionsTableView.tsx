@@ -421,7 +421,7 @@ export function ActionsTableView({
       eventBus.off(EVENTS.TASK_CREATED, handleRefresh);
       eventBus.off(EVENTS.REFRESH_ALL_TASKS, handleRefresh);
     };
-  }, []);
+  }, [filter, period, userId]);
 
   const loadActions = async (silent = false) => {
     if (!userId) {
