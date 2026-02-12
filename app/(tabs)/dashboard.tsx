@@ -15,6 +15,7 @@ import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDet
 import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
+import { SpeedDialFab } from '@/components/SpeedDialFab';
 import { ActivityConfig, getActivityConfig } from '@/lib/activityConfig';
 import { formatLocalDate, toLocalISOString, getWeekStart } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
@@ -36,7 +37,7 @@ import { CompassIcon } from '@/components/icons/CustomIcons';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { FlashingArrow } from '@/components/compass/FlashingArrow';
 import { useAttentionState } from '@/hooks/useAttentionState';
-import { YourGuideContainer } from '@/components/your-guide';
+import { ChatBubbleContainer, detectActiveRitual } from '@/components/chat-bubble';
 
 type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
@@ -77,9 +78,10 @@ export default function Dashboard() {
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const [shouldHideHandEmoji, setShouldHideHandEmoji] = useState(false);
 
-  // Your Guide + capture form state
+  // Speed Dial FAB state - tracks which activity was selected
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
-  const [guideEnabled, setGuideEnabled] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [coachingChatEnabled, setCoachingChatEnabled] = useState(true);
 
   
   // === SLOT MAPPING TEST - DELETE AFTER TESTING ===
@@ -524,7 +526,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!userId) return;
     getUserPreferences(userId).then((prefs) => {
-      setGuideEnabled(prefs?.guide_enabled !== false);
+      setCoachingChatEnabled(prefs?.coaching_chat_enabled !== false);
     });
   }, [userId]);
 
@@ -1493,13 +1495,14 @@ const renderDashboardTabs = () => (
         </View>
       </ScrollView>
 
-      {/* Your Guide - single FAB (💬), panel with sidebar when open */}
-      <YourGuideContainer
-        screenContext="Dashboard"
-        userId={userId || null}
-        guideEnabled={guideEnabled}
-        onOpenCaptureSelector={
-          !guideEnabled
+      {/* Speed Dial FAB - Coach option when enabled, else direct to capture */}
+      <SpeedDialFab
+        onActivitySelect={handleActivitySelect}
+        size={56}
+        coachingChatEnabled={coachingChatEnabled}
+        onCoachPress={() => setChatOpen(true)}
+        onQuickCaptureDirect={
+          !coachingChatEnabled
             ? () => {
                 setSelectedActivityConfig(getActivityConfig('task'));
                 setEditingTask(null);
@@ -1669,6 +1672,15 @@ const renderDashboardTabs = () => (
         onClose={() => setSettingsSidebarVisible(false)}
       />
 
+      {/* AI Coaching Chat - Panel, Gauge, CaptureOverlay (FAB lives above) */}
+      {coachingChatEnabled && (
+        <ChatBubbleContainer
+          ritualType={detectActiveRitual()}
+          userId={userId || null}
+          chatOpen={chatOpen}
+          onCloseChat={() => setChatOpen(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }

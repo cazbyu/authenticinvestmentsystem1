@@ -1261,31 +1261,31 @@ export default function SettingsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Features</Text>
           <Text style={[styles.settingDescription, { color: colors.textSecondary, marginBottom: 12 }]}>
-            Your Guide helps you learn the app. Alignment Guide adds coaching during Weekly Alignment.
+            Alignment Coach and Alignment Guide help you stay on track during rituals.
           </Text>
 
-          {/* Your Guide Toggle */}
+          {/* Alignment Coach Toggle */}
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
-              <Text style={[styles.settingLabel, { color: colors.text }]}>💬 Your Guide</Text>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>🧭 Alignment Coach</Text>
               <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                {userPreferences?.guide_enabled !== false
-                  ? 'Get help understanding and using the app'
-                  : 'FAB goes straight to quick capture'}
+                {userPreferences?.coaching_chat_enabled !== false
+                  ? 'Get AI coaching during your rituals'
+                  : 'Coach is hidden — FAB goes straight to quick capture'}
               </Text>
             </View>
             <Switch
-              value={userPreferences?.guide_enabled !== false}
+              value={userPreferences?.coaching_chat_enabled !== false}
               onValueChange={async (value) => {
-                setUserPreferences(prev => prev ? { ...prev, guide_enabled: value } : null);
+                setUserPreferences(prev => prev ? { ...prev, coaching_chat_enabled: value } : null);
                 try {
                   const supabase = getSupabaseClient();
                   const { data: { user } } = await supabase.auth.getUser();
                   if (user) {
-                    await updateUserPreferences(user.id, { guide_enabled: value });
+                    await updateUserPreferences(user.id, { coaching_chat_enabled: value });
                   }
                 } catch (error) {
-                  console.error('Error updating Your Guide:', error);
+                  console.error('Error updating alignment coach:', error);
                 }
               }}
               trackColor={{ false: colors.border, true: '#ed1c24' }}

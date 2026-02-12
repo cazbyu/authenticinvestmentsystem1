@@ -4,9 +4,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Pla
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
-import { ActivityConfig, ACTIVITY_CONFIGS, getActivityConfig } from '@/lib/activityConfig';
-import { YourGuideContainer } from '@/components/your-guide';
-import { getUserPreferences } from '@/lib/userPreferences';
+import { SpeedDialFab } from '@/components/SpeedDialFab';
+import { ActivityConfig, ACTIVITY_CONFIGS } from '@/lib/activityConfig';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
@@ -96,7 +95,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
-  const [guideEnabled, setGuideEnabled] = useState(true);
 
   // 12-Week Goals for selected domain (only fetch when domain is selected)
   const goalProgressScope = useMemo(() =>
@@ -453,13 +451,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
     };
   }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain, selectedDomain, activeView]);
-
-  useEffect(() => {
-    if (!currentUserId) return;
-    getUserPreferences(currentUserId).then((prefs) => {
-      setGuideEnabled(prefs?.guide_enabled !== false);
-    });
-  }, [currentUserId]);
 
   const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
     try {
@@ -1022,17 +1013,8 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       {renderWellnessBankHeader()}
       {renderContent()}
 
-      {/* Your Guide - single FAB (💬), panel with sidebar when open */}
-      <YourGuideContainer
-        screenContext="Wellness Bank"
-        userId={currentUserId}
-        guideEnabled={guideEnabled}
-        onOpenCaptureSelector={
-          !guideEnabled
-            ? () => handleSpeedDialSelect(getActivityConfig('task'))
-            : undefined
-        }
-      />
+      {/* Speed Dial FAB - replaces old DraggableFab */}
+      <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
 
       {/* Modals */}
       <Modal visible={taskFormVisible} animationType="slide" presentationStyle="pageSheet">
