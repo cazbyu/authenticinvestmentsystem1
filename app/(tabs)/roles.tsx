@@ -4,8 +4,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Ima
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
-import { SpeedDialFab } from '@/components/SpeedDialFab';
-import { ActivityConfig, ACTIVITY_CONFIGS } from '@/lib/activityConfig';
+import { ActivityConfig, ACTIVITY_CONFIGS, getActivityConfig } from '@/lib/activityConfig';
+import { YourGuideContainer } from '@/components/your-guide';
+import { getUserPreferences } from '@/lib/userPreferences';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
@@ -127,6 +128,7 @@ const { headerColor } = useHeaderColor();
 
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
+  const [guideEnabled, setGuideEnabled] = useState(true);
 
   // Memoize the scope object to prevent unnecessary re-renders
   const goalsScope = useMemo(() => {
@@ -838,6 +840,13 @@ const { headerColor } = useHeaderColor();
       eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
     };
   }, [registerResetHandler, unregisterResetHandler, resetToMain, selectedRole, selectedKR, activeView, krView]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    getUserPreferences(currentUserId).then((prefs) => {
+      setGuideEnabled(prefs?.guide_enabled !== false);
+    });
+  }, [currentUserId]);
 
   useEffect(() => {
     if (selectedRole && !isLoadingRole && !fetchInProgressRef.current) {
@@ -1867,8 +1876,17 @@ const { headerColor } = useHeaderColor();
       {renderRoleBankHeader()}
       {renderContent()}
 
-      {/* Speed Dial FAB - replaces old DraggableFab */}
-      <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
+      {/* Your Guide - single FAB (💬), panel with sidebar when open */}
+      <YourGuideContainer
+        screenContext="Role Bank"
+        userId={currentUserId}
+        guideEnabled={guideEnabled}
+        onOpenCaptureSelector={
+          !guideEnabled
+            ? () => handleSpeedDialSelect(getActivityConfig('task'))
+            : undefined
+        }
+      />
 
       {/* Modals */}
       <ManageRolesModal

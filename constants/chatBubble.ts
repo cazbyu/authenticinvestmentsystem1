@@ -186,4 +186,4 @@ export const RITUAL_META = {
   evening: { icon: '🌙', label: 'Evening Review', color: '#7B68AE' },
 } as const;
 
-export type RitualType = 'weekly' | 'morning' | 'evening';
+export type RitualType = 'weekly' | 'morning' | 'evening' | 'guide';

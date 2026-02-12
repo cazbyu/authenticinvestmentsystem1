@@ -59,6 +59,47 @@ export async function getOrCreateSession(
   return newSession as RitualSession;
 }
 
+export async function getOrCreateGuideSession(
+  userId: string,
+  screenContext: string
+): Promise<RitualSession> {
+  const supabase = getSupabaseClient();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: existing } = await supabase
+    .from('0008-ap-ritual-sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('ritual_type', 'guide')
+    .eq('session_date', today)
+    .maybeSingle();
+
+  if (existing) {
+    if (screenContext && existing.screen_context !== screenContext) {
+      await supabase
+        .from('0008-ap-ritual-sessions')
+        .update({ screen_context: screenContext, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+    }
+    return existing as RitualSession;
+  }
+
+  const { data: newSession, error } = await supabase
+    .from('0008-ap-ritual-sessions')
+    .insert({
+      user_id: userId,
+      ritual_type: 'guide',
+      session_date: today,
+      screen_context: screenContext,
+      status: 'active',
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return newSession as RitualSession;
+}
+
 // ============================================
 // MESSAGE MANAGEMENT
 // ============================================

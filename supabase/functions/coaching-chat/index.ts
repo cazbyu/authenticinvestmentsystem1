@@ -13,7 +13,8 @@ function buildSystemPrompt(
   ritualType: string,
   fuelLevel: number | null,
   fuelReason: string | null,
-  userContext: any
+  userContext: any,
+  screenContext?: string
 ): string {
   const { northStar, recentTaskStats, recentSummaries, topRolesThisWeek, overdueItems } =
     userContext;
@@ -39,7 +40,12 @@ THIS WEEK'S DATA:
     base += `\nReference these when relevant — e.g. "Last week you committed to X — how did that go?"`;
   }
 
-  if (ritualType === "morning") {
+  if (ritualType === "guide") {
+    base += `\n\nMODE: Your Guide — app help and onboarding
+SCREEN CONTEXT: ${screenContext || "Unknown"}
+
+You are "Your Guide" — a knowledgeable friend who knows every feature of the Authentic Life Operating System. Your job is to help the user understand how the app works and get the most from it. You are warm, encouraging, and practical. Explain features in plain language. When relevant, suggest they capture something (task, event, rose, thorn, reflection, deposit idea) using the sidebar — but your primary focus is helping them learn and navigate.`;
+  } else if (ritualType === "morning") {
     base += `\n\nRITUAL: Morning Spark
 FUEL LEVEL: ${fuelLevel} (${fuelLevel === 1 ? "Low" : fuelLevel === 2 ? "Moderate" : "Full"})
 FUEL REASON: ${fuelReason || "unknown"}
@@ -73,7 +79,7 @@ When you want to suggest a capture, format your response as:
 
 [CAPTURE_OFFER:{"captureType":"task","data":{"title":"...","role":"...","wellness":["..."],"relationships":["..."],"goalLink":{"name":"...","type":"12wk"},"date":"...","time":"..."}}]
 
-Valid capture types: task, event, rose, thorn, reflection, deposit_idea${ritualType === "evening" ? ", brain_dump" : ""}
+Valid capture types: task, event, rose, thorn, reflection, deposit_idea${ritualType === "evening" ? ", brain_dump" : ""}${ritualType === "guide" ? " (no brain_dump)" : ""}
 Valid wellness zones: Physical, Emotional, Intellectual, Social, Spiritual, Financial, Recreational, Community
 Pre-fill as much data as you can from context. The user can edit everything before saving.
 
@@ -88,16 +94,16 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { messages, ritualType, fuelLevel, fuelReason, userContext } = await req.json();
+    const { messages, ritualType, fuelLevel, fuelReason, userContext, screenContext } = await req.json();
 
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY not configured");
     }
 
-    const systemPrompt = buildSystemPrompt(ritualType, fuelLevel, fuelReason, userContext);
+    const systemPrompt = buildSystemPrompt(ritualType, fuelLevel, fuelReason, userContext, screenContext);
 
     const model =
-      ritualType === "weekly"
+      ritualType === "weekly" || ritualType === "guide"
         ? "claude-sonnet-4-20250514"
         : "claude-3-5-haiku-20241022";
 

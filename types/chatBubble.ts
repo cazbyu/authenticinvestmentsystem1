@@ -37,6 +37,7 @@ export interface RitualSession {
   sessionDate: string;
   fuelLevel?: 1 | 2 | 3;
   fuelReason?: string;
+  screenContext?: string;
   status: 'active' | 'completed' | 'abandoned';
 }
 
