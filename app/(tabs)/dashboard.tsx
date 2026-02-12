@@ -36,6 +36,7 @@ import { CompassIcon } from '@/components/icons/CustomIcons';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { FlashingArrow } from '@/components/compass/FlashingArrow';
 import { useAttentionState } from '@/hooks/useAttentionState';
+import { ChatBubbleContainer, detectActiveRitual } from '@/components/chat-bubble';
 
 type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
 
@@ -677,6 +678,12 @@ export default function Dashboard() {
       .eq('user_id', user.id)
       .eq('ritual_type', 'weekly_alignment')
       .gte('completed_at', today);
+
+    // Clear chat bubble data
+    await supabase.from('0008-ap-conversation-summaries').delete().eq('user_id', user.id);
+    await supabase.from('0008-ap-conversation-messages').delete().eq('user_id', user.id);
+    await supabase.from('0008-ap-captures').delete().eq('user_id', user.id);
+    await supabase.from('0008-ap-ritual-sessions').delete().eq('user_id', user.id);
 
     await checkRitualAvailability();
     Alert.alert('Dev Reset Complete', 'Spark, North Star (Identity/Mission/Vision/Values), and all responses have been cleared.');
@@ -1642,6 +1649,12 @@ const renderDashboardTabs = () => (
       <SettingsSidebar
         visible={settingsSidebarVisible}
         onClose={() => setSettingsSidebarVisible(false)}
+      />
+
+      {/* AI Coaching Chat Bubble */}
+      <ChatBubbleContainer
+        ritualType={detectActiveRitual()}
+        userId={userId || null}
       />
     </SafeAreaView>
   );
