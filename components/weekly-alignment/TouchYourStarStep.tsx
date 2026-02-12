@@ -1291,6 +1291,7 @@ export function TouchYourStarStep({
                 <View style={styles.headerTextContainer}>
                   <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                   <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+                  <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
                 </View>
                 {/* Tooltip Button - ? icon */}
                 <TouchableOpacity 
@@ -1452,6 +1453,7 @@ export function TouchYourStarStep({
             <View style={styles.headerTextContainer}>
               <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+              <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
             </View>
             {/* Tooltip Button */}
             <TouchableOpacity 
@@ -1782,6 +1784,7 @@ export function TouchYourStarStep({
             <View style={styles.headerTextContainer}>
               <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+              <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
             </View>
           </View>
         </View>
@@ -1878,6 +1881,7 @@ export function TouchYourStarStep({
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+                <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
               </View>
             </View>
           </View>
@@ -2028,6 +2032,7 @@ export function TouchYourStarStep({
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+                <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
               </View>
             </View>
           </View>
@@ -2136,6 +2141,7 @@ export function TouchYourStarStep({
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+                <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
               </View>
             </View>
           </View>
@@ -2333,6 +2339,7 @@ export function TouchYourStarStep({
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
+                <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
               </View>
             </View>
           </View>
@@ -2489,6 +2496,12 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
+  },
+  stepSubtitle: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#666',
+    marginTop: 4,
   },
 
   // Tooltip

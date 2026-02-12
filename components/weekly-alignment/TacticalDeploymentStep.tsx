@@ -523,8 +523,9 @@ export function TacticalDeploymentStep({
             <Crosshair size={36} color={DEPLOY_COLOR} strokeWidth={1.8} />
           </View>
           <View style={styles.headerTextWrap}>
-            <Text style={[styles.stepLabel, { color: DEPLOY_COLOR }]}>Step 5</Text>
+            <Text style={[styles.stepLabel, { color: DEPLOY_COLOR }]}>Step 6</Text>
             <Text style={[styles.stepTitle, { color: colors.text }]}>Deployment</Text>
+            <Text style={[styles.stepSubtitle, { color: '#666' }]}>Am I going where I want?</Text>
           </View>
           <TouchableOpacity
             style={styles.tooltipBtn}
@@ -916,6 +917,12 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
+  },
+  stepSubtitle: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#666',
+    marginTop: 4,
   },
   tooltipBtn: {
     padding: 8,

@@ -1257,6 +1257,7 @@ async function loadRoleItemsData(role: Role) {
             <View style={styles.headerTextContainer}>
               <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Wing Check: Roles</Text>
+              <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
             </View>
             <TouchableOpacity
               style={styles.tooltipButton}
@@ -2773,6 +2774,7 @@ async function loadRoleItemsData(role: Role) {
           <View style={styles.headerTextContainer}>
             <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
             <Text style={[styles.stepTitle, { color: colors.text }]}>Wing Check: Roles</Text>
+            <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
           </View>
           <TouchableOpacity
             style={styles.tooltipButton}
@@ -2954,6 +2956,12 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
+  },
+  stepSubtitle: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#666',
+    marginTop: 4,
   },
   tooltipButton: {
     padding: 8,

@@ -1417,6 +1417,7 @@ export function SixCheckStep({
           <View style={styles.headerTextContainer}>
             <Text style={[styles.stepLabel, { color: GOALS_COLOR }]}>Step 4</Text>
             <Text style={[styles.stepTitle, { color: colors.text }]}>Six Check: Goals</Text>
+            <Text style={[styles.stepSubtitle, { color: '#666' }]}>Where do I want to go?</Text>
           </View>
           <TouchableOpacity
             style={styles.tooltipButton}
@@ -1625,6 +1626,12 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
+  },
+  stepSubtitle: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#666',
+    marginTop: 4,
   },
   tooltipButton: {
     padding: 8,

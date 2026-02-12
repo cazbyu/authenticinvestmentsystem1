@@ -395,6 +395,7 @@ export function WingCheckWellnessStep({
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: WELLNESS_COLOR }]}>Step 3</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Prioritize Zones</Text>
+                <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
               </View>
             </View>
           </View>
@@ -528,6 +529,7 @@ export function WingCheckWellnessStep({
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: WELLNESS_COLOR }]}>Step 3</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Review Your Zones</Text>
+                <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
               </View>
             </View>
           </View>
@@ -695,8 +697,9 @@ export function WingCheckWellnessStep({
             <Image source={CompassWellnessIcon} style={styles.compassIcon} resizeMode="contain" />
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={[styles.stepLabel, { color: WELLNESS_COLOR }]}>Step 3</Text>
-            <Text style={[styles.stepTitle, { color: colors.text }]}>Wing Check: Wellness</Text>
+                <Text style={[styles.stepLabel, { color: WELLNESS_COLOR }]}>Step 3</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>Wing Check: Wellness</Text>
+                <Text style={[styles.stepSubtitle, { color: '#666' }]}>Who am I? — Why am I here? — Where do I want to go?</Text>
           </View>
           <TouchableOpacity
             style={styles.tooltipButton}
@@ -864,6 +867,12 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
     fontWeight: '700',
+  },
+  stepSubtitle: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#666',
+    marginTop: 4,
   },
   tooltipButton: {
     padding: 8,

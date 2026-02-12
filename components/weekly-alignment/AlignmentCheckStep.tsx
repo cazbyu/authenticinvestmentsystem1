@@ -30,9 +30,10 @@ import {
   type PQ3Selection,
 } from '@/lib/step5-alignment';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
+import { AlignmentEscortCard } from './AlignmentEscortCard';
 
 const ALIGNMENT_ACCENT = '#FF6B35';
-const ALIGNMENT_LIGHT = '#FF6B3515';
+const ALIGNMENT_LIGHT = '#FF6B3520';
 const ALIGNMENT_BORDER = '#FF6B3540';
 
 type AlignmentPhase = 'loading' | 'pq3' | 'bridge' | 'pq5' | 'library_offer' | 'complete';
@@ -237,20 +238,16 @@ export function AlignmentCheckStep({
       : question.question_context;
 
     return (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: ALIGNMENT_BORDER }]}>
+      <View style={[styles.questionCard, { backgroundColor: colors.surface }]}>
         {displayContext && (
-          <Text style={[styles.contextText, { color: colors.textSecondary }]}>
-            {displayContext}
-          </Text>
+          <Text style={styles.contextText}>{displayContext}</Text>
         )}
-        <Text style={[styles.questionText, { color: colors.text }]}>
-          {question.question_text}
-        </Text>
+        <Text style={styles.questionText}>{question.question_text}</Text>
         <TextInput
           style={[
             styles.input,
             {
-              borderColor: colors.border,
+              borderColor: '#E5E7EB',
               color: colors.text,
               backgroundColor: colors.background,
             },
@@ -266,7 +263,6 @@ export function AlignmentCheckStep({
         <TouchableOpacity
           style={[
             styles.primaryButton,
-            { backgroundColor: ALIGNMENT_ACCENT },
             !canSubmit && styles.primaryButtonDisabled,
           ]}
           onPress={onSubmit}
@@ -297,10 +293,7 @@ export function AlignmentCheckStep({
       <View style={styles.bridgeContainer}>
         <Text style={styles.bridgeEmoji}>🪞</Text>
         <Text style={[styles.bridgeMessage, { color: colors.text }]}>{message}</Text>
-        <TouchableOpacity
-          style={[styles.primaryButton, { backgroundColor: ALIGNMENT_ACCENT }]}
-          onPress={handleBridgeContinue}
-        >
+        <TouchableOpacity style={styles.primaryButton} onPress={handleBridgeContinue}>
           <Text style={styles.primaryButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
@@ -309,7 +302,7 @@ export function AlignmentCheckStep({
 
   function renderLibraryOffer() {
     return (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: ALIGNMENT_BORDER }]}>
+      <View style={[styles.questionCard, { backgroundColor: colors.surface }]}>
         <Text style={[styles.libraryTitle, { color: colors.text }]}>
           Want to revisit this question regularly?
         </Text>
@@ -325,7 +318,7 @@ export function AlignmentCheckStep({
         ) : (
           <View style={styles.libraryButtons}>
             <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: ALIGNMENT_ACCENT }]}
+              style={styles.primaryButton}
               onPress={handleAddToLibrary}
               disabled={librarySaving}
             >
@@ -386,10 +379,36 @@ export function AlignmentCheckStep({
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {(phase === 'pq3' || phase === 'pq5') && (
-          <Text style={[styles.stepLabel, { color: colors.textSecondary }]}>
-            Alignment Check — Am I acting in a way to get there?
-          </Text>
+        {/* Header - matching TacticalDeploymentStep pattern */}
+        {(phase === 'pq3' || phase === 'pq5' || phase === 'bridge' || phase === 'library_offer' || phase === 'complete') && (
+          <View style={styles.headerSection}>
+            <View style={styles.headerRow}>
+              <View style={[styles.iconContainer, { backgroundColor: ALIGNMENT_LIGHT }]}>
+                <Text style={styles.headerEmoji}>🪞</Text>
+              </View>
+              <View style={styles.headerTextWrap}>
+                <Text style={[styles.headerStepLabel, { color: ALIGNMENT_ACCENT }]}>Step 5</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Alignment Check</Text>
+                <Text style={styles.headerSubtitle}>Where am I going?</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Escort card - PQ3 and PQ5 phases only */}
+        {guidedModeEnabled && phase === 'pq3' && (
+          <AlignmentEscortCard
+            type="nudge"
+            message="This is your honest mirror. Read the question below and reflect on what your actions — not your intentions — actually say."
+            stepColor={ALIGNMENT_ACCENT}
+          />
+        )}
+        {guidedModeEnabled && phase === 'pq5' && (
+          <AlignmentEscortCard
+            type="nudge"
+            message="Now look forward. What's one concrete thing you can commit to this week?"
+            stepColor={ALIGNMENT_ACCENT}
+          />
         )}
 
         {phase === 'pq3' &&
@@ -450,36 +469,75 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  stepLabel: {
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: 'center',
+  headerSection: {
+    marginBottom: 20,
   },
-  card: {
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  iconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerEmoji: {
+    fontSize: 36,
+  },
+  headerTextWrap: {
+    flex: 1,
+  },
+  headerStepLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#666',
+    marginTop: 4,
+  },
+  questionCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 24,
+    marginBottom: 16,
     borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   contextText: {
     fontSize: 14,
+    color: '#666',
     marginBottom: 12,
     lineHeight: 20,
   },
   questionText: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 16,
+    color: '#1a1a1a',
+    marginBottom: 20,
     lineHeight: 26,
   },
   input: {
     fontSize: 16,
     borderWidth: 1,
+    borderColor: '#E5E7EB',
     borderRadius: 12,
     minHeight: 100,
     padding: 16,
     marginBottom: 16,
   },
   primaryButton: {
+    backgroundColor: '#FF6B35',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
