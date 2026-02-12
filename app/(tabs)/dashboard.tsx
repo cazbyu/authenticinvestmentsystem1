@@ -16,7 +16,7 @@ import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetai
 import { JournalView } from '@/components/journal/JournalView';
 import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
 import { SpeedDialFab } from '@/components/SpeedDialFab';
-import { ActivityConfig } from '@/lib/activityConfig';
+import { ActivityConfig, getActivityConfig } from '@/lib/activityConfig';
 import { formatLocalDate, toLocalISOString, getWeekStart } from '@/lib/dateUtils';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
@@ -29,6 +29,7 @@ import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
 import { CompassView } from '@/components/compass/CompassView';
 import { router, useFocusEffect } from 'expo-router';
 import { shouldShowRitual } from '@/lib/ritualUtils';
+import { getUserPreferences } from '@/lib/userPreferences';
 import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
@@ -79,6 +80,8 @@ export default function Dashboard() {
 
   // Speed Dial FAB state - tracks which activity was selected
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [coachingChatEnabled, setCoachingChatEnabled] = useState(true);
 
   
   // === SLOT MAPPING TEST - DELETE AFTER TESTING ===
@@ -519,6 +522,13 @@ export default function Dashboard() {
   useEffect(() => {
     loadJournalPeriodScore();
   }, [selectedPeriod]);
+
+  useEffect(() => {
+    if (!userId) return;
+    getUserPreferences(userId).then((prefs) => {
+      setCoachingChatEnabled(prefs?.coaching_chat_enabled !== false);
+    });
+  }, [userId]);
 
   useEffect(() => {
     registerResetHandler('dashboard', resetToMain);
@@ -1485,10 +1495,21 @@ const renderDashboardTabs = () => (
         </View>
       </ScrollView>
 
-      {/* Speed Dial FAB - replaces DraggableFab */}
-      <SpeedDialFab 
+      {/* Speed Dial FAB - Coach option when enabled, else direct to capture */}
+      <SpeedDialFab
         onActivitySelect={handleActivitySelect}
         size={56}
+        coachingChatEnabled={coachingChatEnabled}
+        onCoachPress={() => setChatOpen(true)}
+        onQuickCaptureDirect={
+          !coachingChatEnabled
+            ? () => {
+                setSelectedActivityConfig(getActivityConfig('task'));
+                setEditingTask(null);
+                setIsFormModalVisible(true);
+              }
+            : undefined
+        }
       />
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
@@ -1651,11 +1672,15 @@ const renderDashboardTabs = () => (
         onClose={() => setSettingsSidebarVisible(false)}
       />
 
-      {/* AI Coaching Chat Bubble */}
-      <ChatBubbleContainer
-        ritualType={detectActiveRitual()}
-        userId={userId || null}
-      />
+      {/* AI Coaching Chat - Panel, Gauge, CaptureOverlay (FAB lives above) */}
+      {coachingChatEnabled && (
+        <ChatBubbleContainer
+          ritualType={detectActiveRitual()}
+          userId={userId || null}
+          chatOpen={chatOpen}
+          onCloseChat={() => setChatOpen(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }

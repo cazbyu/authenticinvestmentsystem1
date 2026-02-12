@@ -11,7 +11,7 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import { Plus } from 'lucide-react-native';
+import { Plus, Compass } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ACTIVITY_CONFIGS, ACTIVITY_ORDER, ActivityConfig, ActivityType } from '@/lib/activityConfig';
 
@@ -19,6 +19,12 @@ interface SpeedDialFabProps {
   onActivitySelect: (config: ActivityConfig) => void;
   size?: number;
   backgroundColor?: string;
+  /** When true, adds Coach option at top; when false, single tap skips menu and calls onQuickCaptureDirect */
+  coachingChatEnabled?: boolean;
+  /** Called when user taps Coach option (only when coachingChatEnabled) */
+  onCoachPress?: () => void;
+  /** Called when user taps FAB and coach is disabled — skip menu, go straight to capture */
+  onQuickCaptureDirect?: () => void;
 }
 
 const MINI_FAB_SIZE = 48;
@@ -28,6 +34,9 @@ export function SpeedDialFab({
   onActivitySelect,
   size = 56,
   backgroundColor,
+  coachingChatEnabled = true,
+  onCoachPress,
+  onQuickCaptureDirect,
 }: SpeedDialFabProps) {
   const { colors } = useTheme();
   const fabBackgroundColor = backgroundColor || colors.primary;
@@ -74,6 +83,10 @@ export function SpeedDialFab({
   }, [size, translateX, translateY]);
 
   const toggleOpen = () => {
+    if (!coachingChatEnabled && onQuickCaptureDirect) {
+      onQuickCaptureDirect();
+      return;
+    }
     const newIsOpen = !isOpen;
     setIsOpen(newIsOpen);
     openProgress.value = withSpring(newIsOpen ? 1 : 0, {
@@ -211,9 +224,18 @@ export function SpeedDialFab({
     });
   };
 
-  // Pre-create all the animated styles
-  const miniFabStyles = ACTIVITY_ORDER.map((_, index) => createMiniFabStyle(index));
-  const labelStyles = ACTIVITY_ORDER.map((_, index) => createLabelStyle(index));
+  // When coach enabled, add Coach as first item (index 0)
+  const coachOffset = coachingChatEnabled && onCoachPress ? 1 : 0;
+
+  // Pre-create animated styles: index 0 for coach when present, then activity indices
+  const coachMiniFabStyle = createMiniFabStyle(0);
+  const coachLabelStyle = createLabelStyle(0);
+  const miniFabStyles = ACTIVITY_ORDER.map((_, index) =>
+    createMiniFabStyle(index + coachOffset)
+  );
+  const labelStyles = ACTIVITY_ORDER.map((_, index) =>
+    createLabelStyle(index + coachOffset)
+  );
 
   const renderIcon = (config: ActivityConfig) => {
     // All activities use PNG images
@@ -258,7 +280,31 @@ export function SpeedDialFab({
               mainFabAnimatedStyle,
             ]}
           >
-            {/* Mini FABs */}
+            {/* Coach Mini FAB (when enabled) */}
+            {coachingChatEnabled && onCoachPress && (
+              <Animated.View
+                style={[styles.miniFabContainer, coachMiniFabStyle]}
+              >
+                <Animated.View style={[styles.labelContainer, coachLabelStyle]}>
+                  <Text style={[styles.label, { color: '#4A90D9' }]}>
+                    Coach
+                  </Text>
+                </Animated.View>
+                <TouchableOpacity
+                  style={[styles.miniFab, { borderColor: '#4A90D9' }]}
+                  onPress={() => {
+                    setIsOpen(false);
+                    openProgress.value = withSpring(0);
+                    onCoachPress();
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Compass size={22} color="#4A90D9" />
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {/* Activity Mini FABs */}
             {ACTIVITY_ORDER.map((activityKey, index) => {
               const config = ACTIVITY_CONFIGS[activityKey];
               

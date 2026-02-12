@@ -1,19 +1,17 @@
 /**
- * ChatBubbleContainer - Wraps FAB, Panel, Gauge, and Overlay
- * Integrates into ritual screens (weekly alignment, morning spark, evening review)
+ * ChatBubbleContainer - Manages ChatPanel, Gauge, and CaptureOverlay
+ * FAB lives in parent; parent opens coach via FAB menu and passes chatOpen.
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { saveCapture } from '@/lib/chatBubbleService';
 import type { RitualType } from '@/constants/chatBubble';
-import { RITUAL_META } from '@/constants/chatBubble';
 import { MorningSparkGauge } from './MorningSparkGauge';
 import { ChatPanel } from './ChatPanel';
 import { CaptureOverlay } from './CaptureOverlay';
-import { ChatBubbleFAB } from './ChatBubbleFAB';
 import type { CaptureType } from '@/constants/chatBubble';
 import type { CaptureData } from '@/types/chatBubble';
 
@@ -29,14 +27,18 @@ export function detectActiveRitual(): RitualType {
 interface ChatBubbleContainerProps {
   ritualType: RitualType;
   userId: string | null;
+  /** Coach panel visibility — controlled by parent (FAB menu) */
+  chatOpen: boolean;
+  onCloseChat: () => void;
 }
 
 export function ChatBubbleContainer({
   ritualType,
   userId,
+  chatOpen,
+  onCloseChat,
 }: ChatBubbleContainerProps) {
   const { colors } = useTheme();
-  const [chatOpen, setChatOpen] = useState(false);
   const [morningGaugeComplete, setMorningGaugeComplete] = useState(
     ritualType !== 'morning'
   );
@@ -75,8 +77,6 @@ export function ChatBubbleContainer({
     [userId, ritualType]
   );
 
-  const showFAB = ritualType === 'morning' ? morningGaugeComplete : true;
-
   return (
     <>
       {ritualType === 'morning' && !morningGaugeComplete && (
@@ -88,27 +88,24 @@ export function ChatBubbleContainer({
         </View>
       )}
 
-      {showFAB && (
-        <ChatBubbleFAB
-          isOpen={chatOpen}
-          onPress={() => setChatOpen((o) => !o)}
-          ritualColor={RITUAL_META[ritualType].color}
-          hasNotification={false}
-          visible={!!userId}
-        />
-      )}
-
       {chatOpen && userId && (
-        <ChatPanel
-          userId={userId}
-          ritualType={ritualType}
-          fuelLevel={morningFuel}
-          fuelReason={morningReason}
-          onClose={() => setChatOpen(false)}
-          onOpenCaptureOverlay={(type, data) =>
-            setCaptureOverlay({ type, data })
-          }
-        />
+        <View style={styles.panelBackdrop} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.backdropTouch}
+            activeOpacity={1}
+            onPress={onCloseChat}
+          />
+          <ChatPanel
+            userId={userId}
+            ritualType={ritualType}
+            fuelLevel={morningFuel}
+            fuelReason={morningReason}
+            onClose={onCloseChat}
+            onOpenCaptureOverlay={(type, data) =>
+              setCaptureOverlay({ type, data })
+            }
+          />
+        </View>
       )}
 
       {captureOverlay && (
@@ -126,6 +123,14 @@ export function ChatBubbleContainer({
 }
 
 const styles = StyleSheet.create({
+  panelBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 998,
+  },
+  backdropTouch: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
   gaugeWrapper: {
     position: 'absolute',
     bottom: 100,

@@ -1257,13 +1257,43 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Alignment Guide Section */}
+        {/* AI Features Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Alignment Guide</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Features</Text>
           <Text style={[styles.settingDescription, { color: colors.textSecondary, marginBottom: 12 }]}>
-            The Alignment Guide coaches you through the Weekly Alignment ritual, helping you create purpose-aligned tasks, events, and ideas as you reflect.
+            Alignment Coach and Alignment Guide help you stay on track during rituals.
           </Text>
 
+          {/* Alignment Coach Toggle */}
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.text }]}>🧭 Alignment Coach</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                {userPreferences?.coaching_chat_enabled !== false
+                  ? 'Get AI coaching during your rituals'
+                  : 'Coach is hidden — FAB goes straight to quick capture'}
+              </Text>
+            </View>
+            <Switch
+              value={userPreferences?.coaching_chat_enabled !== false}
+              onValueChange={async (value) => {
+                setUserPreferences(prev => prev ? { ...prev, coaching_chat_enabled: value } : null);
+                try {
+                  const supabase = getSupabaseClient();
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (user) {
+                    await updateUserPreferences(user.id, { coaching_chat_enabled: value });
+                  }
+                } catch (error) {
+                  console.error('Error updating alignment coach:', error);
+                }
+              }}
+              trackColor={{ false: colors.border, true: '#ed1c24' }}
+              thumbColor={colors.surface}
+            />
+          </View>
+
+          {/* Alignment Guide Toggle */}
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <Text style={[styles.settingLabel, { color: colors.text }]}>Alignment Guide</Text>

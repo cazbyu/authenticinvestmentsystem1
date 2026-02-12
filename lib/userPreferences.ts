@@ -37,6 +37,7 @@ export interface UserPreferences {
   share_reviews_with_coach: boolean;
   share_reflections_with_coach: boolean;
   alignment_guide_enabled: boolean;
+  coaching_chat_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -164,6 +165,7 @@ export function getDefaultUserPreferences(userId: string): Partial<UserPreferenc
     share_sparks_with_coach: false,
     share_reviews_with_coach: false,
     share_reflections_with_coach: false,
-    alignment_guide_enabled: true
+    alignment_guide_enabled: true,
+    coaching_chat_enabled: true,
   };
 }
