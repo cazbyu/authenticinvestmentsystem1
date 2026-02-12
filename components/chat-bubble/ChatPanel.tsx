@@ -11,6 +11,7 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -247,7 +248,7 @@ export function ChatPanel({
         <View style={styles.headerLeft}>
           <Text style={styles.headerIcon}>{meta.icon}</Text>
           <View>
-            <Text style={styles.headerTitle}>Alignment Coach</Text>
+            <Text style={styles.headerTitle}>Your Guide</Text>
             <Text style={styles.headerSubtitle}>{meta.label}</Text>
           </View>
         </View>
@@ -259,15 +260,81 @@ export function ChatPanel({
         </TouchableOpacity>
       </View>
 
-      {/* Messages */}
-      <ScrollView
-        ref={scrollRef}
-        style={styles.messagesScroll}
-        contentContainerStyle={styles.messagesContent}
-        onContentSizeChange={() =>
-          scrollRef.current?.scrollToEnd({ animated: true })
-        }
-      >
+      {/* Middle: Sidebar + Messages */}
+      <View style={styles.middleRow}>
+        {/* Capture Sidebar */}
+        <View style={styles.sidebar}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sidebarBtn,
+              pressed && styles.sidebarBtnPressed,
+            ]}
+            onPress={() => onOpenCaptureOverlay?.('task', { title: '' })}
+          >
+            <Text style={[styles.sidebarIcon, { color: '#4A90D9' }]}>✓</Text>
+            <Text style={styles.sidebarLabel}>Task</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sidebarBtn,
+              pressed && styles.sidebarBtnPressed,
+            ]}
+            onPress={() => onOpenCaptureOverlay?.('event', { title: '' })}
+          >
+            <Text style={[styles.sidebarIcon, { color: '#E8963A' }]}>📅</Text>
+            <Text style={styles.sidebarLabel}>Event</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sidebarBtn,
+              pressed && styles.sidebarBtnPressed,
+            ]}
+            onPress={() => onOpenCaptureOverlay?.('deposit_idea', { title: '' })}
+          >
+            <Text style={[styles.sidebarIcon, { color: '#FFC107' }]}>💡</Text>
+            <Text style={styles.sidebarLabel}>Idea</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sidebarBtn,
+              pressed && styles.sidebarBtnPressed,
+            ]}
+            onPress={() => onOpenCaptureOverlay?.('rose', { title: '' })}
+          >
+            <Text style={[styles.sidebarIcon, { color: '#E91E63' }]}>🌹</Text>
+            <Text style={styles.sidebarLabel}>Rose</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sidebarBtn,
+              pressed && styles.sidebarBtnPressed,
+            ]}
+            onPress={() => onOpenCaptureOverlay?.('thorn', { title: '' })}
+          >
+            <Text style={[styles.sidebarIcon, { color: '#795548' }]}>🌵</Text>
+            <Text style={styles.sidebarLabel}>Thorn</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sidebarBtn,
+              pressed && styles.sidebarBtnPressed,
+            ]}
+            onPress={() => onOpenCaptureOverlay?.('reflection', { title: '' })}
+          >
+            <Text style={[styles.sidebarIcon, { color: '#5C6BC0' }]}>💭</Text>
+            <Text style={styles.sidebarLabel}>Refl.</Text>
+          </Pressable>
+        </View>
+
+        {/* Messages */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.messagesScroll}
+          contentContainerStyle={styles.messagesContent}
+          onContentSizeChange={() =>
+            scrollRef.current?.scrollToEnd({ animated: true })
+          }
+        >
         {messages.map((msg) => (
           <View
             key={msg.id}
@@ -297,7 +364,8 @@ export function ChatPanel({
             <ActivityIndicator size="small" color="#fff" />
           </View>
         )}
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       {/* Input */}
       <View style={styles.inputRow}>
@@ -329,11 +397,11 @@ export function ChatPanel({
 const styles = StyleSheet.create({
   panel: {
     position: 'absolute',
-    bottom: 70,
-    left: 12,
-    right: 12,
-    height: '65%',
-    maxHeight: 500,
+    bottom: 80,
+    left: 40,
+    right: 40,
+    height: '55%',
+    maxHeight: 420,
     borderRadius: 18,
     backgroundColor: '#1a1a2e',
     overflow: 'hidden',
@@ -397,6 +465,36 @@ const styles = StyleSheet.create({
   closeText: {
     color: '#fff',
     fontSize: 18,
+  },
+  middleRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  sidebar: {
+    width: 56,
+    backgroundColor: '#232340',
+    borderRightWidth: 1,
+    borderRightColor: '#2d2d4a',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  sidebarBtn: {
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    width: '100%',
+  },
+  sidebarBtnPressed: {
+    backgroundColor: '#2d2d5a',
+  },
+  sidebarIcon: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  sidebarLabel: {
+    fontSize: 9,
+    color: '#9ca3af',
   },
   messagesScroll: {
     flex: 1,
