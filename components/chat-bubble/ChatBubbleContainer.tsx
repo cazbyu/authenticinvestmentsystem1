@@ -79,7 +79,7 @@ export function ChatBubbleContainer({
 
   return (
     <>
-      {ritualType === 'morning' && !morningGaugeComplete && (
+      {chatOpen && ritualType === 'morning' && !morningGaugeComplete && (
         <View style={styles.gaugeWrapper}>
           <MorningSparkGauge
             onComplete={handleGaugeComplete}
