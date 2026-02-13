@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
   Image,
   Modal,
   Dimensions,
+  FlatList,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { X } from 'lucide-react-native';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { BrainDumpTriageItem, TriageAction } from '@/lib/morningSparkV2Service';
 import { triageBrainDumpItem } from '@/lib/morningSparkV2Service';
@@ -27,12 +28,29 @@ interface BrainDumpTriageStepProps {
   onAllProcessed: () => void;
 }
 
-interface ActionOption {
-  action: TriageAction;
-  label: string;
-  emoji: string;
-  color: string;
-}
+// ============ LIFE OS COLOR PALETTE (semi-muted, 70-80% saturation) ============
+
+const PALETTE = {
+  skyBlue: '#5B9BD5',        // Do Today — soft sky blue
+  skyBlueBg: '#EBF3FB',      // light bg
+  skyBlueBorder: '#B8D4EE',  // subtle inner border
+  emerald: '#3DA87A',        // Schedule — emerald green
+  emeraldBg: '#E8F6EF',
+  emeraldBorder: '#A8D9BF',
+  amber: '#D4924A',          // Park — warm amber
+  amberBg: '#FDF3E7',
+  amberBorder: '#E6C99B',
+  muted: '#8B7EB8',          // Archive — muted lavender
+  mutedBg: '#F0ECF6',
+  mutedBorder: '#C5BDD9',
+  coral: '#C7605B',          // Delete — muted coral
+  coralBg: '#FAE9E8',
+  coralBorder: '#E0ACA9',
+  charcoal: '#2D3748',       // Text on light buttons
+  charcoalSoft: '#4A5568',
+  selectedGreen: '#3DA87A',  // Schedule picker selected state
+  selectedGreenBg: '#3DA87A',
+};
 
 // ============ CONSTANTS ============
 
@@ -50,30 +68,24 @@ const SOURCE_ICONS: Record<string, any> = {
 };
 
 const SOURCE_COLORS: Record<string, string> = {
-  task: '#3b82f6',
-  event: '#22c55e',
-  rose: '#ec4899',
-  thorn: '#ef4444',
-  depositIdea: '#f59e0b',
-  reflection: '#9333ea',
-  brain_dump: '#8B5CF6',
-  goal_12wk: '#3b82f6',
-  goal_1y: '#3b82f6',
-  goal_custom: '#3b82f6',
+  task: '#5B9BD5',
+  event: '#3DA87A',
+  rose: '#D4769A',
+  thorn: '#C7605B',
+  depositIdea: '#D4924A',
+  reflection: '#8B7EB8',
+  brain_dump: '#8B7EB8',
+  goal_12wk: '#5B9BD5',
+  goal_1y: '#5B9BD5',
+  goal_custom: '#5B9BD5',
 };
-
-const ACTION_OPTIONS: ActionOption[] = [
-  { action: 'do_today', label: 'Do Today', emoji: '\u{1F4AA}', color: '#3B82F6' },
-  { action: 'schedule', label: 'Schedule', emoji: '\u{1F4C5}', color: '#16A34A' },
-  { action: 'park', label: 'Park', emoji: '\u{1F4A1}', color: '#F59E0B' },
-  { action: 'archive', label: 'Archive', emoji: '\u{1F4D3}', color: '#9333EA' },
-  { action: 'delete', label: 'Delete', emoji: '\u{1F5D1}', color: '#EF4444' },
-];
 
 const STALE_THRESHOLD_DAYS = 3;
 
 /** Duration options in minutes */
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 function formatDuration(mins: number): string {
   if (mins < 60) return `${mins}m`;
@@ -82,29 +94,16 @@ function formatDuration(mins: number): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
-/** Build quick date options with formatted labels */
-function getQuickDateOptions(): { label: string; date: Date }[] {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const twoDays = new Date();
-  twoDays.setDate(twoDays.getDate() + 2);
-
-  const fmt = (d: Date) =>
-    d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-
-  return [
-    { label: `Tomorrow - ${fmt(tomorrow)}`, date: tomorrow },
-    { label: `2 Days - ${fmt(twoDays)}`, date: twoDays },
-  ];
-}
-
 /** Get default start time: current time rounded up to next 15-min */
 function getDefaultStartTime(): string {
   const now = new Date();
   const minutes = now.getMinutes();
   const roundedUp = Math.ceil((minutes + 15) / 15) * 15;
   now.setMinutes(roundedUp, 0, 0);
+  if (now.getHours() >= 24) {
+    // Wrapped past midnight — set to 00:00
+    return '00:00';
+  }
   const h = String(now.getHours()).padStart(2, '0');
   const m = String(now.getMinutes()).padStart(2, '0');
   return `${h}:${m}`;
@@ -121,11 +120,37 @@ function getTimeOptions(): string[] {
   return options;
 }
 
+/** Get the index of the default start time in the time options */
+function getDefaultTimeIndex(): number {
+  const defaultTime = getDefaultStartTime();
+  const options = getTimeOptions();
+  const idx = options.indexOf(defaultTime);
+  return idx >= 0 ? idx : 0;
+}
+
 function formatTime(time: string): string {
   const [h, m] = time.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+/** Generate 30 days of date options starting from tomorrow */
+function getDateOptions(): { date: Date; dateStr: string; dayLabel: string; dayNum: number; monthLabel: string; isTomorrow: boolean }[] {
+  const options = [];
+  for (let i = 1; i <= 30; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    options.push({
+      date: d,
+      dateStr: toLocalISOString(d).split('T')[0],
+      dayLabel: d.toLocaleDateString(undefined, { weekday: 'short' }),
+      dayNum: d.getDate(),
+      monthLabel: d.toLocaleDateString(undefined, { month: 'short' }),
+      isTomorrow: i === 1,
+    });
+  }
+  return options;
 }
 
 // ============ CELEBRATION OVERLAY ============
@@ -227,6 +252,69 @@ function CelebrationOverlay({ action, visible, onFinished }: {
   );
 }
 
+// ============ ARROW SCROLL WRAPPER ============
+
+/** Horizontal scroll with left/right arrow buttons */
+function ArrowScrollView({
+  children,
+  scrollRef,
+  colors,
+  isDarkMode,
+  itemWidth,
+  initialScrollIndex,
+}: {
+  children: React.ReactNode;
+  scrollRef?: React.RefObject<ScrollView>;
+  colors: any;
+  isDarkMode: boolean;
+  itemWidth: number;
+  initialScrollIndex?: number;
+}) {
+  const internalRef = useRef<ScrollView>(null);
+  const ref = scrollRef || internalRef;
+  const scrollX = useRef(0);
+  const maxScroll = useRef(0);
+
+  useEffect(() => {
+    if (initialScrollIndex && initialScrollIndex > 0) {
+      setTimeout(() => {
+        ref.current?.scrollTo({ x: initialScrollIndex * itemWidth - 20, animated: false });
+      }, 50);
+    }
+  }, [initialScrollIndex, itemWidth]);
+
+  const scrollLeft = () => {
+    const newX = Math.max(0, scrollX.current - itemWidth * 3);
+    ref.current?.scrollTo({ x: newX, animated: true });
+  };
+
+  const scrollRight = () => {
+    const newX = scrollX.current + itemWidth * 3;
+    ref.current?.scrollTo({ x: newX, animated: true });
+  };
+
+  return (
+    <View style={styles.arrowScrollContainer}>
+      <TouchableOpacity onPress={scrollLeft} style={styles.arrowBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <ChevronLeft size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+      <ScrollView
+        ref={ref}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.arrowScrollInner}
+        onScroll={(e) => { scrollX.current = e.nativeEvent.contentOffset.x; }}
+        scrollEventThrottle={16}
+      >
+        {children}
+      </ScrollView>
+      <TouchableOpacity onPress={scrollRight} style={styles.arrowBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <ChevronRight size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ============ ITEM DETAIL POPUP ============
 
 function ItemDetailPopup({
@@ -252,18 +340,28 @@ function ItemDetailPopup({
   const [celebrationAction, setCelebrationAction] = useState<TriageAction | null>(null);
 
   // Schedule state
-  const quickDates = getQuickDateOptions();
-  const [selectedDateOption, setSelectedDateOption] = useState<'tomorrow' | '2days' | 'other'>('tomorrow');
-  const [customDate, setCustomDate] = useState('');
+  const dateOptions = useMemo(() => getDateOptions(), []);
+  const [selectedDateStr, setSelectedDateStr] = useState(() => dateOptions[0]?.dateStr || '');
   const [startTime, setStartTime] = useState(getDefaultStartTime);
   const [duration, setDuration] = useState(30);
-  const [showTimePicker, setShowTimePicker] = useState(false);
 
-  const scheduleDate = selectedDateOption === 'tomorrow'
-    ? quickDates[0].date
-    : selectedDateOption === '2days'
-      ? quickDates[1].date
-      : customDate ? new Date(customDate) : quickDates[0].date;
+  const timeOptions = useMemo(() => getTimeOptions(), []);
+  const defaultTimeIdx = useMemo(() => getDefaultTimeIndex(), []);
+
+  const scheduleDate = dateOptions.find(d => d.dateStr === selectedDateStr)?.date || dateOptions[0]?.date || new Date();
+
+  // Reset schedule state when popup opens for a new item
+  useEffect(() => {
+    if (visible && item) {
+      setShowSchedule(false);
+      setProcessing(false);
+      setShowCelebration(false);
+      setCelebrationAction(null);
+      setSelectedDateStr(dateOptions[0]?.dateStr || '');
+      setStartTime(getDefaultStartTime());
+      setDuration(30);
+    }
+  }, [visible, item?.id]);
 
   if (!item || !visible) return null;
 
@@ -349,12 +447,11 @@ function ItemDetailPopup({
               <Text style={[styles.popupTitle, { color: colors.text }]}>{item.title}</Text>
             </View>
 
-            {/* Stale nudge */}
+            {/* Compact stale nudge */}
             {isStale && (
               <View style={[styles.staleBanner, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
-                <Text style={styles.staleBannerIcon}>{'\u26A0\uFE0F'}</Text>
-                <Text style={[styles.staleBannerText, { color: '#92400E' }]}>
-                  {daysPastDue} day{daysPastDue !== 1 ? 's' : ''} past follow-up. Consider parking, archiving, or deleting.
+                <Text style={styles.staleBannerText}>
+                  {'\u26A0\uFE0F'} {daysPastDue}d overdue — park, archive, or delete?
                 </Text>
               </View>
             )}
@@ -380,106 +477,77 @@ function ItemDetailPopup({
                   {'\u{1F4C5}'} Schedule
                 </Text>
 
-                {/* Date options */}
-                <Text style={[styles.scheduleLabel, { color: colors.textSecondary }]}>Date</Text>
-                <View style={styles.scheduleDateOptions}>
-                  {quickDates.map((opt, idx) => {
-                    const key = idx === 0 ? 'tomorrow' : '2days';
-                    const isSelected = selectedDateOption === key;
+                {/* Date picker with arrows — tomorrow highlighted */}
+                <Text style={[styles.scheduleLabel, { color: PALETTE.charcoalSoft }]}>Date</Text>
+                <ArrowScrollView colors={colors} isDarkMode={isDarkMode} itemWidth={68} initialScrollIndex={0}>
+                  {dateOptions.map((opt) => {
+                    const isSelected = selectedDateStr === opt.dateStr;
                     return (
                       <TouchableOpacity
-                        key={key}
-                        style={[styles.scheduleDateBtn, isSelected
-                          ? { backgroundColor: '#16A34A', borderColor: '#16A34A' }
-                          : { backgroundColor: isDarkMode ? colors.background : '#F9FAFB', borderColor: colors.border }]}
-                        onPress={() => setSelectedDateOption(key as any)}
+                        key={opt.dateStr}
+                        style={[
+                          styles.datePill,
+                          isSelected
+                            ? { backgroundColor: PALETTE.selectedGreenBg, borderColor: PALETTE.selectedGreenBg }
+                            : { backgroundColor: isDarkMode ? colors.background : '#F7F8FA', borderColor: isDarkMode ? colors.border : '#E2E6EA' },
+                        ]}
+                        onPress={() => setSelectedDateStr(opt.dateStr)}
                       >
-                        <Text style={[styles.scheduleDateBtnText, { color: isSelected ? '#FFF' : colors.text }]}>
-                          {opt.label}
+                        <Text style={[styles.datePillDay, { color: isSelected ? '#FFF' : PALETTE.charcoalSoft }]}>
+                          {opt.isTomorrow ? 'Tmrw' : opt.dayLabel}
+                        </Text>
+                        <Text style={[styles.datePillNum, { color: isSelected ? '#FFF' : PALETTE.charcoal }]}>
+                          {opt.dayNum}
+                        </Text>
+                        <Text style={[styles.datePillMonth, { color: isSelected ? '#E5FFE5' : colors.textSecondary }]}>
+                          {opt.monthLabel}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
-                  <TouchableOpacity
-                    style={[styles.scheduleDateBtn, selectedDateOption === 'other'
-                      ? { backgroundColor: '#16A34A', borderColor: '#16A34A' }
-                      : { backgroundColor: isDarkMode ? colors.background : '#F9FAFB', borderColor: colors.border }]}
-                    onPress={() => setSelectedDateOption('other')}
-                  >
-                    <Text style={[styles.scheduleDateBtnText, { color: selectedDateOption === 'other' ? '#FFF' : colors.text }]}>
-                      Other
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                </ArrowScrollView>
 
-                {/* Custom date picker (simple date input for "Other") */}
-                {selectedDateOption === 'other' && (
-                  <View style={styles.otherDateContainer}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {Array.from({ length: 14 }, (_, i) => {
-                        const d = new Date();
-                        d.setDate(d.getDate() + i + 3); // Start 3 days out (1 and 2 are already quick options)
-                        const dateStr = toLocalISOString(d).split('T')[0];
-                        const isSelected = customDate === dateStr;
-                        return (
-                          <TouchableOpacity
-                            key={dateStr}
-                            style={[styles.otherDateBtn, isSelected
-                              ? { backgroundColor: '#16A34A', borderColor: '#16A34A' }
-                              : { backgroundColor: isDarkMode ? colors.background : '#F9FAFB', borderColor: colors.border }]}
-                            onPress={() => setCustomDate(dateStr)}
-                          >
-                            <Text style={[styles.otherDateDay, { color: isSelected ? '#FFF' : colors.text }]}>
-                              {d.toLocaleDateString(undefined, { weekday: 'short' })}
-                            </Text>
-                            <Text style={[styles.otherDateNum, { color: isSelected ? '#FFF' : colors.text }]}>
-                              {d.getDate()}
-                            </Text>
-                            <Text style={[styles.otherDateMonth, { color: isSelected ? '#E5FFE5' : colors.textSecondary }]}>
-                              {d.toLocaleDateString(undefined, { month: 'short' })}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {/* Start Time */}
-                <Text style={[styles.scheduleLabel, { color: colors.textSecondary, marginTop: 12 }]}>Start Time</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeScroll}>
-                  {getTimeOptions().map((t) => {
+                {/* Start Time with arrows */}
+                <Text style={[styles.scheduleLabel, { color: PALETTE.charcoalSoft, marginTop: 14 }]}>Start Time</Text>
+                <ArrowScrollView colors={colors} isDarkMode={isDarkMode} itemWidth={82} initialScrollIndex={defaultTimeIdx}>
+                  {timeOptions.map((t) => {
                     const isSelected = startTime === t;
                     return (
                       <TouchableOpacity
                         key={t}
-                        style={[styles.timeBtn, isSelected
-                          ? { backgroundColor: '#16A34A', borderColor: '#16A34A' }
-                          : { backgroundColor: isDarkMode ? colors.background : '#F9FAFB', borderColor: colors.border }]}
+                        style={[
+                          styles.timePill,
+                          isSelected
+                            ? { backgroundColor: PALETTE.selectedGreenBg, borderColor: PALETTE.selectedGreenBg }
+                            : { backgroundColor: isDarkMode ? colors.background : '#F7F8FA', borderColor: isDarkMode ? colors.border : '#E2E6EA' },
+                        ]}
                         onPress={() => setStartTime(t)}
                       >
-                        <Text style={[styles.timeBtnText, { color: isSelected ? '#FFF' : colors.text }]}>
+                        <Text style={[styles.timePillText, { color: isSelected ? '#FFF' : PALETTE.charcoal }]}>
                           {formatTime(t)}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </ArrowScrollView>
 
                 {/* Duration */}
-                <Text style={[styles.scheduleLabel, { color: colors.textSecondary, marginTop: 12 }]}>Duration</Text>
+                <Text style={[styles.scheduleLabel, { color: PALETTE.charcoalSoft, marginTop: 14 }]}>Duration</Text>
                 <View style={styles.durationRow}>
                   {DURATION_OPTIONS.map((d) => {
                     const isSelected = duration === d;
                     return (
                       <TouchableOpacity
                         key={d}
-                        style={[styles.durationBtn, isSelected
-                          ? { backgroundColor: '#16A34A', borderColor: '#16A34A' }
-                          : { backgroundColor: isDarkMode ? colors.background : '#F9FAFB', borderColor: colors.border }]}
+                        style={[
+                          styles.durationBtn,
+                          isSelected
+                            ? { backgroundColor: PALETTE.selectedGreenBg, borderColor: PALETTE.selectedGreenBg }
+                            : { backgroundColor: isDarkMode ? colors.background : '#F7F8FA', borderColor: isDarkMode ? colors.border : '#E2E6EA' },
+                        ]}
                         onPress={() => setDuration(d)}
                       >
-                        <Text style={[styles.durationBtnText, { color: isSelected ? '#FFF' : colors.text }]}>
+                        <Text style={[styles.durationBtnText, { color: isSelected ? '#FFF' : PALETTE.charcoal }]}>
                           {formatDuration(d)}
                         </Text>
                       </TouchableOpacity>
@@ -489,7 +557,7 @@ function ItemDetailPopup({
 
                 {/* Schedule confirm button */}
                 <TouchableOpacity
-                  style={[styles.scheduleGoBtn, { backgroundColor: '#16A34A', opacity: processing ? 0.5 : 1 }]}
+                  style={[styles.scheduleGoBtn, { backgroundColor: PALETTE.emerald, opacity: processing ? 0.5 : 1 }]}
                   onPress={handleScheduleConfirm}
                   disabled={processing}
                   activeOpacity={0.7}
@@ -498,35 +566,92 @@ function ItemDetailPopup({
                     {'\u{1F4C5}'} Schedule It
                   </Text>
                 </TouchableOpacity>
+
+                {/* Back from schedule */}
+                <TouchableOpacity
+                  style={styles.scheduleBackBtn}
+                  onPress={() => setShowSchedule(false)}
+                >
+                  <Text style={[styles.scheduleBackText, { color: colors.textSecondary }]}>
+                    {'\u2190'} Back to actions
+                  </Text>
+                </TouchableOpacity>
               </View>
             ) : (
-              /* Action buttons grid */
-              <View style={styles.popupActions}>
-                {ACTION_OPTIONS.map((opt) => (
+              /* ====== ACTION BUTTONS — 2x2 grid + Park full-width + Archive/Delete utility ====== */
+              <View style={styles.actionsContainer}>
+                {/* Top row: Do Today + Schedule (2x2 grid) */}
+                <View style={styles.actionsTopRow}>
                   <TouchableOpacity
-                    key={opt.action}
-                    style={[styles.popupActionBtn, { backgroundColor: opt.color, opacity: processing ? 0.5 : 1 }]}
-                    onPress={() => handleAction(opt.action)}
+                    style={[
+                      styles.actionPrimaryBtn,
+                      { backgroundColor: PALETTE.skyBlueBg, borderColor: PALETTE.skyBlueBorder, opacity: processing ? 0.5 : 1 },
+                    ]}
+                    onPress={() => handleAction('do_today')}
                     disabled={processing}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.popupActionEmoji}>{opt.emoji}</Text>
-                    <Text style={styles.popupActionLabel}>{opt.label}</Text>
+                    <Text style={styles.actionPrimaryEmoji}>{'\u2600\uFE0F'}</Text>
+                    <Text style={[styles.actionPrimaryLabel, { color: PALETTE.charcoal }]}>Do Today</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-            )}
 
-            {/* Back from schedule */}
-            {showSchedule && (
-              <TouchableOpacity
-                style={styles.scheduleBackBtn}
-                onPress={() => setShowSchedule(false)}
-              >
-                <Text style={[styles.scheduleBackText, { color: colors.textSecondary }]}>
-                  {'\u2190'} Back to actions
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.actionPrimaryBtn,
+                      { backgroundColor: PALETTE.emeraldBg, borderColor: PALETTE.emeraldBorder, opacity: processing ? 0.5 : 1 },
+                    ]}
+                    onPress={() => handleAction('schedule')}
+                    disabled={processing}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.actionPrimaryEmoji}>{'\u{1F4C5}'}</Text>
+                    <Text style={[styles.actionPrimaryLabel, { color: PALETTE.charcoal }]}>Schedule</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Park — slim full-width */}
+                <TouchableOpacity
+                  style={[
+                    styles.actionParkBtn,
+                    { backgroundColor: PALETTE.amberBg, borderColor: PALETTE.amberBorder, opacity: processing ? 0.5 : 1 },
+                  ]}
+                  onPress={() => handleAction('park')}
+                  disabled={processing}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.actionParkEmoji}>{'\u{1F4A1}'}</Text>
+                  <Text style={[styles.actionParkLabel, { color: PALETTE.charcoal }]}>Park</Text>
+                </TouchableOpacity>
+
+                {/* Bottom: Archive + Delete as small utility buttons */}
+                <View style={styles.actionsBottomRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.actionUtilBtn,
+                      { backgroundColor: PALETTE.mutedBg, borderColor: PALETTE.mutedBorder, opacity: processing ? 0.5 : 1 },
+                    ]}
+                    onPress={() => handleAction('archive')}
+                    disabled={processing}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.actionUtilEmoji}>{'\u{1F4D3}'}</Text>
+                    <Text style={[styles.actionUtilLabel, { color: PALETTE.charcoalSoft }]}>Archive</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.actionUtilBtn,
+                      { backgroundColor: PALETTE.coralBg, borderColor: PALETTE.coralBorder, opacity: processing ? 0.5 : 1 },
+                    ]}
+                    onPress={() => handleAction('delete')}
+                    disabled={processing}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.actionUtilEmoji}>{'\u{1F5D1}'}</Text>
+                    <Text style={[styles.actionUtilLabel, { color: PALETTE.charcoalSoft }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
           </ScrollView>
         </View>
@@ -548,9 +673,6 @@ function CompactCard({
   isDarkMode: boolean;
   onTap: () => void;
 }) {
-  const slideAnim = useRef(new Animated.Value(1)).current;
-  const heightAnim = useRef(new Animated.Value(1)).current;
-
   const iconKey = item.iconType || 'reflection';
   const iconSource = SOURCE_ICONS[iconKey] || SOURCE_ICONS.reflection;
   const iconColor = SOURCE_COLORS[iconKey] || SOURCE_COLORS.reflection;
@@ -572,12 +694,12 @@ function CompactCard({
         styles.compactCard,
         {
           backgroundColor: isDarkMode ? colors.surface : '#FFFFFF',
-          borderColor: isStale ? '#F59E0B' : colors.border,
+          borderColor: isStale ? '#D4924A' : colors.border,
           borderWidth: isStale ? 2 : 1,
         },
       ]}
     >
-      <View style={[styles.compactIconBox, { backgroundColor: iconColor + '20' }]}>
+      <View style={[styles.compactIconBox, { backgroundColor: iconColor + '18' }]}>
         <Image source={iconSource} style={styles.compactIcon} resizeMode="contain" />
       </View>
       <View style={styles.compactContent}>
@@ -585,12 +707,12 @@ function CompactCard({
           {item.title}
         </Text>
         {item.follow_up_date && (
-          <Text style={[styles.compactDate, { color: isStale ? '#D97706' : colors.textSecondary }]}>
+          <Text style={[styles.compactDate, { color: isStale ? '#D4924A' : colors.textSecondary }]}>
             {isStale ? `\u26A0\uFE0F ${daysPastDue}d overdue` : `\u{1F4C5} ${item.follow_up_date}`}
           </Text>
         )}
       </View>
-      <Text style={[styles.compactChevron, { color: colors.textSecondary }]}>{'\u203A'}</Text>
+      <ChevronRight size={18} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 }
@@ -704,7 +826,6 @@ const styles = StyleSheet.create({
   compactContent: { flex: 1, gap: 2 },
   compactTitle: { fontSize: 15, fontWeight: '600', lineHeight: 20 },
   compactDate: { fontSize: 12 },
-  compactChevron: { fontSize: 24, fontWeight: '300' },
 
   // ---- Popup ----
   popupBackdrop: {
@@ -717,51 +838,74 @@ const styles = StyleSheet.create({
   },
   popupClose: { position: 'absolute', top: 16, right: 16, zIndex: 20, padding: 4 },
   popupScroll: { paddingTop: 8, paddingBottom: 20 },
-  popupHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 12, paddingRight: 30 },
-  popupIconBox: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  popupIcon: { width: 28, height: 28 },
-  popupTitle: { fontSize: 18, fontWeight: '700', flex: 1, lineHeight: 24 },
-  popupMeta: { fontSize: 13, marginBottom: 8 },
-  popupBodyBox: { borderRadius: 10, borderWidth: 1, padding: 14, marginBottom: 16 },
-  popupBody: { fontSize: 14, lineHeight: 22 },
+  popupHeader: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10, paddingRight: 30 },
+  popupIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  popupIcon: { width: 26, height: 26 },
+  popupTitle: { fontSize: 17, fontWeight: '700', flex: 1, lineHeight: 22 },
+  popupMeta: { fontSize: 12, marginBottom: 6 },
+  popupBodyBox: { borderRadius: 10, borderWidth: 1, padding: 12, marginBottom: 14 },
+  popupBody: { fontSize: 14, lineHeight: 21 },
 
-  // ---- Stale nudge ----
+  // ---- Stale nudge (compact) ----
   staleBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center', padding: 8, borderRadius: 8, borderWidth: 1, marginBottom: 8,
   },
-  staleBannerIcon: { fontSize: 16 },
-  staleBannerText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: '500' },
+  staleBannerText: { flex: 1, fontSize: 12, lineHeight: 16, fontWeight: '600', color: '#92400E' },
 
-  // ---- Popup action buttons ----
-  popupActions: { gap: 10, marginTop: 8 },
-  popupActionBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, borderRadius: 12, gap: 8,
+  // ---- Action buttons: 2x2 grid + Park + Archive/Delete ----
+  actionsContainer: { marginTop: 10, gap: 10 },
+
+  actionsTopRow: { flexDirection: 'row', gap: 10 },
+  actionPrimaryBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 20, borderRadius: 12, borderWidth: 1, gap: 6,
   },
-  popupActionEmoji: { fontSize: 18 },
-  popupActionLabel: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  actionPrimaryEmoji: { fontSize: 24 },
+  actionPrimaryLabel: { fontSize: 15, fontWeight: '700' },
+
+  actionParkBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 12, borderRadius: 12, borderWidth: 1, gap: 8,
+  },
+  actionParkEmoji: { fontSize: 18 },
+  actionParkLabel: { fontSize: 14, fontWeight: '700' },
+
+  actionsBottomRow: { flexDirection: 'row', gap: 10 },
+  actionUtilBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, borderRadius: 10, borderWidth: 1, gap: 6,
+  },
+  actionUtilEmoji: { fontSize: 14 },
+  actionUtilLabel: { fontSize: 13, fontWeight: '600' },
+
+  // ---- Arrow scroll wrapper ----
+  arrowScrollContainer: { flexDirection: 'row', alignItems: 'center' },
+  arrowBtn: { padding: 4 },
+  arrowScrollInner: { flex: 1 },
 
   // ---- Schedule section ----
   scheduleSection: { marginTop: 8 },
-  scheduleSectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
-  scheduleLabel: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  scheduleDateOptions: { gap: 8 },
-  scheduleDateBtn: { borderRadius: 10, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 16 },
-  scheduleDateBtnText: { fontSize: 15, fontWeight: '600' },
-  otherDateContainer: { marginTop: 8 },
-  otherDateBtn: {
-    borderRadius: 10, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12,
-    alignItems: 'center', marginRight: 8, minWidth: 60,
+  scheduleSectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
+  scheduleLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  // Date pill
+  datePill: {
+    borderRadius: 10, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 10,
+    alignItems: 'center', marginRight: 6, minWidth: 58,
   },
-  otherDateDay: { fontSize: 11, fontWeight: '600' },
-  otherDateNum: { fontSize: 18, fontWeight: '700' },
-  otherDateMonth: { fontSize: 11 },
-  timeScroll: { marginBottom: 4 },
-  timeBtn: { borderRadius: 8, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, marginRight: 6 },
-  timeBtnText: { fontSize: 13, fontWeight: '600' },
+  datePillDay: { fontSize: 10, fontWeight: '600' },
+  datePillNum: { fontSize: 17, fontWeight: '700', lineHeight: 22 },
+  datePillMonth: { fontSize: 10 },
+
+  // Time pill
+  timePill: { borderRadius: 8, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 10, marginRight: 6 },
+  timePillText: { fontSize: 13, fontWeight: '600' },
+
+  // Duration
   durationRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   durationBtn: { borderRadius: 8, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 14 },
   durationBtnText: { fontSize: 13, fontWeight: '600' },
+
   scheduleGoBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
   scheduleGoBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
   scheduleBackBtn: { alignItems: 'center', paddingVertical: 12 },
@@ -774,7 +918,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.90)', borderRadius: 20, zIndex: 30,
   },
   celebrationEmoji: { fontSize: 72 },
-  celebrationText: { fontSize: 28, fontWeight: '800', color: '#EF4444', textAlign: 'center' },
+  celebrationText: { fontSize: 28, fontWeight: '800', color: '#C7605B', textAlign: 'center' },
   celebrationImage: { width: 80, height: 80 },
 
   // ---- Empty ----
