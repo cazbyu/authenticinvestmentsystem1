@@ -107,7 +107,7 @@ const QUICK_DATE_OPTIONS = [
 
 /**
  * The celebration that pops up when an action is taken.
- * Each action has a different celebration.
+ * Each action has a different celebration: icon rises up + confetti bursts.
  */
 const CELEBRATIONS: Record<TriageAction, { content: string; isImage: boolean; imageKey?: string }> = {
   do_today: { content: '\u{1FAF6}', isImage: false },      // 🫶 heart hands
@@ -116,6 +116,77 @@ const CELEBRATIONS: Record<TriageAction, { content: string; isImage: boolean; im
   archive: { content: 'reflection', isImage: true, imageKey: 'reflection' },
   delete: { content: 'Get Out of Here!', isImage: false },
 };
+
+/** Confetti particle colors */
+const CONFETTI_COLORS = ['#FF6B6B', '#FFE66D', '#4ECDC4', '#45B7D1', '#96E6A1', '#DDA0DD', '#FFA07A', '#87CEEB'];
+
+/** Single confetti particle component */
+function ConfettiParticle({ delay, color, startX }: { delay: number; color: string; startX: number }) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const xDrift = (Math.random() - 0.5) * 120;
+    Animated.sequence([
+      Animated.delay(delay),
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(translateY, {
+          toValue: -80 - Math.random() * 40,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateX, {
+          toValue: xDrift,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rotate, {
+          toValue: Math.random() * 4 - 2,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Fall + fade
+      Animated.parallel([
+        Animated.timing(translateY, {
+          toValue: 40,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, []);
+
+  const spin = rotate.interpolate({
+    inputRange: [-2, 2],
+    outputRange: ['-120deg', '120deg'],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        left: startX,
+        bottom: '40%',
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        backgroundColor: color,
+        opacity,
+        transform: [{ translateY }, { translateX }, { rotate: spin }],
+      }}
+      pointerEvents="none"
+    />
+  );
+}
 
 function CelebrationOverlay({
   action,
@@ -128,15 +199,27 @@ function CelebrationOverlay({
 }) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const riseAnim = useRef(new Animated.Value(30)).current; // start 30px below, rise up
+
+  // Generate confetti particles once per celebration
+  const [confettiPieces] = useState(() =>
+    Array.from({ length: 12 }, (_, i) => ({
+      id: i,
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      delay: Math.random() * 200,
+      startX: 30 + Math.random() * 140, // spread across the card width
+    }))
+  );
 
   useEffect(() => {
     if (visible && action) {
       // Reset
       scaleAnim.setValue(0);
       opacityAnim.setValue(0);
+      riseAnim.setValue(30);
 
       Animated.sequence([
-        // Pop in
+        // Rise + pop in
         Animated.parallel([
           Animated.spring(scaleAnim, {
             toValue: 1,
@@ -149,15 +232,28 @@ function CelebrationOverlay({
             duration: 150,
             useNativeDriver: true,
           }),
+          Animated.spring(riseAnim, {
+            toValue: 0,
+            tension: 60,
+            friction: 7,
+            useNativeDriver: true,
+          }),
         ]),
         // Hold
-        Animated.delay(800),
-        // Fade out
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
+        Animated.delay(700),
+        // Float up + fade out
+        Animated.parallel([
+          Animated.timing(riseAnim, {
+            toValue: -20,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacityAnim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]),
       ]).start(() => {
         onFinished();
       });
@@ -174,22 +270,38 @@ function CelebrationOverlay({
         styles.celebrationOverlay,
         {
           opacity: opacityAnim,
-          transform: [{ scale: scaleAnim }],
         },
       ]}
       pointerEvents="none"
     >
-      {celebration.isImage && celebration.imageKey ? (
-        <Image
-          source={SOURCE_ICONS[celebration.imageKey]}
-          style={styles.celebrationImage}
-          resizeMode="contain"
+      {/* Confetti particles */}
+      {confettiPieces.map((piece) => (
+        <ConfettiParticle
+          key={piece.id}
+          delay={piece.delay}
+          color={piece.color}
+          startX={piece.startX}
         />
-      ) : action === 'delete' ? (
-        <Text style={styles.celebrationText}>{celebration.content}</Text>
-      ) : (
-        <Text style={styles.celebrationEmoji}>{celebration.content}</Text>
-      )}
+      ))}
+
+      {/* Main celebration icon — rises up */}
+      <Animated.View
+        style={{
+          transform: [{ scale: scaleAnim }, { translateY: riseAnim }],
+        }}
+      >
+        {celebration.isImage && celebration.imageKey ? (
+          <Image
+            source={SOURCE_ICONS[celebration.imageKey]}
+            style={styles.celebrationImage}
+            resizeMode="contain"
+          />
+        ) : action === 'delete' ? (
+          <Text style={styles.celebrationText}>{celebration.content}</Text>
+        ) : (
+          <Text style={styles.celebrationEmoji}>{celebration.content}</Text>
+        )}
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -507,26 +619,28 @@ export default function BrainDumpTriageStep({
   onAllProcessed,
 }: BrainDumpTriageStepProps) {
   const { colors, isDarkMode } = useTheme();
-  const [remainingItems, setRemainingItems] = useState<BrainDumpTriageItem[]>(items);
 
-  // Sync from parent if items change
-  useEffect(() => {
-    setRemainingItems(items);
-  }, [items]);
+  // Track processed IDs in a ref so re-renders never reset them
+  const processedIdsRef = useRef<Set<string>>(new Set());
+  // Counter state to force re-render when an item is processed
+  const [processedCount, setProcessedCount] = useState(0);
+
+  const remainingItems = items.filter((i) => !processedIdsRef.current.has(i.id));
 
   const handleItemProcessed = useCallback(
     (itemId: string) => {
-      setRemainingItems((prev) => {
-        const next = prev.filter((i) => i.id !== itemId);
-        if (next.length === 0) {
-          // Small delay so the last card animates out
-          setTimeout(() => onAllProcessed(), 200);
-        }
-        return next;
-      });
+      processedIdsRef.current.add(itemId);
+      setProcessedCount((c) => c + 1); // force re-render
+
       onItemProcessed(itemId);
+
+      // Check if all done AFTER adding to the set
+      const stillRemaining = items.filter((i) => !processedIdsRef.current.has(i.id));
+      if (stillRemaining.length === 0) {
+        setTimeout(() => onAllProcessed(), 200);
+      }
     },
-    [onItemProcessed, onAllProcessed],
+    [items, onItemProcessed, onAllProcessed],
   );
 
   // Determine header text based on item sources
