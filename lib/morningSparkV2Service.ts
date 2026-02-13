@@ -622,12 +622,13 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
 
-  // Get tasks due today or overdue (pending only)
+  // Get tasks due today or overdue — only INCOMPLETE tasks for the morning contract
   const { data: tasks, error } = await supabase
     .from('0008-ap-tasks')
     .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea')
     .eq('user_id', userId)
     .is('deleted_at', null)
+    .is('completed_at', null)
     .eq('cancelled', false)
     .or(`due_date.eq.${today},due_date.lt.${today},start_date.eq.${today}`)
     .order('is_urgent', { ascending: false })
