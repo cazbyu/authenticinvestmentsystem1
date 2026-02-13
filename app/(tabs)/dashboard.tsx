@@ -1296,7 +1296,7 @@ const renderDashboardTabs = () => (
       {showMorningSpark && (
         <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
           <TouchableOpacity
-            onPress={() => router.push('/morning-spark')}
+            onPress={() => router.push('/morning-spark-v2')}
             style={[styles.ritualIcon, { backgroundColor: '#FEE2E2' }]}
             activeOpacity={0.7}
           >
@@ -1308,7 +1308,7 @@ const renderDashboardTabs = () => (
       {showEveningReview && (
         <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
           <TouchableOpacity
-            onPress={() => router.push('/evening-review')}
+            onPress={() => router.push('/evening-review-v2')}
             style={[styles.ritualIcon, { backgroundColor: '#EDE9FE' }]}
             activeOpacity={0.7}
           >
