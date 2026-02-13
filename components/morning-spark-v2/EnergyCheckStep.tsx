@@ -39,9 +39,9 @@ const FUEL_OPTIONS: {
 
 const NEEDLE_ANGLES: Record<string, number> = {
   null: 0,
-  '1': -45,
+  '1': -90,
   '2': 0,
-  '3': 45,
+  '3': 90,
 };
 
 export default function EnergyCheckStep({
@@ -92,8 +92,8 @@ export default function EnergyCheckStep({
   };
 
   const needleRotation = needleAnim.interpolate({
-    inputRange: [-45, 0, 45],
-    outputRange: ['-45deg', '0deg', '45deg'],
+    inputRange: [-90, 0, 90],
+    outputRange: ['-90deg', '0deg', '90deg'],
   });
 
   const whyHeight = whyAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 180] });
@@ -106,15 +106,23 @@ export default function EnergyCheckStep({
       </Text>
 
       <View style={styles.gaugeContainer}>
-        <GaugeBg width={200} height={120} />
-        <Animated.View
-          style={[
-            styles.needleOverlay,
-            { transform: [{ rotate: needleRotation }] },
-          ]}
-        >
-          <GaugeNeedle width={200} height={120} />
-        </Animated.View>
+        <View style={styles.gaugeSvgContainer}>
+          <GaugeBg width="100%" height="100%" />
+          <Animated.View
+            style={[
+              styles.needleContainer,
+              {
+                transform: [
+                  { translateY: 50 },
+                  { rotate: needleRotation },
+                  { translateY: -50 },
+                ],
+              },
+            ]}
+          >
+            <GaugeNeedle width={40} height={100} />
+          </Animated.View>
+        </View>
       </View>
 
       <View style={styles.optionsRow}>
@@ -191,8 +199,9 @@ export default function EnergyCheckStep({
 const styles = StyleSheet.create({
   container: { alignItems: 'center', paddingVertical: 16 },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
-  gaugeContainer: { width: 200, height: 120, marginBottom: 20, alignItems: 'center', justifyContent: 'center' },
-  needleOverlay: { position: 'absolute', top: 0, left: 0 },
+  gaugeContainer: { alignItems: 'center', marginBottom: 20 },
+  gaugeSvgContainer: { width: 320, height: 200, position: 'relative', justifyContent: 'center', alignItems: 'center' },
+  needleContainer: { position: 'absolute', bottom: 16, width: 40, height: 100, alignItems: 'center', justifyContent: 'flex-end' },
   optionsRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 4, marginBottom: 8 },
   optionCard: { borderRadius: 12, padding: 12, alignItems: 'center' },
   optionEmoji: { fontSize: 28, marginBottom: 4 },

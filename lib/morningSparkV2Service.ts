@@ -138,7 +138,7 @@ export async function saveFuelLevel(
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
 
-  const modeMap: Record<FuelLevel, string> = { 1: 'Recovery', 2: 'Steady', 3: 'Sprint' };
+  const modeMap: Record<FuelLevel, string> = { 1: 'recovery', 2: 'steady', 3: 'sprint' };
   const scoreMap: Record<FuelLevel, number> = { 1: 20, 2: 35, 3: 55 };
 
   if (sparkId) {
