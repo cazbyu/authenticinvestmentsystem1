@@ -29,10 +29,12 @@ import {
   FuelLevel,
   FuelWhyReason,
   AspirationContent,
+  NorthStarCore,
   BrainDumpTriageItem,
   GroupedContractItems,
   DelegationItem,
   saveFuelLevel,
+  getNorthStarCore,
   getAspirationContent,
   getBrainDumpAndFollowUps,
   getWeeklyContractForToday,
@@ -74,6 +76,7 @@ export default function MorningSparkV2Screen() {
 
   // Step C: Remember
   const [aspiration, setAspiration] = useState<AspirationContent | null>(null);
+  const [northStar, setNorthStar] = useState<NorthStarCore | null>(null);
   const [aspirationLoading, setAspirationLoading] = useState(false);
 
   // Step D: Contract
@@ -247,8 +250,12 @@ export default function MorningSparkV2Screen() {
     }
     if (nextStep === 2) {
       setAspirationLoading(true);
-      getAspirationContent(userId)
-        .then((content) => {
+      Promise.all([
+        getNorthStarCore(userId),
+        getAspirationContent(userId),
+      ])
+        .then(([northStarData, content]) => {
+          setNorthStar(northStarData);
           setAspiration(content);
           setAspirationLoading(false);
         })
@@ -404,7 +411,7 @@ export default function MorningSparkV2Screen() {
           )
         )}
         {currentStep === 2 && (
-          <RememberStep aspiration={aspiration} loading={aspirationLoading} />
+          <RememberStep aspiration={aspiration} northStar={northStar} loading={aspirationLoading} />
         )}
         {currentStep === 3 && (
           <ContractReviewStep

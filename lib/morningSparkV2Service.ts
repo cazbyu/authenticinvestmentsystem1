@@ -49,7 +49,14 @@ export interface AspirationContent {
   content_text: string | null;
   content_url: string | null;
   storage_path: string | null;
-  source: 'coach' | 'user';
+  source: 'coach' | 'self' | 'system';
+}
+
+export interface NorthStarCore {
+  mission_statement: string | null;
+  vision: string | null;
+  life_motto: string | null;
+  core_values: string[];
 }
 
 export interface BrainDumpTriageItem {
@@ -177,33 +184,71 @@ export async function saveFuelLevel(
   }
 }
 
-// ============ ASPIRATION FUNCTIONS ============
+// ============ NORTH STAR & ASPIRATION FUNCTIONS ============
+
+/**
+ * Get user's North Star core data (mission, vision, values).
+ */
+export async function getNorthStarCore(userId: string): Promise<NorthStarCore> {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('0008-ap-north-star')
+    .select('mission_statement, 5yr_vision, life_motto, core_values')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return { mission_statement: null, vision: null, life_motto: null, core_values: [] };
+  }
+
+  // core_values can be a JSON array of strings, or null
+  let values: string[] = [];
+  if (data.core_values) {
+    if (Array.isArray(data.core_values)) {
+      values = data.core_values;
+    } else if (typeof data.core_values === 'object') {
+      values = Object.values(data.core_values).filter((v): v is string => typeof v === 'string');
+    }
+  }
+
+  return {
+    mission_statement: data.mission_statement || null,
+    vision: data['5yr_vision'] || null,
+    life_motto: data.life_motto || null,
+    core_values: values,
+  };
+}
 
 /**
  * Get inspirational content for "Remember Who You Are" step.
- * Queries coach aspirations first, then user aspirations.
+ *
+ * Priority:
+ * 1. Coach-assigned content from aspirations-coach (rich media)
+ * 2. User's power quotes from user-power-quotes where show_in_spark = true
+ *    (now supports quote, image, song, video via content_type/content_url/storage_path)
  */
 export async function getAspirationContent(userId: string): Promise<AspirationContent | null> {
   const supabase = getSupabaseClient();
 
-  // Try coach aspirations first
+  // 1. Try coach aspirations first (these are curated by the coach)
   const { data: coachData } = await supabase
     .from('0008-ap-aspirations-coach')
-    .select('id, content_type, title, content_text, content_url, storage_path')
+    .select('id, content_type, title, content_text, content_url, storage_path, usage_count')
     .eq('is_active', true)
     .or(`is_shared_with_all_clients.eq.true,specific_client_ids.cs.{${userId}}`)
     .order('usage_count', { ascending: true })
     .limit(5);
 
   if (coachData && coachData.length > 0) {
-    // Pick random from least-used
     const item = coachData[Math.floor(Math.random() * coachData.length)];
 
-    // Update usage tracking
-    await supabase
+    // Update usage tracking (fire-and-forget)
+    supabase
       .from('0008-ap-aspirations-coach')
-      .update({ usage_count: (item as any).usage_count + 1 || 1, last_shown_at: new Date().toISOString() })
-      .eq('id', item.id);
+      .update({ usage_count: (item.usage_count || 0) + 1, last_shown_at: new Date().toISOString() })
+      .eq('id', item.id)
+      .then();
 
     return {
       id: item.id,
@@ -216,31 +261,36 @@ export async function getAspirationContent(userId: string): Promise<AspirationCo
     };
   }
 
-  // Fallback to user aspirations
-  const { data: userData } = await supabase
-    .from('0008-ap-aspirations-user')
-    .select('id, content_type, title, content_text, content_url, storage_path')
+  // 2. User's own power content (quotes, images, songs, videos) where show_in_spark = true
+  const { data: powerData } = await supabase
+    .from('0008-ap-user-power-quotes')
+    .select('id, quote_text, attribution, content_type, content_url, storage_path, source_type, times_shown, is_pinned')
     .eq('user_id', userId)
     .eq('is_active', true)
-    .order('usage_count', { ascending: true })
+    .eq('show_in_spark', true)
+    .order('is_pinned', { ascending: false })
+    .order('times_shown', { ascending: true })
     .limit(5);
 
-  if (userData && userData.length > 0) {
-    const item = userData[Math.floor(Math.random() * userData.length)];
+  if (powerData && powerData.length > 0) {
+    // Pinned items always come first, then least-shown
+    const item = powerData[0].is_pinned ? powerData[0] : powerData[Math.floor(Math.random() * powerData.length)];
 
-    await supabase
-      .from('0008-ap-aspirations-user')
-      .update({ usage_count: (item as any).usage_count + 1 || 1, last_shown_at: new Date().toISOString() })
-      .eq('id', item.id);
+    // Update usage tracking (fire-and-forget)
+    supabase
+      .from('0008-ap-user-power-quotes')
+      .update({ times_shown: (item.times_shown || 0) + 1, last_shown_at: new Date().toISOString() })
+      .eq('id', item.id)
+      .then();
 
     return {
       id: item.id,
-      content_type: item.content_type as AspirationContent['content_type'],
-      title: item.title,
-      content_text: item.content_text,
-      content_url: item.content_url,
-      storage_path: item.storage_path,
-      source: 'user',
+      content_type: (item.content_type || 'quote') as AspirationContent['content_type'],
+      title: item.attribution || null,
+      content_text: item.quote_text || null,
+      content_url: item.content_url || null,
+      storage_path: item.storage_path || null,
+      source: (item.source_type || 'self') as AspirationContent['source'],
     };
   }
 
