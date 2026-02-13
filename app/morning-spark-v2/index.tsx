@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -31,13 +30,11 @@ import {
   FuelWhyReason,
   AspirationContent,
   BrainDumpTriageItem,
-  TriageAction,
   GroupedContractItems,
   DelegationItem,
   saveFuelLevel,
   getAspirationContent,
   getBrainDumpAndFollowUps,
-  triageBrainDumpItem,
   getWeeklyContractForToday,
   adjustContractItem,
   getDelegations,
@@ -72,8 +69,8 @@ export default function MorningSparkV2Screen() {
 
   // Step B: Brain Dump Triage
   const [triageItems, setTriageItems] = useState<BrainDumpTriageItem[]>([]);
-  const [triageDecisions, setTriageDecisions] = useState<Map<string, TriageAction>>(new Map());
   const [triageLoading, setTriageLoading] = useState(false);
+  const [triageAllDone, setTriageAllDone] = useState(false);
 
   // Step C: Remember
   const [aspiration, setAspiration] = useState<AspirationContent | null>(null);
@@ -146,18 +143,14 @@ export default function MorningSparkV2Screen() {
     }
   }
 
-  // ---- Triage decision handler ----
+  // ---- Triage handlers (items process themselves immediately) ----
 
-  const handleTriageDecision = useCallback((itemId: string, action: TriageAction) => {
-    setTriageDecisions((prev) => {
-      const next = new Map(prev);
-      if (next.get(itemId) === action) {
-        next.delete(itemId); // toggle off
-      } else {
-        next.set(itemId, action);
-      }
-      return next;
-    });
+  const handleTriageItemProcessed = useCallback((itemId: string) => {
+    // Item was processed within the card — no batch needed
+  }, []);
+
+  const handleTriageAllProcessed = useCallback(() => {
+    setTriageAllDone(true);
   }, []);
 
   // ---- Contract adjustment handler ----
@@ -233,19 +226,7 @@ export default function MorningSparkV2Screen() {
         setSparkId(newSparkId);
       }
 
-      if (currentStep === 1) {
-        // Process triage decisions
-        for (const item of triageItems) {
-          const action = triageDecisions.get(item.id);
-          if (action) {
-            try {
-              await triageBrainDumpItem(item, action, userId);
-            } catch (e) {
-              console.error('Error processing triage item:', e);
-            }
-          }
-        }
-      }
+      // Step B: triage items are processed immediately in-card, nothing to batch here
     } catch (error) {
       console.error('Error processing step:', error);
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -296,7 +277,7 @@ export default function MorningSparkV2Screen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-  }, [currentStep, fuelLevel, fuelWhy, sparkId, userId, triageItems, triageDecisions]);
+  }, [currentStep, fuelLevel, fuelWhy, sparkId, userId]);
 
   const goToPreviousStep = useCallback(() => {
     if (currentStep > 0) {
@@ -406,11 +387,21 @@ export default function MorningSparkV2Screen() {
           />
         )}
         {currentStep === 1 && (
-          <BrainDumpTriageStep
-            items={triageItems}
-            triageDecisions={triageDecisions}
-            onTriageDecision={handleTriageDecision}
-          />
+          triageLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                Loading items to triage...
+              </Text>
+            </View>
+          ) : (
+            <BrainDumpTriageStep
+              items={triageItems}
+              userId={userId}
+              onItemProcessed={handleTriageItemProcessed}
+              onAllProcessed={handleTriageAllProcessed}
+            />
+          )
         )}
         {currentStep === 2 && (
           <RememberStep aspiration={aspiration} loading={aspirationLoading} />
