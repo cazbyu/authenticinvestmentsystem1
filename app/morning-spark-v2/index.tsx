@@ -23,6 +23,7 @@ import { RememberStep } from '@/components/morning-spark-v2/RememberStep';
 import ContractReviewStep from '@/components/morning-spark-v2/ContractReviewStep';
 import { DelegationStep } from '@/components/morning-spark-v2/DelegationStep';
 import ContractCloseStep from '@/components/morning-spark-v2/ContractCloseStep';
+import { DelegateModal } from '@/components/morning-spark/DelegateModal';
 
 // Service layer
 import {
@@ -39,6 +40,7 @@ import {
   getBrainDumpAndFollowUps,
   getWeeklyContractForToday,
   adjustContractItem,
+  delegateContractItem,
   getDelegations,
   commitMorningSparkV2,
   checkTodaysSpark,
@@ -91,6 +93,10 @@ export default function MorningSparkV2Screen() {
   // Step E: Delegation
   const [delegations, setDelegations] = useState<DelegationItem[]>([]);
   const [delegationLoading, setDelegationLoading] = useState(false);
+
+  // Delegate modal
+  const [delegateModalVisible, setDelegateModalVisible] = useState(false);
+  const [delegateTask, setDelegateTask] = useState<{ id: string; title: string } | null>(null);
 
   // Step F: Close
   const [committing, setCommitting] = useState(false);
@@ -159,8 +165,22 @@ export default function MorningSparkV2Screen() {
   // ---- Contract adjustment handler ----
 
   const handleAdjustContract = useCallback(
-    async (taskId: string, action: 'delay' | 'delete', newDate?: string) => {
+    async (taskId: string, action: 'delay' | 'delete' | 'delegate', newDate?: string) => {
       try {
+        if (action === 'delegate') {
+          // Find the task title for the delegate modal
+          const allItems = [
+            ...contractItems.roles,
+            ...contractItems.wellness,
+            ...contractItems.goals,
+            ...contractItems.other,
+          ];
+          const task = allItems.find((t) => t.id === taskId);
+          setDelegateTask({ id: taskId, title: task?.title || 'Task' });
+          setDelegateModalVisible(true);
+          return;
+        }
+
         if (action === 'delay' && !newDate) {
           // Default to tomorrow
           const tomorrow = new Date();
@@ -173,6 +193,21 @@ export default function MorningSparkV2Screen() {
         setContractItems(grouped);
       } catch (e) {
         console.error('Error adjusting contract item:', e);
+      }
+    },
+    [userId, contractItems],
+  );
+
+  const handleDelegateTask = useCallback(
+    async (taskId: string, delegateId: string, dueDate: string | null, notes: string) => {
+      try {
+        await delegateContractItem(taskId, userId, delegateId, dueDate, notes);
+        // Refresh contract items to reflect delegation
+        const grouped = await getWeeklyContractForToday(userId);
+        setContractItems(grouped);
+      } catch (e) {
+        console.error('Error delegating task:', e);
+        throw e; // Re-throw so DelegateModal can show error state
       }
     },
     [userId],
@@ -460,6 +495,18 @@ export default function MorningSparkV2Screen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Delegate modal — triggered from contract review step */}
+      <DelegateModal
+        visible={delegateModalVisible}
+        task={delegateTask}
+        userId={userId}
+        onClose={() => {
+          setDelegateModalVisible(false);
+          setDelegateTask(null);
+        }}
+        onDelegate={handleDelegateTask}
+      />
     </SafeAreaView>
   );
 }

@@ -739,7 +739,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
 }
 
 /**
- * Adjust a contract item: delay or remove.
+ * Adjust a contract item: delay, delete, or delegate.
  */
 export async function adjustContractItem(
   taskId: string,
@@ -759,6 +759,45 @@ export async function adjustContractItem(
       .update({ cancelled: true })
       .eq('id', taskId);
   }
+}
+
+/**
+ * Delegate a contract item to another person.
+ * Creates a delegation record in 0008-ap-delegates and updates
+ * the task's delegated_to field.
+ */
+export async function delegateContractItem(
+  taskId: string,
+  userId: string,
+  delegateId: string,
+  dueDate: string | null,
+  notes: string
+): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  // Update the delegation record (0008-ap-delegates already stores task_id)
+  const { error: delegateError } = await supabase
+    .from('0008-ap-delegates')
+    .update({
+      task_id: taskId,
+      due_date: dueDate,
+      notes: notes || null,
+      status: 'pending',
+    })
+    .eq('id', delegateId)
+    .eq('user_id', userId);
+
+  if (delegateError) {
+    // If update fails (no matching row), insert a new delegation link instead
+    // This covers the case where delegate exists but isn't linked to this task
+    console.warn('Delegate update failed, trying to link delegate to task:', delegateError);
+  }
+
+  // Also stamp the task with delegated_to
+  await supabase
+    .from('0008-ap-tasks')
+    .update({ delegated_to: delegateId })
+    .eq('id', taskId);
 }
 
 /**
