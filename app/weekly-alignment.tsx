@@ -18,6 +18,9 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString, getWeekStart, getWeekEnd, formatLocalDate } from '@/lib/dateUtils';
 import { recordNorthStarVisit } from '@/lib/northStarVisits';
 import type { WeekPlanItem } from '@/types/weekPlan';
+import type { CaptureOffer, Step1Context, StepContext, CoachTrigger, AlignmentStep } from '@/types/alignmentCoach';
+import type { CaptureData } from '@/types/chatBubble';
+import type { CaptureType } from '@/constants/chatBubble';
 
 // Step Components
 import { TouchYourStarStep } from '@/components/weekly-alignment/TouchYourStarStep';
@@ -28,7 +31,9 @@ import { AlignmentCheckStep } from '@/components/weekly-alignment/AlignmentCheck
 import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
 import { WeekPlanBadge } from '@/components/weekly-alignment/WeekPlanBadge';
 import { TourGuideBubble } from '@/components/weekly-alignment/TourGuideBubble';
-// Note: StepIndicatorCompact removed - using inline clickable version
+import { CaptureOverlay } from '@/components/chat-bubble/CaptureOverlay';
+import { CompassRitualController } from '@/components/compass/CompassRitualController';
+import { useAlignmentCoach } from '@/hooks/useAlignmentCoach';
 
 // Types
 interface WeeklyAlignmentData {
@@ -91,13 +96,48 @@ export default function WeeklyAlignmentScreen() {
   const [guidedModeEnabled, setGuidedModeEnabled] = useState(true);
   const [weekPlanItems, setWeekPlanItems] = useState<WeekPlanItem[]>([]);
 
-  // Tour Guide floating bubble state (lifted from steps for overlay display)
-  const [tourGuideMessage, setTourGuideMessage] = useState<string | null>(null);
-  const [tourGuideLoading, setTourGuideLoading] = useState(false);
-  
+  // Capture overlay for coach suggestions
+  const [captureOverlay, setCaptureOverlay] = useState<{ type: CaptureType; data: CaptureData } | null>(null);
+
+  // Compass ritual state
+  const [ignitionComplete, setIgnitionComplete] = useState(false);
+  const [silverFocusAngle, setSilverFocusAngle] = useState<number | undefined>(undefined);
+  const [alignmentSweepIndex, setAlignmentSweepIndex] = useState<number | undefined>(undefined);
+
   // Week dates state
   const [weekStartDate, setWeekStartDate] = useState<string>('');
   const [weekEndDate, setWeekEndDate] = useState<string>('');
+
+  // Alignment Coach hook (2-way coaching for all steps)
+  const coach = useAlignmentCoach(userId, guidedModeEnabled);
+
+  // Step 1 coach integration handlers
+  const handleStep1CoachTrigger = useCallback((trigger: CoachTrigger, context: Step1Context) => {
+    if (!guidedModeEnabled) return;
+    coach.setStep1Context(context);
+    coach.requestGuidance('step_1', trigger);
+  }, [guidedModeEnabled, coach]);
+
+  const handleStep1ContextChange = useCallback((context: Step1Context) => {
+    coach.setStep1Context(context);
+  }, [coach]);
+
+  // Generic coach trigger handler for Steps 2-6
+  const handleStepCoachTrigger = useCallback((trigger: CoachTrigger, context: StepContext) => {
+    if (!guidedModeEnabled) return;
+    coach.setStepContext(context);
+    const stepMap: AlignmentStep[] = ['step_1', 'step_2', 'step_3', 'step_4', 'step_5', 'step_6'];
+    coach.requestGuidance(stepMap[currentStep], trigger);
+  }, [guidedModeEnabled, coach, currentStep]);
+
+  // Compass ritual handlers
+  const handleCompassFocus = useCallback((angle: number) => {
+    setSilverFocusAngle(angle);
+  }, []);
+
+  const handleAlignmentSweep = useCallback((index: number) => {
+    setAlignmentSweepIndex(index);
+  }, []);
 
   // Week Plan accumulator callbacks
   const addWeekPlanItem = useCallback((item: Omit<WeekPlanItem, 'id' | 'created_at'>) => {
@@ -191,9 +231,10 @@ export default function WeeklyAlignmentScreen() {
       if (currentStep === 0) {
         recordNorthStarVisit('weekly_alignment_step');
       }
-      setCurrentStep(prev => prev + 1);
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
       setStepBackHandler(null);
-      setTourGuideMessage(null); // Clear for new step
+      coach.onStepChange(STEPS[nextStep].key);
 
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -208,7 +249,7 @@ export default function WeeklyAlignmentScreen() {
       }
       setCurrentStep(stepIndex);
       setStepBackHandler(null);
-      setTourGuideMessage(null); // Clear for new step
+      coach.onStepChange(STEPS[stepIndex].key);
 
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -235,10 +276,11 @@ export default function WeeklyAlignmentScreen() {
     }
 
     if (currentStep > 0) {
-      setCurrentStep(prev => prev - 1);
+      const prevStep = currentStep - 1;
+      setCurrentStep(prevStep);
       setStepBackHandler(null); // Clear handler when changing steps
-      setTourGuideMessage(null); // Clear for new step
-      
+      coach.onStepChange(STEPS[prevStep].key);
+
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
@@ -468,6 +510,16 @@ export default function WeeklyAlignmentScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* Compass Ritual Controller — persistent visual heartbeat */}
+      <CompassRitualController
+        currentStep={currentStep}
+        isIgnitionComplete={ignitionComplete}
+        silverFocusAngle={silverFocusAngle}
+        onIgnitionComplete={() => setIgnitionComplete(true)}
+        alignmentSweepIndex={alignmentSweepIndex}
+        colors={colors}
+      />
+
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
@@ -528,10 +580,8 @@ export default function WeeklyAlignmentScreen() {
             guidedModeEnabled={guidedModeEnabled}
             weekStartDate={weekStartDate}
             weekEndDate={weekEndDate}
-            onTourGuideMessage={(msg, loading) => {
-              setTourGuideMessage(msg);
-              setTourGuideLoading(loading);
-            }}
+            onCoachTrigger={guidedModeEnabled ? handleStep1CoachTrigger : undefined}
+            onStep1ContextChange={guidedModeEnabled ? handleStep1ContextChange : undefined}
           />
         )}
 
@@ -548,6 +598,8 @@ export default function WeeklyAlignmentScreen() {
             onAddWeekPlanItem={addWeekPlanItem}
             weekStartDate={weekStartDate}
             weekEndDate={weekEndDate}
+            onCoachTrigger={guidedModeEnabled ? handleStepCoachTrigger : undefined}
+            onCompassFocus={handleCompassFocus}
           />
         )}
 
@@ -564,6 +616,8 @@ export default function WeeklyAlignmentScreen() {
             onAddWeekPlanItem={addWeekPlanItem}
             weekStartDate={weekStartDate}
             weekEndDate={weekEndDate}
+            onCoachTrigger={guidedModeEnabled ? handleStepCoachTrigger : undefined}
+            onCompassFocus={handleCompassFocus}
           />
         )}
 
@@ -580,6 +634,8 @@ export default function WeeklyAlignmentScreen() {
             onAddWeekPlanItem={addWeekPlanItem}
             weekStartDate={weekStartDate}
             weekEndDate={weekEndDate}
+            onCoachTrigger={guidedModeEnabled ? handleStepCoachTrigger : undefined}
+            onCompassFocus={handleCompassFocus}
           />
         )}
 
@@ -598,6 +654,8 @@ export default function WeeklyAlignmentScreen() {
               setWeeklyAlignmentId(id);
               setExistingAlignment({ id });
             }}
+            onCoachTrigger={guidedModeEnabled ? handleStepCoachTrigger : undefined}
+            onAlignmentSweep={handleAlignmentSweep}
           />
         )}
 
@@ -621,15 +679,46 @@ export default function WeeklyAlignmentScreen() {
             onRemoveWeekPlanItem={removeWeekPlanItem}
             weekStartDate={weekStartDate}
             weekEndDate={weekEndDate}
+            onCoachTrigger={guidedModeEnabled ? handleStepCoachTrigger : undefined}
           />
         )}
       </View>
 
-      {/* Tour Guide floating bubble overlay */}
+      {/* Alignment Coach floating bubble overlay */}
       {guidedModeEnabled && (
         <TourGuideBubble
-          message={tourGuideMessage}
-          isLoading={tourGuideLoading}
+          latestResponse={coach.latestResponse}
+          isLoading={coach.isLoading}
+          messages={coach.messages}
+          onSendMessage={(text) => coach.sendMessage(text, coach.getCurrentStep())}
+          onAcceptCapture={(offer: CaptureOffer) => {
+            setCaptureOverlay({ type: offer.captureType, data: offer.data });
+          }}
+          isOpen={coach.chatOpen}
+          onToggle={coach.toggleChat}
+          stepColor={currentStepData.color}
+          stepLabel={currentStepData.label}
+        />
+      )}
+
+      {/* Capture Overlay for coach-suggested captures */}
+      {captureOverlay && (
+        <CaptureOverlay
+          visible={!!captureOverlay}
+          captureType={captureOverlay.type}
+          initialData={captureOverlay.data}
+          ritualType="weekly"
+          onSave={(type, data) => {
+            addWeekPlanItem({
+              type: type as any,
+              title: data.title,
+              source_step: currentStep + 1,
+              source_context: `Coach suggested: ${type}`,
+              aligned_to: data.role || null,
+            });
+            setCaptureOverlay(null);
+          }}
+          onCancel={() => setCaptureOverlay(null)}
         />
       )}
     </SafeAreaView>

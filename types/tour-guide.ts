@@ -68,6 +68,7 @@ export interface TourGuideUserState {
   five_year_vision?: string | null;
   core_values?: string[] | null;
   life_motto?: string | null;
+  identity_insights?: string | null;
 
   // Raw answers to guided questions
   question_responses?: QuestionResponse[];

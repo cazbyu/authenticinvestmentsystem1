@@ -103,6 +103,7 @@ export async function buildTourGuideState(
     five_year_vision: northStar?.five_year_vision || null,
     core_values: northStar?.core_values || null,
     life_motto: northStar?.life_motto || null,
+    identity_insights: northStar?.identity_insights || null,
     question_responses: questionResponses,
     roles: roles.length > 0 ? roles : undefined,
     goals: goals.length > 0 ? goals : undefined,
@@ -122,7 +123,7 @@ async function fetchNorthStar(userId: string) {
   
   const { data, error } = await supabase
     .from('0008-ap-north-star')
-    .select('core_identity, mission_statement, 5yr_vision, core_values, life_motto')
+    .select('core_identity, mission_statement, 5yr_vision, core_values, life_motto, identity_insights')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -149,6 +150,7 @@ async function fetchNorthStar(userId: string) {
     five_year_vision: data?.['5yr_vision'] || null,
     core_values: coreValues,
     life_motto: data?.life_motto || null,
+    identity_insights: data?.identity_insights || null,
   };
 }
 
