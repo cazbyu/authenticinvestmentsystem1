@@ -53,12 +53,14 @@ export interface AspirationContent {
 }
 
 export interface BrainDumpTriageItem {
-  id: string;
-  content: string;
-  created_at: string;
+  id: string;              // The source row ID (reflection, task, deposit idea, etc.)
+  title: string;           // Short title shown on card
+  body?: string;           // Full content for popup (e.g. reflection content)
   source: 'brain_dump' | 'follow_up';
-  parent_type?: string;
-  parent_id?: string;
+  /** The source table type for the follow-up view (reflection, task, depositIdea, goal_12wk, etc.) */
+  sourceType: string;
+  /** Rose / thorn / reflection / depositIdea / task — for icon selection */
+  iconType: string;
   follow_up_date?: string;
 }
 
@@ -249,6 +251,13 @@ export async function getAspirationContent(userId: string): Promise<AspirationCo
 
 /**
  * Get yesterday's brain dump + today's follow-ups merged into a triage list.
+ *
+ * The v_morning_spark_follow_ups view returns:
+ *   id (source row ID), user_id, parent_type, parent_id (same as id),
+ *   follow_up_date, title, completed_at, archived
+ *
+ * It does NOT use the universal follow-up join table — it queries
+ * tasks, deposit-ideas, reflections, and goals directly via UNION.
  */
 export async function getBrainDumpAndFollowUps(userId: string): Promise<BrainDumpTriageItem[]> {
   const items: BrainDumpTriageItem[] = [];
@@ -259,16 +268,18 @@ export async function getBrainDumpAndFollowUps(userId: string): Promise<BrainDum
     for (const bd of brainDumps) {
       items.push({
         id: bd.id,
-        content: bd.content,
-        created_at: bd.created_at,
+        title: bd.content?.substring(0, 100) || 'Brain dump',
+        body: bd.content,
         source: 'brain_dump',
+        sourceType: 'brain_dump',
+        iconType: 'brain_dump',
       });
     }
   } catch (e) {
     console.error('Error fetching brain dump items:', e);
   }
 
-  // Get follow-up items due today
+  // Get follow-up items due today or overdue
   try {
     const supabase = getSupabaseClient();
     const { data: followUps, error } = await supabase
@@ -278,14 +289,46 @@ export async function getBrainDumpAndFollowUps(userId: string): Promise<BrainDum
       .order('follow_up_date', { ascending: true });
 
     if (!error && followUps) {
+      // Collect reflection IDs so we can fetch body + rose/thorn flags
+      const reflectionIds = followUps
+        .filter((fu: any) => fu.parent_type === 'reflection')
+        .map((fu: any) => fu.id);
+
+      let reflectionDetails: Record<string, { content: string | null; daily_rose: boolean; daily_thorn: boolean }> = {};
+      if (reflectionIds.length > 0) {
+        const { data: reflections } = await supabase
+          .from('0008-ap-reflections')
+          .select('id, content, daily_rose, daily_thorn')
+          .in('id', reflectionIds);
+
+        if (reflections) {
+          for (const r of reflections) {
+            reflectionDetails[r.id] = {
+              content: r.content,
+              daily_rose: r.daily_rose || false,
+              daily_thorn: r.daily_thorn || false,
+            };
+          }
+        }
+      }
+
       for (const fu of followUps) {
+        // Determine icon based on type + rose/thorn
+        let iconType = fu.parent_type || 'reflection';
+        const refDetail = reflectionDetails[fu.id];
+        if (fu.parent_type === 'reflection' && refDetail) {
+          if (refDetail.daily_rose) iconType = 'rose';
+          else if (refDetail.daily_thorn) iconType = 'thorn';
+          else iconType = 'reflection';
+        }
+
         items.push({
-          id: fu.follow_up_id,
-          content: fu.title || 'Follow-up item',
-          created_at: fu.created_at,
+          id: fu.id,
+          title: fu.title || 'Follow-up item',
+          body: refDetail?.content || undefined,
           source: 'follow_up',
-          parent_type: fu.parent_type,
-          parent_id: fu.parent_id,
+          sourceType: fu.parent_type || 'unknown',
+          iconType,
           follow_up_date: fu.follow_up_date,
         });
       }
@@ -300,12 +343,17 @@ export async function getBrainDumpAndFollowUps(userId: string): Promise<BrainDum
 /**
  * Process a single triage decision for a brain dump or follow-up item.
  *
+ * The follow-up view uses the source table directly (reflections, tasks,
+ * deposit-ideas, goals) — NOT the universal follow-up join table.
+ * Processing means clearing the `follow_up` date or archiving on
+ * the source row so it no longer appears in the view.
+ *
  * Actions:
  * - do_today: Create task due today and add to contract
- * - schedule: Create task with specified date/time
+ * - schedule: Create task with specified date/time + optional duration
  * - park: Move to Deposit Ideas (idea bank)
- * - archive: Mark as processed / done (keep in journal)
- * - delete: Cancel / remove the item
+ * - archive: Mark as processed / done (clear follow_up)
+ * - delete: Archive / remove the item
  */
 export async function triageBrainDumpItem(
   item: BrainDumpTriageItem,
@@ -314,28 +362,123 @@ export async function triageBrainDumpItem(
   options?: {
     scheduleDate?: string;
     scheduleTime?: string;
+    durationMinutes?: number;
   }
 ): Promise<void> {
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
-  const now = new Date().toISOString();
 
   /**
-   * Helper: mark the source item as processed.
+   * Helper: clear follow-up on the source row so item disappears from view.
+   * For brain dumps, marks as processed. For follow-ups, clears the follow_up date.
    */
-  async function markSourceProcessed(status: 'done' | 'cancelled' = 'done') {
+  async function clearFollowUp() {
     if (item.source === 'brain_dump') {
       await supabase
         .from('0008-ap-reflections')
         .update({ brain_dump_processed: true })
         .eq('id', item.id);
     } else if (item.source === 'follow_up') {
-      await supabase
-        .from('0008-ap-universal-follow-up-join')
-        .update({ status, completed_at: now })
-        .eq('id', item.id);
+      // Update the source table directly based on sourceType
+      switch (item.sourceType) {
+        case 'reflection':
+          await supabase
+            .from('0008-ap-reflections')
+            .update({ follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'task':
+        case 'event':
+          await supabase
+            .from('0008-ap-tasks')
+            .update({ follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'depositIdea':
+          await supabase
+            .from('0008-ap-deposit-ideas')
+            .update({ follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'goal_12wk':
+          await supabase
+            .from('0008-ap-goals-12wk')
+            .update({ follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'goal_1y':
+          await supabase
+            .from('0008-ap-goals-1y')
+            .update({ follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'goal_custom':
+          await supabase
+            .from('0008-ap-goals-custom')
+            .update({ follow_up: null })
+            .eq('id', item.id);
+          break;
+        default:
+          console.warn('Unknown sourceType for follow-up clear:', item.sourceType);
+      }
     }
   }
+
+  /**
+   * Helper: archive the source item (set archived = true and clear follow_up).
+   */
+  async function archiveSource() {
+    if (item.source === 'brain_dump') {
+      await supabase
+        .from('0008-ap-reflections')
+        .update({ brain_dump_processed: true, archived: true })
+        .eq('id', item.id);
+    } else if (item.source === 'follow_up') {
+      switch (item.sourceType) {
+        case 'reflection':
+          await supabase
+            .from('0008-ap-reflections')
+            .update({ archived: true, follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'task':
+        case 'event':
+          await supabase
+            .from('0008-ap-tasks')
+            .update({ cancelled: true, follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'depositIdea':
+          await supabase
+            .from('0008-ap-deposit-ideas')
+            .update({ archived: true, follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'goal_12wk':
+          await supabase
+            .from('0008-ap-goals-12wk')
+            .update({ archived: true, follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'goal_1y':
+          await supabase
+            .from('0008-ap-goals-1y')
+            .update({ archived_at: new Date().toISOString(), follow_up: null })
+            .eq('id', item.id);
+          break;
+        case 'goal_custom':
+          await supabase
+            .from('0008-ap-goals-custom')
+            .update({ archived: true, follow_up: null })
+            .eq('id', item.id);
+          break;
+        default:
+          console.warn('Unknown sourceType for archive:', item.sourceType);
+      }
+    }
+  }
+
+  const titleText = item.title.substring(0, 200);
 
   switch (action) {
     case 'do_today': {
@@ -344,8 +487,8 @@ export async function triageBrainDumpItem(
         .from('0008-ap-tasks')
         .insert({
           user_id: userId,
-          title: item.content.substring(0, 200),
-          description: item.content.length > 200 ? item.content : null,
+          title: titleText,
+          description: item.body || null,
           type: 'task',
           due_date: today,
           status: 'pending',
@@ -354,70 +497,67 @@ export async function triageBrainDumpItem(
         });
 
       if (taskError) throw taskError;
-      await markSourceProcessed();
+      await clearFollowUp();
       break;
     }
 
     case 'schedule': {
-      // Create a task with the specified scheduled date (and optional time)
       const dueDate = options?.scheduleDate || today;
+      // If duration provided, calculate end_time from start_time
+      let endTime: string | null = null;
+      if (options?.scheduleTime && options?.durationMinutes) {
+        const [h, m] = options.scheduleTime.split(':').map(Number);
+        const totalMin = h * 60 + m + options.durationMinutes;
+        const endH = Math.floor(totalMin / 60) % 24;
+        const endM = totalMin % 60;
+        endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      }
 
       const { error: taskError } = await supabase
         .from('0008-ap-tasks')
         .insert({
           user_id: userId,
-          title: item.content.substring(0, 200),
-          description: item.content.length > 200 ? item.content : null,
+          title: titleText,
+          description: item.body || null,
           type: 'task',
           due_date: dueDate,
           start_time: options?.scheduleTime || null,
+          end_time: endTime,
           status: 'pending',
           is_urgent: false,
           is_important: false,
         });
 
       if (taskError) throw taskError;
-      await markSourceProcessed();
+      await clearFollowUp();
       break;
     }
 
     case 'park': {
-      // Move to Deposit Ideas (idea bank) for future consideration
+      // Move to Deposit Ideas (idea bank)
       const { error } = await supabase
         .from('0008-ap-deposit-ideas')
         .insert({
           user_id: userId,
-          idea_title: item.content.substring(0, 200),
-          idea_description: item.content.length > 200 ? item.content : null,
+          title: titleText,
           is_active: true,
           archived: false,
         });
 
       if (error) throw error;
-      await markSourceProcessed();
+      await clearFollowUp();
       break;
     }
 
     case 'archive': {
-      // Keep in journal — acknowledge and mark as processed
-      await markSourceProcessed('done');
+      // Acknowledge — clear the follow-up date so it disappears from view
+      await clearFollowUp();
       break;
     }
 
     case 'delete': {
-      // Cancel / remove — mark as cancelled
-      if (item.source === 'brain_dump') {
-        // For brain dump items, mark processed (effectively dismissing)
-        await supabase
-          .from('0008-ap-reflections')
-          .update({ brain_dump_processed: true, archived: true })
-          .eq('id', item.id);
-      } else if (item.source === 'follow_up') {
-        await supabase
-          .from('0008-ap-universal-follow-up-join')
-          .update({ status: 'cancelled', completed_at: now })
-          .eq('id', item.id);
-      }
+      // Archive the source item
+      await archiveSource();
       break;
     }
   }
