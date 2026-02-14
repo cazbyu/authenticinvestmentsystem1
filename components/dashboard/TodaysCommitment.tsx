@@ -42,7 +42,8 @@ interface CommittedTask {
   id: string;
   title: string;
   points: number;
-  priority?: string;
+  is_urgent?: boolean;
+  is_important?: boolean;
   due_date?: string;
   start_time?: string;
   end_time?: string;
@@ -146,7 +147,7 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
         // Note: 'points' is NOT a column in 0008-ap-tasks — use committedTaskPoints map instead
         const { data: committedData } = await supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, start_date, start_time, end_time, due_date, priority, completed_at, status')
+          .select('id, title, type, start_date, start_time, end_time, due_date, is_urgent, is_important, completed_at, status')
           .in('id', committedTaskIds);
 
         const allItems = committedData || [];
@@ -168,7 +169,8 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
             id: t.id,
             title: t.title,
             points: committedTaskPoints[t.id] || 3,
-            priority: t.priority,
+            is_urgent: t.is_urgent,
+            is_important: t.is_important,
             due_date: t.due_date,
             start_time: t.start_time,
             end_time: t.end_time,
@@ -188,12 +190,12 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
 
         const { data: tasksData } = await supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_time, end_time, priority, completed_at')
+          .select('id, title, type, due_date, start_time, end_time, is_urgent, is_important, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
           .eq('due_date', today)
           .in('status', ['pending', 'in_progress', 'completed'])
-          .order('priority', { ascending: false });
+          .order('is_important', { ascending: false });
 
         events = (eventsData || []).map(e => ({
           id: e.id,
@@ -208,7 +210,8 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
           id: t.id,
           title: t.title,
           points: 3,
-          priority: t.priority,
+          is_urgent: t.is_urgent,
+          is_important: t.is_important,
           due_date: t.due_date,
           start_time: t.start_time,
           end_time: t.end_time,
