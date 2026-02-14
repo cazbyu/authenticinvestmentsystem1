@@ -106,6 +106,7 @@ export default function Dashboard() {
   const [showMorningSpark, setShowMorningSpark] = useState(false);
   const [showEveningReview, setShowEveningReview] = useState(false);
   const [showWeeklyAlignment, setShowWeeklyAlignment] = useState(false);
+  const [showTodaysContract, setShowTodaysContract] = useState(false);
   const sparkAnimation = useState(new Animated.Value(1))[0];
   const reviewAnimation = useState(new Animated.Value(1))[0];
   const alignmentAnimation = useState(new Animated.Value(1))[0];
@@ -586,6 +587,22 @@ export default function Dashboard() {
         shouldShowRitual(userId, 'evening_review'),
         shouldShowRitual(userId, 'weekly_alignment'),
       ]);
+
+      // Check if today's spark has been committed (show contract icon)
+      try {
+        const supabase = getSupabaseClient();
+        const today = toLocalISOString(new Date()).split('T')[0];
+        const { data: spark } = await supabase
+          .from('0008-ap-daily-sparks')
+          .select('committed_at')
+          .eq('user_id', userId)
+          .gte('created_at', today)
+          .maybeSingle();
+
+        setShowTodaysContract(!!spark?.committed_at);
+      } catch (err) {
+        console.error('[Dashboard] Error checking contract:', err);
+      }
 
       console.log('=== RITUAL BUTTON DEBUG ===');
       console.log('Show Morning Spark:', showSpark);
@@ -1296,7 +1313,7 @@ const renderDashboardTabs = () => (
       {showMorningSpark && (
         <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
           <TouchableOpacity
-            onPress={() => router.push('/morning-spark')}
+            onPress={() => router.push('/morning-spark-v2')}
             style={[styles.ritualIcon, { backgroundColor: '#FEE2E2' }]}
             activeOpacity={0.7}
           >
@@ -1308,13 +1325,23 @@ const renderDashboardTabs = () => (
       {showEveningReview && (
         <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
           <TouchableOpacity
-            onPress={() => router.push('/evening-review')}
+            onPress={() => router.push('/evening-review-v2')}
             style={[styles.ritualIcon, { backgroundColor: '#EDE9FE' }]}
             activeOpacity={0.7}
           >
             <Text style={{ fontSize: 24 }}>🌙</Text>
           </TouchableOpacity>
         </Animated.View>
+      )}
+
+      {showTodaysContract && (
+        <TouchableOpacity
+          onPress={() => router.push('/todays-contract')}
+          style={[styles.ritualIcon, { backgroundColor: '#DBEAFE' }]}
+          activeOpacity={0.7}
+        >
+          <Text style={{ fontSize: 24 }}>📋</Text>
+        </TouchableOpacity>
       )}
 
       {/* Dev Reset - small text link */}

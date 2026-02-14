@@ -24,6 +24,7 @@ import { getWeekStart, formatLocalDate } from '@/lib/dateUtils';
 import { WellnessVisionBoard } from './WellnessVisionBoard';
 import { AlignmentEscortCard } from './AlignmentEscortCard';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
+import { calculateItemAngle } from '@/lib/compassRitualSequence';
 
 const CompassWellnessIcon = require('@/assets/images/compass-wellness-zones.png');
 
@@ -43,6 +44,7 @@ interface WingCheckWellnessStepProps {
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
   weekStartDate: string;
   weekEndDate: string;
+  onCompassFocus?: (angle: number) => void;
 }
 
 interface WellnessZone {
@@ -113,6 +115,7 @@ export function WingCheckWellnessStep({
   onAddWeekPlanItem,
   weekStartDate,
   weekEndDate,
+  onCompassFocus,
 }: WingCheckWellnessStepProps) {
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -579,6 +582,8 @@ export function WingCheckWellnessStep({
                   }
                 ]}
                 onPress={() => {
+                  const zoneIndex = allZonesSorted.indexOf(zone);
+                  onCompassFocus?.(calculateItemAngle(90, zoneIndex, allZonesSorted.length));
                   setSelectedReflectionZone(zone);
                   slideToState('zone-reflection');
                 }}
@@ -675,6 +680,7 @@ export function WingCheckWellnessStep({
             ));
           }}
           onAddWeekPlanItem={onAddWeekPlanItem}
+          onCompassFocus={onCompassFocus}
         />
       </Animated.View>
     );

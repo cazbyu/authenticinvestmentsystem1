@@ -15,16 +15,13 @@ import { ChevronRight, ChevronLeft, Edit3, Lightbulb, HelpCircle } from 'lucide-
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { MiniCompass } from '@/components/compass/MiniCompass';
-import { LifeCompass } from '@/components/compass/LifeCompass';
 import { 
   trackQuestionShown, 
   trackQuestionAnswered, 
   trackQuestionSkipped 
 } from '@/lib/analytics';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
-import { getTourGuideMessage } from '@/lib/tour-guide';
-import { buildStep1State } from '@/lib/tour-guide-state';
-import type { TourGuideResponse, TourGuideUserState } from '@/types/tour-guide';
+import type { Step1Context, CoachTrigger, Step1FlowState, DomainCompletionStatus } from '@/types/alignmentCoach';
 
 interface TouchYourStarStepProps {
   userId: string;
@@ -39,7 +36,10 @@ interface TouchYourStarStepProps {
   guidedModeEnabled?: boolean;
   weekStartDate: string;
   weekEndDate: string;
-  onTourGuideMessage?: (message: string | null, isLoading: boolean) => void;
+  /** Fired when a coach-relevant event occurs (identity selected, question answered, etc.) */
+  onCoachTrigger?: (trigger: CoachTrigger, context: Step1Context) => void;
+  /** Fired when Step 1 UI state changes — keeps parent context fresh for 2-way chat */
+  onStep1ContextChange?: (context: Step1Context) => void;
 }
 
 interface NorthStarData {
@@ -115,7 +115,8 @@ export function TouchYourStarStep({
   guidedModeEnabled = true,
   weekStartDate,
   weekEndDate,
-  onTourGuideMessage,
+  onCoachTrigger,
+  onStep1ContextChange,
 }: TouchYourStarStepProps) {
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -123,14 +124,7 @@ export function TouchYourStarStep({
   const [currentDomain, setCurrentDomain] = useState<DomainType>('mission');
   
   // Compass ceremony state
-  const [showCompass, setShowCompass] = useState(true);
-  const [ceremonyComplete, setCeremonyComplete] = useState(false);
-  
-  // Tour guide AI state
-  const [tourGuideMessage, setTourGuideMessage] = useState<TourGuideResponse | null>(null);
-  const [tourGuideLoading, setTourGuideLoading] = useState(false);
-  const [userState, setUserState] = useState<TourGuideUserState | null>(null);
-  const [stepStartTime, setStepStartTime] = useState<Date>(new Date());
+  // Note: Compass ceremony now handled by CompassRitualController at parent level
   
   // Identity state
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
@@ -194,6 +188,7 @@ export function TouchYourStarStep({
   // Refs to track current state for back handler (avoids stale closures and infinite loops)
   const flowStateRef = useRef<FlowState>(flowState);
   const questionsLengthRef = useRef(questions.length);
+  const onCoachTriggerRef = useRef(onCoachTrigger);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -203,6 +198,10 @@ export function TouchYourStarStep({
   useEffect(() => {
     questionsLengthRef.current = questions.length;
   }, [questions.length]);
+
+  useEffect(() => {
+    onCoachTriggerRef.current = onCoachTrigger;
+  }, [onCoachTrigger]);
 
   // Stable back handler function using refs - doesn't change on re-renders
   const handleBack = useCallback(() => {
@@ -215,7 +214,16 @@ export function TouchYourStarStep({
       // User can tap "Edit" on Core Identity card to change their identity
       return false;
     } else if (currentFlowState === 'choice') {
-      // From choice, go back to identity-hub
+      // From choice, go back to identity-hub (domain skipped)
+      // Note: onStep1ContextChange useEffect will fire when flowState changes,
+      // and domain_skipped trigger is fired via ref to avoid stale closure
+      if (onCoachTriggerRef.current) {
+        // Lightweight context — full context will arrive via onStep1ContextChange
+        onCoachTriggerRef.current('domain_skipped', {
+          flow_state: 'identity-hub',
+          domain_completion: { identity: true, mission: false, vision: false, values: false },
+        } as Step1Context);
+      }
       setFlowState('identity-hub');
       return true;
     } else if (currentFlowState === 'direct-input') {
@@ -260,45 +268,53 @@ export function TouchYourStarStep({
   }, []);
   // ============ END BACK HANDLER FIX ============
 
+  // ============ STEP 1 CONTEXT FOR AI COACH ============
+
+  /** Build the current Step1Context from component state */
+  const buildCurrentStep1Context = useCallback((): Step1Context => {
+    // Map local FlowState to Step1FlowState (exclude 'loading')
+    const mappedFlowState: Step1FlowState =
+      flowState === 'loading' ? 'hero-question' : flowState as Step1FlowState;
+
+    const domainCompletion: DomainCompletionStatus = {
+      identity: !!northStarData.identity,
+      mission: !!northStarData.mission,
+      vision: !!northStarData.vision,
+      values: !!(northStarData.values && northStarData.values.length > 0),
+    };
+
+    return {
+      flow_state: mappedFlowState,
+      current_domain: currentDomain as 'mission' | 'vision' | 'values' | null,
+      domain_completion: domainCompletion,
+      identity_selection_method: selectedIdentity
+        ? (sparkListOptions.some(o => o.label === selectedIdentity && !o.isCustom) ? 'spark_list' : 'custom')
+        : null,
+      spark_list_selection: sparkListOptions.some(o => o.label === selectedIdentity && !o.isCustom)
+        ? selectedIdentity
+        : null,
+      identity_insights: northStarData.identityInsights || null,
+      questions_answered_in_session: responses.length,
+      questions_total_in_session: questions.length,
+      current_question_text: flowState === 'guided-questions' && questions[currentQuestionIndex]
+        ? questions[currentQuestionIndex].question_text
+        : null,
+      synthesis_active: flowState === 'synthesis' && aiSuggestions.length > 0,
+    };
+  }, [flowState, northStarData, currentDomain, selectedIdentity, sparkListOptions, responses.length, questions, currentQuestionIndex, aiSuggestions.length]);
+
+  // Sync Step1Context to parent whenever relevant state changes
+  useEffect(() => {
+    if (onStep1ContextChange && flowState !== 'loading') {
+      onStep1ContextChange(buildCurrentStep1Context());
+    }
+  }, [flowState, currentDomain, responses.length, northStarData.identity, northStarData.mission, northStarData.vision, northStarData.values?.length]);
+
+  // ============ END STEP 1 CONTEXT ============
+
   useEffect(() => {
     loadInitialData();
-    setStepStartTime(new Date());
   }, []);
-
-  // Track flow state changes and trigger tour guide on state transitions
-  useEffect(() => {
-    if (userState && guidedModeEnabled) {
-      // Determine trigger based on state
-      let trigger: 'enter' | 'complete' | 'return' = 'enter';
-      
-      if (flowState === 'identity-hub' && northStarData.identity) {
-        trigger = 'complete'; // User just saved identity
-      }
-      
-      // Call tour guide for major flow transitions
-      if (flowState === 'identity-hub' || flowState === 'synthesis') {
-        callTourGuide(trigger);
-      }
-    }
-  }, [flowState, userState]);
-
-  // Idle nudge timer
-  useEffect(() => {
-    if (!tourGuideMessage || !guidedModeEnabled) return;
-    
-    const nudgeSeconds = tourGuideMessage.next_nudge_seconds || 0;
-    if (nudgeSeconds === 0) return; // Don't nudge
-    
-    const timer = setTimeout(() => {
-      const secondsOnStep = Math.round((new Date().getTime() - stepStartTime.getTime()) / 1000);
-      
-      if (userState) {
-        callTourGuide('idle', { ...userState, current_step_time_seconds: secondsOnStep });
-      }
-    }, nudgeSeconds * 1000);
-    
-    return () => clearTimeout(timer);
-  }, [tourGuideMessage, stepStartTime]);
 
   // Write step_1_started on mount
   useEffect(() => {
@@ -364,6 +380,13 @@ export function TouchYourStarStep({
       generateAISuggestions()
         .then(suggestions => {
           setAiSuggestions(suggestions);
+
+          // Fire coach trigger when synthesis suggestions are ready
+          if (suggestions.length > 0 && onCoachTrigger) {
+            const ctx = buildCurrentStep1Context();
+            ctx.synthesis_active = true;
+            onCoachTrigger('synthesis_ready', ctx);
+          }
         })
         .finally(() => {
           setLoadingSuggestions(false);
@@ -407,10 +430,6 @@ export function TouchYourStarStep({
           isCustom: opt.is_custom_option,
         })));
       }
-
-      // Build tour guide user state for Step 1
-      const state = await buildStep1State(userId);
-      setUserState(state);
 
       // Check if user has already answered the identity prompt
       const { data: existingPromptResponse } = await supabase
@@ -485,11 +504,6 @@ export function TouchYourStarStep({
         
         setFlowState('identity-hub');
         setCeremonyComplete(true); // Skip ceremony if returning user
-        
-        // Call tour guide for returning user
-        if (guidedModeEnabled) {
-          callTourGuide('return');
-        }
       } else {
         // Show hero question with compass ceremony
         setPromptShownAt(new Date());
@@ -500,33 +514,6 @@ export function TouchYourStarStep({
     } catch (error) {
       console.error('Error loading initial data:', error);
       setFlowState('hero-question');
-    }
-  }
-
-  /**
-   * Call the Tour Guide AI for personalized coaching
-   */
-  async function callTourGuide(
-    trigger: 'enter' | 'idle' | 'complete' | 'skip' | 'return',
-    stateOverride?: TourGuideUserState
-  ) {
-    if (!guidedModeEnabled) return;
-    
-    const state = stateOverride || userState;
-    if (!state) return;
-    
-    setTourGuideLoading(true);
-    onTourGuideMessage?.(null, true);
-    
-    try {
-      const response = await getTourGuideMessage('step_1', trigger, state);
-      setTourGuideMessage(response);
-      onTourGuideMessage?.(response.message, false);
-    } catch (err) {
-      console.error('Tour guide call failed:', err);
-      onTourGuideMessage?.(null, false);
-    } finally {
-      setTourGuideLoading(false);
     }
   }
 
@@ -746,19 +733,11 @@ export function TouchYourStarStep({
       }
 
       // Update local state
-      setNorthStarData(prev => ({ 
-        ...prev, 
+      setNorthStarData(prev => ({
+        ...prev,
         identity: identityValue,
       }));
-      
-      // Update user state for tour guide
-      if (userState) {
-        setUserState({
-          ...userState,
-          core_identity: identityValue,
-        });
-      }
-      
+
       // Slide animation to identity hub
       Animated.timing(slideAnim, {
         toValue: 1,
@@ -767,10 +746,14 @@ export function TouchYourStarStep({
       }).start(() => {
         setFlowState('identity-hub');
         slideAnim.setValue(0);
-        
-        // Call tour guide after identity saved
-        if (guidedModeEnabled) {
-          callTourGuide('complete');
+
+        // Fire coach trigger after identity save completes
+        if (onCoachTrigger) {
+          // Build context with updated identity
+          const ctx = buildCurrentStep1Context();
+          ctx.flow_state = 'identity-hub';
+          ctx.domain_completion = { ...ctx.domain_completion, identity: true };
+          onCoachTrigger('identity_selected', ctx);
         }
       });
 
@@ -821,7 +804,17 @@ export function TouchYourStarStep({
       } else {
         setNorthStarData(prev => ({ ...prev, mission: statementText }));
       }
-      
+
+      // Fire coach trigger for domain completed
+      if (onCoachTrigger) {
+        const ctx = buildCurrentStep1Context();
+        ctx.flow_state = 'identity-hub';
+        // Update domain completion to reflect the save
+        if (currentDomain === 'mission') ctx.domain_completion = { ...ctx.domain_completion, mission: true };
+        if (currentDomain === 'vision') ctx.domain_completion = { ...ctx.domain_completion, vision: true };
+        onCoachTrigger('domain_completed', ctx);
+      }
+
       resetDomainState();
       setFlowState('identity-hub');
 
@@ -877,6 +870,15 @@ export function TouchYourStarStep({
 
       setNorthStarData(prev => ({ ...prev, values: updatedValues }));
 
+      // Fire coach trigger for domain completed (values)
+      if (onCoachTrigger) {
+        const ctx = buildCurrentStep1Context();
+        ctx.flow_state = 'identity-hub';
+        ctx.current_domain = 'values';
+        ctx.domain_completion = { ...ctx.domain_completion, values: true };
+        onCoachTrigger('domain_completed', ctx);
+      }
+
       resetDomainState();
       setEditingValueIndex(null);
       setFlowState('identity-hub');
@@ -930,7 +932,16 @@ export function TouchYourStarStep({
       }
 
       setNorthStarData(prev => ({ ...prev, values: updatedValues }));
-      
+
+      // Fire coach trigger for domain completed (multiple values)
+      if (onCoachTrigger) {
+        const ctx = buildCurrentStep1Context();
+        ctx.flow_state = 'identity-hub';
+        ctx.current_domain = 'values';
+        ctx.domain_completion = { ...ctx.domain_completion, values: true };
+        onCoachTrigger('domain_completed', ctx);
+      }
+
       resetDomainState();
       setFlowState('identity-hub');
 
@@ -1023,7 +1034,14 @@ export function TouchYourStarStep({
     
     setResponses(prev => [...prev, newResponse]);
     saveResponse(currentQuestion.id, currentAnswer.trim());
-    
+
+    // Fire coach trigger for question answered
+    if (onCoachTrigger) {
+      const ctx = buildCurrentStep1Context();
+      ctx.questions_answered_in_session = responses.length + 1; // +1 for the one just answered
+      onCoachTrigger('question_answered', ctx);
+    }
+
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
       setCurrentAnswer('');
@@ -1199,6 +1217,14 @@ export function TouchYourStarStep({
     setCurrentDomain(domain);
     resetDomainState();
     setFlowState('choice');
+
+    // Fire coach trigger for domain started
+    if (onCoachTrigger) {
+      const ctx = buildCurrentStep1Context();
+      ctx.flow_state = 'choice';
+      ctx.current_domain = domain;
+      onCoachTrigger('domain_started', ctx);
+    }
   }
 
   function getDomainConfig(domain: DomainType) {
@@ -1275,23 +1301,6 @@ export function TouchYourStarStep({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Compass Ceremony - Only for new users */}
-            {!ceremonyComplete && showCompass && (
-              <View style={styles.compassCeremonyContainer}>
-                <LifeCompass
-                  size={200}
-                  contextMode="weekly_alignment"
-                  onCeremonyComplete={() => {
-                    setCeremonyComplete(true);
-                    // Call tour guide after ceremony
-                    if (guidedModeEnabled) {
-                      callTourGuide('enter');
-                    }
-                  }}
-                />
-              </View>
-            )}
-
             {/* Header with Tooltip (? icon in top right) */}
             <View style={styles.headerSection}>
               <View style={styles.headerRow}>

@@ -49,6 +49,7 @@ interface AlignmentCheckStepProps {
   weekEndDate: string;
   weeklyAlignmentId: string | null;
   onAlignmentRowCreated: (id: string) => void;
+  onAlignmentSweep?: (index: number) => void;
 }
 
 export function AlignmentCheckStep({
@@ -62,6 +63,7 @@ export function AlignmentCheckStep({
   weekEndDate,
   weeklyAlignmentId,
   onAlignmentRowCreated,
+  onAlignmentSweep,
 }: AlignmentCheckStepProps) {
   const [phase, setPhase] = useState<AlignmentPhase>('loading');
   const [alignmentRowId, setAlignmentRowId] = useState<string | null>(weeklyAlignmentId);
@@ -147,6 +149,8 @@ export function AlignmentCheckStep({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
+    onAlignmentSweep?.(0); // Gold spindle → North (reviewing identity/mission)
+
     setTimeout(() => setPhase('bridge'), 500);
   }
 
@@ -183,6 +187,8 @@ export function AlignmentCheckStep({
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+
+    onAlignmentSweep?.(2); // Gold spindle → East (reviewing wellness/goals)
 
     if (!pq3Skipped && pq3Selection) {
       setPhase('library_offer');

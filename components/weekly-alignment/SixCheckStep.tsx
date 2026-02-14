@@ -32,6 +32,7 @@ import { parseLocalDate } from '@/lib/dateUtils';
 import { useGoals, Timeline } from '@/hooks/useGoals';
 import ActionEffortModal from '@/components/goals/ActionEffortModal';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
+import { calculateItemAngle } from '@/lib/compassRitualSequence';
 
 // Compass Goals icon for Step 4 header
 const CompassGoalsIcon = require('@/assets/images/compass-goals.png');
@@ -60,6 +61,7 @@ interface SixCheckStepProps {
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
   weekStartDate: string;
   weekEndDate: string;
+  onCompassFocus?: (angle: number) => void;
 }
 
 interface AnnualGoal {
@@ -158,6 +160,7 @@ export function SixCheckStep({
   onAddWeekPlanItem,
   weekStartDate,
   weekEndDate,
+  onCompassFocus,
 }: SixCheckStepProps) {
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -511,6 +514,8 @@ export function SixCheckStep({
   }
 
   function handleOpenGoalDetail(goal: AnnualGoal) {
+    const goalIndex = annualGoals.findIndex(g => g.id === goal.id);
+    onCompassFocus?.(calculateItemAngle(180, goalIndex, annualGoals.length));
     setSelectedGoal(goal);
     slideToState('goal-detail');
   }

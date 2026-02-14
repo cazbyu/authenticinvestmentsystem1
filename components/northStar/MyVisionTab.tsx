@@ -8,11 +8,11 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { 
-  FileText, 
-  TrendingUp, 
-  Target, 
-  ChevronRight, 
+import {
+  FileText,
+  TrendingUp,
+  Target,
+  ChevronRight,
   ChevronDown,
   Plus,
   Edit3,
@@ -58,7 +58,7 @@ interface MyVisionTabProps {
 export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
   const router = useRouter();
   const { colors } = useTheme();
-  
+
   // State
   const [loading, setLoading] = useState(true);
   const [northStarData, setNorthStarData] = useState<NorthStarData | null>(null);
@@ -205,9 +205,13 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.error('[MyVisionTab] No user found for save');
+        return;
+      }
 
       const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
+      const trimmedText = editText.trim();
 
       // First check if a row exists for this user
       const { data: existing } = await supabase
@@ -218,26 +222,34 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
       if (existing) {
         // Row exists — UPDATE only the edited field (preserves other columns)
-        const { error } = await supabase
+        const { error: updateError } = await supabase
           .from('0008-ap-north-star')
           .update({
-            [fieldName]: editText.trim(),
+            [fieldName]: trimmedText,
             updated_at: new Date().toISOString(),
           })
           .eq('user_id', user.id);
 
-        if (error) throw error;
+        if (updateError) {
+          console.error('[MyVisionTab] Update error:', updateError);
+          Alert.alert('Error', `Failed to update: ${updateError.message}`);
+          return;
+        }
       } else {
         // No row yet — INSERT with just this field
-        const { error } = await supabase
+        const { error: insertError } = await supabase
           .from('0008-ap-north-star')
           .insert({
             user_id: user.id,
-            [fieldName]: editText.trim(),
+            [fieldName]: trimmedText,
             updated_at: new Date().toISOString(),
           });
 
-        if (error) throw error;
+        if (insertError) {
+          console.error('[MyVisionTab] Insert error:', insertError);
+          Alert.alert('Error', `Failed to save: ${insertError.message}`);
+          return;
+        }
       }
 
       // Refresh data
@@ -245,7 +257,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
       setEditingField(null);
       setEditText('');
     } catch (error) {
-      console.error('Error saving edit:', error);
+      console.error('[MyVisionTab] Error saving edit:', error);
       Alert.alert('Error', 'Failed to save. Please try again.');
     } finally {
       setSavingEdit(false);
@@ -297,7 +309,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             </Text>
           </View>
           {editingField !== 'mission' && (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleEditMission}
               style={[styles.editButton, { backgroundColor: colors.background }]}
             >
@@ -344,8 +356,8 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             </View>
           </View>
         ) : hasMission ? (
-          <Text 
-            style={[styles.cardContent, { color: colors.text }]} 
+          <Text
+            style={[styles.cardContent, { color: colors.text }]}
             numberOfLines={6}
           >
             {northStarData.mission_statement}
@@ -355,7 +367,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
               Define your personal mission statement — your core purpose, values, and the impact you want to make.
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleEditMission}
               style={styles.getStartedButton}
             >
@@ -375,7 +387,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             </Text>
           </View>
           {editingField !== 'vision' && (
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleEditVision}
               style={[styles.editButton, { backgroundColor: colors.background }]}
             >
@@ -422,8 +434,8 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             </View>
           </View>
         ) : hasVision ? (
-          <Text 
-            style={[styles.cardContent, { color: colors.text }]} 
+          <Text
+            style={[styles.cardContent, { color: colors.text }]}
             numberOfLines={6}
           >
             {northStarData.five_year_vision}
@@ -433,7 +445,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
               Paint a vivid picture of where you want to be in 5 years across personal growth, career, relationships, and lifestyle.
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleEditVision}
               style={styles.getStartedButton}
             >
@@ -453,13 +465,13 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             </Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleAddGoal}
               style={styles.addButton}
             >
               <Plus size={16} color="#ffffff" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleManageGoals}
               style={[styles.editButton, { backgroundColor: colors.background }]}
             >
@@ -487,21 +499,21 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                     <View style={styles.goalNumber}>
                       <Text style={styles.goalNumberText}>{index + 1}</Text>
                     </View>
-                    
+
                     <View style={styles.goalInfo}>
-                      <Text 
+                      <Text
                         style={[styles.goalTitle, { color: colors.text }]}
                         numberOfLines={2}
                       >
                         {goal.title}
                       </Text>
-                      
+
                       {hasCampaigns && (
                         <Text style={[styles.campaignCount, { color: colors.textSecondary }]}>
                           {completedCampaigns}/{goal.campaigns.length} campaigns
                         </Text>
                       )}
-                      
+
                       {goal.year_target_date && (
                         <Text style={[styles.targetDate, { color: colors.textSecondary }]}>
                           Target: {new Date(goal.year_target_date).toLocaleDateString('en-US', {
@@ -527,55 +539,55 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                   {isExpanded && hasCampaigns && (
                     <View style={styles.campaignsContainer}>
                       {goal.campaigns.map((campaign) => (
-                        <View 
-                          key={campaign.id} 
+                        <View
+                          key={campaign.id}
                           style={[
                             styles.campaignItem,
                             { backgroundColor: colors.background }
                           ]}
                         >
-                          <View 
+                          <View
                             style={[
                               styles.campaignTypeBadge,
-                              { 
-                                backgroundColor: campaign.goal_type === '12wk' 
-                                  ? '#dbeafe' 
-                                  : '#fef3c7' 
+                              {
+                                backgroundColor: campaign.goal_type === '12wk'
+                                  ? '#dbeafe'
+                                  : '#fef3c7'
                               }
                             ]}
                           >
-                            <Text 
+                            <Text
                               style={[
                                 styles.campaignTypeText,
-                                { 
-                                  color: campaign.goal_type === '12wk' 
-                                    ? '#1e40af' 
-                                    : '#92400e' 
+                                {
+                                  color: campaign.goal_type === '12wk'
+                                    ? '#1e40af'
+                                    : '#92400e'
                                 }
                               ]}
                             >
                               {campaign.goal_type === '12wk' ? '12-Week' : 'Custom'}
                             </Text>
                           </View>
-                          
-                          <Text 
+
+                          <Text
                             style={[styles.campaignTitle, { color: colors.text }]}
                             numberOfLines={1}
                           >
                             {campaign.title}
                           </Text>
-                          
+
                           <View style={styles.campaignProgress}>
-                            <View 
+                            <View
                               style={[
                                 styles.progressBar,
                                 { backgroundColor: colors.border }
                               ]}
                             >
-                              <View 
+                              <View
                                 style={[
                                   styles.progressFill,
-                                  { 
+                                  {
                                     width: `${campaign.progress || 0}%`,
                                     backgroundColor: getStatusColor(campaign.status)
                                   }
@@ -599,7 +611,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
               Set your top goals for the year that bridge your 5-year vision to daily actions.
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={handleAddGoal}
               style={styles.getStartedButton}
             >

@@ -1,5 +1,6 @@
 // Enhanced Dashboard commitment component
-// Shows committed items from Morning Spark with real-time updates and completion tracking
+// Shows committed items from Morning Spark V2 with real-time updates and completion tracking
+// Uses committed_task_ids from daily-sparks to show ONLY items the user explicitly committed to
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -12,11 +13,11 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { 
-  Calendar, 
-  CheckSquare, 
-  Flame, 
-  ChevronDown, 
+import {
+  Calendar,
+  CheckSquare,
+  Flame,
+  ChevronDown,
   ChevronUp,
   Check,
   X,
@@ -85,7 +86,7 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
 
   function setupRealtimeSubscriptions() {
     const supabase = getSupabaseClient();
-    
+
     // Subscribe to task/event updates (both in same table)
     const taskChannel = supabase
       .channel('dashboard-tasks')
@@ -128,53 +129,96 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
         return;
       }
 
-      // Get today's events (use start_date for events)
-      const { data: eventsData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, start_date, start_time, end_time, points, completed_at')
-        .eq('user_id', userId)
-        .eq('type', 'event')
-        .eq('start_date', today)
-        .in('status', ['pending', 'in_progress', 'active'])
-        .order('start_time', { ascending: true });
+      // Get committed task IDs from V2 Morning Spark
+      const committedTaskIds: string[] = spark.committed_task_ids || [];
+      const hasV2CommittedIds = committedTaskIds.length > 0;
 
-      // Get today's tasks (use due_date for tasks)
-      const { data: tasksData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, due_date, start_time, end_time, points, priority, completed_at')
-        .eq('user_id', userId)
-        .eq('type', 'task')
-        .eq('due_date', today)
-        .in('status', ['pending', 'in_progress', 'active'])
-        .order('priority', { ascending: false });
+      console.log('[TodaysCommitment] Loading. V2 committed IDs:', committedTaskIds.length,
+        'committed_at:', spark.committed_at);
 
-      // Map events
-      const events = (eventsData || []).map(e => ({
-        id: e.id,
-        title: e.title,
-        start_time: e.start_time || `${today}T09:00:00`,
-        end_time: e.end_time,
-        points: e.points || 3,
-        completed_at: e.completed_at,
-      }));
+      let events: CommittedEvent[] = [];
+      let tasks: CommittedTask[] = [];
 
-      // Map tasks
-      const tasks = (tasksData || []).map(t => ({
-        id: t.id,
-        title: t.title,
-        points: t.points || 3,
-        priority: t.priority,
-        due_date: t.due_date,
-        start_time: t.start_time,
-        end_time: t.end_time,
-        completed_at: t.completed_at,
-      }));
+      if (hasV2CommittedIds) {
+        // V2 flow: Load ONLY the tasks/events the user committed to
+        const { data: committedData } = await supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, start_date, start_time, end_time, due_date, points, priority, completed_at, status')
+          .in('id', committedTaskIds);
+
+        const allItems = committedData || [];
+
+        events = allItems
+          .filter(item => item.type === 'event')
+          .map(e => ({
+            id: e.id,
+            title: e.title,
+            start_time: e.start_time || `${today}T09:00:00`,
+            end_time: e.end_time,
+            points: e.points || 3,
+            completed_at: e.completed_at,
+          }));
+
+        tasks = allItems
+          .filter(item => item.type === 'task')
+          .map(t => ({
+            id: t.id,
+            title: t.title,
+            points: t.points || 3,
+            priority: t.priority,
+            due_date: t.due_date,
+            start_time: t.start_time,
+            end_time: t.end_time,
+            completed_at: t.completed_at,
+          }));
+      } else {
+        // V1 fallback: Load all events/tasks for today (legacy behavior)
+        const { data: eventsData } = await supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, start_date, start_time, end_time, points, completed_at')
+          .eq('user_id', userId)
+          .eq('type', 'event')
+          .eq('start_date', today)
+          .in('status', ['pending', 'in_progress', 'completed'])
+          .order('start_time', { ascending: true });
+
+        const { data: tasksData } = await supabase
+          .from('0008-ap-tasks')
+          .select('id, title, type, due_date, start_time, end_time, points, priority, completed_at')
+          .eq('user_id', userId)
+          .eq('type', 'task')
+          .eq('due_date', today)
+          .in('status', ['pending', 'in_progress', 'completed'])
+          .order('priority', { ascending: false });
+
+        events = (eventsData || []).map(e => ({
+          id: e.id,
+          title: e.title,
+          start_time: e.start_time || `${today}T09:00:00`,
+          end_time: e.end_time,
+          points: e.points || 3,
+          completed_at: e.completed_at,
+        }));
+
+        tasks = (tasksData || []).map(t => ({
+          id: t.id,
+          title: t.title,
+          points: t.points || 3,
+          priority: t.priority,
+          due_date: t.due_date,
+          start_time: t.start_time,
+          end_time: t.end_time,
+          completed_at: t.completed_at,
+        }));
+      }
+
+      console.log('[TodaysCommitment] Loaded', events.length, 'events,', tasks.length, 'tasks');
 
       // Calculate current score
       const completedEventPoints = events
         .filter(e => e.completed_at)
         .reduce((sum, e) => sum + e.points, 0);
-      
+
       const completedTaskPoints = tasks
         .filter(t => t.completed_at)
         .reduce((sum, t) => sum + t.points, 0);
@@ -330,7 +374,7 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
           </Text>
           <TouchableOpacity
             style={[styles.startButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.push('/morning-spark')}
+            onPress={() => router.push('/morning-spark-v2')}
           >
             <Text style={styles.startButtonText}>Get Started</Text>
           </TouchableOpacity>
@@ -362,7 +406,7 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
           <Text style={styles.emoji}>{getFuelEmoji(commitment.fuel_level)}</Text>
           <View style={styles.headerInfo}>
             <Text style={[styles.title, { color: colors.text }]}>
-              Today's Menu
+              Today's Contract
             </Text>
             <View style={styles.scoreRow}>
               <Flame size={14} color={colors.primary} />

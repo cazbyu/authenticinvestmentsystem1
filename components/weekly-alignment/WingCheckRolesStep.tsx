@@ -53,6 +53,7 @@ import { EditKRModal } from '@/components/settings/EditKRModal';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { AlignmentEscortCard } from './AlignmentEscortCard';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
+import { calculateItemAngle } from '@/lib/compassRitualSequence';
 
 // Format a date as "Mon, Feb 3"
 function formatShortDate(dateStr: string): string {
@@ -124,6 +125,7 @@ interface WingCheckRolesStepProps {
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
   weekStartDate: string;
   weekEndDate: string;
+  onCompassFocus?: (angle: number) => void;
 }
 
 interface Role {
@@ -205,6 +207,7 @@ export function WingCheckRolesStep({
   onAddWeekPlanItem,
   weekStartDate,
   weekEndDate,
+  onCompassFocus,
 }: WingCheckRolesStepProps) {
   const router = useRouter();
   
@@ -1479,7 +1482,7 @@ async function loadRoleItemsData(role: Role) {
           )}
 
           {/* All Roles List - NO R1/R2/R3 badges, priority sort maintained */}
-          {allRolesSorted.map((role) => {
+          {allRolesSorted.map((role, roleIndex) => {
             const categoryColor = getCategoryColor(role.category);
             const hasPurpose = !!role.purpose;
             const hasDream = !!role.dream;
@@ -1502,6 +1505,7 @@ async function loadRoleItemsData(role: Role) {
                   setDreamResponse(role.dream || '');
                   loadRoleReflectionData(role);
                   slideToState('role-reflection');
+                  onCompassFocus?.(calculateItemAngle(270, roleIndex, allRolesSorted.length));
                 }}
                 activeOpacity={0.7}
               >
