@@ -87,6 +87,9 @@ export default function Goals() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  // Today's contract committed task IDs — for showing 📋 icon on actions
+  const [committedTaskIds, setCommittedTaskIds] = useState<Set<string>>(new Set());
+
   const [northStarData, setNorthStarData] = useState<any>(null);
   const [loadingNorthStar, setLoadingNorthStar] = useState(false);
   const [northStarEditorVisible, setNorthStarEditorVisible] = useState(false);
@@ -198,6 +201,24 @@ export default function Goals() {
       fetchTotalGoalProgress(timelineGoals);
     }
   }, [selectedTimeline, currentWeekIndex, timelineGoals]);
+
+  // Fetch today's committed task IDs for contract icon display on goal actions
+  useEffect(() => {
+    const fetchCommittedIds = async () => {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const todayStr = formatLocalDate(new Date());
+      const { data: sparkData } = await supabase
+        .from('0008-ap-daily-sparks')
+        .select('committed_task_ids')
+        .eq('user_id', user.id)
+        .gte('created_at', todayStr)
+        .maybeSingle();
+      setCommittedTaskIds(new Set(sparkData?.committed_task_ids || []));
+    };
+    fetchCommittedIds();
+  }, []);
 
   const handleToggleCompletion = async (actionId: string, date: string, completed: boolean) => {
     if (!selectedTimeline) {
@@ -1415,6 +1436,7 @@ export default function Goals() {
                   onEditAction={(action) => handleEditAction(action, goal)}
                   onDeleteAction={handleDeleteAction}
                   onToggleExpanded={() => toggleGoalExpanded(goal.id)}
+                  committedTaskIds={committedTaskIds}
                 />
               );
             }}

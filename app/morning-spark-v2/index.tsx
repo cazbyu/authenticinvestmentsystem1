@@ -135,6 +135,9 @@ export default function MorningSparkV2Screen() {
   // "Do It" = "I commit to doing this" (NOT "mark completed")
   const [committedTaskIds, setCommittedTaskIds] = useState<Set<string>>(new Set());
 
+  // Delegated task IDs — tracks which items were delegated (auto-committed with blue state)
+  const [delegatedTaskIds, setDelegatedTaskIds] = useState<Set<string>>(new Set());
+
   const [committing, setCommitting] = useState(false);
 
   // Alignment Coach state
@@ -299,6 +302,18 @@ export default function MorningSparkV2Screen() {
     async (taskId: string, delegateId: string, dueDate: string | null, notes: string) => {
       try {
         await delegateContractItem(taskId, userId, delegateId, dueDate, notes);
+        // Auto-commit the delegated task
+        setCommittedTaskIds((prev) => {
+          const next = new Set(prev);
+          next.add(taskId);
+          return next;
+        });
+        // Track as delegated (blue visual state)
+        setDelegatedTaskIds((prev) => {
+          const next = new Set(prev);
+          next.add(taskId);
+          return next;
+        });
         // Refresh contract items to reflect delegation
         const grouped = await getWeeklyContractForToday(userId);
         setContractItems(grouped);
@@ -784,6 +799,7 @@ export default function MorningSparkV2Screen() {
             onAdjust={handleAdjustContract}
             onCommitToTask={handleCommitToTask}
             committedTaskIds={committedTaskIds}
+            delegatedTaskIds={delegatedTaskIds}
             onEdit={handleEditContract}
             onAddNew={handleAddNew}
             targetScore={targetScore}
@@ -799,6 +815,7 @@ export default function MorningSparkV2Screen() {
             aspiration={aspiration}
             committedItems={committedItems}
             delegations={delegations}
+            delegatedTaskIds={delegatedTaskIds}
             targetScore={committedTargetScore}
             contractItemCount={committedItems.length}
             onCommit={handleCommit}

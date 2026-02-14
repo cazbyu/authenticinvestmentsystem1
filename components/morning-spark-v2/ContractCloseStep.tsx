@@ -41,6 +41,7 @@ interface ContractCloseStepProps {
   aspiration: AspirationContent | null;
   committedItems: WeeklyContractItem[];
   delegations: DelegationItem[];
+  delegatedTaskIds?: Set<string>;
   targetScore: number;
   contractItemCount: number;
   onCommit: () => void;
@@ -61,14 +62,16 @@ function CommittedItemRow({
   item,
   colors,
   isDarkMode,
+  borderColorOverride,
 }: {
   item: WeeklyContractItem;
   colors: any;
   isDarkMode: boolean;
+  borderColorOverride?: string;
 }) {
   const isEvent = item.type === 'event';
   const iconSource = isEvent ? SOURCE_ICONS.event : SOURCE_ICONS.task;
-  const borderColor = getQuadrantColor(item);
+  const borderColor = borderColorOverride || getQuadrantColor(item);
 
   const timeDisplay =
     item.start_time && item.end_time
@@ -224,6 +227,7 @@ export default function ContractCloseStep({
   aspiration,
   committedItems,
   delegations,
+  delegatedTaskIds,
   targetScore,
   contractItemCount,
   onCommit,
@@ -289,18 +293,42 @@ export default function ContractCloseStep({
     onCommit();
   };
 
-  // Sorted items: events first (one_thing on top), then tasks (one_thing on top)
-  const sortedItems = useMemo(() => {
-    const events = committedItems
-      .filter((i) => i.type === 'event')
-      .sort((a, b) => (b.one_thing ? 1 : 0) - (a.one_thing ? 1 : 0));
+  // Group committed items: Goals → Events → Tasks → Delegated
+  const groupedDisplay = useMemo(() => {
+    const delegatedIds = delegatedTaskIds || new Set<string>();
 
-    const tasks = committedItems
-      .filter((i) => i.type === 'task')
-      .sort((a, b) => (b.one_thing ? 1 : 0) - (a.one_thing ? 1 : 0));
+    // Separate delegated from non-delegated committed items
+    const nonDelegated = committedItems.filter(i => !delegatedIds.has(i.id));
+    const delegatedItems = committedItems.filter(i => delegatedIds.has(i.id));
 
-    return { events, tasks };
-  }, [committedItems]);
+    // Group non-delegated by goals, events, tasks
+    const goalMap = new Map<string, { goalId: string; goalTitle: string; items: WeeklyContractItem[] }>();
+    const events: WeeklyContractItem[] = [];
+    const tasks: WeeklyContractItem[] = [];
+
+    nonDelegated.forEach(item => {
+      if (item.type === 'event') {
+        events.push(item);
+      } else if (item.goals && item.goals.length > 0) {
+        // Group by first goal
+        const goal = item.goals[0];
+        if (!goalMap.has(goal.id)) {
+          goalMap.set(goal.id, { goalId: goal.id, goalTitle: goal.title, items: [] });
+        }
+        goalMap.get(goal.id)!.items.push(item);
+      } else {
+        tasks.push(item);
+      }
+    });
+
+    // Sort within groups: one_thing items first
+    events.sort((a, b) => (b.one_thing ? 1 : 0) - (a.one_thing ? 1 : 0));
+    tasks.sort((a, b) => (b.one_thing ? 1 : 0) - (a.one_thing ? 1 : 0));
+
+    const goals = Array.from(goalMap.values());
+
+    return { goals, events, tasks, delegatedItems };
+  }, [committedItems, delegatedTaskIds]);
 
   // Active delegations
   const activeDelegations = useMemo(
@@ -354,8 +382,40 @@ export default function ContractCloseStep({
           Here's what you've committed to today
         </Text>
 
+        {/* Goals section — grouped by goal */}
+        {groupedDisplay.goals.length > 0 && (
+          <View style={styles.itemSection}>
+            <View style={styles.itemSectionHeader}>
+              <Text style={styles.itemSectionEmoji}>{'\u{1F3AF}'}</Text>
+              <Text style={[styles.itemSectionLabel, { color: colors.text }]}>
+                Goals
+              </Text>
+              <View style={[styles.itemSectionCount, { backgroundColor: '#D4924A' }]}>
+                <Text style={styles.itemSectionCountText}>
+                  {groupedDisplay.goals.reduce((sum, g) => sum + g.items.length, 0)}
+                </Text>
+              </View>
+            </View>
+            {groupedDisplay.goals.map((goalGroup) => (
+              <View key={goalGroup.goalId} style={styles.goalGroupSection}>
+                <View style={styles.goalGroupHeader}>
+                  <Text style={[styles.goalGroupTitle, { color: colors.text }]} numberOfLines={1}>
+                    {goalGroup.goalTitle}
+                  </Text>
+                  <Text style={[styles.goalGroupCount, { color: colors.textSecondary }]}>
+                    {goalGroup.items.length} action{goalGroup.items.length !== 1 ? 's' : ''} committed
+                  </Text>
+                </View>
+                {goalGroup.items.map((item) => (
+                  <CommittedItemRow key={item.id} item={item} colors={colors} isDarkMode={isDarkMode} />
+                ))}
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Events section */}
-        {sortedItems.events.length > 0 && (
+        {groupedDisplay.events.length > 0 && (
           <View style={styles.itemSection}>
             <View style={styles.itemSectionHeader}>
               <Text style={styles.itemSectionEmoji}>{'\u{1F4C5}'}</Text>
@@ -363,17 +423,17 @@ export default function ContractCloseStep({
                 Events
               </Text>
               <View style={[styles.itemSectionCount, { backgroundColor: '#5B9BD5' }]}>
-                <Text style={styles.itemSectionCountText}>{sortedItems.events.length}</Text>
+                <Text style={styles.itemSectionCountText}>{groupedDisplay.events.length}</Text>
               </View>
             </View>
-            {sortedItems.events.map((item) => (
+            {groupedDisplay.events.map((item) => (
               <CommittedItemRow key={item.id} item={item} colors={colors} isDarkMode={isDarkMode} />
             ))}
           </View>
         )}
 
-        {/* Tasks section */}
-        {sortedItems.tasks.length > 0 && (
+        {/* Tasks section (non-goal, non-delegated) */}
+        {groupedDisplay.tasks.length > 0 && (
           <View style={styles.itemSection}>
             <View style={styles.itemSectionHeader}>
               <Text style={styles.itemSectionEmoji}>{'\u2705'}</Text>
@@ -381,27 +441,34 @@ export default function ContractCloseStep({
                 Tasks
               </Text>
               <View style={[styles.itemSectionCount, { backgroundColor: '#3DA87A' }]}>
-                <Text style={styles.itemSectionCountText}>{sortedItems.tasks.length}</Text>
+                <Text style={styles.itemSectionCountText}>{groupedDisplay.tasks.length}</Text>
               </View>
             </View>
-            {sortedItems.tasks.map((item) => (
+            {groupedDisplay.tasks.map((item) => (
               <CommittedItemRow key={item.id} item={item} colors={colors} isDarkMode={isDarkMode} />
             ))}
           </View>
         )}
 
-        {/* Delegated section */}
-        {activeDelegations.length > 0 && (
+        {/* Delegated section — blue theme */}
+        {(groupedDisplay.delegatedItems.length > 0 || activeDelegations.length > 0) && (
           <View style={styles.itemSection}>
             <View style={styles.itemSectionHeader}>
               <Text style={styles.itemSectionEmoji}>{'\u{1F465}'}</Text>
               <Text style={[styles.itemSectionLabel, { color: colors.text }]}>
                 Delegated
               </Text>
-              <View style={[styles.itemSectionCount, { backgroundColor: '#D4924A' }]}>
-                <Text style={styles.itemSectionCountText}>{activeDelegations.length}</Text>
+              <View style={[styles.itemSectionCount, { backgroundColor: '#5B9BD5' }]}>
+                <Text style={styles.itemSectionCountText}>
+                  {groupedDisplay.delegatedItems.length + activeDelegations.length}
+                </Text>
               </View>
             </View>
+            {/* Delegated committed items (from this contract) */}
+            {groupedDisplay.delegatedItems.map((item) => (
+              <CommittedItemRow key={item.id} item={item} colors={colors} isDarkMode={isDarkMode} borderColorOverride="#5B9BD5" />
+            ))}
+            {/* Pre-existing delegations (from delegation step) */}
             {activeDelegations.map((d) => (
               <View
                 key={d.delegation_id}
@@ -422,7 +489,7 @@ export default function ContractCloseStep({
                   </Text>
                   <Text style={[styles.delegateSubtext, { color: colors.textSecondary }]}>
                     {'\u2192'} {d.delegate_name}
-                    {d.due_date ? ` · Due ${d.due_date}` : ''}
+                    {d.due_date ? ` \u00B7 Due ${d.due_date}` : ''}
                   </Text>
                 </View>
               </View>
@@ -431,13 +498,20 @@ export default function ContractCloseStep({
         )}
 
         {/* Empty state */}
-        {sortedItems.events.length === 0 && sortedItems.tasks.length === 0 && activeDelegations.length === 0 && (
+        {groupedDisplay.goals.length === 0 && groupedDisplay.events.length === 0 && groupedDisplay.tasks.length === 0 && groupedDisplay.delegatedItems.length === 0 && activeDelegations.length === 0 && (
           <View style={[styles.emptyCard, { backgroundColor: isDarkMode ? colors.surface : '#FFF' }]}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               No items committed yet. Go back to the Contract step to add some.
             </Text>
           </View>
         )}
+
+        {/* Reminder message */}
+        <View style={[styles.reminderCard, { backgroundColor: isDarkMode ? '#2A2000' : '#FFF8E1' }]}>
+          <Text style={[styles.reminderText, { color: isDarkMode ? '#D4A843' : '#92400E' }]}>
+            {'\u{1F4A1}'} Remember to capture a rose, thorn, and reflections that help you improve
+          </Text>
+        </View>
 
         {/* Target badge */}
         <View style={styles.targetRow}>
@@ -588,7 +662,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderLeftWidth: 4,
-    borderLeftColor: '#D4924A',
+    borderLeftColor: '#5B9BD5',
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 5,
@@ -598,7 +672,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: '#D4924A15',
+    backgroundColor: '#5B9BD515',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -607,9 +681,40 @@ const styles = StyleSheet.create({
   delegateTitle: { fontSize: 13, fontWeight: '600' },
   delegateSubtext: { fontSize: 11, marginTop: 1 },
 
+  // ── Goal Groups ──
+  goalGroupSection: { marginBottom: 4 },
+  goalGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#D4924A',
+    marginBottom: 2,
+    marginLeft: 4,
+  },
+  goalGroupTitle: { fontSize: 13, fontWeight: '700', flex: 1 },
+  goalGroupCount: { fontSize: 11, fontWeight: '500' },
+
   // ── Empty ──
   emptyCard: { borderRadius: 12, padding: 24, alignItems: 'center' },
   emptyText: { fontSize: 14, textAlign: 'center' },
+
+  // ── Reminder ──
+  reminderCard: {
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  reminderText: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+    fontStyle: 'italic',
+  },
 
   // ── Target ──
   targetRow: { alignItems: 'center', marginTop: 8, marginBottom: 8 },

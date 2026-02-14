@@ -292,16 +292,22 @@ function ItemRow({
         onPress={handlePress}
         activeOpacity={0.7}
       >
-        <Text
-          style={[
-            styles.titleText,
-            { color: isCompleted ? '#9ca3af' : priorityColor },
-            isCompleted && styles.completedText
-          ]}
-          numberOfLines={2}
-        >
-          {item.title}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text
+            style={[
+              styles.titleText,
+              styles.titleTextFlex,
+              { color: isCompleted ? '#9ca3af' : priorityColor },
+              isCompleted && styles.completedText
+            ]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
+          {isOnTodaysContract && (
+            <Text style={styles.contractIconInline}>📋</Text>
+          )}
+        </View>
 
         {metadataParts.length > 0 && (
           <Text style={[styles.metadataText, isCompleted && { color: '#9ca3af' }]}>
@@ -315,11 +321,6 @@ function ItemRow({
           </Text>
         )}
       </TouchableOpacity>
-
-      {/* Contract Icon */}
-      {isOnTodaysContract && (
-        <Text style={styles.contractIcon}>📋</Text>
-      )}
 
       {/* Right: Ghost Points */}
       <View style={styles.pointsContainer}>
@@ -454,14 +455,15 @@ export function ActionsTableView({
       todayStart.setHours(0, 0, 0, 0);
       const todayStartISO = toLocalISOString(todayStart);
 
-      // Fetch today's committed task IDs for contract icon display
+      // Fetch today's committed task IDs for contract icon display + sorting
       const { data: sparkData } = await supabase
         .from('0008-ap-daily-sparks')
         .select('committed_task_ids')
         .eq('user_id', userId)
         .gte('created_at', todayStr)
         .maybeSingle();
-      setCommittedTaskIds(new Set(sparkData?.committed_task_ids || []));
+      const contractIds = new Set<string>(sparkData?.committed_task_ids || []);
+      setCommittedTaskIds(contractIds);
 
       let tasksData: any[] = [];
 
@@ -658,8 +660,13 @@ export function ActionsTableView({
           const events = items.filter(item => item.type === 'event');
           const tasks = items.filter(item => item.type === 'task');
 
-          // Sort tasks: incomplete first, then completed
+          // Sort tasks: contracted first, then incomplete, then completed
           const sortedTasks = tasks.sort((a, b) => {
+            // Contract items first
+            const aContract = contractIds.has(a.id) ? 0 : 1;
+            const bContract = contractIds.has(b.id) ? 0 : 1;
+            if (aContract !== bContract) return aContract - bContract;
+            // Then incomplete before completed
             if (a.isCompleted === b.isCompleted) return 0;
             return a.isCompleted ? 1 : -1;
           });
@@ -1087,9 +1094,17 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
     lineHeight: 16,
   },
-  contractIcon: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  titleTextFlex: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  contractIconInline: {
     fontSize: 14,
-    marginRight: 4,
   },
   pointsContainer: {
     minWidth: 50,

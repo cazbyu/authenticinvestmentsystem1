@@ -88,6 +88,7 @@ interface GoalProgressCardProps {
   onEditAction?: (action: TaskWithLogs) => void; // New prop for editing actions
   onDeleteAction?: (actionId: string, weekNumber: number) => void; // New prop for deleting actions
   onToggleExpanded?: () => void; // New prop for toggling collapse/expand
+  committedTaskIds?: Set<string>; // Today's contract committed task IDs
 }
 
 export const GoalProgressCard = memo(function GoalProgressCard({
@@ -106,6 +107,7 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   onEditAction,
   onDeleteAction,
   onToggleExpanded,
+  committedTaskIds,
 }: GoalProgressCardProps) {
   const weekActions = weekActionsProp ?? [];
   
@@ -402,9 +404,14 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                     <View key={action.id} style={styles.actionItem}>
                       <View style={styles.actionHeader}>
                         <View style={styles.actionTitleContainer}>
-                          <Text style={styles.actionTitle} numberOfLines={1}>
-                            {action.title}
-                          </Text>
+                          <View style={styles.actionTitleRow}>
+                            <Text style={styles.actionTitle} numberOfLines={1}>
+                              {action.title}
+                            </Text>
+                            {committedTaskIds?.has(action.id) && (
+                              <Text style={styles.contractIconInline}>{'\u{1F4CB}'}</Text>
+                            )}
+                          </View>
                         </View>
                         <View style={styles.actionHeaderRight}>
                           {action.input_kind === 'count' && (
@@ -765,10 +772,20 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  actionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   actionTitle: {
     fontSize: 12,
     fontWeight: '500',
     color: '#1f2937',
+    flex: 1,
+    flexShrink: 1,
+  },
+  contractIconInline: {
+    fontSize: 12,
   },
   actionHeaderRight: {
     flexDirection: 'row',
