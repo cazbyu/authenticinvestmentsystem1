@@ -739,6 +739,23 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
 }
 
 /**
+ * Complete a contract item — marks it done with the current timestamp.
+ * Returns the completed_at timestamp.
+ */
+export async function completeContractItem(taskId: string): Promise<string> {
+  const supabase = getSupabaseClient();
+  const now = new Date().toISOString();
+
+  const { error } = await supabase
+    .from('0008-ap-tasks')
+    .update({ completed_at: now })
+    .eq('id', taskId);
+
+  if (error) throw error;
+  return now;
+}
+
+/**
  * Adjust a contract item: delay, delete, or delegate.
  */
 export async function adjustContractItem(

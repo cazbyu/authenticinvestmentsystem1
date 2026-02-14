@@ -40,6 +40,7 @@ import {
   getBrainDumpAndFollowUps,
   getWeeklyContractForToday,
   adjustContractItem,
+  completeContractItem,
   delegateContractItem,
   getDelegations,
   commitMorningSparkV2,
@@ -212,6 +213,30 @@ export default function MorningSparkV2Screen() {
     },
     [userId],
   );
+
+  // ---- Complete task handler (Do It / commit) ----
+
+  const handleCompleteContract = useCallback(
+    async (taskId: string) => {
+      try {
+        await completeContractItem(taskId);
+        // Refresh contract items so the completed task gets hidden
+        const grouped = await getWeeklyContractForToday(userId);
+        setContractItems(grouped);
+      } catch (e) {
+        console.error('Error completing contract item:', e);
+        throw e;
+      }
+    },
+    [userId],
+  );
+
+  // ---- Edit task handler ----
+
+  const handleEditContract = useCallback((_taskId: string) => {
+    // TODO: Open ActionDetailsModal or TaskEventForm for this task
+    Alert.alert('Coming Soon', 'Task editing will be available soon.');
+  }, []);
 
   // ---- Add new placeholder ----
 
@@ -453,6 +478,8 @@ export default function MorningSparkV2Screen() {
             grouped={contractItems}
             loading={contractLoading}
             onAdjust={handleAdjustContract}
+            onComplete={handleCompleteContract}
+            onEdit={handleEditContract}
             onAddNew={handleAddNew}
             targetScore={targetScore}
           />
