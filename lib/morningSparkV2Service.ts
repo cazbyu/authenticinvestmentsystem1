@@ -632,22 +632,29 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
 
-  // Get tasks due today or overdue — only INCOMPLETE tasks for the morning contract
+  // Get tasks due today or overdue — only INCOMPLETE, non-cancelled tasks
   const { data: tasks, error } = await supabase
     .from('0008-ap-tasks')
     .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea')
     .eq('user_id', userId)
     .is('deleted_at', null)
     .is('completed_at', null)
-    .eq('cancelled', false)
+    .neq('status', 'cancelled')
+    .neq('status', 'archived')
     .or(`due_date.eq.${today},due_date.lt.${today},start_date.eq.${today}`)
     .order('is_urgent', { ascending: false })
     .order('is_important', { ascending: false })
     .order('start_time', { ascending: true, nullsFirst: false });
 
-  if (error || !tasks || tasks.length === 0) {
+  if (error) {
+    console.error('[Contract] Error fetching tasks:', error.message, error.details);
     return { roles: [], wellness: [], goals: [], unassigned: [] };
   }
+  if (!tasks || tasks.length === 0) {
+    console.log('[Contract] No tasks found for today:', today);
+    return { roles: [], wellness: [], goals: [], unassigned: [] };
+  }
+  console.log('[Contract] Found', tasks.length, 'tasks for', today);
 
   const taskIds = tasks.map(t => t.id);
 
@@ -893,15 +900,15 @@ export async function adjustContractItem(
   } else if (action === 'delete') {
     await supabase
       .from('0008-ap-tasks')
-      .update({ cancelled: true })
+      .update({ status: 'cancelled' })
       .eq('id', taskId);
   }
 }
 
 /**
  * Delegate a contract item to another person.
- * Creates a delegation record in 0008-ap-delegates and updates
- * the task's delegated_to field.
+ * Creates/updates a delegation record in 0008-ap-delegates.
+ * Delegation is tracked through the delegates table, not a column on tasks.
  */
 export async function delegateContractItem(
   taskId: string,
@@ -912,29 +919,42 @@ export async function delegateContractItem(
 ): Promise<void> {
   const supabase = getSupabaseClient();
 
-  // Update the delegation record (0008-ap-delegates already stores task_id)
-  const { error: delegateError } = await supabase
+  // Try to update an existing delegation link for this delegate + task
+  const { data: existing } = await supabase
     .from('0008-ap-delegates')
-    .update({
-      task_id: taskId,
-      due_date: dueDate,
-      notes: notes || null,
-      status: 'pending',
-    })
+    .select('id')
     .eq('id', delegateId)
-    .eq('user_id', userId);
+    .eq('task_id', taskId)
+    .maybeSingle();
 
-  if (delegateError) {
-    // If update fails (no matching row), insert a new delegation link instead
-    // This covers the case where delegate exists but isn't linked to this task
-    console.warn('Delegate update failed, trying to link delegate to task:', delegateError);
+  if (existing) {
+    // Update existing delegation
+    await supabase
+      .from('0008-ap-delegates')
+      .update({
+        due_date: dueDate,
+        notes: notes || null,
+        status: 'pending',
+      })
+      .eq('id', existing.id);
+  } else {
+    // Update the delegate record to link it to this task
+    const { error } = await supabase
+      .from('0008-ap-delegates')
+      .update({
+        task_id: taskId,
+        due_date: dueDate,
+        notes: notes || null,
+        status: 'pending',
+      })
+      .eq('id', delegateId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error delegating task:', error.message);
+      throw error;
+    }
   }
-
-  // Also stamp the task with delegated_to
-  await supabase
-    .from('0008-ap-tasks')
-    .update({ delegated_to: delegateId })
-    .eq('id', taskId);
 }
 
 /**
@@ -993,12 +1013,14 @@ export async function commitMorningSparkV2(
 export async function getContractFollowUp(userId: string, date: string): Promise<ContractFollowUpData> {
   const supabase = getSupabaseClient();
 
-  // Get all tasks that were due today
+  // Get all tasks that were due today (include completed but not cancelled/archived)
   const { data: allTasks, error } = await supabase
     .from('0008-ap-tasks')
     .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea')
     .eq('user_id', userId)
     .is('deleted_at', null)
+    .neq('status', 'cancelled')
+    .neq('status', 'archived')
     .or(`due_date.eq.${date},start_date.eq.${date}`)
     .order('completed_at', { ascending: false, nullsFirst: false });
 
