@@ -106,7 +106,14 @@ export default function MorningSparkV2Screen() {
     id: string; title: string; start_date: string; start_time: string; end_time?: string;
   } | null>(null);
 
-  // Step F: Close
+  // Step F: Close — snapshot of contract at time of entering contract step
+  // This preserves the full list even after Do It / Delete / Reschedule actions drain contractItems
+  const [contractSnapshot, setContractSnapshot] = useState<GroupedContractItems>({
+    roles: [],
+    wellness: [],
+    goals: [],
+    unassigned: [],
+  });
   const [committing, setCommitting] = useState(false);
 
   // Derived values — goals is now GoalContractGroup[], flatten for counts
@@ -121,6 +128,19 @@ export default function MorningSparkV2Screen() {
   const contractItemCount = allContractItems.length;
 
   const targetScore = allContractItems
+    .filter((item) => !item.completed_at)
+    .reduce((sum, item) => sum + item.points, 0);
+
+  // Snapshot-derived values for the Close step (doesn't drain as user acts on items)
+  const snapshotGoalTasks = contractSnapshot.goals.flatMap((g) => g.tasks);
+  const allSnapshotItems = [
+    ...contractSnapshot.roles,
+    ...contractSnapshot.wellness,
+    ...snapshotGoalTasks,
+    ...contractSnapshot.unassigned,
+  ];
+  const snapshotItemCount = allSnapshotItems.length;
+  const snapshotTargetScore = allSnapshotItems
     .filter((item) => !item.completed_at)
     .reduce((sum, item) => sum + item.points, 0);
 
@@ -360,6 +380,8 @@ export default function MorningSparkV2Screen() {
       getWeeklyContractForToday(userId)
         .then((grouped) => {
           setContractItems(grouped);
+          // Capture snapshot for the Close step — this won't be drained by Do It / Delete actions
+          setContractSnapshot(grouped);
           setContractLoading(false);
         })
         .catch(() => setContractLoading(false));
@@ -524,10 +546,10 @@ export default function MorningSparkV2Screen() {
         {currentStep === 5 && (
           <ContractCloseStep
             aspiration={aspiration}
-            grouped={contractItems}
+            grouped={contractSnapshot}
             delegations={delegations}
-            targetScore={targetScore}
-            contractItemCount={contractItemCount}
+            targetScore={snapshotTargetScore}
+            contractItemCount={snapshotItemCount}
             onCommit={handleCommit}
             committing={committing}
           />
