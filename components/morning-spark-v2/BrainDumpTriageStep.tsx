@@ -770,10 +770,24 @@ export default function BrainDumpTriageStep({
 
   if (items.length === 0) {
     return (
-      <View style={[styles.emptyContainer, { backgroundColor: '#ECFDF5' }]}>
-        <Text style={styles.emptyIcon}>{'\u2705'}</Text>
-        <Text style={[styles.emptyTitle, { color: '#065F46' }]}>Your mind is clear!</Text>
-        <Text style={[styles.emptySubtext, { color: '#047857' }]}>Nothing to triage.</Text>
+      <View style={styles.wrapper}>
+        {/* Coach insight — explains what this step is even when empty */}
+        {coachMessage && (
+          <View style={styles.coachInsightWrapper}>
+            <CoachInsight
+              message={coachMessage}
+              tone={coachTone}
+              loading={false}
+              isFallback={coachIsFallback}
+              startCollapsed={false}
+            />
+          </View>
+        )}
+        <View style={[styles.emptyContainer, { backgroundColor: '#ECFDF5' }]}>
+          <Text style={styles.emptyIcon}>{'\u2705'}</Text>
+          <Text style={[styles.emptyTitle, { color: '#065F46' }]}>Your mind is clear!</Text>
+          <Text style={[styles.emptySubtext, { color: '#047857' }]}>Nothing to triage.</Text>
+        </View>
       </View>
     );
   }

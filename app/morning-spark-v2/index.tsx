@@ -145,6 +145,10 @@ export default function MorningSparkV2Screen() {
   const [rememberCoachMessage, setRememberCoachMessage] = useState<string | null>(null);
   const rememberCoachTone: CoachTone = 'reflect';
 
+  // Step 1: Built dynamically from triage items when step loads
+  const [triageCoachMessage, setTriageCoachMessage] = useState<string | null>(null);
+  const triageCoachTone: CoachTone = 'encourage';
+
   // Step 3: Static transition message (no AI call)
   const contractCoachMessage = "Review your commitments below. These are grouped by your roles, wellness zones, and goals. Commit to what matters most.";
   const contractCoachTone: CoachTone = 'push_forward';
@@ -415,10 +419,25 @@ export default function MorningSparkV2Screen() {
         .then((items) => {
           setTriageItems(items);
           setTriageLoading(false);
+
+          // Build contextual coach message for triage step
+          const hasBrainDumps = items.some((i) => i.source === 'brain_dump');
+          const hasFollowUps = items.some((i) => i.source === 'follow_up');
+          const intro = 'This step reviews items that you requested for follow up or thoughts that you captured during your Evening Review but didn\u2019t want to organize at the time.';
+
+          if (items.length === 0) {
+            setTriageCoachMessage(`${intro} It looks like you don\u2019t currently have anything to triage \u2014 your mind is clear! Let\u2019s move on.`);
+          } else if (hasBrainDumps && hasFollowUps) {
+            setTriageCoachMessage(`${intro} Below are last night\u2019s thoughts along with items you requested a follow-up reminder on. Take a moment to decide what to do with each one.`);
+          } else if (hasFollowUps) {
+            setTriageCoachMessage(`${intro} Below are the things you requested a follow-up reminder on. Review each one and decide your next action.`);
+          } else {
+            setTriageCoachMessage(`${intro} Below are last night\u2019s comments from your Evening Review. Take a moment to decide what to do with each one.`);
+          }
         })
         .catch(() => setTriageLoading(false));
 
-      // Fetch morning coach guidance (non-blocking — runs in background)
+      // Fetch morning coach guidance (non-blocking — runs in background, used for close step)
       if (!coachMessage) {
         setCoachLoading(true);
         const fuelReasonStr =
@@ -663,10 +682,10 @@ export default function MorningSparkV2Screen() {
               userId={userId}
               onItemProcessed={handleTriageItemProcessed}
               onAllProcessed={handleTriageAllProcessed}
-              coachMessage={coachMessage}
-              coachTone={coachTone}
-              coachLoading={coachLoading}
-              coachIsFallback={coachIsFallback}
+              coachMessage={triageCoachMessage}
+              coachTone={triageCoachTone}
+              coachLoading={false}
+              coachIsFallback={false}
             />
           )
         )}
