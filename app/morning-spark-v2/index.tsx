@@ -524,6 +524,8 @@ export default function MorningSparkV2Screen() {
         {currentStep === 5 && (
           <ContractCloseStep
             aspiration={aspiration}
+            grouped={contractItems}
+            delegations={delegations}
             targetScore={targetScore}
             contractItemCount={contractItemCount}
             onCommit={handleCommit}
