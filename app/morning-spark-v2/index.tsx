@@ -137,6 +137,18 @@ export default function MorningSparkV2Screen() {
   const [closeCoachLoading, setCloseCoachLoading] = useState(false);
   const [closeCoachIsFallback, setCloseCoachIsFallback] = useState(false);
 
+  // Step 0: Static welcome greeting (no AI call)
+  const energyCoachMessage = "Remember \u2014 this tool exists for one reason: to help you live intentionally. It helps you plan your day by focusing on the Big Five Questions, but before we weave through those let\u2019s do a fuel check \u2014 how much fuel do you have in the tank?";
+  const energyCoachTone: CoachTone = 'welcome';
+
+  // Step 2: Built dynamically from North Star data when step loads
+  const [rememberCoachMessage, setRememberCoachMessage] = useState<string | null>(null);
+  const rememberCoachTone: CoachTone = 'reflect';
+
+  // Step 3: Static transition message (no AI call)
+  const contractCoachMessage = "Review your commitments below. These are grouped by your roles, wellness zones, and goals. Commit to what matters most.";
+  const contractCoachTone: CoachTone = 'push_forward';
+
   // Derived values — goals is now GoalContractGroup[], flatten for counts
   const goalTasks = contractItems.goals.flatMap((g) => g.tasks);
   const allContractItems = [
@@ -434,6 +446,25 @@ export default function MorningSparkV2Screen() {
         .then(([northStarData, content]) => {
           setNorthStar(northStarData);
           setAspiration(content);
+
+          // Build coach message for Remember step from North Star data
+          const parts: string[] = [];
+          if (northStarData.core_identity) {
+            parts.push(`You previously established your core identity as ${northStarData.core_identity}.`);
+          }
+          if (northStarData.mission_statement && northStarData.vision) {
+            parts.push(`You have stated that you are here to ${northStarData.mission_statement} and that your personal vision is ${northStarData.vision}.`);
+          } else if (northStarData.mission_statement) {
+            parts.push(`You have stated that you are here to ${northStarData.mission_statement}.`);
+          } else if (northStarData.vision) {
+            parts.push(`Your personal vision is ${northStarData.vision}.`);
+          }
+          if (!northStarData.mission_statement && !northStarData.vision) {
+            parts.push('Would you like to reflect on your mission and vision? The Weekly Alignment is the best place for deep thinking on these big questions.');
+          }
+          parts.push("Let\u2019s now focus on where you want to go today.");
+          setRememberCoachMessage(parts.join(' '));
+
           setAspirationLoading(false);
         })
         .catch(() => setAspirationLoading(false));
@@ -614,6 +645,8 @@ export default function MorningSparkV2Screen() {
             onFuelLevelChange={setFuelLevel}
             onFuelWhyChange={setFuelWhy}
             onFuel3WhyChange={setFuel3Why}
+            coachMessage={energyCoachMessage}
+            coachTone={energyCoachTone}
           />
         )}
         {currentStep === 1 && (
@@ -638,7 +671,13 @@ export default function MorningSparkV2Screen() {
           )
         )}
         {currentStep === 2 && (
-          <RememberStep aspiration={aspiration} northStar={northStar} loading={aspirationLoading} />
+          <RememberStep
+            aspiration={aspiration}
+            northStar={northStar}
+            loading={aspirationLoading}
+            coachMessage={rememberCoachMessage}
+            coachTone={rememberCoachTone}
+          />
         )}
         {currentStep === 3 && (
           <ContractReviewStep
@@ -650,6 +689,8 @@ export default function MorningSparkV2Screen() {
             onEdit={handleEditContract}
             onAddNew={handleAddNew}
             targetScore={targetScore}
+            coachMessage={contractCoachMessage}
+            coachTone={contractCoachTone}
           />
         )}
         {currentStep === 4 && (

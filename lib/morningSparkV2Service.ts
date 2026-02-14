@@ -76,6 +76,7 @@ export interface AspirationContent {
 }
 
 export interface NorthStarCore {
+  core_identity: string | null;
   mission_statement: string | null;
   vision: string | null;
   life_motto: string | null;
@@ -233,12 +234,12 @@ export async function getNorthStarCore(userId: string): Promise<NorthStarCore> {
 
   const { data, error } = await supabase
     .from('0008-ap-north-star')
-    .select('mission_statement, 5yr_vision, life_motto, core_values')
+    .select('core_identity, mission_statement, 5yr_vision, life_motto, core_values')
     .eq('user_id', userId)
     .maybeSingle();
 
   if (error || !data) {
-    return { mission_statement: null, vision: null, life_motto: null, core_values: [] };
+    return { core_identity: null, mission_statement: null, vision: null, life_motto: null, core_values: [] };
   }
 
   // core_values can be a JSON array of strings, or null
@@ -252,6 +253,7 @@ export async function getNorthStarCore(userId: string): Promise<NorthStarCore> {
   }
 
   return {
+    core_identity: data.core_identity || null,
     mission_statement: data.mission_statement || null,
     vision: data['5yr_vision'] || null,
     life_motto: data.life_motto || null,

@@ -25,6 +25,8 @@ import {
   GoalContractGroup,
   WeeklyContractItem,
 } from '@/lib/morningSparkV2Service';
+import { CoachInsight } from './CoachInsight';
+import type { CoachTone } from '@/types/alignmentCoach';
 
 // ── FAB Icon images (same as BrainDumpTriageStep / SpeedDialFab) ────
 const SOURCE_ICONS: Record<string, any> = {
@@ -86,6 +88,8 @@ interface ContractReviewStepProps {
   onEdit: (taskId: string) => void;
   onAddNew: () => void;
   targetScore: number;
+  coachMessage?: string | null;
+  coachTone?: CoachTone;
 }
 
 /** Flat sections (roles, wellness, unassigned) — goals handled separately */
@@ -460,6 +464,8 @@ export default function ContractReviewStep({
   onEdit,
   onAddNew,
   targetScore,
+  coachMessage,
+  coachTone,
 }: ContractReviewStepProps) {
   const { colors, isDarkMode } = useTheme();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
@@ -549,6 +555,17 @@ export default function ContractReviewStep({
 
   return (
     <View style={styles.container}>
+      {coachMessage && (
+        <View style={{ marginBottom: 4 }}>
+          <CoachInsight
+            message={coachMessage}
+            tone={coachTone || 'push_forward'}
+            loading={false}
+            isFallback={false}
+            startCollapsed={true}
+          />
+        </View>
+      )}
       <Text style={[styles.title, { color: colors.text }]}>
         Here's what you said you wanted to accomplish today
       </Text>

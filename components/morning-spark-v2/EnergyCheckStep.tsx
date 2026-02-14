@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Animated,
   Platform,
+  ScrollView,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -18,6 +19,8 @@ import {
   Fuel3WhyReason,
   FUEL_3_WHY_OPTIONS,
 } from '@/lib/morningSparkV2Service';
+import { CoachInsight } from './CoachInsight';
+import type { CoachTone } from '@/types/alignmentCoach';
 
 interface EnergyCheckStepProps {
   fuelLevel: 1 | 2 | 3 | null;
@@ -26,6 +29,8 @@ interface EnergyCheckStepProps {
   onFuelLevelChange: (level: 1 | 2 | 3) => void;
   onFuelWhyChange: (why: FuelWhyReason) => void;
   onFuel3WhyChange: (why: Fuel3WhyReason) => void;
+  coachMessage?: string | null;
+  coachTone?: CoachTone;
 }
 
 const FUEL_OPTIONS: {
@@ -55,6 +60,8 @@ export default function EnergyCheckStep({
   onFuelLevelChange,
   onFuelWhyChange,
   onFuel3WhyChange,
+  coachMessage,
+  coachTone,
 }: EnergyCheckStepProps) {
   const { colors, isDarkMode } = useTheme();
   const needleAnim = useRef(new Animated.Value(0)).current;
@@ -121,7 +128,18 @@ export default function EnergyCheckStep({
   const why3Opacity = why3Anim;
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.container}>
+      {coachMessage && (
+        <View style={{ marginBottom: 8, width: '100%' }}>
+          <CoachInsight
+            message={coachMessage}
+            tone={coachTone || 'welcome'}
+            loading={false}
+            isFallback={false}
+            startCollapsed={false}
+          />
+        </View>
+      )}
       <Text style={[styles.title, { color: colors.text }]}>
         How's your energy this morning?
       </Text>
@@ -261,11 +279,12 @@ export default function EnergyCheckStep({
           })}
         </View>
       </Animated.View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContainer: { flex: 1 },
   container: { alignItems: 'center', paddingVertical: 16 },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
   gaugeContainer: { alignItems: 'center', marginBottom: 20 },

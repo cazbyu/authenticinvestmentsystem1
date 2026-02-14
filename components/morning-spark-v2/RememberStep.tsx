@@ -12,6 +12,8 @@ import {
 import { Music, Play } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { AspirationContent, NorthStarCore } from '@/lib/morningSparkV2Service';
+import { CoachInsight } from './CoachInsight';
+import type { CoachTone } from '@/types/alignmentCoach';
 
 // ============ PALETTE ============
 
@@ -35,6 +37,8 @@ interface RememberStepProps {
   aspiration: AspirationContent | null;
   northStar: NorthStarCore | null;
   loading: boolean;
+  coachMessage?: string | null;
+  coachTone?: CoachTone;
 }
 
 // ============ SUB-COMPONENTS ============
@@ -49,7 +53,7 @@ function NorthStarSection({ northStar, colors, isDarkMode }: {
   const hasVision = northStar?.vision;
   const hasValues = northStar?.core_values && northStar.core_values.length > 0;
 
-  if (!hasMission && !hasVision && !hasValues) {
+  if (!hasMission && !hasVision && !hasValues && !northStar?.core_identity) {
     return (
       <View style={[styles.northStarEmpty, { backgroundColor: isDarkMode ? colors.surface : '#F9FAFB', borderColor: colors.border }]}>
         <Text style={[styles.northStarEmptyText, { color: colors.textSecondary }]}>
@@ -61,6 +65,16 @@ function NorthStarSection({ northStar, colors, isDarkMode }: {
 
   return (
     <View style={styles.northStarContainer}>
+      {/* Identity */}
+      {northStar?.core_identity && (
+        <View style={[styles.mvvCard, { borderLeftColor: P.emerald, backgroundColor: isDarkMode ? colors.surface : '#F0FFF4' }]}>
+          <Text style={[styles.mvvLabel, { color: P.emerald }]}>IDENTITY</Text>
+          <Text style={[styles.mvvText, { color: colors.text }]}>
+            {northStar.core_identity}
+          </Text>
+        </View>
+      )}
+
       {/* Mission Statement */}
       {hasMission && (
         <View style={[styles.mvvCard, { borderLeftColor: P.missionBlue, backgroundColor: isDarkMode ? colors.surface : '#FAFCFF' }]}>
@@ -214,7 +228,7 @@ function MediaContent({ aspiration, colors, isDarkMode }: {
 
 // ============ MAIN COMPONENT ============
 
-export function RememberStep({ aspiration, northStar, loading }: RememberStepProps) {
+export function RememberStep({ aspiration, northStar, loading, coachMessage, coachTone }: RememberStepProps) {
   const { colors, isDarkMode } = useTheme();
 
   if (loading) {
@@ -231,6 +245,17 @@ export function RememberStep({ aspiration, northStar, loading }: RememberStepPro
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
     >
+      {/* Coach Insight */}
+      {coachMessage && (
+        <CoachInsight
+          message={coachMessage}
+          tone={coachTone || 'reflect'}
+          loading={false}
+          isFallback={false}
+          startCollapsed={false}
+        />
+      )}
+
       {/* Header */}
       <Text style={[styles.sectionHeader, { color: colors.text }]}>
         {'\u2728'} Remember Who You Are
