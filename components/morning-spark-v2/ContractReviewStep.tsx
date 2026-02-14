@@ -14,11 +14,10 @@ import * as Haptics from 'expo-haptics';
 import {
   Clock,
   Users,
-  CalendarClock,
+  CalendarDays,
   Trash2,
   ChevronRight,
   X,
-  Check,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import {
@@ -146,12 +145,15 @@ function ConfettiParticle({ delay, color, startX }: { delay: number; color: stri
 }
 
 // ── Celebration Overlay (inline per card) ───────────────────────────
+// type: 'commit' = 🫶 (heart-hands), 'delete' = "Get Out of Here!" text
+type CelebrationType = 'commit' | 'delete';
 
-function CardCelebration({ visible, onFinished }: { visible: boolean; onFinished: () => void }) {
+function CardCelebration({ visible, type, onFinished }: { visible: boolean; type: CelebrationType; onFinished: () => void }) {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const riseAnim = useRef(new Animated.Value(30)).current;
   const [confettiPieces] = useState(() =>
-    Array.from({ length: 10 }, (_, i) => ({
+    Array.from({ length: 12 }, (_, i) => ({
       id: i,
       color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
       delay: Math.random() * 200,
@@ -163,13 +165,18 @@ function CardCelebration({ visible, onFinished }: { visible: boolean; onFinished
     if (visible) {
       scaleAnim.setValue(0);
       opacityAnim.setValue(0);
+      riseAnim.setValue(30);
       Animated.sequence([
         Animated.parallel([
           Animated.spring(scaleAnim, { toValue: 1, tension: 80, friction: 6, useNativeDriver: true }),
           Animated.timing(opacityAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+          Animated.spring(riseAnim, { toValue: 0, tension: 60, friction: 7, useNativeDriver: true }),
         ]),
-        Animated.delay(600),
-        Animated.timing(opacityAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.delay(700),
+        Animated.parallel([
+          Animated.timing(riseAnim, { toValue: -20, duration: 400, useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]),
       ]).start(() => onFinished());
     }
   }, [visible]);
@@ -180,16 +187,20 @@ function CardCelebration({ visible, onFinished }: { visible: boolean; onFinished
     <Animated.View
       style={[
         styles.celebrationOverlay,
-        { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+        { opacity: opacityAnim },
       ]}
       pointerEvents="none"
     >
       {confettiPieces.map((p) => (
         <ConfettiParticle key={p.id} delay={p.delay} color={p.color} startX={p.startX} />
       ))}
-      <View style={styles.celebrationBadge}>
-        <Check size={28} color="#FFFFFF" strokeWidth={3} />
-      </View>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }, { translateY: riseAnim }] }}>
+        {type === 'delete' ? (
+          <Text style={styles.celebrationDeleteText}>Get Out of Here!</Text>
+        ) : (
+          <Text style={styles.celebrationEmoji}>{'\u{1FAF6}'}</Text>
+        )}
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -226,10 +237,10 @@ function TaskCard({
   const showDelegateNudge = isDelegateCandidate(item);
   const daysOverdue = getDaysOverdue(item.due_date);
   const isOverdue = daysOverdue > 0;
-  const [celebrating, setCelebrating] = useState(false);
+  const [celebrationType, setCelebrationType] = useState<CelebrationType | null>(null);
   const [completing, setCompleting] = useState(false);
 
-  const handleDelay = () => {
+  const handleReschedule = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onAdjust(item.id, 'delay');
   };
@@ -241,14 +252,18 @@ function TaskCard({
 
   const handleRemove = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onAdjust(item.id, 'delete');
+    setCelebrationType('delete');
+    // Delay actual deletion so celebration plays first
+    setTimeout(() => {
+      onAdjust(item.id, 'delete');
+    }, 1300);
   };
 
   const handleComplete = async () => {
-    if (completing || celebrating) return;
+    if (completing || celebrationType) return;
     setCompleting(true);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setCelebrating(true);
+    setCelebrationType('commit');
     try {
       await onComplete(item.id);
     } catch (e) {
@@ -288,7 +303,7 @@ function TaskCard({
       ]}
     >
       {/* Celebration overlay (stacks on top of card content) */}
-      <CardCelebration visible={celebrating} onFinished={() => setCelebrating(false)} />
+      <CardCelebration visible={!!celebrationType} type={celebrationType || 'commit'} onFinished={() => setCelebrationType(null)} />
 
       {/* Row 1: FAB Icon + Title + (One Thing) + Points */}
       <View style={styles.taskHeader}>
@@ -360,27 +375,27 @@ function TaskCard({
       {/* Row 4: Action buttons */}
       {!isCompleted && (
         <View style={styles.actionsRow}>
-          {/* Do It (commit / complete) */}
+          {/* Do It (commit — 🫶 heart-hands celebration) */}
           <TouchableOpacity
             style={[styles.actionBtn, styles.doItBtn]}
             onPress={handleComplete}
             disabled={completing}
             activeOpacity={0.7}
           >
-            <Check size={14} color="#3DA87A" strokeWidth={2.5} />
+            <Text style={styles.actionBtnEmoji}>{'\u{1FAF6}'}</Text>
             <Text style={[styles.actionBtnLabel, { color: '#3DA87A', fontWeight: '700' }]}>
               Do It
             </Text>
           </TouchableOpacity>
 
-          {/* Delay */}
+          {/* Reschedule (opens date picker) */}
           <TouchableOpacity
             style={[styles.actionBtn, { borderColor: colors.border }]}
-            onPress={handleDelay}
+            onPress={handleReschedule}
             activeOpacity={0.7}
           >
-            <CalendarClock size={13} color={colors.textSecondary} />
-            <Text style={[styles.actionBtnLabel, { color: colors.textSecondary }]}>Delay</Text>
+            <CalendarDays size={13} color={colors.textSecondary} />
+            <Text style={[styles.actionBtnLabel, { color: colors.textSecondary }]}>Reschedule</Text>
           </TouchableOpacity>
 
           {/* Delegate */}
@@ -409,13 +424,13 @@ function TaskCard({
             )}
           </TouchableOpacity>
 
-          {/* Remove */}
+          {/* Delete (🗑️ "Get Out of Here!" celebration) */}
           <TouchableOpacity
             style={[styles.actionBtn, { borderColor: '#C7605B40' }]}
             onPress={handleRemove}
             activeOpacity={0.7}
           >
-            <Trash2 size={12} color="#C7605B" />
+            <Text style={styles.actionBtnEmoji}>{'\u{1F5D1}\uFE0F'}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -780,6 +795,7 @@ const styles = StyleSheet.create({
     borderColor: '#3DA87A50', backgroundColor: '#3DA87A10',
   },
   actionBtnLabel: { fontSize: 11, fontWeight: '500' },
+  actionBtnEmoji: { fontSize: 13 },
   nudgeDot: { width: 5, height: 5, borderRadius: 3, marginLeft: 1 },
 
   // ── Goal groups ──
@@ -807,11 +823,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 10,
   },
-  celebrationBadge: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: '#3DA87A', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#3DA87A', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  celebrationEmoji: { fontSize: 56 },
+  celebrationDeleteText: {
+    fontSize: 22, fontWeight: '800', color: '#C7605B', textAlign: 'center',
   },
 
   // ── Bottom ──

@@ -875,14 +875,20 @@ export async function completeContractItem(taskId: string): Promise<string> {
 export async function adjustContractItem(
   taskId: string,
   action: 'delay' | 'delete',
-  newDate?: string
+  newDate?: string,
+  newStartTime?: string,
+  newEndTime?: string | null,
 ): Promise<void> {
   const supabase = getSupabaseClient();
 
   if (action === 'delay' && newDate) {
+    const update: Record<string, any> = { due_date: newDate };
+    if (newStartTime) update.start_time = newStartTime;
+    if (newEndTime !== undefined) update.end_time = newEndTime;
+
     await supabase
       .from('0008-ap-tasks')
-      .update({ due_date: newDate, times_rescheduled: supabase.rpc ? undefined : 1 })
+      .update(update)
       .eq('id', taskId);
   } else if (action === 'delete') {
     await supabase

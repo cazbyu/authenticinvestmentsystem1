@@ -24,6 +24,7 @@ import ContractReviewStep from '@/components/morning-spark-v2/ContractReviewStep
 import { DelegationStep } from '@/components/morning-spark-v2/DelegationStep';
 import ContractCloseStep from '@/components/morning-spark-v2/ContractCloseStep';
 import { DelegateModal } from '@/components/morning-spark/DelegateModal';
+import { RescheduleModal } from '@/components/morning-spark/RescheduleModal';
 
 // Service layer
 import {
@@ -99,6 +100,12 @@ export default function MorningSparkV2Screen() {
   const [delegateModalVisible, setDelegateModalVisible] = useState(false);
   const [delegateTask, setDelegateTask] = useState<{ id: string; title: string } | null>(null);
 
+  // Reschedule modal
+  const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
+  const [rescheduleTask, setRescheduleTask] = useState<{
+    id: string; title: string; start_date: string; start_time: string; end_time?: string;
+  } | null>(null);
+
   // Step F: Close
   const [committing, setCommitting] = useState(false);
 
@@ -169,26 +176,35 @@ export default function MorningSparkV2Screen() {
   const handleAdjustContract = useCallback(
     async (taskId: string, action: 'delay' | 'delete' | 'delegate', newDate?: string) => {
       try {
+        // Find the task for modal context
+        const allItems = [
+          ...contractItems.roles,
+          ...contractItems.wellness,
+          ...contractItems.goals.flatMap((g) => g.tasks),
+          ...contractItems.unassigned,
+        ];
+        const task = allItems.find((t) => t.id === taskId);
+
         if (action === 'delegate') {
-          // Find the task title for the delegate modal
-          const allItems = [
-            ...contractItems.roles,
-            ...contractItems.wellness,
-            ...contractItems.goals.flatMap((g) => g.tasks),
-            ...contractItems.unassigned,
-          ];
-          const task = allItems.find((t) => t.id === taskId);
           setDelegateTask({ id: taskId, title: task?.title || 'Task' });
           setDelegateModalVisible(true);
           return;
         }
 
-        if (action === 'delay' && !newDate) {
-          // Default to tomorrow
-          const tomorrow = new Date();
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          newDate = toLocalISOString(tomorrow).split('T')[0];
+        if (action === 'delay') {
+          // Open RescheduleModal so user picks their own date/time
+          setRescheduleTask({
+            id: taskId,
+            title: task?.title || 'Task',
+            start_date: task?.due_date || toLocalISOString(new Date()).split('T')[0],
+            start_time: task?.start_time || '09:00',
+            end_time: task?.end_time || undefined,
+          });
+          setRescheduleModalVisible(true);
+          return;
         }
+
+        // Delete action
         await adjustContractItem(taskId, action, newDate);
         // Refresh contract items
         const grouped = await getWeeklyContractForToday(userId);
@@ -210,6 +226,23 @@ export default function MorningSparkV2Screen() {
       } catch (e) {
         console.error('Error delegating task:', e);
         throw e; // Re-throw so DelegateModal can show error state
+      }
+    },
+    [userId],
+  );
+
+  // ---- Reschedule handler (from RescheduleModal) ----
+
+  const handleRescheduleTask = useCallback(
+    async (taskId: string, newDate: string, newStartTime: string, newEndTime: string | null) => {
+      try {
+        await adjustContractItem(taskId, 'delay', newDate, newStartTime, newEndTime);
+        // Refresh contract items to reflect the reschedule
+        const grouped = await getWeeklyContractForToday(userId);
+        setContractItems(grouped);
+      } catch (e) {
+        console.error('Error rescheduling task:', e);
+        throw e;
       }
     },
     [userId],
@@ -534,6 +567,17 @@ export default function MorningSparkV2Screen() {
           setDelegateTask(null);
         }}
         onDelegate={handleDelegateTask}
+      />
+
+      {/* Reschedule modal — triggered when user taps "Reschedule" on a contract card */}
+      <RescheduleModal
+        visible={rescheduleModalVisible}
+        event={rescheduleTask}
+        onClose={() => {
+          setRescheduleModalVisible(false);
+          setRescheduleTask(null);
+        }}
+        onReschedule={handleRescheduleTask}
       />
     </SafeAreaView>
   );
