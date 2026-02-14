@@ -149,17 +149,43 @@ export function useNorthStarData() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { error: 'Not authenticated' };
 
-      const { data, error } = await supabase
+      // Check if row exists first to avoid upsert wiping unspecified columns
+      const { data: existing } = await supabase
         .from('0008-ap-north-star')
-        .upsert({
-          user_id: user.id,
-          ...updates,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id',
-        })
-        .select()
-        .single();
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      let data;
+      let error;
+
+      if (existing) {
+        // Row exists — UPDATE only the provided fields (preserves other columns)
+        const result = await supabase
+          .from('0008-ap-north-star')
+          .update({
+            ...updates,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        // No row yet — INSERT
+        const result = await supabase
+          .from('0008-ap-north-star')
+          .insert({
+            user_id: user.id,
+            ...updates,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
 

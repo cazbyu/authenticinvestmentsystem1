@@ -101,16 +101,33 @@ export function NorthStarEditor({ onUpdate, initialSection = 'mission' }: NorthS
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not found');
 
-      const { error } = await supabase
-  .from('0008-ap-north-star')
-  .upsert({
-    user_id: user.id,
-    mission_statement: missionText.trim() || null,
-    '5yr_vision': visionText.trim() || null,
-    updated_at: toLocalISOString(new Date()),
-  }, { onConflict: 'user_id' });
+      const payload = {
+        mission_statement: missionText.trim() || null,
+        '5yr_vision': visionText.trim() || null,
+        updated_at: toLocalISOString(new Date()),
+      };
 
-      if (error) throw error;
+      // Check if row exists to avoid upsert wiping other columns
+      const { data: existing } = await supabase
+        .from('0008-ap-north-star')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existing) {
+        // Row exists — UPDATE only mission + vision (preserves core_values, core_identity, etc.)
+        const { error } = await supabase
+          .from('0008-ap-north-star')
+          .update(payload)
+          .eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        // No row yet — INSERT
+        const { error } = await supabase
+          .from('0008-ap-north-star')
+          .insert({ user_id: user.id, ...payload });
+        if (error) throw error;
+      }
 
       setLastSaved(new Date());
       Alert.alert('Success', 'North Star updated successfully!');

@@ -209,15 +209,36 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
       const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
 
-      const { error } = await supabase
+      // First check if a row exists for this user
+      const { data: existing } = await supabase
         .from('0008-ap-north-star')
-        .upsert({
-          user_id: user.id,
-          [fieldName]: editText.trim(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (existing) {
+        // Row exists — UPDATE only the edited field (preserves other columns)
+        const { error } = await supabase
+          .from('0008-ap-north-star')
+          .update({
+            [fieldName]: editText.trim(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        // No row yet — INSERT with just this field
+        const { error } = await supabase
+          .from('0008-ap-north-star')
+          .insert({
+            user_id: user.id,
+            [fieldName]: editText.trim(),
+            updated_at: new Date().toISOString(),
+          });
+
+        if (error) throw error;
+      }
 
       // Refresh data
       await fetchNorthStarData();

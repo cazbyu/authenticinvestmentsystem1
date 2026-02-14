@@ -703,23 +703,25 @@ export function TouchYourStarStep({
         .maybeSingle();
 
       if (existing) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('0008-ap-north-star')
-          .update({ 
+          .update({
             core_identity: identityValue,
             identity_prompt_id: heroPrompt?.id,
             identity_answered_at: new Date().toISOString(),
           })
           .eq('user_id', userId);
+        if (updateError) throw updateError;
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('0008-ap-north-star')
-          .insert({ 
-            user_id: userId, 
+          .insert({
+            user_id: userId,
             core_identity: identityValue,
             identity_prompt_id: heroPrompt?.id,
             identity_answered_at: new Date().toISOString(),
           });
+        if (insertError) throw insertError;
       }
 
       // Record prompt response for A/B analytics (don't ask again)
@@ -793,14 +795,16 @@ export function TouchYourStarStep({
         .maybeSingle();
 
       if (existing) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('0008-ap-north-star')
           .update({ [fieldName]: statementText })
           .eq('user_id', userId);
+        if (updateError) throw updateError;
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('0008-ap-north-star')
           .insert({ user_id: userId, [fieldName]: statementText });
+        if (insertError) throw insertError;
       }
 
       if (responses.length > 0) {
@@ -850,14 +854,16 @@ export function TouchYourStarStep({
         .maybeSingle();
 
       if (existing) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('0008-ap-north-star')
           .update({ core_values: updatedValues })
           .eq('user_id', userId);
+        if (updateError) throw updateError;
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('0008-ap-north-star')
           .insert({ user_id: userId, core_values: updatedValues });
+        if (insertError) throw insertError;
       }
 
       if (responses.length > 0) {
@@ -870,7 +876,7 @@ export function TouchYourStarStep({
       }
 
       setNorthStarData(prev => ({ ...prev, values: updatedValues }));
-      
+
       resetDomainState();
       setEditingValueIndex(null);
       setFlowState('identity-hub');
@@ -886,7 +892,7 @@ export function TouchYourStarStep({
     setSaving(true);
     try {
       const supabase = getSupabaseClient();
-      
+
       const newValues = valuesToSave.map((v, i) => ({
         id: `value-${Date.now()}-${i}`,
         name: v.name,
@@ -902,14 +908,16 @@ export function TouchYourStarStep({
         .maybeSingle();
 
       if (existing) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('0008-ap-north-star')
           .update({ core_values: updatedValues })
           .eq('user_id', userId);
+        if (updateError) throw updateError;
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('0008-ap-north-star')
           .insert({ user_id: userId, core_values: updatedValues });
+        if (insertError) throw insertError;
       }
 
       if (responses.length > 0) {
@@ -936,13 +944,15 @@ export function TouchYourStarStep({
   async function deleteValue(index: number) {
     try {
       const supabase = getSupabaseClient();
-      
+
       const updatedValues = northStarData.values?.filter((_, i) => i !== index) || [];
 
-      await supabase
+      const { error } = await supabase
         .from('0008-ap-north-star')
         .update({ core_values: updatedValues })
         .eq('user_id', userId);
+
+      if (error) throw error;
 
       setNorthStarData(prev => ({ ...prev, values: updatedValues }));
     } catch (error) {
