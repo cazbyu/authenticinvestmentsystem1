@@ -99,6 +99,7 @@ export default function MorningSparkV2Screen() {
 
   // Step D: Contract
   const [contractItems, setContractItems] = useState<GroupedContractItems>({
+    events: [],
     roles: [],
     wellness: [],
     goals: [],
@@ -529,10 +530,11 @@ export default function MorningSparkV2Screen() {
       console.log('[MorningSpark] Loading contract for userId:', userId);
       getWeeklyContractForToday(userId)
         .then((grouped) => {
-          const total = grouped.roles.length + grouped.wellness.length +
+          const total = grouped.events.length + grouped.roles.length + grouped.wellness.length +
             grouped.goals.flatMap(g => g.tasks).length + grouped.unassigned.length;
           console.log('[MorningSpark] Contract loaded:', total, 'items',
-            '(roles:', grouped.roles.length,
+            '(events:', grouped.events.length,
+            'roles:', grouped.roles.length,
             'wellness:', grouped.wellness.length,
             'goals:', grouped.goals.flatMap(g => g.tasks).length,
             'unassigned:', grouped.unassigned.length, ')');

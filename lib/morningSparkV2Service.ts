@@ -143,6 +143,7 @@ export interface GoalContractGroup {
 }
 
 export interface GroupedContractItems {
+  events: WeeklyContractItem[];
   roles: WeeklyContractItem[];
   wellness: WeeklyContractItem[];
   goals: GoalContractGroup[];
@@ -683,7 +684,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
 
   if (error) {
     console.error('[Contract] Error fetching tasks:', error.message, error.details, error.hint, error.code);
-    return { roles: [], wellness: [], goals: [], unassigned: [] };
+    return { events: [], roles: [], wellness: [], goals: [], unassigned: [] };
   }
 
   // 2) Get goal-linked tasks (leading indicators) that have NO due_date and NO start_date.
@@ -729,7 +730,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
 
   if (tasks.length === 0) {
     console.log('[Contract] No tasks found for today:', today);
-    return { roles: [], wellness: [], goals: [], unassigned: [] };
+    return { events: [], roles: [], wellness: [], goals: [], unassigned: [] };
   }
   console.log('[Contract] Found', tasks.length, 'tasks (',
     (dateTasks || []).length, 'date-based +', goalActivityTasks.length, 'goal activities)');
@@ -868,7 +869,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   }
 
   // Build enriched items and group
-  const grouped: GroupedContractItems = { roles: [], wellness: [], goals: [], unassigned: [] };
+  const grouped: GroupedContractItems = { events: [], roles: [], wellness: [], goals: [], unassigned: [] };
 
   // Temporary map to accumulate tasks per goal
   const goalGroupMap = new Map<string, GoalContractGroup>();
@@ -897,10 +898,18 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
       goals,
     };
 
-    // Categorize: goals FIRST (highest priority), then roles, wellness, unassigned.
+    // Categorize: events FIRST, then goals, roles, wellness, unassigned.
+    // A task with type='event' OR with start_date=today (event-like) goes to events section.
     // A task linked to a goal should always appear under that goal,
     // even if it also has role or domain tags.
-    if (goals.length > 0) {
+    const isEvent = task.type === 'event' || (task.start_date === today && task.type === 'task');
+    if (isEvent) {
+      // Force the type to 'event' for display purposes if it has start_date=today
+      if (task.type === 'task' && task.start_date === today) {
+        item.type = 'event';
+      }
+      grouped.events.push(item);
+    } else if (goals.length > 0) {
       // Add to the FIRST goal's group
       const primaryGoal = goals[0];
       if (!goalGroupMap.has(primaryGoal.id)) {
@@ -923,6 +932,13 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
       grouped.unassigned.push(item);
     }
   }
+
+  // Sort events by start_time (earliest first)
+  grouped.events.sort((a, b) => {
+    const aTime = a.start_time || '99:99';
+    const bTime = b.start_time || '99:99';
+    return aTime.localeCompare(bTime);
+  });
 
   // Convert goal groups map to sorted array (goals with most tasks first)
   grouped.goals = Array.from(goalGroupMap.values())

@@ -55,6 +55,17 @@ function isDelegateCandidate(item: WeeklyContractItem) {
   return (item.is_urgent && !item.is_important) || (!item.is_urgent && !item.is_important);
 }
 
+/** Format a time string like "18:30:00" to "6:30 PM" */
+function formatTime12h(time: string): string {
+  const [hourStr, minStr] = time.split(':');
+  let hour = parseInt(hourStr, 10);
+  const min = minStr || '00';
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  if (hour === 0) hour = 12;
+  else if (hour > 12) hour -= 12;
+  return min === '00' ? `${hour} ${ampm}` : `${hour}:${min} ${ampm}`;
+}
+
 /** Calculate days overdue relative to today */
 function getDaysOverdue(dueDate: string | null): number {
   if (!dueDate) return 0;
@@ -279,9 +290,9 @@ function TaskCard({
 
   const timeDisplay =
     item.start_time && item.end_time
-      ? `${item.start_time} - ${item.end_time}`
+      ? `${formatTime12h(item.start_time)} - ${formatTime12h(item.end_time)}`
       : item.start_time
-        ? item.start_time
+        ? formatTime12h(item.start_time)
         : null;
 
   const isEvent = item.type === 'event';
@@ -469,6 +480,7 @@ export default function ContractReviewStep({
 }: ContractReviewStepProps) {
   const { colors, isDarkMode } = useTheme();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    events: true,
     roles: true,
     wellness: true,
     goals: true,
@@ -494,7 +506,7 @@ export default function ContractReviewStep({
   // Collect all flat items for Eisenhower counts
   const goalTasks = grouped.goals.flatMap((g) => g.tasks);
   const allItems = [
-    ...grouped.roles, ...grouped.wellness, ...goalTasks, ...grouped.unassigned,
+    ...grouped.events, ...grouped.roles, ...grouped.wellness, ...goalTasks, ...grouped.unassigned,
   ].filter((i) => !i.completed_at);
 
   // Extract One Thing items to surface at the top
@@ -506,6 +518,7 @@ export default function ContractReviewStep({
   const q4Count = allItems.filter((i) => !i.is_urgent && !i.is_important).length;
 
   const hasAnything =
+    grouped.events.length > 0 ||
     grouped.roles.length > 0 ||
     grouped.wellness.length > 0 ||
     grouped.goals.length > 0 ||
@@ -639,6 +652,9 @@ export default function ContractReviewStep({
             ))}
           </View>
         )}
+
+        {/* Events section — today's scheduled events shown at top */}
+        {renderFlatSection('events', "Today's Events", '\u{1F4C5}', grouped.events)}
 
         {/* Roles section */}
         {renderFlatSection('roles', 'Roles', '\u{1F465}', grouped.roles)}
