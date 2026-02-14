@@ -149,9 +149,11 @@ export async function hasCompletedRitualToday(
     const today = formatLocalDate(new Date());
 
     if (ritualType === 'morning_spark') {
+      // A spark is only "completed" when the user signs the daily contract
+      // (committed_at is set). Just starting the spark (creating the row) is not enough.
       const { data, error } = await supabase
         .from('0008-ap-daily-sparks')
-        .select('id')
+        .select('id, committed_at')
         .eq('user_id', userId)
         .eq('spark_date', today)
         .maybeSingle();
@@ -161,7 +163,7 @@ export async function hasCompletedRitualToday(
         return false;
       }
 
-      return data !== null;
+      return data !== null && data.committed_at !== null;
     }
 
     if (ritualType === 'evening_review') {
