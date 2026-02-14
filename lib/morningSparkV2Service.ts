@@ -108,11 +108,21 @@ export interface WeeklyContractItem {
   goals: GoalTag[];
 }
 
+/** A goal with its child tasks/leading indicators for the contract view */
+export interface GoalContractGroup {
+  goalId: string;
+  goalTitle: string;
+  goalType: string;           // 'twelve_wk_goal' | 'custom_goal' | 'one_yr_goal'
+  weeklyTarget: number | null; // e.g. 3 = target 3x/week
+  weeklyActual: number;       // completed occurrences this week
+  tasks: WeeklyContractItem[];
+}
+
 export interface GroupedContractItems {
   roles: WeeklyContractItem[];
   wellness: WeeklyContractItem[];
-  goals: WeeklyContractItem[];
-  other: WeeklyContractItem[];
+  goals: GoalContractGroup[];
+  unassigned: WeeklyContractItem[];
 }
 
 export interface ContractFollowUpData {
@@ -636,7 +646,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     .order('start_time', { ascending: true, nullsFirst: false });
 
   if (error || !tasks || tasks.length === 0) {
-    return { roles: [], wellness: [], goals: [], other: [] };
+    return { roles: [], wellness: [], goals: [], unassigned: [] };
   }
 
   const taskIds = tasks.map(t => t.id);
@@ -655,10 +665,14 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     .in('parent_id', taskIds)
     .eq('parent_type', 'task');
 
-  // Fetch goal joins
+  // Fetch goal joins — include weekly_target from the goal itself
   const { data: goalJoins } = await supabase
     .from('0008-ap-universal-goals-join')
-    .select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title), custom_goal:0008-ap-goals-custom(id, title)')
+    .select(`
+      parent_id, goal_type,
+      twelve_wk_goal:0008-ap-goals-12wk(id, title, weekly_target),
+      custom_goal:0008-ap-goals-custom(id, title, weekly_target)
+    `)
     .in('parent_id', taskIds)
     .eq('parent_type', 'task');
 
@@ -666,6 +680,15 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   const roleMap = new Map<string, RoleTag[]>();
   const domainMap = new Map<string, DomainTag[]>();
   const goalMap = new Map<string, GoalTag[]>();
+
+  // Also track goal metadata for building GoalContractGroups
+  interface GoalMeta {
+    id: string;
+    title: string;
+    goalType: string;
+    weeklyTarget: number | null;
+  }
+  const goalMetaMap = new Map<string, GoalMeta>();
 
   for (const rj of (roleJoins || [])) {
     const role = (rj as any).role;
@@ -686,18 +709,84 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   }
 
   for (const gj of (goalJoins || [])) {
-    const goal = (gj as any).goal_type === 'twelve_wk_goal'
-      ? (gj as any).twelve_wk_goal
-      : (gj as any).custom_goal;
+    const isTwelveWk = (gj as any).goal_type === 'twelve_wk_goal';
+    const goal = isTwelveWk ? (gj as any).twelve_wk_goal : (gj as any).custom_goal;
     if (goal) {
       const existing = goalMap.get(gj.parent_id) || [];
       existing.push({ id: goal.id, title: goal.title, goal_type: (gj as any).goal_type });
       goalMap.set(gj.parent_id, existing);
+
+      // Store goal metadata (de-dup by goal id)
+      if (!goalMetaMap.has(goal.id)) {
+        goalMetaMap.set(goal.id, {
+          id: goal.id,
+          title: goal.title,
+          goalType: (gj as any).goal_type,
+          weeklyTarget: goal.weekly_target ?? null,
+        });
+      }
+    }
+  }
+
+  // Count completed tasks this week per goal (for weekly occurrence tracking)
+  // Get the current week boundaries (Monday-Sunday)
+  const todayDate = new Date(today);
+  const dayOfWeek = todayDate.getDay(); // 0=Sun, 1=Mon, ...
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const weekStart = new Date(todayDate);
+  weekStart.setDate(todayDate.getDate() + mondayOffset);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const weekStartStr = formatLocalDate(weekStart);
+  const weekEndStr = formatLocalDate(weekEnd);
+
+  // Get all completed tasks this week that are linked to goals
+  const allGoalIds = Array.from(goalMetaMap.keys());
+  const weeklyActualMap = new Map<string, number>();
+
+  if (allGoalIds.length > 0) {
+    // Find task IDs linked to these goals
+    const { data: goalTaskJoins } = await supabase
+      .from('0008-ap-universal-goals-join')
+      .select('parent_id, twelve_wk_goal_id, custom_goal_id')
+      .eq('parent_type', 'task')
+      .or(allGoalIds.map(gid => `twelve_wk_goal_id.eq.${gid},custom_goal_id.eq.${gid}`).join(','));
+
+    if (goalTaskJoins && goalTaskJoins.length > 0) {
+      const goalTaskIds = goalTaskJoins.map((gj: any) => gj.parent_id);
+
+      // Count completed tasks from this week
+      const { data: completedThisWeek } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, completed_at')
+        .in('id', goalTaskIds)
+        .not('completed_at', 'is', null)
+        .gte('completed_at', weekStartStr + 'T00:00:00')
+        .lte('completed_at', weekEndStr + 'T23:59:59')
+        .is('deleted_at', null);
+
+      if (completedThisWeek) {
+        // Map completed task IDs back to goal IDs
+        const taskToGoal = new Map<string, string>();
+        for (const gj of goalTaskJoins) {
+          const goalId = (gj as any).twelve_wk_goal_id || (gj as any).custom_goal_id;
+          if (goalId) taskToGoal.set((gj as any).parent_id, goalId);
+        }
+        for (const ct of completedThisWeek) {
+          const goalId = taskToGoal.get(ct.id);
+          if (goalId) {
+            weeklyActualMap.set(goalId, (weeklyActualMap.get(goalId) || 0) + 1);
+          }
+        }
+      }
     }
   }
 
   // Build enriched items and group
-  const grouped: GroupedContractItems = { roles: [], wellness: [], goals: [], other: [] };
+  const grouped: GroupedContractItems = { roles: [], wellness: [], goals: [], unassigned: [] };
+
+  // Temporary map to accumulate tasks per goal
+  const goalGroupMap = new Map<string, GoalContractGroup>();
 
   for (const task of tasks) {
     const roles = roleMap.get(task.id) || [];
@@ -723,19 +812,44 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
       goals,
     };
 
-    // Categorize: primary group by first connection found
+    // Categorize: roles first, then domains (wellness), then goals, else unassigned
     if (roles.length > 0) {
       grouped.roles.push(item);
     } else if (domains.length > 0) {
       grouped.wellness.push(item);
     } else if (goals.length > 0) {
-      grouped.goals.push(item);
+      // Add to the FIRST goal's group
+      const primaryGoal = goals[0];
+      if (!goalGroupMap.has(primaryGoal.id)) {
+        const meta = goalMetaMap.get(primaryGoal.id);
+        goalGroupMap.set(primaryGoal.id, {
+          goalId: primaryGoal.id,
+          goalTitle: primaryGoal.title,
+          goalType: primaryGoal.goal_type,
+          weeklyTarget: meta?.weeklyTarget ?? null,
+          weeklyActual: weeklyActualMap.get(primaryGoal.id) || 0,
+          tasks: [],
+        });
+      }
+      goalGroupMap.get(primaryGoal.id)!.tasks.push(item);
     } else {
-      grouped.other.push(item);
+      grouped.unassigned.push(item);
     }
   }
 
+  // Convert goal groups map to sorted array (goals with most tasks first)
+  grouped.goals = Array.from(goalGroupMap.values())
+    .sort((a, b) => b.tasks.length - a.tasks.length);
+
   return grouped;
+}
+
+/** Helper to format a Date to YYYY-MM-DD in local time */
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 /**

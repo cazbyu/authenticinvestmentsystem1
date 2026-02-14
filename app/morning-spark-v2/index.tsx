@@ -87,7 +87,7 @@ export default function MorningSparkV2Screen() {
     roles: [],
     wellness: [],
     goals: [],
-    other: [],
+    unassigned: [],
   });
   const [contractLoading, setContractLoading] = useState(false);
 
@@ -102,12 +102,13 @@ export default function MorningSparkV2Screen() {
   // Step F: Close
   const [committing, setCommitting] = useState(false);
 
-  // Derived values
+  // Derived values — goals is now GoalContractGroup[], flatten for counts
+  const goalTasks = contractItems.goals.flatMap((g) => g.tasks);
   const allContractItems = [
     ...contractItems.roles,
     ...contractItems.wellness,
-    ...contractItems.goals,
-    ...contractItems.other,
+    ...goalTasks,
+    ...contractItems.unassigned,
   ];
 
   const contractItemCount = allContractItems.length;
@@ -173,8 +174,8 @@ export default function MorningSparkV2Screen() {
           const allItems = [
             ...contractItems.roles,
             ...contractItems.wellness,
-            ...contractItems.goals,
-            ...contractItems.other,
+            ...contractItems.goals.flatMap((g) => g.tasks),
+            ...contractItems.unassigned,
           ];
           const task = allItems.find((t) => t.id === taskId);
           setDelegateTask({ id: taskId, title: task?.title || 'Task' });

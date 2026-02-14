@@ -23,6 +23,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import {
   GroupedContractItems,
+  GoalContractGroup,
   WeeklyContractItem,
 } from '@/lib/morningSparkV2Service';
 
@@ -87,17 +88,16 @@ interface ContractReviewStepProps {
   targetScore: number;
 }
 
-interface SectionConfig {
-  key: keyof GroupedContractItems;
+/** Flat sections (roles, wellness, unassigned) — goals handled separately */
+interface FlatSectionConfig {
+  key: 'roles' | 'wellness' | 'unassigned';
   label: string;
   icon: string;
 }
 
-const SECTIONS: SectionConfig[] = [
+const FLAT_SECTIONS: FlatSectionConfig[] = [
   { key: 'roles', label: 'Roles', icon: '\u{1F465}' },
-  { key: 'wellness', label: 'Wellness', icon: '\u{1F9D8}' },
-  { key: 'goals', label: 'Goals', icon: '\u{1F3AF}' },
-  { key: 'other', label: 'Other', icon: '\u{1F4CB}' },
+  { key: 'wellness', label: 'Wellness Zones', icon: '\u{1F9D8}' },
 ];
 
 // ── Confetti Particle ───────────────────────────────────────────────
@@ -290,14 +290,9 @@ function TaskCard({
       {/* Celebration overlay (stacks on top of card content) */}
       <CardCelebration visible={celebrating} onFinished={() => setCelebrating(false)} />
 
-      {/* Row 1: FAB Icon + Title + Points */}
+      {/* Row 1: FAB Icon + Title + (One Thing) + Points */}
       <View style={styles.taskHeader}>
         <View style={styles.taskTitleRow}>
-          {item.one_thing && (
-            <View style={styles.oneThingBadge}>
-              <Text style={styles.oneThingStar}>{'\u2B50'}</Text>
-            </View>
-          )}
           <View style={[styles.typeIconWrap, { backgroundColor: quadrant.border + '15' }]}>
             <Image source={iconSource} style={styles.typeIconImage} resizeMode="contain" />
           </View>
@@ -310,6 +305,9 @@ function TaskCard({
             numberOfLines={2}
           >
             {item.title}
+            {item.one_thing && (
+              <Text style={styles.oneThingLabel}> (One Thing)</Text>
+            )}
           </Text>
         </View>
         <View style={styles.rightCol}>
@@ -441,7 +439,7 @@ export default function ContractReviewStep({
     roles: true,
     wellness: true,
     goals: true,
-    other: true,
+    unassigned: true,
   });
 
   const toggleSection = useCallback((key: string) => {
@@ -460,16 +458,63 @@ export default function ContractReviewStep({
     );
   }
 
-  const visibleSections = SECTIONS.filter((s) => grouped[s.key].length > 0);
-
+  // Collect all flat items for Eisenhower counts
+  const goalTasks = grouped.goals.flatMap((g) => g.tasks);
   const allItems = [
-    ...grouped.roles, ...grouped.wellness, ...grouped.goals, ...grouped.other,
+    ...grouped.roles, ...grouped.wellness, ...goalTasks, ...grouped.unassigned,
   ].filter((i) => !i.completed_at);
 
   const q1Count = allItems.filter((i) => i.is_urgent && i.is_important).length;
   const q2Count = allItems.filter((i) => !i.is_urgent && i.is_important).length;
   const q3Count = allItems.filter((i) => i.is_urgent && !i.is_important).length;
   const q4Count = allItems.filter((i) => !i.is_urgent && !i.is_important).length;
+
+  const hasAnything =
+    grouped.roles.length > 0 ||
+    grouped.wellness.length > 0 ||
+    grouped.goals.length > 0 ||
+    grouped.unassigned.length > 0;
+
+  // Helper to render a collapsible flat section
+  const renderFlatSection = (
+    key: string,
+    label: string,
+    icon: string,
+    items: WeeklyContractItem[],
+  ) => {
+    if (items.length === 0) return null;
+    const isExpanded = expanded[key];
+    return (
+      <View key={key} style={styles.sectionContainer}>
+        <TouchableOpacity
+          style={[
+            styles.sectionHeader,
+            { backgroundColor: isDarkMode ? colors.surface : '#F9FAFB', borderColor: colors.border },
+          ]}
+          onPress={() => toggleSection(key)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.sectionHeaderLeft}>
+            <Text style={styles.sectionIcon}>{icon}</Text>
+            <Text style={[styles.sectionLabel, { color: colors.text }]}>{label}</Text>
+            <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.countBadgeText}>{items.length}</Text>
+            </View>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textSecondary }]}>
+            {isExpanded ? '\u25B2' : '\u25BC'}
+          </Text>
+        </TouchableOpacity>
+        {isExpanded &&
+          items.map((item) => (
+            <TaskCard
+              key={item.id} item={item} colors={colors} isDarkMode={isDarkMode}
+              onAdjust={onAdjust} onComplete={onComplete} onEdit={onEdit}
+            />
+          ))}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -510,7 +555,7 @@ export default function ContractReviewStep({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {visibleSections.length === 0 && (
+        {!hasAnything && (
           <View style={[styles.emptyCard, { backgroundColor: isDarkMode ? colors.surface : '#FFF' }]}>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               No tasks scheduled for today. Tap "+ Add New" to get started.
@@ -518,52 +563,90 @@ export default function ContractReviewStep({
           </View>
         )}
 
-        {visibleSections.map((section) => {
-          const items = grouped[section.key];
-          const isExpanded = expanded[section.key];
+        {/* Roles section */}
+        {renderFlatSection('roles', 'Roles', '\u{1F465}', grouped.roles)}
 
-          return (
-            <View key={section.key} style={styles.sectionContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.sectionHeader,
-                  {
-                    backgroundColor: isDarkMode ? colors.surface : '#F9FAFB',
-                    borderColor: colors.border,
-                  },
-                ]}
-                onPress={() => toggleSection(section.key)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.sectionHeaderLeft}>
-                  <Text style={styles.sectionIcon}>{section.icon}</Text>
-                  <Text style={[styles.sectionLabel, { color: colors.text }]}>
-                    {section.label}
-                  </Text>
-                  <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.countBadgeText}>{items.length}</Text>
-                  </View>
+        {/* Wellness section */}
+        {renderFlatSection('wellness', 'Wellness Zones', '\u{1F9D8}', grouped.wellness)}
+
+        {/* Goals section — parent goal headers with nested tasks */}
+        {grouped.goals.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <TouchableOpacity
+              style={[
+                styles.sectionHeader,
+                { backgroundColor: isDarkMode ? colors.surface : '#F9FAFB', borderColor: colors.border },
+              ]}
+              onPress={() => toggleSection('goals')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionHeaderLeft}>
+                <Text style={styles.sectionIcon}>{'\u{1F3AF}'}</Text>
+                <Text style={[styles.sectionLabel, { color: colors.text }]}>Goals</Text>
+                <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.countBadgeText}>{grouped.goals.length}</Text>
                 </View>
-                <Text style={[styles.chevron, { color: colors.textSecondary }]}>
-                  {isExpanded ? '\u25B2' : '\u25BC'}
-                </Text>
-              </TouchableOpacity>
+              </View>
+              <Text style={[styles.chevron, { color: colors.textSecondary }]}>
+                {expanded.goals ? '\u25B2' : '\u25BC'}
+              </Text>
+            </TouchableOpacity>
 
-              {isExpanded &&
-                items.map((item) => (
-                  <TaskCard
-                    key={item.id}
-                    item={item}
-                    colors={colors}
-                    isDarkMode={isDarkMode}
-                    onAdjust={onAdjust}
-                    onComplete={onComplete}
-                    onEdit={onEdit}
-                  />
-                ))}
-            </View>
-          );
-        })}
+            {expanded.goals &&
+              grouped.goals.map((goalGroup) => {
+                const targetMet =
+                  goalGroup.weeklyTarget !== null &&
+                  goalGroup.weeklyActual >= goalGroup.weeklyTarget;
+
+                return (
+                  <View key={goalGroup.goalId} style={styles.goalGroupContainer}>
+                    {/* Goal parent header */}
+                    <View style={[styles.goalHeader, { backgroundColor: isDarkMode ? colors.surface : '#F0F7FF' }]}>
+                      <View style={styles.goalHeaderLeft}>
+                        <Text style={styles.goalIcon}>{'\u{1F3AF}'}</Text>
+                        <Text style={[styles.goalTitle, { color: colors.text }]} numberOfLines={1}>
+                          {goalGroup.goalTitle}
+                        </Text>
+                      </View>
+                      {goalGroup.weeklyTarget !== null && (
+                        <View
+                          style={[
+                            styles.weeklyProgressBadge,
+                            {
+                              backgroundColor: targetMet ? '#3DA87A20' : '#5B9BD520',
+                              borderColor: targetMet ? '#3DA87A' : '#5B9BD5',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.weeklyProgressText,
+                              { color: targetMet ? '#3DA87A' : '#5B9BD5' },
+                            ]}
+                          >
+                            {targetMet
+                              ? `\u2713 ${goalGroup.weeklyActual}/${goalGroup.weeklyTarget} this week`
+                              : `${goalGroup.weeklyActual}/${goalGroup.weeklyTarget} this week`}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Goal's child tasks */}
+                    {goalGroup.tasks.map((item) => (
+                      <TaskCard
+                        key={item.id} item={item} colors={colors} isDarkMode={isDarkMode}
+                        onAdjust={onAdjust} onComplete={onComplete} onEdit={onEdit}
+                      />
+                    ))}
+                  </View>
+                );
+              })}
+          </View>
+        )}
+
+        {/* Unassigned section (was "Other") */}
+        {renderFlatSection('unassigned', 'Unassigned', '\u{1F4CB}', grouped.unassigned)}
       </ScrollView>
 
       {/* Fixed bottom bar */}
@@ -656,8 +739,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
   },
   taskTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 },
-  oneThingBadge: { position: 'absolute', top: -6, left: -6, zIndex: 2 },
-  oneThingStar: { fontSize: 14 },
+  oneThingLabel: { fontSize: 12, fontWeight: '700', color: '#D4A843', fontStyle: 'italic' },
   typeIconWrap: {
     width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center',
   },
@@ -699,6 +781,22 @@ const styles = StyleSheet.create({
   },
   actionBtnLabel: { fontSize: 11, fontWeight: '500' },
   nudgeDot: { width: 5, height: 5, borderRadius: 3, marginLeft: 1 },
+
+  // ── Goal groups ──
+  goalGroupContainer: { marginTop: 6, marginLeft: 8 },
+  goalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+    borderLeftWidth: 3, borderLeftColor: '#5B9BD5',
+  },
+  goalHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  goalIcon: { fontSize: 14 },
+  goalTitle: { fontSize: 13, fontWeight: '700', flex: 1 },
+  weeklyProgressBadge: {
+    borderRadius: 8, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3,
+    marginLeft: 6,
+  },
+  weeklyProgressText: { fontSize: 10, fontWeight: '700' },
 
   // ── Celebration ──
   celebrationOverlay: {
