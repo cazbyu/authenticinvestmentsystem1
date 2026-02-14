@@ -205,9 +205,13 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.error('[MyVisionTab] No user found for save');
+        return;
+      }
 
       const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
+      const trimmedText = editText.trim();
 
       const { data: existing } = await supabase
         .from('0008-ap-north-star')
@@ -216,14 +220,26 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
         .maybeSingle();
 
       if (existing) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('0008-ap-north-star')
-          .update({ [fieldName]: editText.trim() })
+          .update({ [fieldName]: trimmedText, updated_at: new Date().toISOString() })
           .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error('[MyVisionTab] Update error:', updateError);
+          Alert.alert('Error', `Failed to update: ${updateError.message}`);
+          return;
+        }
       } else {
-        await supabase
+        const { error: insertError } = await supabase
           .from('0008-ap-north-star')
-          .insert({ user_id: user.id, [fieldName]: editText.trim() });
+          .insert({ user_id: user.id, [fieldName]: trimmedText });
+
+        if (insertError) {
+          console.error('[MyVisionTab] Insert error:', insertError);
+          Alert.alert('Error', `Failed to save: ${insertError.message}`);
+          return;
+        }
       }
 
       // Refresh data
@@ -231,7 +247,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
       setEditingField(null);
       setEditText('');
     } catch (error) {
-      console.error('Error saving edit:', error);
+      console.error('[MyVisionTab] Error saving edit:', error);
       Alert.alert('Error', 'Failed to save. Please try again.');
     } finally {
       setSavingEdit(false);
