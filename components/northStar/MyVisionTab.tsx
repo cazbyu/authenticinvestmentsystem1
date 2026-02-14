@@ -205,11 +205,17 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.error('[MyVisionTab] No user found for save');
+        return;
+      }
 
       const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
+      const trimmedText = editText.trim();
 
-      const { error } = await supabase
+      console.log('[MyVisionTab] Saving:', { fieldName, trimmedText, userId: user.id, editingField });
+
+      const { data: existing, error: selectError } = await supabase
         .from('0008-ap-north-star')
         .upsert({
           user_id: user.id,
@@ -217,14 +223,43 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
-      if (error) throw error;
+      console.log('[MyVisionTab] Existing row:', { existing, selectError });
+
+      if (existing) {
+        const updatePayload = { [fieldName]: trimmedText, updated_at: new Date().toISOString() };
+        console.log('[MyVisionTab] Update payload:', JSON.stringify(updatePayload));
+
+        const { error: updateError, data: updateData, count } = await supabase
+          .from('0008-ap-north-star')
+          .update(updatePayload)
+          .eq('user_id', user.id)
+          .select();
+
+        console.log('[MyVisionTab] Update result:', { updateError, updateData, count });
+
+        if (updateError) {
+          console.error('[MyVisionTab] Update error:', updateError);
+          Alert.alert('Error', `Failed to update: ${updateError.message}`);
+          return;
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from('0008-ap-north-star')
+          .insert({ user_id: user.id, [fieldName]: trimmedText });
+
+        if (insertError) {
+          console.error('[MyVisionTab] Insert error:', insertError);
+          Alert.alert('Error', `Failed to save: ${insertError.message}`);
+          return;
+        }
+      }
 
       // Refresh data
       await fetchNorthStarData();
       setEditingField(null);
       setEditText('');
     } catch (error) {
-      console.error('Error saving edit:', error);
+      console.error('[MyVisionTab] Error saving edit:', error);
       Alert.alert('Error', 'Failed to save. Please try again.');
     } finally {
       setSavingEdit(false);

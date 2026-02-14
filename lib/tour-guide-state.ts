@@ -103,6 +103,7 @@ export async function buildTourGuideState(
     five_year_vision: northStar?.five_year_vision || null,
     core_values: northStar?.core_values || null,
     life_motto: northStar?.life_motto || null,
+    identity_insights: northStar?.identity_insights || null,
     question_responses: questionResponses,
     roles: roles.length > 0 ? roles : undefined,
     goals: goals.length > 0 ? goals : undefined,
@@ -122,7 +123,7 @@ async function fetchNorthStar(userId: string) {
   
   const { data, error } = await supabase
     .from('0008-ap-north-star')
-    .select('core_identity, mission_statement, 5yr_vision, core_values, life_motto')
+    .select('core_identity, mission_statement, 5yr_vision, core_values, life_motto, identity_insights')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -149,6 +150,7 @@ async function fetchNorthStar(userId: string) {
     five_year_vision: data?.['5yr_vision'] || null,
     core_values: coreValues,
     life_motto: data?.life_motto || null,
+    identity_insights: data?.identity_insights || null,
   };
 }
 
@@ -225,37 +227,49 @@ async function fetchRolesWithActivity(
   if (!rolesData || rolesData.length === 0) return [];
 
   // For each role, count tasks this week
+  // Note: 0008-ap-universal-roles-join uses polymorphic parent_id/parent_type
+  // (no FK to tasks), so we can't use PostgREST joins. Two-step approach instead.
   const rolesWithActivity: RoleSummary[] = await Promise.all(
     rolesData.map(async (role) => {
-      // Count tasks linked to this role this week
-      const { data: taskLinks } = await supabase
+      // Step 1: Get task IDs linked to this role
+      const { data: joinLinks } = await supabase
         .from('0008-ap-universal-roles-join')
-        .select(`
-          parent_id,
-          task:0008-ap-tasks(
-            id,
-            status,
-            is_deposit_idea,
-            due_date,
-            completed_at
-          )
-        `)
+        .select('parent_id')
         .eq('user_id', userId)
         .eq('role_id', role.id)
-        .eq('parent_type', 'task')
-        .gte('task.due_date', weekStart)
-        .lte('task.due_date', weekEnd)
-        .neq('task.status', 'cancelled');
+        .eq('parent_type', 'task');
 
-      const tasks = (taskLinks || []).map((link: any) => link.task).filter(Boolean);
-      const completed = tasks.filter((t: any) => t.status === 'completed').length;
-      const deposits = tasks.filter((t: any) => t.is_deposit_idea === true).length;
+      const taskIds = (joinLinks || []).map((link: any) => link.parent_id).filter(Boolean);
+
+      if (taskIds.length === 0) {
+        return {
+          label: role.label,
+          category: role.category || '',
+          purpose: role.purpose || undefined,
+          tasks_this_week: 0,
+          tasks_completed_this_week: 0,
+          deposits_this_week: 0,
+        };
+      }
+
+      // Step 2: Fetch those tasks filtered by date range
+      const { data: tasks } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, status, is_deposit_idea, due_date, completed_at')
+        .in('id', taskIds)
+        .gte('due_date', weekStart)
+        .lte('due_date', weekEnd)
+        .neq('status', 'cancelled');
+
+      const taskList = tasks || [];
+      const completed = taskList.filter((t: any) => t.status === 'completed').length;
+      const deposits = taskList.filter((t: any) => t.is_deposit_idea === true).length;
 
       return {
         label: role.label,
         category: role.category || '',
         purpose: role.purpose || undefined,
-        tasks_this_week: tasks.length,
+        tasks_this_week: taskList.length,
         tasks_completed_this_week: completed,
         deposits_this_week: deposits,
       };
@@ -356,7 +370,7 @@ async function fetchGoals(
 
   const { data: goals, error } = await supabase
     .from('0008-ap-goals-12wk')
-    .select('id, title, target_date')
+    .select('id, title, end_date')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(10);
@@ -368,28 +382,44 @@ async function fetchGoals(
 
   if (!goals || goals.length === 0) return [];
 
-  // For each goal, count linked tasks
+  // For each goal, count linked tasks via 0008-ap-universal-goals-join
+  // (polymorphic join: twelve_wk_goal_id + parent_type/parent_id)
   const goalsWithActivity: GoalSummary[] = await Promise.all(
     goals.map(async (goal) => {
-      const { count: linkedTasks } = await supabase
-        .from('0008-ap-task-12wkgoals')
-        .select('task:0008-ap-tasks(id)', { count: 'exact', head: true })
-        .eq('goal_id', goal.id);
+      // Step 1: Get task IDs linked to this goal
+      const { data: goalLinks } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .eq('twelve_wk_goal_id', goal.id)
+        .eq('parent_type', 'task');
 
+      const taskIds = (goalLinks || []).map((link: any) => link.parent_id).filter(Boolean);
+
+      if (taskIds.length === 0) {
+        return {
+          title: goal.title,
+          target_date: goal.end_date || undefined,
+          tasks_linked: 0,
+          tasks_completed: 0,
+          progress_percent: 0,
+        };
+      }
+
+      // Step 2: Count completed among those tasks
       const { count: completedTasks } = await supabase
-        .from('0008-ap-task-12wkgoals')
-        .select('task:0008-ap-tasks!inner(id)', { count: 'exact', head: true })
-        .eq('goal_id', goal.id)
-        .eq('task.status', 'completed');
+        .from('0008-ap-tasks')
+        .select('*', { count: 'exact', head: true })
+        .in('id', taskIds)
+        .eq('status', 'completed');
 
-      const progressPercent = linkedTasks && linkedTasks > 0
-        ? Math.round((completedTasks || 0) / linkedTasks * 100)
+      const progressPercent = taskIds.length > 0
+        ? Math.round((completedTasks || 0) / taskIds.length * 100)
         : 0;
 
       return {
         title: goal.title,
-        target_date: goal.target_date || undefined,
-        tasks_linked: linkedTasks || 0,
+        target_date: goal.end_date || undefined,
+        tasks_linked: taskIds.length,
         tasks_completed: completedTasks || 0,
         progress_percent: progressPercent,
       };

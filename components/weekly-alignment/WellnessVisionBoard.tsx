@@ -91,6 +91,7 @@ interface WellnessVisionBoardProps {
   onBack: () => void;
   onZoneUpdated: (zone: WellnessZone) => void;
   onAddWeekPlanItem?: (item: Omit<import('@/types/weekPlan').WeekPlanItem, 'id' | 'created_at'>) => void;
+  onCompassFocus?: (angle: number) => void;
 }
 
 function getZoneColor(zoneName: string): string {
