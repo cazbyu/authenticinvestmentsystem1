@@ -45,6 +45,7 @@ import {
   GroupedContractItems,
   WeeklyContractItem,
   DelegationItem,
+  SparkQuestion,
   saveFuelLevel,
   getNorthStarCore,
   getAspirationContent,
@@ -55,6 +56,8 @@ import {
   getDelegations,
   commitMorningSparkV2,
   checkTodaysSpark,
+  getSparkQuestion,
+  saveSparkQuestionResponse,
 } from '@/lib/morningSparkV2Service';
 
 const STEPS = [
@@ -92,6 +95,7 @@ export default function MorningSparkV2Screen() {
   const [aspiration, setAspiration] = useState<AspirationContent | null>(null);
   const [northStar, setNorthStar] = useState<NorthStarCore | null>(null);
   const [aspirationLoading, setAspirationLoading] = useState(false);
+  const [sparkQuestion, setSparkQuestion] = useState<SparkQuestion | null>(null);
 
   // Step D: Contract
   const [contractItems, setContractItems] = useState<GroupedContractItems>({
@@ -220,6 +224,18 @@ export default function MorningSparkV2Screen() {
   const handleTriageAllProcessed = useCallback(() => {
     setTriageAllDone(true);
   }, []);
+
+  // ---- Quick Question handler (Remember step) ----
+  const handleQuestionAnswered = useCallback(
+    async (questionId: string, responseText: string, domain: string) => {
+      if (!userId) return;
+      const success = await saveSparkQuestionResponse(userId, questionId, responseText, domain);
+      if (!success) {
+        Alert.alert('Error', 'Failed to save your response. Please try again.');
+      }
+    },
+    [userId],
+  );
 
   // ---- Contract adjustment handler ----
 
@@ -461,26 +477,46 @@ export default function MorningSparkV2Screen() {
       Promise.all([
         getNorthStarCore(userId),
         getAspirationContent(userId),
+        getSparkQuestion(userId),
       ])
-        .then(([northStarData, content]) => {
+        .then(([northStarData, content, question]) => {
           setNorthStar(northStarData);
           setAspiration(content);
+          setSparkQuestion(question);
+
+          // Determine how complete the North Star is
+          const hasMission = !!northStarData.mission_statement;
+          const hasVision = !!northStarData.vision;
+          const hasValues = northStarData.core_values && northStarData.core_values.length > 0;
+          const hasIdentity = !!northStarData.core_identity;
+          const pieceCount = [hasMission, hasVision, hasValues, hasIdentity].filter(Boolean).length;
 
           // Build coach message for Remember step from North Star data
           const parts: string[] = [];
-          if (northStarData.core_identity) {
+
+          // Brevity note: remind users not to linger here
+          parts.push('Don\u2019t spend too much time here \u2014 this step is just a quick reminder of who you are and where you\u2019re headed.');
+
+          if (hasIdentity) {
             parts.push(`You previously established your core identity as ${northStarData.core_identity}.`);
           }
-          if (northStarData.mission_statement && northStarData.vision) {
+          if (hasMission && hasVision) {
             parts.push(`You have stated that you are here to ${northStarData.mission_statement} and that your personal vision is ${northStarData.vision}.`);
-          } else if (northStarData.mission_statement) {
+          } else if (hasMission) {
             parts.push(`You have stated that you are here to ${northStarData.mission_statement}.`);
-          } else if (northStarData.vision) {
+          } else if (hasVision) {
             parts.push(`Your personal vision is ${northStarData.vision}.`);
           }
-          if (!northStarData.mission_statement && !northStarData.vision) {
-            parts.push('Would you like to reflect on your mission and vision? The Weekly Alignment is the best place for deep thinking on these big questions.');
+
+          // If North Star is incomplete, encourage the question + Weekly Alignment
+          if (pieceCount < 3) {
+            if (question) {
+              parts.push('Your North Star is still taking shape \u2014 answer the quick question below to start building it. For deeper reflection, the Weekly Alignment is the best place.');
+            } else {
+              parts.push('Would you like to reflect on your mission and vision? The Weekly Alignment is the best place for deep thinking on these big questions.');
+            }
           }
+
           parts.push("Let\u2019s now focus on where you want to go today.");
           setRememberCoachMessage(parts.join(' '));
 
@@ -696,6 +732,8 @@ export default function MorningSparkV2Screen() {
             loading={aspirationLoading}
             coachMessage={rememberCoachMessage}
             coachTone={rememberCoachTone}
+            sparkQuestion={sparkQuestion}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         )}
         {currentStep === 3 && (

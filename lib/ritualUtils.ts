@@ -547,6 +547,30 @@ export async function calculateDailyScore(
       totalScore += 10;
     }
 
+    // Question responses scored same as reflections (+1 each, combined max 10/day)
+    const { data: questionResponses, error: qrError } = await supabase
+      .from('0008-ap-question-responses')
+      .select('id')
+      .eq('user_id', userId)
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay);
+
+    if (!qrError && questionResponses && questionResponses.length > 0) {
+      // Get reflection count for the day to enforce combined cap of 10
+      const { data: reflections } = await supabase
+        .from('0008-ap-reflections')
+        .select('id')
+        .eq('user_id', userId)
+        .gte('created_at', startOfDay)
+        .lte('created_at', endOfDay);
+
+      const reflectionCount = reflections?.length || 0;
+      const combinedCap = 10;
+      const slotsRemaining = Math.max(0, combinedCap - reflectionCount);
+      const questionPoints = Math.min(questionResponses.length, slotsRemaining);
+      totalScore += questionPoints;
+    }
+
     return Math.round(totalScore * 10) / 10;
   } catch (error) {
     console.error('Exception in calculateDailyScore:', error);

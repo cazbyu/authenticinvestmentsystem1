@@ -88,6 +88,21 @@ export function calculateAspirationPoints(
 }
 
 /**
+ * Calculate Question Response Points
+ * Same as reflection: +1 per response (max 10/day combined with reflections)
+ * Questions answered during Morning Spark earn the same points as creating a reflection.
+ */
+export function calculateQuestionResponsePoints(
+  totalQuestionsAndReflectionsToday: number
+): number {
+  // Max 10 combined reflections + question responses per day count for points
+  if (totalQuestionsAndReflectionsToday >= 10) {
+    return 0;
+  }
+  return 1; // Same as base reflection point
+}
+
+/**
  * Calculate Beat the Target Bonus
  * Awarded at midnight if daily score > target score
  * Returns +10 if target was beaten, 0 otherwise

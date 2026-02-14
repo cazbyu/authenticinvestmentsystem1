@@ -1297,5 +1297,117 @@ export async function getUserGoals(userId: string): Promise<GoalTag[]> {
   return (data || []).map(g => ({ id: g.id, title: g.title, goal_type: 'twelve_wk_goal' }));
 }
 
+// ============ MORNING SPARK QUICK QUESTION ============
+
+export interface SparkQuestion {
+  id: string;
+  question_text: string;
+  question_context: string | null;
+  strategy_type: string; // 'mission' | 'vision' | 'values'
+}
+
+/**
+ * Fetch a random unanswered strategy question for the Morning Spark Remember step.
+ * Prioritises questions the user hasn't answered yet.
+ * Returns null if no questions are available.
+ */
+export async function getSparkQuestion(userId: string): Promise<SparkQuestion | null> {
+  const supabase = getSupabaseClient();
+
+  // Get user's core identity for identity-specific question filtering
+  const { data: nsRow } = await supabase
+    .from('0008-ap-north-star')
+    .select('core_identity')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const identity = nsRow?.core_identity || null;
+
+  // Get questions the user has already answered
+  const { data: answered } = await supabase
+    .from('0008-ap-question-responses')
+    .select('question_id')
+    .eq('user_id', userId);
+
+  const answeredIds = (answered || []).map((a: { question_id: string }) => a.question_id);
+
+  // Fetch active strategy questions (mission/vision/values), not role-specific
+  let query = supabase
+    .from('0008-ap-power-questions')
+    .select('id, question_text, question_context, strategy_type')
+    .eq('is_active', true)
+    .eq('show_in_onboarding', true)
+    .is('role_type', null)
+    .in('strategy_type', ['mission', 'vision', 'values'])
+    .order('ob_priority', { ascending: true });
+
+  // Filter by identity or universal
+  if (identity) {
+    query = query.or(`core_identity.eq.${identity},core_identity.is.null`);
+  } else {
+    query = query.is('core_identity', null);
+  }
+
+  // Exclude already answered
+  if (answeredIds.length > 0) {
+    query = query.not('id', 'in', `(${answeredIds.join(',')})`);
+  }
+
+  const { data: questions, error } = await query.limit(5);
+
+  if (error || !questions || questions.length === 0) {
+    // Fallback: allow repeats if all have been answered
+    const { data: fallback } = await supabase
+      .from('0008-ap-power-questions')
+      .select('id, question_text, question_context, strategy_type')
+      .eq('is_active', true)
+      .eq('show_in_onboarding', true)
+      .is('role_type', null)
+      .in('strategy_type', ['mission', 'vision', 'values'])
+      .order('ob_priority', { ascending: true })
+      .limit(5);
+
+    if (!fallback || fallback.length === 0) return null;
+    return fallback[Math.floor(Math.random() * fallback.length)];
+  }
+
+  // Pick randomly from the top-priority pool
+  return questions[Math.floor(Math.random() * questions.length)];
+}
+
+/**
+ * Save a quick question response from the Morning Spark Remember step.
+ * Uses upsert on (user_id, question_id) so answering the same question
+ * again updates rather than duplicates.
+ */
+export async function saveSparkQuestionResponse(
+  userId: string,
+  questionId: string,
+  responseText: string,
+  domain: string
+): Promise<boolean> {
+  const supabase = getSupabaseClient();
+
+  const { error } = await supabase
+    .from('0008-ap-question-responses')
+    .upsert(
+      {
+        user_id: userId,
+        question_id: questionId,
+        response_text: responseText.trim(),
+        context_type: 'morning_spark',
+        domain,
+        used_in_synthesis: false,
+      },
+      { onConflict: 'user_id,question_id' }
+    );
+
+  if (error) {
+    console.error('[MorningSpark] Error saving question response:', error);
+    return false;
+  }
+  return true;
+}
+
 // Re-export commonly used functions so components can import from one place
 export { checkTodaysSpark, calculateDailyScore, calculateDominantCardinal };

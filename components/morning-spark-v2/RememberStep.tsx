@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,13 @@ import {
   TouchableOpacity,
   Linking,
   ScrollView,
+  TextInput,
+  Alert,
+  Keyboard,
 } from 'react-native';
-import { Music, Play } from 'lucide-react-native';
+import { Music, Play, Send, CheckCircle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import type { AspirationContent, NorthStarCore } from '@/lib/morningSparkV2Service';
+import type { AspirationContent, NorthStarCore, SparkQuestion } from '@/lib/morningSparkV2Service';
 import { CoachInsight } from './CoachInsight';
 import type { CoachTone } from '@/types/alignmentCoach';
 
@@ -39,6 +42,10 @@ interface RememberStepProps {
   loading: boolean;
   coachMessage?: string | null;
   coachTone?: CoachTone;
+  /** Optional quick question for users missing North Star data */
+  sparkQuestion?: SparkQuestion | null;
+  /** Called when user submits a question response */
+  onQuestionAnswered?: (questionId: string, responseText: string, domain: string) => void;
 }
 
 // ============ SUB-COMPONENTS ============
@@ -108,6 +115,105 @@ function NorthStarSection({ northStar, colors, isDarkMode }: {
           </View>
         </View>
       )}
+    </View>
+  );
+}
+
+/** Quick question card — shown when North Star is incomplete */
+function QuickQuestionCard({
+  question,
+  onSubmit,
+  colors,
+  isDarkMode,
+}: {
+  question: SparkQuestion;
+  onSubmit: (questionId: string, responseText: string, domain: string) => void;
+  colors: any;
+  isDarkMode: boolean;
+}) {
+  const [answer, setAnswer] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = useCallback(async () => {
+    if (!answer.trim() || submitting) return;
+    setSubmitting(true);
+    Keyboard.dismiss();
+    onSubmit(question.id, answer.trim(), question.strategy_type);
+    setSubmitted(true);
+    setSubmitting(false);
+  }, [answer, question, onSubmit, submitting]);
+
+  const domainLabel =
+    question.strategy_type === 'mission' ? 'MISSION'
+    : question.strategy_type === 'vision' ? 'VISION'
+    : 'VALUES';
+  const domainColor =
+    question.strategy_type === 'mission' ? P.missionBlue
+    : question.strategy_type === 'vision' ? P.visionPurple
+    : P.valuesAmber;
+
+  if (submitted) {
+    return (
+      <View style={[styles.questionCard, { backgroundColor: isDarkMode ? colors.surface : '#F0FFF4', borderColor: P.emerald }]}>
+        <View style={styles.questionSubmittedRow}>
+          <CheckCircle size={20} color={P.emerald} />
+          <Text style={[styles.questionSubmittedText, { color: P.emerald }]}>
+            Great reflection! +1 point earned.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.questionCard, { backgroundColor: isDarkMode ? colors.surface : '#FAFCFF', borderColor: domainColor }]}>
+      <View style={styles.questionDomainBadge}>
+        <Text style={[styles.questionDomainText, { color: domainColor }]}>
+          {domainLabel} QUESTION
+        </Text>
+      </View>
+      <Text style={[styles.questionText, { color: colors.text }]}>
+        {question.question_text}
+      </Text>
+      {question.question_context && (
+        <Text style={[styles.questionContext, { color: colors.textSecondary }]}>
+          {question.question_context}
+        </Text>
+      )}
+      <View style={styles.questionInputRow}>
+        <TextInput
+          style={[
+            styles.questionInput,
+            {
+              color: colors.text,
+              backgroundColor: isDarkMode ? colors.background : '#FFF',
+              borderColor: colors.border,
+            },
+          ]}
+          placeholder="Share your thoughts..."
+          placeholderTextColor={colors.textSecondary}
+          value={answer}
+          onChangeText={setAnswer}
+          multiline
+          maxLength={500}
+          textAlignVertical="top"
+        />
+        <TouchableOpacity
+          style={[
+            styles.questionSubmitBtn,
+            { backgroundColor: answer.trim() ? domainColor : colors.border },
+          ]}
+          onPress={handleSubmit}
+          disabled={!answer.trim() || submitting}
+          activeOpacity={0.7}
+        >
+          <Send size={18} color="#FFF" />
+        </TouchableOpacity>
+      </View>
+      <Text style={[styles.questionHint, { color: colors.textSecondary }]}>
+        A sentence or two is perfect — this feeds your North Star over time.
+      </Text>
     </View>
   );
 }
@@ -228,8 +334,24 @@ function MediaContent({ aspiration, colors, isDarkMode }: {
 
 // ============ MAIN COMPONENT ============
 
-export function RememberStep({ aspiration, northStar, loading, coachMessage, coachTone }: RememberStepProps) {
+export function RememberStep({
+  aspiration,
+  northStar,
+  loading,
+  coachMessage,
+  coachTone,
+  sparkQuestion,
+  onQuestionAnswered,
+}: RememberStepProps) {
   const { colors, isDarkMode } = useTheme();
+
+  // Determine if North Star is mostly empty (show question when data is sparse)
+  const hasMission = !!northStar?.mission_statement;
+  const hasVision = !!northStar?.vision;
+  const hasValues = northStar?.core_values && northStar.core_values.length > 0;
+  const hasIdentity = !!northStar?.core_identity;
+  const northStarPieceCount = [hasMission, hasVision, hasValues, hasIdentity].filter(Boolean).length;
+  const showQuestion = sparkQuestion && onQuestionAnswered && northStarPieceCount < 3;
 
   if (loading) {
     return (
@@ -263,6 +385,18 @@ export function RememberStep({ aspiration, northStar, loading, coachMessage, coa
 
       {/* Mission / Vision / Values */}
       <NorthStarSection northStar={northStar} colors={colors} isDarkMode={isDarkMode} />
+
+      {/* Quick Question — shown when North Star is incomplete */}
+      {showQuestion && sparkQuestion && onQuestionAnswered && (
+        <View style={{ marginTop: 14 }}>
+          <QuickQuestionCard
+            question={sparkQuestion}
+            onSubmit={onQuestionAnswered}
+            colors={colors}
+            isDarkMode={isDarkMode}
+          />
+        </View>
+      )}
 
       {/* Divider */}
       <View style={[styles.divider, { backgroundColor: P.goldBorder }]} />
@@ -482,6 +616,68 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   mediaButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // ---- Quick Question Card ----
+  questionCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    gap: 10,
+  },
+  questionDomainBadge: {
+    alignSelf: 'flex-start',
+  },
+  questionDomainText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  questionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  questionContext: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  questionInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  questionInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    minHeight: 44,
+    maxHeight: 100,
+  },
+  questionSubmitBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  questionHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  questionSubmittedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  questionSubmittedText: {
     fontSize: 14,
     fontWeight: '600',
   },
