@@ -30,6 +30,10 @@ import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { getActivityConfig } from '@/lib/activityConfig';
 import type { ActivityConfig } from '@/lib/activityConfig';
 
+// Alignment Coach
+import { getMorningGuidance, getCoachGuidance, buildFullState } from '@/lib/alignmentCoachService';
+import type { CoachTone } from '@/types/alignmentCoach';
+
 // Service layer
 import {
   FuelLevel,
@@ -121,6 +125,17 @@ export default function MorningSparkV2Screen() {
   const [committedTaskIds, setCommittedTaskIds] = useState<Set<string>>(new Set());
 
   const [committing, setCommitting] = useState(false);
+
+  // Alignment Coach state
+  const [coachMessage, setCoachMessage] = useState<string | null>(null);
+  const [coachTone, setCoachTone] = useState<CoachTone>('welcome');
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachIsFallback, setCoachIsFallback] = useState(false);
+  // Close-step coach (separate so triage step and close step can have different messages)
+  const [closeCoachMessage, setCloseCoachMessage] = useState<string | null>(null);
+  const [closeCoachTone, setCloseCoachTone] = useState<CoachTone>('push_forward');
+  const [closeCoachLoading, setCloseCoachLoading] = useState(false);
+  const [closeCoachIsFallback, setCloseCoachIsFallback] = useState(false);
 
   // Derived values — goals is now GoalContractGroup[], flatten for counts
   const goalTasks = contractItems.goals.flatMap((g) => g.tasks);
@@ -390,6 +405,25 @@ export default function MorningSparkV2Screen() {
           setTriageLoading(false);
         })
         .catch(() => setTriageLoading(false));
+
+      // Fetch morning coach guidance (non-blocking — runs in background)
+      if (!coachMessage) {
+        setCoachLoading(true);
+        const fuelReasonStr =
+          fuelLevel === 1 ? (fuelWhy || 'unknown')
+          : fuelLevel === 3 ? (fuel3Why || 'positive')
+          : 'moderate';
+        getMorningGuidance(userId, fuelLevel || 2, fuelReasonStr)
+          .then((response) => {
+            setCoachMessage(response.text);
+            setCoachTone(response.tone);
+            setCoachIsFallback(response.model === 'fallback');
+            setCoachLoading(false);
+          })
+          .catch(() => {
+            setCoachLoading(false);
+          });
+      }
     }
     if (nextStep === 2) {
       setAspirationLoading(true);
@@ -434,11 +468,44 @@ export default function MorningSparkV2Screen() {
         .catch(() => setDelegationLoading(false));
     }
 
+    // When entering Close step, fetch coaching summary for committed items
+    if (nextStep === 5) {
+      setCloseCoachLoading(true);
+      buildFullState(userId)
+        .then((userState) => {
+          return getCoachGuidance({
+            mode: 'morning',
+            trigger: 'complete',
+            userState,
+            fuelLevel: fuelLevel || 2,
+            fuelReason: fuelLevel === 1 ? (fuelWhy || 'unknown')
+              : fuelLevel === 3 ? (fuel3Why || 'positive')
+              : 'moderate',
+            stepContext: {
+              flow_state: 'contract_close',
+              context_data: {
+                committed_task_count: committedTaskIds.size,
+                committed_event_count: committedItems.filter(i => i.type === 'event').length,
+              },
+            },
+          });
+        })
+        .then((response) => {
+          setCloseCoachMessage(response.text);
+          setCloseCoachTone(response.tone);
+          setCloseCoachIsFallback(response.model === 'fallback');
+          setCloseCoachLoading(false);
+        })
+        .catch(() => {
+          setCloseCoachLoading(false);
+        });
+    }
+
     setCurrentStep(nextStep);
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-  }, [currentStep, fuelLevel, fuelWhy, sparkId, userId]);
+  }, [currentStep, fuelLevel, fuelWhy, fuel3Why, sparkId, userId, coachMessage, committedTaskIds, committedItems]);
 
   const goToPreviousStep = useCallback(() => {
     if (currentStep > 0) {
@@ -563,6 +630,10 @@ export default function MorningSparkV2Screen() {
               userId={userId}
               onItemProcessed={handleTriageItemProcessed}
               onAllProcessed={handleTriageAllProcessed}
+              coachMessage={coachMessage}
+              coachTone={coachTone}
+              coachLoading={coachLoading}
+              coachIsFallback={coachIsFallback}
             />
           )
         )}
@@ -593,6 +664,10 @@ export default function MorningSparkV2Screen() {
             contractItemCount={committedItems.length}
             onCommit={handleCommit}
             committing={committing}
+            coachMessage={closeCoachMessage}
+            coachTone={closeCoachTone}
+            coachLoading={closeCoachLoading}
+            coachIsFallback={closeCoachIsFallback}
           />
         )}
       </View>

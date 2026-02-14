@@ -18,6 +18,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import type { BrainDumpTriageItem, TriageAction } from '@/lib/morningSparkV2Service';
 import { triageBrainDumpItem } from '@/lib/morningSparkV2Service';
 import { toLocalISOString } from '@/lib/dateUtils';
+import { CoachInsight } from './CoachInsight';
+import type { CoachTone } from '@/types/alignmentCoach';
 
 // ============ TYPES ============
 
@@ -26,6 +28,14 @@ interface BrainDumpTriageStepProps {
   userId: string;
   onItemProcessed: (itemId: string) => void;
   onAllProcessed: () => void;
+  /** Alignment coach message (from morning guidance call) */
+  coachMessage?: string | null;
+  /** Coach message tone */
+  coachTone?: CoachTone;
+  /** Coach is still loading */
+  coachLoading?: boolean;
+  /** Coach message is from local fallback */
+  coachIsFallback?: boolean;
 }
 
 // ============ LIFE OS COLOR PALETTE (semi-muted, 70-80% saturation) ============
@@ -724,6 +734,10 @@ export default function BrainDumpTriageStep({
   userId,
   onItemProcessed,
   onAllProcessed,
+  coachMessage,
+  coachTone = 'encourage',
+  coachLoading = false,
+  coachIsFallback = false,
 }: BrainDumpTriageStepProps) {
   const { colors, isDarkMode } = useTheme();
 
@@ -776,6 +790,19 @@ export default function BrainDumpTriageStep({
 
   return (
     <View style={styles.wrapper}>
+      {/* Alignment Coach insight (from morning guidance) */}
+      {(coachMessage || coachLoading) && (
+        <View style={styles.coachInsightWrapper}>
+          <CoachInsight
+            message={coachMessage ?? null}
+            tone={coachTone}
+            loading={coachLoading}
+            isFallback={coachIsFallback}
+            startCollapsed={false}
+          />
+        </View>
+      )}
+
       <Text style={[styles.header, { color: colors.text }]}>{headerEmoji} {headerText}</Text>
       <Text style={[styles.subtext, { color: colors.textSecondary }]}>
         {remainingItems.length} item{remainingItems.length !== 1 ? 's' : ''} remaining — tap to action
@@ -811,6 +838,7 @@ export default function BrainDumpTriageStep({
 
 const styles = StyleSheet.create({
   wrapper: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
+  coachInsightWrapper: { marginBottom: 4 },
   header: { fontSize: 20, fontWeight: '700', marginBottom: 4 },
   subtext: { fontSize: 14, marginBottom: 16 },
   scrollView: { flex: 1 },

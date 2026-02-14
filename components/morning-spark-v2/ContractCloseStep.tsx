@@ -18,6 +18,8 @@ import {
   WeeklyContractItem,
   DelegationItem,
 } from '@/lib/morningSparkV2Service';
+import { CoachInsight } from './CoachInsight';
+import type { CoachTone } from '@/types/alignmentCoach';
 
 // ── FAB Icon images ────────────────────────────────────────────────
 const SOURCE_ICONS: Record<string, any> = {
@@ -43,6 +45,14 @@ interface ContractCloseStepProps {
   contractItemCount: number;
   onCommit: () => void;
   committing: boolean;
+  /** Alignment coach message for the close step */
+  coachMessage?: string | null;
+  /** Coach message tone */
+  coachTone?: CoachTone;
+  /** Coach is still loading */
+  coachLoading?: boolean;
+  /** Coach message is from local fallback */
+  coachIsFallback?: boolean;
 }
 
 // ── Compact item row (read-only) ──────────────────────────────────
@@ -218,6 +228,10 @@ export default function ContractCloseStep({
   contractItemCount,
   onCommit,
   committing,
+  coachMessage,
+  coachTone: coachToneProp = 'push_forward',
+  coachLoading = false,
+  coachIsFallback = false,
 }: ContractCloseStepProps) {
   const { colors, isDarkMode } = useTheme();
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -307,24 +321,33 @@ export default function ContractCloseStep({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Coach summary section */}
-        <View
-          style={[
-            styles.coachCard,
-            {
-              backgroundColor: isDarkMode ? colors.surface : '#F0F7FF',
-              borderColor: isDarkMode ? colors.border : '#5B9BD540',
-            },
-          ]}
-        >
-          <Text style={styles.coachIcon}>{'\u{1F9E0}'}</Text>
-          <Text style={[styles.coachTitle, { color: colors.text }]}>
-            Alignment Coach
-          </Text>
-          <Text style={[styles.coachSummary, { color: colors.textSecondary }]}>
-            {coachingSummary}
-          </Text>
-        </View>
+        {/* Coach summary section — use AI coach if available, fallback to local */}
+        {(coachMessage || coachLoading) ? (
+          <CoachInsight
+            message={coachMessage ?? null}
+            tone={coachToneProp}
+            loading={coachLoading}
+            isFallback={coachIsFallback}
+          />
+        ) : (
+          <View
+            style={[
+              styles.coachCard,
+              {
+                backgroundColor: isDarkMode ? colors.surface : '#F0F7FF',
+                borderColor: isDarkMode ? colors.border : '#5B9BD540',
+              },
+            ]}
+          >
+            <Text style={styles.coachIcon}>{'\u{1F9E0}'}</Text>
+            <Text style={[styles.coachTitle, { color: colors.text }]}>
+              Alignment Coach
+            </Text>
+            <Text style={[styles.coachSummary, { color: colors.textSecondary }]}>
+              {coachingSummary}
+            </Text>
+          </View>
+        )}
 
         {/* Committed items */}
         <Text style={[styles.sectionHeading, { color: colors.text }]}>

@@ -34,6 +34,11 @@ import {
   calculateDominantCardinal,
 } from '@/lib/morningSparkV2Service';
 
+// Alignment Coach
+import { getEveningGuidance } from '@/lib/alignmentCoachService';
+import { CoachInsight } from '@/components/morning-spark-v2/CoachInsight';
+import type { CoachTone } from '@/types/alignmentCoach';
+
 // ============ BRAIN DUMP GUIDED QUESTIONS ============
 
 const BRAIN_DUMP_QUESTIONS = [
@@ -295,6 +300,12 @@ export default function EveningReviewV2Screen() {
   const [dominantCardinal, setDominantCardinal] = useState<string | null>(null);
   const [dayWord, setDayWord] = useState('');
 
+  // Alignment Coach state
+  const [coachMessage, setCoachMessage] = useState<string | null>(null);
+  const [coachTone, setCoachTone] = useState<CoachTone>('reflect');
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachIsFallback, setCoachIsFallback] = useState(false);
+
   // Animations
   const [scaleAnim] = useState(new Animated.Value(1));
   const [completionAnim] = useState(new Animated.Value(0));
@@ -340,6 +351,19 @@ export default function EveningReviewV2Screen() {
       setFinalScore(score);
       setDominantCardinal(cardinal);
       setTargetScore(sparkData.data?.initial_target_score || 35);
+
+      // Fetch evening coach guidance (non-blocking)
+      setCoachLoading(true);
+      getEveningGuidance(user.id)
+        .then((response) => {
+          setCoachMessage(response.text);
+          setCoachTone(response.tone);
+          setCoachIsFallback(response.model === 'fallback');
+          setCoachLoading(false);
+        })
+        .catch(() => {
+          setCoachLoading(false);
+        });
     } catch (error) {
       console.error('Error loading evening review data:', error);
     } finally {
@@ -541,6 +565,19 @@ export default function EveningReviewV2Screen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* ====== COACH INSIGHT ====== */}
+        {(coachMessage || coachLoading) && (
+          <View style={styles.coachInsightWrapper}>
+            <CoachInsight
+              message={coachMessage}
+              tone={coachTone}
+              loading={coachLoading}
+              isFallback={coachIsFallback}
+              startCollapsed={false}
+            />
+          </View>
+        )}
+
         {/* ====== SECTION 1: CONTRACT FOLLOW-UP ====== */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -795,6 +832,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    paddingTop: 8,
+  },
+  coachInsightWrapper: {
+    paddingHorizontal: 16,
     paddingTop: 8,
   },
 
