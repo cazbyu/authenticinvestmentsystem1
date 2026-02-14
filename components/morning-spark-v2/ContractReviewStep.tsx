@@ -392,7 +392,7 @@ function TaskCard({
               Do It
             </Text>
           </TouchableOpacity>
-        )
+        )}
 
         {/* Reschedule (opens date picker) — hidden once committed */}
         {!isCommitted && (
