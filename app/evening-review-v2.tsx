@@ -34,6 +34,16 @@ import {
   calculateDominantCardinal,
 } from '@/lib/morningSparkV2Service';
 
+// ============ BRAIN DUMP GUIDED QUESTIONS ============
+
+const BRAIN_DUMP_QUESTIONS = [
+  { emoji: '💭', label: 'Worried you might forget something?', prompt: 'The one thing I\'m worried I might forget by tomorrow:' },
+  { emoji: '🔄', label: 'Unfinished conversation or decision?', prompt: 'An unfinished conversation or decision:' },
+  { emoji: '👤', label: 'Someone on your mind today?', prompt: 'Someone whose name is on my mind that didn\'t get attention today:' },
+  { emoji: '📋', label: 'Small things competing for attention?', prompt: 'Small things competing for my attention that aren\'t on the calendar:' },
+  { emoji: '🗑️', label: 'Delete one stressor before sleep?', prompt: 'If I could delete one stressor before sleep:' },
+];
+
 // ============ HELPER FUNCTIONS ============
 
 function getCardinalLabel(cardinal: string | null): string {
@@ -601,8 +611,39 @@ export default function EveningReviewV2Screen() {
             Brain Dump
           </Text>
           <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            Wins, challenges, and anything on your mind for tomorrow
+            The day's mission is over. Let's offload any lingering thoughts so you can rest fully.
           </Text>
+
+          {/* 5 Guided prompting questions */}
+          <View style={styles.brainDumpPrompts}>
+            {BRAIN_DUMP_QUESTIONS.map((q, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[
+                  styles.brainDumpPromptChip,
+                  {
+                    backgroundColor: isDarkMode ? colors.surface : '#FFF',
+                    borderColor: isDarkMode ? colors.border : '#E5E7EB',
+                  },
+                ]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  if (Platform.OS !== 'web') {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                  // Append question as a prompt to the brain dump
+                  const prefix = brainDumpContent.trim() ? brainDumpContent.trim() + '\n\n' : '';
+                  setBrainDumpContent(prefix + q.prompt + ' ');
+                }}
+              >
+                <Text style={styles.brainDumpPromptEmoji}>{q.emoji}</Text>
+                <Text style={[styles.brainDumpPromptText, { color: colors.text }]} numberOfLines={2}>
+                  {q.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <TextInput
             style={[
               styles.brainDumpInput,
@@ -913,6 +954,32 @@ const styles = StyleSheet.create({
   tagChipText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  // Brain dump prompts
+  brainDumpPrompts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  brainDumpPromptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+    maxWidth: '100%' as any,
+  },
+  brainDumpPromptEmoji: {
+    fontSize: 14,
+  },
+  brainDumpPromptText: {
+    fontSize: 12,
+    fontWeight: '500',
+    flexShrink: 1,
   },
 
   // Brain dump

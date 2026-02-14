@@ -42,6 +42,29 @@ export const FUEL_WHY_OPTIONS: FuelWhyOption[] = [
   { id: 'just_not_feeling_it', emoji: '😐', label: 'Just Not Feeling It' },
 ];
 
+// Level 3 (Full energy) follow-up: distinguish true sprint from over-enthusiasm
+export type Fuel3WhyReason =
+  | 'true_sprint'
+  | 'post_rest_energy'
+  | 'exciting_day'
+  | 'over_enthusiasm'
+  | 'caffeine_boost';
+
+export interface Fuel3WhyOption {
+  id: Fuel3WhyReason;
+  emoji: string;
+  label: string;
+  subtext: string;
+}
+
+export const FUEL_3_WHY_OPTIONS: Fuel3WhyOption[] = [
+  { id: 'true_sprint', emoji: '🏃', label: 'True Sprint', subtext: 'Genuinely rested and ready' },
+  { id: 'post_rest_energy', emoji: '😴', label: 'Well-Rested', subtext: 'Good sleep, body recovered' },
+  { id: 'exciting_day', emoji: '🎯', label: 'Exciting Day', subtext: 'Something to look forward to' },
+  { id: 'over_enthusiasm', emoji: '⚠️', label: 'Maybe Over It', subtext: 'Could be riding a high' },
+  { id: 'caffeine_boost', emoji: '☕', label: 'Caffeine Boost', subtext: 'Fueled by coffee, not rest' },
+];
+
 export interface AspirationContent {
   id: string;
   content_type: 'quote' | 'image' | 'song' | 'video';
@@ -145,31 +168,40 @@ export interface DelegationItem {
 // ============ FUEL LEVEL FUNCTIONS ============
 
 /**
- * Save or update fuel level (and optionally fuel_1_why) for today's spark.
+ * Save or update fuel level (and optionally fuel_1_why / fuel_3_why) for today's spark.
  * Creates a new spark if one doesn't exist.
  */
 export async function saveFuelLevel(
   sparkId: string | null,
   userId: string,
   fuelLevel: FuelLevel,
-  fuelWhy?: FuelWhyReason | null
+  fuelWhy?: FuelWhyReason | null,
+  fuel3Why?: Fuel3WhyReason | null,
 ): Promise<string> {
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
 
   const modeMap: Record<FuelLevel, string> = { 1: 'recovery', 2: 'steady', 3: 'sprint' };
+  // If user says over-enthusiasm or caffeine boost, pull target down to steady pace
+  const adjustedMode = (fuelLevel === 3 && (fuel3Why === 'over_enthusiasm' || fuel3Why === 'caffeine_boost'))
+    ? 'steady' : modeMap[fuelLevel];
   const scoreMap: Record<FuelLevel, number> = { 1: 20, 2: 35, 3: 55 };
+  const adjustedScore = (fuelLevel === 3 && (fuel3Why === 'over_enthusiasm' || fuel3Why === 'caffeine_boost'))
+    ? 40 : scoreMap[fuelLevel];
+
+  const fuelPayload = {
+    fuel_level: fuelLevel,
+    mode: adjustedMode,
+    initial_target_score: adjustedScore,
+    fuel_1_why: fuelLevel === 1 ? (fuelWhy || null) : null,
+    fuel_3_why: fuelLevel === 3 ? (fuel3Why || null) : null,
+  };
 
   if (sparkId) {
     // Update existing spark
     const { error } = await supabase
       .from('0008-ap-daily-sparks')
-      .update({
-        fuel_level: fuelLevel,
-        mode: modeMap[fuelLevel],
-        initial_target_score: scoreMap[fuelLevel],
-        fuel_1_why: fuelLevel === 1 ? (fuelWhy || null) : null,
-      })
+      .update(fuelPayload)
       .eq('id', sparkId);
 
     if (error) throw error;
@@ -181,10 +213,7 @@ export async function saveFuelLevel(
       .insert({
         user_id: userId,
         spark_date: today,
-        fuel_level: fuelLevel,
-        mode: modeMap[fuelLevel],
-        initial_target_score: scoreMap[fuelLevel],
-        fuel_1_why: fuelLevel === 1 ? (fuelWhy || null) : null,
+        ...fuelPayload,
       })
       .select('id')
       .single();

@@ -15,13 +15,17 @@ import {
   FuelLevel,
   FuelWhyReason,
   FUEL_WHY_OPTIONS,
+  Fuel3WhyReason,
+  FUEL_3_WHY_OPTIONS,
 } from '@/lib/morningSparkV2Service';
 
 interface EnergyCheckStepProps {
   fuelLevel: 1 | 2 | 3 | null;
   fuelWhy: FuelWhyReason | null;
+  fuel3Why: Fuel3WhyReason | null;
   onFuelLevelChange: (level: 1 | 2 | 3) => void;
   onFuelWhyChange: (why: FuelWhyReason) => void;
+  onFuel3WhyChange: (why: Fuel3WhyReason) => void;
 }
 
 const FUEL_OPTIONS: {
@@ -47,12 +51,15 @@ const NEEDLE_ANGLES: Record<string, number> = {
 export default function EnergyCheckStep({
   fuelLevel,
   fuelWhy,
+  fuel3Why,
   onFuelLevelChange,
   onFuelWhyChange,
+  onFuel3WhyChange,
 }: EnergyCheckStepProps) {
   const { colors, isDarkMode } = useTheme();
   const needleAnim = useRef(new Animated.Value(0)).current;
   const whyAnim = useRef(new Animated.Value(0)).current;
+  const why3Anim = useRef(new Animated.Value(0)).current;
   const scaleAnims = useRef([1, 2, 3].map(() => new Animated.Value(1))).current;
 
   useEffect(() => {
@@ -68,6 +75,11 @@ export default function EnergyCheckStep({
   useEffect(() => {
     Animated.timing(whyAnim, {
       toValue: fuelLevel === 1 ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+    Animated.timing(why3Anim, {
+      toValue: fuelLevel === 3 ? 1 : 0,
       duration: 300,
       useNativeDriver: false,
     }).start();
@@ -91,6 +103,13 @@ export default function EnergyCheckStep({
     onFuelWhyChange(why);
   };
 
+  const handleWhy3Select = (why: Fuel3WhyReason) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onFuel3WhyChange(why);
+  };
+
   const needleRotation = needleAnim.interpolate({
     inputRange: [-90, 0, 90],
     outputRange: ['-90deg', '0deg', '90deg'],
@@ -98,6 +117,8 @@ export default function EnergyCheckStep({
 
   const whyHeight = whyAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 180] });
   const whyOpacity = whyAnim;
+  const why3Height = why3Anim.interpolate({ inputRange: [0, 1], outputRange: [0, 220] });
+  const why3Opacity = why3Anim;
 
   return (
     <View style={styles.container}>
@@ -156,6 +177,7 @@ export default function EnergyCheckStep({
         })}
       </View>
 
+      {/* Level 1 follow-up: What's behind the low energy? */}
       <Animated.View
         style={[styles.whyContainer, { maxHeight: whyHeight, opacity: whyOpacity }]}
       >
@@ -192,6 +214,53 @@ export default function EnergyCheckStep({
           })}
         </View>
       </Animated.View>
+
+      {/* Level 3 follow-up: True sprint or over-enthusiasm? */}
+      <Animated.View
+        style={[styles.whyContainer, { maxHeight: why3Height, opacity: why3Opacity }]}
+      >
+        <Text style={[styles.whyTitle, { color: colors.text }]}>
+          What's driving this energy?
+        </Text>
+        <Text style={[styles.whySubtext, { color: colors.textSecondary }]}>
+          High energy is great — let's make sure it's sustainable
+        </Text>
+        <View style={styles.pillRow}>
+          {FUEL_3_WHY_OPTIONS.map((opt) => {
+            const isSelected = fuel3Why === opt.id;
+            const isWarning = opt.id === 'over_enthusiasm' || opt.id === 'caffeine_boost';
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[
+                  styles.pill,
+                  isSelected
+                    ? {
+                        backgroundColor: isWarning ? '#F57F17' : '#2E7D32',
+                        borderColor: isWarning ? '#F57F17' : '#2E7D32',
+                      }
+                    : {
+                        backgroundColor: isDarkMode ? colors.surface : '#FFF',
+                        borderColor: colors.border,
+                      },
+                ]}
+                activeOpacity={0.7}
+                onPress={() => handleWhy3Select(opt.id)}
+              >
+                <Text style={styles.pillEmoji}>{opt.emoji}</Text>
+                <Text
+                  style={[
+                    styles.pillLabel,
+                    { color: isSelected ? '#FFF' : colors.text },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -208,7 +277,8 @@ const styles = StyleSheet.create({
   optionLabel: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   optionDesc: { fontSize: 11, textAlign: 'center' },
   whyContainer: { overflow: 'hidden', width: '100%', paddingHorizontal: 4, marginTop: 12 },
-  whyTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10, textAlign: 'center' },
+  whyTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4, textAlign: 'center' },
+  whySubtext: { fontSize: 13, marginBottom: 10, textAlign: 'center' },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   pill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   pillEmoji: { fontSize: 16, marginRight: 6 },

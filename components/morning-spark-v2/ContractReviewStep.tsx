@@ -491,6 +491,9 @@ export default function ContractReviewStep({
     ...grouped.roles, ...grouped.wellness, ...goalTasks, ...grouped.unassigned,
   ].filter((i) => !i.completed_at);
 
+  // Extract One Thing items to surface at the top
+  const oneThingItems = allItems.filter((i) => i.one_thing);
+
   const q1Count = allItems.filter((i) => i.is_urgent && i.is_important).length;
   const q2Count = allItems.filter((i) => !i.is_urgent && i.is_important).length;
   const q3Count = allItems.filter((i) => i.is_urgent && !i.is_important).length;
@@ -588,6 +591,35 @@ export default function ContractReviewStep({
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               No tasks scheduled for today. Tap "+ Add New" to get started.
             </Text>
+          </View>
+        )}
+
+        {/* One Thing Focus — surfaced at top for daily priority */}
+        {oneThingItems.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <View
+              style={[
+                styles.oneThingBanner,
+                { backgroundColor: isDarkMode ? '#2A2000' : '#FFFBEB', borderColor: '#D4A84350' },
+              ]}
+            >
+              <Text style={styles.oneThingBannerIcon}>{'\u2B50'}</Text>
+              <View style={styles.oneThingBannerTextWrap}>
+                <Text style={[styles.oneThingBannerTitle, { color: isDarkMode ? '#FFD700' : '#92400E' }]}>
+                  Your One Thing{oneThingItems.length > 1 ? 's' : ''}
+                </Text>
+                <Text style={[styles.oneThingBannerSub, { color: isDarkMode ? '#D4A843' : '#B45309' }]}>
+                  If you do nothing else today, do this
+                </Text>
+              </View>
+            </View>
+            {oneThingItems.map((item) => (
+              <TaskCard
+                key={`onething-${item.id}`} item={item} colors={colors} isDarkMode={isDarkMode}
+                onAdjust={onAdjust} onCommitToTask={onCommitToTask}
+                isCommitted={committedTaskIds.has(item.id)} onEdit={onEdit}
+              />
+            ))}
           </View>
         )}
 
@@ -769,6 +801,14 @@ const styles = StyleSheet.create({
   },
   taskTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 },
   oneThingLabel: { fontSize: 12, fontWeight: '700', color: '#D4A843', fontStyle: 'italic' },
+  oneThingBanner: {
+    flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12,
+    borderWidth: 1, marginBottom: 8, gap: 10,
+  },
+  oneThingBannerIcon: { fontSize: 24 },
+  oneThingBannerTextWrap: { flex: 1 },
+  oneThingBannerTitle: { fontSize: 15, fontWeight: '700' },
+  oneThingBannerSub: { fontSize: 12, marginTop: 2 },
   typeIconWrap: {
     width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center',
   },

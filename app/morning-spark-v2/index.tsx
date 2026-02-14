@@ -34,6 +34,7 @@ import type { ActivityConfig } from '@/lib/activityConfig';
 import {
   FuelLevel,
   FuelWhyReason,
+  Fuel3WhyReason,
   AspirationContent,
   NorthStarCore,
   BrainDumpTriageItem,
@@ -76,6 +77,7 @@ export default function MorningSparkV2Screen() {
   // Step A: Energy
   const [fuelLevel, setFuelLevel] = useState<FuelLevel | null>(null);
   const [fuelWhy, setFuelWhy] = useState<FuelWhyReason | null>(null);
+  const [fuel3Why, setFuel3Why] = useState<Fuel3WhyReason | null>(null);
 
   // Step B: Brain Dump Triage
   const [triageItems, setTriageItems] = useState<BrainDumpTriageItem[]>([]);
@@ -362,7 +364,11 @@ export default function MorningSparkV2Screen() {
           Alert.alert('Tell us why', 'Please select a reason for your low energy.');
           return;
         }
-        const newSparkId = await saveFuelLevel(sparkId, userId, fuelLevel, fuelWhy);
+        if (fuelLevel === 3 && !fuel3Why) {
+          Alert.alert('Quick check', 'What\'s driving this energy? Tap an option to continue.');
+          return;
+        }
+        const newSparkId = await saveFuelLevel(sparkId, userId, fuelLevel, fuelWhy, fuel3Why);
         setSparkId(newSparkId);
       }
 
@@ -537,8 +543,10 @@ export default function MorningSparkV2Screen() {
           <EnergyCheckStep
             fuelLevel={fuelLevel}
             fuelWhy={fuelWhy}
+            fuel3Why={fuel3Why}
             onFuelLevelChange={setFuelLevel}
             onFuelWhyChange={setFuelWhy}
+            onFuel3WhyChange={setFuel3Why}
           />
         )}
         {currentStep === 1 && (
