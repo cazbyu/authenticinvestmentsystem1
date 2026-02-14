@@ -685,13 +685,17 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     .neq('status', 'cancelled')
     .neq('status', 'archived');
 
-  // ── Query B: Overdue non-recurring tasks ──
+  // ── Query B: Overdue NON-recurring tasks only ──
+  // Recurring tasks are handled by their daily occurrence in Query A;
+  // missed past occurrences are not "overdue" — they're just missed.
+  // This prevents goal-linked recurring tasks from piling up as overdue.
   const { data: overdueTasks, error: errorB } = await supabase
     .from('v_tasks_with_recurrence_expanded')
     .select(viewSelect)
     .eq('user_id', userId)
     .lt('occurrence_date', today)
     .eq('is_virtual_occurrence', false)
+    .is('recurrence_rule', null)
     .is('completed_at', null)
     .neq('status', 'cancelled')
     .neq('status', 'archived');
@@ -1031,10 +1035,32 @@ export async function adjustContractItem(
       .update(update)
       .eq('id', taskId);
   } else if (action === 'delete') {
-    await supabase
+    // Check if this is a recurring task — if so, add a recurrence exception
+    // instead of permanently cancelling the template (which kills all future occurrences)
+    const { data: task } = await supabase
       .from('0008-ap-tasks')
-      .update({ status: 'cancelled' })
-      .eq('id', taskId);
+      .select('recurrence_rule, recurrence_exceptions')
+      .eq('id', taskId)
+      .single();
+
+    if (task?.recurrence_rule) {
+      // RECURRING: Add today to recurrence_exceptions — skip just this occurrence
+      const today = toLocalISOString(new Date()).split('T')[0];
+      const currentExceptions: string[] = task.recurrence_exceptions || [];
+      if (!currentExceptions.includes(today)) {
+        currentExceptions.push(today);
+      }
+      await supabase
+        .from('0008-ap-tasks')
+        .update({ recurrence_exceptions: currentExceptions })
+        .eq('id', taskId);
+    } else {
+      // NON-RECURRING (including one-off goal tasks): Safe to cancel
+      await supabase
+        .from('0008-ap-tasks')
+        .update({ status: 'cancelled' })
+        .eq('id', taskId);
+    }
   }
 }
 

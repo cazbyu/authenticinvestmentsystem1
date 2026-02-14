@@ -410,18 +410,18 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
         activeOpacity={0.7}
       >
         <View style={styles.headerLeft}>
-          <Text style={styles.emoji}>{getFuelEmoji(commitment.fuel_level)}</Text>
+          <Text style={styles.emoji}>📋</Text>
           <View style={styles.headerInfo}>
             <Text style={[styles.title, { color: colors.text }]}>
               Today's Contract
             </Text>
             <View style={styles.scoreRow}>
-              <Flame size={14} color={colors.primary} />
+              <CheckSquare size={14} color={colors.primary} />
               <Text style={[styles.score, { color: colors.primary }]}>
-                {commitment.current_score}/{commitment.target_score}
+                {completedItems}/{totalItems}
               </Text>
               <Text style={[styles.remainingText, { color: colors.textSecondary }]}>
-                • {remainingPoints} to go
+                • {totalItems - completedItems} to go
               </Text>
             </View>
           </View>
@@ -454,6 +454,19 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
       {/* Expandable Content */}
       {!collapsed && (
         <>
+          {/* Score / Points Summary */}
+          <View style={[styles.scoreSummary, { backgroundColor: colors.background }]}>
+            <Flame size={14} color={colors.primary} />
+            <Text style={[styles.scoreSummaryText, { color: colors.text }]}>
+              {commitment.current_score}/{commitment.target_score} points
+            </Text>
+            {remainingPoints > 0 && (
+              <Text style={[styles.scoreSummaryRemaining, { color: colors.textSecondary }]}>
+                • {remainingPoints} pts remaining
+              </Text>
+            )}
+          </View>
+
           {/* Events */}
           {commitment.events.length > 0 && (
             <View style={styles.section}>
@@ -729,6 +742,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 16,
+  },
+  scoreSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  scoreSummaryText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  scoreSummaryRemaining: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   section: {
     marginTop: 12,

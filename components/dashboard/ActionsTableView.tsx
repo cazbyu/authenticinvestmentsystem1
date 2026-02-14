@@ -234,6 +234,7 @@ interface ItemRowProps {
   completionTrigger: number;
   colors: any;
   isSwiping?: boolean;
+  isOnTodaysContract?: boolean;
 }
 
 function ItemRow({
@@ -247,6 +248,7 @@ function ItemRow({
   completionTrigger,
   colors,
   isSwiping = false,
+  isOnTodaysContract = false,
 }: ItemRowProps) {
   const handlePress = () => {
     // Prevent opening modal if currently swiping
@@ -313,6 +315,11 @@ function ItemRow({
           </Text>
         )}
       </TouchableOpacity>
+
+      {/* Contract Icon */}
+      {isOnTodaysContract && (
+        <Text style={styles.contractIcon}>📋</Text>
+      )}
 
       {/* Right: Ghost Points */}
       <View style={styles.pointsContainer}>
@@ -400,6 +407,7 @@ export function ActionsTableView({
   const isInitialLoad = useRef(true);
   const [completionTriggers, setCompletionTriggers] = useState<Record<string, number>>({});
   const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const [committedTaskIds, setCommittedTaskIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     isInitialLoad.current = true;
@@ -445,6 +453,15 @@ export function ActionsTableView({
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const todayStartISO = toLocalISOString(todayStart);
+
+      // Fetch today's committed task IDs for contract icon display
+      const { data: sparkData } = await supabase
+        .from('0008-ap-daily-sparks')
+        .select('committed_task_ids')
+        .eq('user_id', userId)
+        .gte('created_at', todayStr)
+        .maybeSingle();
+      setCommittedTaskIds(new Set(sparkData?.committed_task_ids || []));
 
       let tasksData: any[] = [];
 
@@ -906,6 +923,7 @@ export function ActionsTableView({
                 onTaskPress={() => onTaskPress && onTaskPress(item.id)}
                 completionTrigger={completionTriggers[item.id] || 0}
                 colors={colors}
+                isOnTodaysContract={committedTaskIds.has(item.id)}
               />
             </SwipeableRow>
           );
@@ -1068,6 +1086,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#3b82f6',
     lineHeight: 16,
+  },
+  contractIcon: {
+    fontSize: 14,
+    marginRight: 4,
   },
   pointsContainer: {
     minWidth: 50,
