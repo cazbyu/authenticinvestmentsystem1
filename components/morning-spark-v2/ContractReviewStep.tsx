@@ -81,7 +81,8 @@ interface ContractReviewStepProps {
   grouped: GroupedContractItems;
   loading: boolean;
   onAdjust: (taskId: string, action: 'delay' | 'delete' | 'delegate', newDate?: string) => void;
-  onComplete: (taskId: string) => Promise<void>;
+  onCommitToTask: (taskId: string) => void;
+  committedTaskIds: Set<string>;
   onEdit: (taskId: string) => void;
   onAddNew: () => void;
   targetScore: number;
@@ -222,23 +223,23 @@ function TaskCard({
   colors,
   isDarkMode,
   onAdjust,
-  onComplete,
+  onCommitToTask,
+  isCommitted,
   onEdit,
 }: {
   item: WeeklyContractItem;
   colors: ReturnType<typeof useTheme>['colors'];
   isDarkMode: boolean;
   onAdjust: ContractReviewStepProps['onAdjust'];
-  onComplete: ContractReviewStepProps['onComplete'];
+  onCommitToTask: ContractReviewStepProps['onCommitToTask'];
+  isCommitted: boolean;
   onEdit: ContractReviewStepProps['onEdit'];
 }) {
-  const isCompleted = !!item.completed_at;
   const quadrant = getQuadrant(item);
   const showDelegateNudge = isDelegateCandidate(item);
   const daysOverdue = getDaysOverdue(item.due_date);
   const isOverdue = daysOverdue > 0;
   const [celebrationType, setCelebrationType] = useState<CelebrationType | null>(null);
-  const [completing, setCompleting] = useState(false);
 
   const handleReschedule = () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -259,17 +260,12 @@ function TaskCard({
     }, 1300);
   };
 
-  const handleComplete = async () => {
-    if (completing || celebrationType) return;
-    setCompleting(true);
+  const handleDoIt = () => {
+    if (isCommitted || celebrationType) return;
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCelebrationType('commit');
-    try {
-      await onComplete(item.id);
-    } catch (e) {
-      console.error('Error completing task:', e);
-    }
-    setCompleting(false);
+    // "Do It" = commit to the task for today's contract (NOT mark completed)
+    onCommitToTask(item.id);
   };
 
   const handleEdit = () => {
@@ -294,11 +290,14 @@ function TaskCard({
       style={[
         styles.taskCard,
         {
-          backgroundColor: isDarkMode ? colors.surface : '#FFFFFF',
-          borderColor: isOverdue ? '#DC454540' : (isDarkMode ? colors.border : '#EDF2F7'),
-          borderLeftColor: quadrant.border,
+          backgroundColor: isCommitted
+            ? (isDarkMode ? '#1A3A2A' : '#F0FFF4')
+            : (isDarkMode ? colors.surface : '#FFFFFF'),
+          borderColor: isCommitted
+            ? '#3DA87A40'
+            : isOverdue ? '#DC454540' : (isDarkMode ? colors.border : '#EDF2F7'),
+          borderLeftColor: isCommitted ? '#3DA87A' : quadrant.border,
           borderLeftWidth: 4,
-          opacity: isCompleted ? 0.5 : 1,
         },
       ]}
     >
@@ -315,7 +314,7 @@ function TaskCard({
             style={[
               styles.taskTitle,
               { color: colors.text },
-              isCompleted && styles.strikethrough,
+              !!item.completed_at && styles.strikethrough,
             ]}
             numberOfLines={2}
           >
@@ -373,13 +372,19 @@ function TaskCard({
       )}
 
       {/* Row 4: Action buttons */}
-      {!isCompleted && (
-        <View style={styles.actionsRow}>
-          {/* Do It (commit — 🫶 heart-hands celebration) */}
+      <View style={styles.actionsRow}>
+        {/* Do It (commit to contract — 🫶 heart-hands celebration) */}
+        {isCommitted ? (
+          <View style={[styles.actionBtn, styles.committedBtn]}>
+            <Text style={styles.actionBtnEmoji}>{'\u{1FAF6}'}</Text>
+            <Text style={[styles.actionBtnLabel, { color: '#3DA87A', fontWeight: '700' }]}>
+              Committed
+            </Text>
+          </View>
+        ) : (
           <TouchableOpacity
             style={[styles.actionBtn, styles.doItBtn]}
-            onPress={handleComplete}
-            disabled={completing}
+            onPress={handleDoIt}
             activeOpacity={0.7}
           >
             <Text style={styles.actionBtnEmoji}>{'\u{1FAF6}'}</Text>
@@ -387,8 +392,10 @@ function TaskCard({
               Do It
             </Text>
           </TouchableOpacity>
+        )
 
-          {/* Reschedule (opens date picker) */}
+        {/* Reschedule (opens date picker) — hidden once committed */}
+        {!isCommitted && (
           <TouchableOpacity
             style={[styles.actionBtn, { borderColor: colors.border }]}
             onPress={handleReschedule}
@@ -397,8 +404,10 @@ function TaskCard({
             <CalendarDays size={13} color={colors.textSecondary} />
             <Text style={[styles.actionBtnLabel, { color: colors.textSecondary }]}>Reschedule</Text>
           </TouchableOpacity>
+        )}
 
-          {/* Delegate */}
+        {/* Delegate — hidden once committed */}
+        {!isCommitted && (
           <TouchableOpacity
             style={[
               styles.actionBtn,
@@ -423,8 +432,10 @@ function TaskCard({
               <View style={[styles.nudgeDot, { backgroundColor: quadrant.border }]} />
             )}
           </TouchableOpacity>
+        )}
 
-          {/* Delete (🗑️ "Get Out of Here!" celebration) */}
+        {/* Delete (🗑️ "Get Out of Here!" celebration) */}
+        {!isCommitted && (
           <TouchableOpacity
             style={[styles.actionBtn, { borderColor: '#C7605B40' }]}
             onPress={handleRemove}
@@ -432,8 +443,8 @@ function TaskCard({
           >
             <Text style={styles.actionBtnEmoji}>{'\u{1F5D1}\uFE0F'}</Text>
           </TouchableOpacity>
-        </View>
-      )}
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -444,7 +455,8 @@ export default function ContractReviewStep({
   grouped,
   loading,
   onAdjust,
-  onComplete,
+  onCommitToTask,
+  committedTaskIds,
   onEdit,
   onAddNew,
   targetScore,
@@ -524,7 +536,8 @@ export default function ContractReviewStep({
           items.map((item) => (
             <TaskCard
               key={item.id} item={item} colors={colors} isDarkMode={isDarkMode}
-              onAdjust={onAdjust} onComplete={onComplete} onEdit={onEdit}
+              onAdjust={onAdjust} onCommitToTask={onCommitToTask}
+              isCommitted={committedTaskIds.has(item.id)} onEdit={onEdit}
             />
           ))}
       </View>
@@ -651,7 +664,8 @@ export default function ContractReviewStep({
                     {goalGroup.tasks.map((item) => (
                       <TaskCard
                         key={item.id} item={item} colors={colors} isDarkMode={isDarkMode}
-                        onAdjust={onAdjust} onComplete={onComplete} onEdit={onEdit}
+                        onAdjust={onAdjust} onCommitToTask={onCommitToTask}
+                        isCommitted={committedTaskIds.has(item.id)} onEdit={onEdit}
                       />
                     ))}
                   </View>
@@ -793,6 +807,9 @@ const styles = StyleSheet.create({
   },
   doItBtn: {
     borderColor: '#3DA87A50', backgroundColor: '#3DA87A10',
+  },
+  committedBtn: {
+    borderColor: '#3DA87A', backgroundColor: '#3DA87A20', borderWidth: 1.5,
   },
   actionBtnLabel: { fontSize: 11, fontWeight: '500' },
   actionBtnEmoji: { fontSize: 13 },

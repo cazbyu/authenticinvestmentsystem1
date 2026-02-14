@@ -15,7 +15,6 @@ import { Clock } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import {
   AspirationContent,
-  GroupedContractItems,
   WeeklyContractItem,
   DelegationItem,
 } from '@/lib/morningSparkV2Service';
@@ -38,7 +37,7 @@ function getQuadrantColor(item: WeeklyContractItem): string {
 
 interface ContractCloseStepProps {
   aspiration: AspirationContent | null;
-  grouped: GroupedContractItems;
+  committedItems: WeeklyContractItem[];
   delegations: DelegationItem[];
   targetScore: number;
   contractItemCount: number;
@@ -102,39 +101,37 @@ function CommittedItemRow({
 // ── Build AI coaching summary ─────────────────────────────────────
 
 function buildCoachingSummary(
-  grouped: GroupedContractItems,
+  items: WeeklyContractItem[],
   delegations: DelegationItem[],
 ): string {
-  const allItems = [
-    ...grouped.roles,
-    ...grouped.wellness,
-    ...grouped.goals.flatMap((g) => g.tasks),
-    ...grouped.unassigned,
-  ].filter((i) => !i.completed_at);
-
-  const events = allItems.filter((i) => i.type === 'event');
-  const tasks = allItems.filter((i) => i.type === 'task');
+  const events = items.filter((i) => i.type === 'event');
+  const tasks = items.filter((i) => i.type === 'task');
 
   // Count unique roles
   const roleSet = new Set<string>();
-  allItems.forEach((i) => i.roles.forEach((r) => roleSet.add(r.label)));
+  items.forEach((i) => i.roles.forEach((r) => roleSet.add(r.label)));
   const roleCount = roleSet.size;
 
   // Count unique wellness domains
   const domainSet = new Set<string>();
-  allItems.forEach((i) => i.domains.forEach((d) => domainSet.add(d.name)));
+  items.forEach((i) => i.domains.forEach((d) => domainSet.add(d.name)));
   const wellnessCount = domainSet.size;
 
-  // Build goal summary
-  const goalSummaries: string[] = [];
-  for (const goalGroup of grouped.goals) {
-    const activeTasks = goalGroup.tasks.filter((t) => !t.completed_at);
-    if (activeTasks.length > 0) {
-      goalSummaries.push(
-        `${activeTasks.length} action${activeTasks.length !== 1 ? 's' : ''} toward "${goalGroup.goalTitle}"`
-      );
-    }
-  }
+  // Build goal summary from unique goals across all committed items
+  const goalMap = new Map<string, { title: string; count: number }>();
+  items.forEach((i) => {
+    i.goals.forEach((g) => {
+      const existing = goalMap.get(g.id);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        goalMap.set(g.id, { title: g.title, count: 1 });
+      }
+    });
+  });
+  const goalSummaries = Array.from(goalMap.values()).map(
+    (g) => `${g.count} action${g.count !== 1 ? 's' : ''} toward "${g.title}"`
+  );
 
   // Delegation count
   const delegateCount = delegations.filter((d) => d.status !== 'completed').length;
@@ -152,9 +149,9 @@ function buildCoachingSummary(
   }
 
   if (countParts.length > 0) {
-    parts.push(`You have ${countParts.join(' and ')} for today`);
+    parts.push(`You committed to ${countParts.join(' and ')} for today`);
   } else {
-    parts.push("You don't have anything scheduled for today");
+    parts.push("You haven't committed to anything yet — go back and tap \"Do It\" on items you want to tackle today");
   }
 
   // Role + wellness + goal support
@@ -192,10 +189,10 @@ function buildCoachingSummary(
   summary = summary.replace(/\. y/g, '. Y');
 
   // Tone assessment
-  const totalActive = allItems.length;
+  const totalActive = items.length;
   let tone: string;
   if (totalActive === 0) {
-    tone = "Hmm, an empty slate — consider adding a few meaningful items to make the day count.";
+    tone = "Hmm, an empty slate — go back to the Contract step and commit to some items.";
   } else if (totalActive <= 3) {
     tone = "A focused day — quality over quantity. Make each one count.";
   } else if (totalActive <= 7) {
@@ -215,7 +212,7 @@ function buildCoachingSummary(
 
 export default function ContractCloseStep({
   aspiration,
-  grouped,
+  committedItems,
   delegations,
   targetScore,
   contractItemCount,
@@ -280,23 +277,16 @@ export default function ContractCloseStep({
 
   // Sorted items: events first (one_thing on top), then tasks (one_thing on top)
   const sortedItems = useMemo(() => {
-    const all = [
-      ...grouped.roles,
-      ...grouped.wellness,
-      ...grouped.goals.flatMap((g) => g.tasks),
-      ...grouped.unassigned,
-    ].filter((i) => !i.completed_at);
-
-    const events = all
+    const events = committedItems
       .filter((i) => i.type === 'event')
       .sort((a, b) => (b.one_thing ? 1 : 0) - (a.one_thing ? 1 : 0));
 
-    const tasks = all
+    const tasks = committedItems
       .filter((i) => i.type === 'task')
       .sort((a, b) => (b.one_thing ? 1 : 0) - (a.one_thing ? 1 : 0));
 
     return { events, tasks };
-  }, [grouped]);
+  }, [committedItems]);
 
   // Active delegations
   const activeDelegations = useMemo(
@@ -306,8 +296,8 @@ export default function ContractCloseStep({
 
   // AI coaching summary
   const coachingSummary = useMemo(
-    () => buildCoachingSummary(grouped, delegations),
-    [grouped, delegations],
+    () => buildCoachingSummary(committedItems, delegations),
+    [committedItems, delegations],
   );
 
   return (

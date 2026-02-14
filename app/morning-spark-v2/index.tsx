@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -25,6 +26,9 @@ import { DelegationStep } from '@/components/morning-spark-v2/DelegationStep';
 import ContractCloseStep from '@/components/morning-spark-v2/ContractCloseStep';
 import { DelegateModal } from '@/components/morning-spark/DelegateModal';
 import { RescheduleModal } from '@/components/morning-spark/RescheduleModal';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
+import { getActivityConfig } from '@/lib/activityConfig';
+import type { ActivityConfig } from '@/lib/activityConfig';
 
 // Service layer
 import {
@@ -34,6 +38,7 @@ import {
   NorthStarCore,
   BrainDumpTriageItem,
   GroupedContractItems,
+  WeeklyContractItem,
   DelegationItem,
   saveFuelLevel,
   getNorthStarCore,
@@ -41,7 +46,6 @@ import {
   getBrainDumpAndFollowUps,
   getWeeklyContractForToday,
   adjustContractItem,
-  completeContractItem,
   delegateContractItem,
   getDelegations,
   commitMorningSparkV2,
@@ -106,14 +110,14 @@ export default function MorningSparkV2Screen() {
     id: string; title: string; start_date: string; start_time: string; end_time?: string;
   } | null>(null);
 
-  // Step F: Close — snapshot of contract at time of entering contract step
-  // This preserves the full list even after Do It / Delete / Reschedule actions drain contractItems
-  const [contractSnapshot, setContractSnapshot] = useState<GroupedContractItems>({
-    roles: [],
-    wellness: [],
-    goals: [],
-    unassigned: [],
-  });
+  // Add New task/event modal (uses same TaskEventForm as FAB)
+  const [addNewModalVisible, setAddNewModalVisible] = useState(false);
+  const [addNewConfig, setAddNewConfig] = useState<ActivityConfig | null>(null);
+
+  // Committed task IDs — tracks which items the user clicked "Do It" on
+  // "Do It" = "I commit to doing this" (NOT "mark completed")
+  const [committedTaskIds, setCommittedTaskIds] = useState<Set<string>>(new Set());
+
   const [committing, setCommitting] = useState(false);
 
   // Derived values — goals is now GoalContractGroup[], flatten for counts
@@ -131,18 +135,11 @@ export default function MorningSparkV2Screen() {
     .filter((item) => !item.completed_at)
     .reduce((sum, item) => sum + item.points, 0);
 
-  // Snapshot-derived values for the Close step (doesn't drain as user acts on items)
-  const snapshotGoalTasks = contractSnapshot.goals.flatMap((g) => g.tasks);
-  const allSnapshotItems = [
-    ...contractSnapshot.roles,
-    ...contractSnapshot.wellness,
-    ...snapshotGoalTasks,
-    ...contractSnapshot.unassigned,
-  ];
-  const snapshotItemCount = allSnapshotItems.length;
-  const snapshotTargetScore = allSnapshotItems
-    .filter((item) => !item.completed_at)
-    .reduce((sum, item) => sum + item.points, 0);
+  // Committed items for Close step — only items user explicitly clicked "Do It" on
+  const committedItems: WeeklyContractItem[] = allContractItems.filter(
+    (item) => committedTaskIds.has(item.id)
+  );
+  const committedTargetScore = committedItems.reduce((sum, item) => sum + item.points, 0);
 
   // ---- Initial data load ----
 
@@ -224,9 +221,15 @@ export default function MorningSparkV2Screen() {
           return;
         }
 
-        // Delete action
+        // Delete action — cancel the task in DB then remove from local state
         await adjustContractItem(taskId, action, newDate);
-        // Refresh contract items
+        // Remove from committedTaskIds if it was committed
+        setCommittedTaskIds((prev) => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+        // Refresh contract items so deleted task disappears
         const grouped = await getWeeklyContractForToday(userId);
         setContractItems(grouped);
       } catch (e) {
@@ -257,7 +260,13 @@ export default function MorningSparkV2Screen() {
     async (taskId: string, newDate: string, newStartTime: string, newEndTime: string | null) => {
       try {
         await adjustContractItem(taskId, 'delay', newDate, newStartTime, newEndTime);
-        // Refresh contract items to reflect the reschedule
+        // Remove from committedTaskIds if it was committed (it's moved to another day)
+        setCommittedTaskIds((prev) => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+        // Refresh contract items — rescheduled item moves off today
         const grouped = await getWeeklyContractForToday(userId);
         setContractItems(grouped);
       } catch (e) {
@@ -268,21 +277,18 @@ export default function MorningSparkV2Screen() {
     [userId],
   );
 
-  // ---- Complete task handler (Do It / commit) ----
+  // ---- "Do It" handler — commit to doing the task (NOT mark completed) ----
 
-  const handleCompleteContract = useCallback(
-    async (taskId: string) => {
-      try {
-        await completeContractItem(taskId);
-        // Refresh contract items so the completed task gets hidden
-        const grouped = await getWeeklyContractForToday(userId);
-        setContractItems(grouped);
-      } catch (e) {
-        console.error('Error completing contract item:', e);
-        throw e;
-      }
+  const handleCommitToTask = useCallback(
+    (taskId: string) => {
+      console.log('[MorningSpark] User committed to task:', taskId);
+      setCommittedTaskIds((prev) => {
+        const next = new Set(prev);
+        next.add(taskId);
+        return next;
+      });
     },
-    [userId],
+    [],
   );
 
   // ---- Edit task handler ----
@@ -292,12 +298,28 @@ export default function MorningSparkV2Screen() {
     Alert.alert('Coming Soon', 'Task editing will be available soon.');
   }, []);
 
-  // ---- Add new placeholder ----
+  // ---- Add new task/event (opens same form as FAB) ----
 
   const handleAddNew = useCallback(() => {
-    // TODO: Open TaskEventForm modal
-    Alert.alert('Coming Soon', 'Add new task functionality will be available soon.');
+    // Default to task; the form lets user switch to event
+    setAddNewConfig(getActivityConfig('task'));
+    setAddNewModalVisible(true);
   }, []);
+
+  // When a new task/event is created from the Add New modal
+  const handleAddNewSubmitSuccess = useCallback(async () => {
+    setAddNewModalVisible(false);
+    setAddNewConfig(null);
+    // Refresh contract items to include the newly created task
+    if (userId) {
+      try {
+        const grouped = await getWeeklyContractForToday(userId);
+        setContractItems(grouped);
+      } catch (e) {
+        console.error('Error refreshing contract after add:', e);
+      }
+    }
+  }, [userId]);
 
   // ---- Commit handler ----
 
@@ -305,7 +327,8 @@ export default function MorningSparkV2Screen() {
     if (!sparkId) return;
     setCommitting(true);
     try {
-      await commitMorningSparkV2(sparkId, userId, targetScore);
+      // Save using the committed items' score, not the full contract score
+      await commitMorningSparkV2(sparkId, userId, committedTargetScore, Array.from(committedTaskIds));
       // ContractCloseStep handles the celebration animation
       // After 3 seconds, navigate to dashboard
       setTimeout(() => {
@@ -317,7 +340,7 @@ export default function MorningSparkV2Screen() {
     } finally {
       setCommitting(false);
     }
-  }, [sparkId, userId, targetScore, router]);
+  }, [sparkId, userId, committedTargetScore, committedTaskIds, router]);
 
   // ---- Step navigation ----
 
@@ -377,14 +400,23 @@ export default function MorningSparkV2Screen() {
     }
     if (nextStep === 3) {
       setContractLoading(true);
+      console.log('[MorningSpark] Loading contract for userId:', userId);
       getWeeklyContractForToday(userId)
         .then((grouped) => {
+          const total = grouped.roles.length + grouped.wellness.length +
+            grouped.goals.flatMap(g => g.tasks).length + grouped.unassigned.length;
+          console.log('[MorningSpark] Contract loaded:', total, 'items',
+            '(roles:', grouped.roles.length,
+            'wellness:', grouped.wellness.length,
+            'goals:', grouped.goals.flatMap(g => g.tasks).length,
+            'unassigned:', grouped.unassigned.length, ')');
           setContractItems(grouped);
-          // Capture snapshot for the Close step — this won't be drained by Do It / Delete actions
-          setContractSnapshot(grouped);
           setContractLoading(false);
         })
-        .catch(() => setContractLoading(false));
+        .catch((err) => {
+          console.error('[MorningSpark] Error loading contract:', err);
+          setContractLoading(false);
+        });
     }
     if (nextStep === 4) {
       setDelegationLoading(true);
@@ -534,7 +566,8 @@ export default function MorningSparkV2Screen() {
             grouped={contractItems}
             loading={contractLoading}
             onAdjust={handleAdjustContract}
-            onComplete={handleCompleteContract}
+            onCommitToTask={handleCommitToTask}
+            committedTaskIds={committedTaskIds}
             onEdit={handleEditContract}
             onAddNew={handleAddNew}
             targetScore={targetScore}
@@ -546,10 +579,10 @@ export default function MorningSparkV2Screen() {
         {currentStep === 5 && (
           <ContractCloseStep
             aspiration={aspiration}
-            grouped={contractSnapshot}
+            committedItems={committedItems}
             delegations={delegations}
-            targetScore={snapshotTargetScore}
-            contractItemCount={snapshotItemCount}
+            targetScore={committedTargetScore}
+            contractItemCount={committedItems.length}
             onCommit={handleCommit}
             committing={committing}
           />
@@ -603,6 +636,19 @@ export default function MorningSparkV2Screen() {
         }}
         onReschedule={handleRescheduleTask}
       />
+
+      {/* Add New task/event modal — same as FAB */}
+      <Modal visible={addNewModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <TaskEventForm
+          mode="create"
+          onSubmitSuccess={handleAddNewSubmitSuccess}
+          onClose={() => {
+            setAddNewModalVisible(false);
+            setAddNewConfig(null);
+          }}
+          config={addNewConfig || undefined}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }

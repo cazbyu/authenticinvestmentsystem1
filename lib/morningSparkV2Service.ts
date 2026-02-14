@@ -632,6 +632,8 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
 
+  console.log('[Contract] Querying tasks for userId:', userId, 'today:', today);
+
   // Get tasks due today or overdue — only INCOMPLETE, non-cancelled tasks
   const { data: tasks, error } = await supabase
     .from('0008-ap-tasks')
@@ -647,14 +649,17 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     .order('start_time', { ascending: true, nullsFirst: false });
 
   if (error) {
-    console.error('[Contract] Error fetching tasks:', error.message, error.details);
+    console.error('[Contract] Error fetching tasks:', error.message, error.details, error.hint, error.code);
     return { roles: [], wellness: [], goals: [], unassigned: [] };
   }
   if (!tasks || tasks.length === 0) {
-    console.log('[Contract] No tasks found for today:', today);
+    console.log('[Contract] No tasks found for today:', today, '— this might be a query issue.');
+    console.log('[Contract] Query filters: user_id=', userId, 'deleted_at IS NULL, completed_at IS NULL, status != cancelled/archived');
+    console.log('[Contract] OR clause: due_date.eq.', today, 'OR due_date.lt.', today, 'OR start_date.eq.', today);
     return { roles: [], wellness: [], goals: [], unassigned: [] };
   }
-  console.log('[Contract] Found', tasks.length, 'tasks for', today);
+  console.log('[Contract] Found', tasks.length, 'tasks for', today,
+    '— types:', tasks.map(t => t.type).join(', '));
 
   const taskIds = tasks.map(t => t.id);
 
@@ -986,23 +991,47 @@ export async function getDelegations(userId: string): Promise<DelegationItem[]> 
 
 /**
  * Commit the morning spark (finalize the contract).
+ * Saves the committed task IDs as a JSONB array so the contract is viewable later.
  */
 export async function commitMorningSparkV2(
   sparkId: string,
   userId: string,
-  targetScore: number
+  targetScore: number,
+  committedTaskIds?: string[],
 ): Promise<void> {
   const supabase = getSupabaseClient();
 
+  const updatePayload: Record<string, any> = {
+    committed_at: new Date().toISOString(),
+    initial_target_score: targetScore,
+  };
+
+  // Save committed task IDs if the column exists (graceful fallback)
+  if (committedTaskIds && committedTaskIds.length > 0) {
+    updatePayload.committed_task_ids = committedTaskIds;
+  }
+
   const { error } = await supabase
     .from('0008-ap-daily-sparks')
-    .update({
-      committed_at: new Date().toISOString(),
-      initial_target_score: targetScore,
-    })
+    .update(updatePayload)
     .eq('id', sparkId);
 
-  if (error) throw error;
+  if (error) {
+    // If the column doesn't exist yet, retry without it
+    if (error.message?.includes('committed_task_ids')) {
+      console.warn('[MorningSpark] committed_task_ids column not found, saving without it');
+      const { error: retryError } = await supabase
+        .from('0008-ap-daily-sparks')
+        .update({
+          committed_at: new Date().toISOString(),
+          initial_target_score: targetScore,
+        })
+        .eq('id', sparkId);
+      if (retryError) throw retryError;
+    } else {
+      throw error;
+    }
+  }
 }
 
 // ============ EVENING REVIEW V2 FUNCTIONS ============
