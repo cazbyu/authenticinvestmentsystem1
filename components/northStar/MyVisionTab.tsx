@@ -213,17 +213,27 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
       const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
       const trimmedText = editText.trim();
 
-      const { data: existing } = await supabase
+      console.log('[MyVisionTab] Saving:', { fieldName, trimmedText, userId: user.id, editingField });
+
+      const { data: existing, error: selectError } = await supabase
         .from('0008-ap-north-star')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      console.log('[MyVisionTab] Existing row:', { existing, selectError });
+
       if (existing) {
-        const { error: updateError } = await supabase
+        const updatePayload = { [fieldName]: trimmedText, updated_at: new Date().toISOString() };
+        console.log('[MyVisionTab] Update payload:', JSON.stringify(updatePayload));
+
+        const { error: updateError, data: updateData, count } = await supabase
           .from('0008-ap-north-star')
-          .update({ [fieldName]: trimmedText, updated_at: new Date().toISOString() })
-          .eq('user_id', user.id);
+          .update(updatePayload)
+          .eq('user_id', user.id)
+          .select();
+
+        console.log('[MyVisionTab] Update result:', { updateError, updateData, count });
 
         if (updateError) {
           console.error('[MyVisionTab] Update error:', updateError);
