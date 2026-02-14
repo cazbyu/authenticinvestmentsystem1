@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Check, FileText, Paperclip, Users, X, Trash2 } from 'lucide-react-native';
 import { calculateTaskPoints } from '@/lib/taskUtils';
+import { OverdueWarningBadge, getDaysOverdue } from './OverdueWarningBadge';
 
 // Interface for a Task
 export interface Task {
@@ -12,6 +13,7 @@ export interface Task {
   end_date?: string;
   start_time?: string;
   end_time?: string;
+  due_time?: string;
   recurrence_rule?: string;
   recurrence_end_date?: string;
   recurrence_exceptions?: string[];
@@ -50,6 +52,8 @@ interface TaskCardProps {
   task: Task;
   onComplete: (task: Task) => void;
   onDelete?: (task: Task) => void;
+  onArchive?: (taskId: string) => void;
+  onReschedule?: (taskId: string) => void;
   onLongPress?: () => void;
   onPress?: (task: Task) => void;
   isDragging?: boolean;
@@ -58,7 +62,7 @@ interface TaskCardProps {
 // --- TaskCard Component ---
 // Renders a single task item in the list
 export const TaskCard = React.forwardRef<View, TaskCardProps>(
-  ({ task, onComplete, onDelete, onLongPress, onPress, isDragging }, ref) => {
+  ({ task, onComplete, onDelete, onArchive, onReschedule, onLongPress, onPress, isDragging }, ref) => {
 
   // Determines the border color based on task priority
   const getBorderColor = () => {
@@ -192,6 +196,15 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
               )}
             </View>
           </View>
+          {getDaysOverdue(task.due_date) >= 3 && onArchive && onReschedule && (
+            <OverdueWarningBadge
+              dueDate={task.due_date!}
+              taskId={task.id}
+              onArchive={onArchive}
+              onDelete={(_taskId) => onDelete?.(task)}
+              onReschedule={onReschedule}
+            />
+          )}
         </View>
         <View style={styles.rightSection}>
           <View style={styles.topActionRow}>

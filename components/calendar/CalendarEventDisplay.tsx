@@ -27,6 +27,10 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
   const isEvent = task.type === 'event';
   const isCompleted = task.status === 'completed';
 
+  // For tasks, prefer due_time over start_time (post-migration).
+  // For events, always use start_time.
+  const displayStartTime = isTask ? (task.due_time || task.start_time) : task.start_time;
+
   return (
     <TouchableOpacity
       style={[
@@ -46,14 +50,14 @@ export function CalendarEventDisplay({ task, onPress, style }: CalendarEventDisp
             {task.title}
           </Text>
         </View>
-        {!isNoTimeTask && task.start_time && task.end_time && (
+        {!isNoTimeTask && displayStartTime && task.end_time && (
           <Text style={styles.eventTime}>
-            {formatTime(task.start_time)} – {formatTime(task.end_time)}
+            {formatTime(displayStartTime)} – {formatTime(task.end_time)}
           </Text>
         )}
-        {!isNoTimeTask && task.start_time && !task.end_time && (
+        {!isNoTimeTask && displayStartTime && !task.end_time && (
           <Text style={styles.eventTime}>
-            {formatTime(task.start_time)}
+            {formatTime(displayStartTime)}
           </Text>
         )}
         {isNoTimeTask && (

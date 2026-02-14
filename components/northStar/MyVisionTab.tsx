@@ -217,9 +217,11 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
       const { data: existing, error: selectError } = await supabase
         .from('0008-ap-north-star')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .upsert({
+          user_id: user.id,
+          [fieldName]: editText.trim(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
 
       console.log('[MyVisionTab] Existing row:', { existing, selectError });
 

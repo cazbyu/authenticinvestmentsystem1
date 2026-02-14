@@ -24,18 +24,27 @@ const getTimeInMinutes = (timeString: string) => {
   return parsed.hours * 60 + parsed.minutes;
 };
 
+// For tasks, use due_time (post-migration) with start_time as fallback.
+// For events, always use start_time.
+const getEffectiveStartTime = (item: Task): string | undefined => {
+  if (item.type === 'task') {
+    return item.due_time || item.start_time;
+  }
+  return item.start_time;
+};
+
 const calculateEventLayout = (events: Task[]) => {
   if (events.length === 0) return [];
 
   const sortedEvents = [...events].sort((a, b) => {
-    const aStart = getTimeInMinutes(a.start_time!);
-    const bStart = getTimeInMinutes(b.start_time!);
+    const aStart = getTimeInMinutes(getEffectiveStartTime(a)!);
+    const bStart = getTimeInMinutes(getEffectiveStartTime(b)!);
     return aStart - bStart;
   });
 
   const eventsWithLayout = sortedEvents.map(event => ({
     ...event,
-    startMinutes: getTimeInMinutes(event.start_time!),
+    startMinutes: getTimeInMinutes(getEffectiveStartTime(event)!),
     endMinutes: getTimeInMinutes(event.end_time!),
     column: 0,
     maxColumns: 1,
@@ -151,8 +160,8 @@ const WeeklyTimeGridComponent = ({
       const dateStr = formatLocalDate(date);
       const dayTasks = tasksByDate[dateStr] || [];
 
-      const timedEvents = dayTasks.filter(task => task.start_time && task.end_time && !task.is_all_day);
-      const noTimeItems = dayTasks.filter(task => !task.is_all_day && !task.is_anytime && (!task.start_time || !task.end_time));
+      const timedEvents = dayTasks.filter(task => getEffectiveStartTime(task) && task.end_time && !task.is_all_day);
+      const noTimeItems = dayTasks.filter(task => !task.is_all_day && !task.is_anytime && (!getEffectiveStartTime(task) || !task.end_time));
 
       const noTimeItemsAsMidnight = noTimeItems.map(task => ({
         ...task,

@@ -34,6 +34,7 @@ interface ActionItem {
   start_date: string | null;
   start_time: string | null;
   end_time: string | null;
+  due_time: string | null;
   is_urgent: boolean;
   is_important: boolean;
   is_deposit_idea: boolean;
@@ -450,7 +451,7 @@ export function ActionsTableView({
       if (filter === 'task') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
@@ -465,7 +466,7 @@ export function ActionsTableView({
       } else if (filter === 'event') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'event')
           .is('deleted_at', null)
@@ -481,7 +482,7 @@ export function ActionsTableView({
       } else {
         let tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
@@ -490,7 +491,7 @@ export function ActionsTableView({
 
         let eventsQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'event')
           .is('deleted_at', null)
@@ -593,6 +594,7 @@ export function ActionsTableView({
             start_date: task.start_date,
             start_time: task.start_time,
             end_time: task.end_time,
+            due_time: task.due_time,
             is_urgent: task.is_urgent,
             is_important: task.is_important,
             is_deposit_idea: task.is_deposit_idea || false,
@@ -863,7 +865,12 @@ export function ActionsTableView({
           const priorityColor = getPriorityColor(item);
           const isCompleted = item.isCompleted;
 
-          const startTimeFormatted = formatTime(item.start_time);
+          // For tasks, prefer due_time over start_time (post-migration).
+          // For events, always use start_time.
+          const effectiveStartTime = item.type === 'task'
+            ? (item.due_time || item.start_time)
+            : item.start_time;
+          const startTimeFormatted = formatTime(effectiveStartTime);
           const endTimeFormatted = formatTime(item.end_time);
           const timeDisplay = startTimeFormatted && endTimeFormatted
             ? `${startTimeFormatted} - ${endTimeFormatted}`
