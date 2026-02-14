@@ -101,15 +101,15 @@ export async function calculate12WeekGoalExecution(
 
     const taskIds = taskJoins.map(j => j.parent_id);
 
-    // 3. Count completed tasks this week
+    // 3. Count completed occurrences this week (using recurrence-expanded view)
     const { data: completedTasks, error: completedError } = await supabase
-      .from('0008-ap-tasks')
-      .select('id', { count: 'exact', head: true })
-      .in('id', taskIds)
-      .eq('status', 'completed')
-      .gte('completed_at', weekStartDate)
-      .lte('completed_at', weekEndDate)
-      .is('deleted_at', null);
+      .from('v_tasks_with_recurrence_expanded')
+      .select('source_task_id')
+      .eq('user_id', userId)
+      .in('source_task_id', taskIds)
+      .not('completed_at', 'is', null)
+      .gte('occurrence_date', weekStartDate)
+      .lte('occurrence_date', weekEndDate);
 
     if (completedError) throw completedError;
 

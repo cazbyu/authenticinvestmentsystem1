@@ -27,6 +27,8 @@ import ContractCloseStep from '@/components/morning-spark-v2/ContractCloseStep';
 import { DelegateModal } from '@/components/morning-spark/DelegateModal';
 import { RescheduleModal } from '@/components/morning-spark/RescheduleModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
+import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
+import { Task } from '@/components/tasks/TaskCard';
 import { getActivityConfig } from '@/lib/activityConfig';
 import type { ActivityConfig } from '@/lib/activityConfig';
 
@@ -124,6 +126,10 @@ export default function MorningSparkV2Screen() {
   // Add New task/event modal (uses same TaskEventForm as FAB)
   const [addNewModalVisible, setAddNewModalVisible] = useState(false);
   const [addNewConfig, setAddNewConfig] = useState<ActivityConfig | null>(null);
+
+  // Edit task modal (ActionDetailsModal for editing roles/wellness zones)
+  const [editTaskModalVisible, setEditTaskModalVisible] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   // Committed task IDs — tracks which items the user clicked "Do It" on
   // "Do It" = "I commit to doing this" (NOT "mark completed")
@@ -343,10 +349,38 @@ export default function MorningSparkV2Screen() {
 
   // ---- Edit task handler ----
 
-  const handleEditContract = useCallback((_taskId: string) => {
-    // TODO: Open ActionDetailsModal or TaskEventForm for this task
-    Alert.alert('Coming Soon', 'Task editing will be available soon.');
-  }, []);
+  const handleEditContract = useCallback((taskId: string) => {
+    // Find the task from contractItems (search all sections)
+    const allItems = [
+      ...(contractItems?.events || []),
+      ...(contractItems?.roles || []),
+      ...(contractItems?.wellness || []),
+      ...(contractItems?.unassigned || []),
+      ...(contractItems?.goals?.flatMap(g => g.tasks) || []),
+    ];
+    const found = allItems.find(item => item.id === taskId);
+    if (found) {
+      // Cast WeeklyContractItem to Task shape (compatible core fields)
+      setEditingTask(found as unknown as Task);
+      setEditTaskModalVisible(true);
+    }
+  }, [contractItems]);
+
+  // ---- Edit task submit success — refresh contract after role/wellness changes ----
+
+  const handleEditSubmitSuccess = useCallback(async () => {
+    setEditTaskModalVisible(false);
+    setEditingTask(null);
+    // Refresh contract to reflect role/wellness changes
+    if (userId) {
+      try {
+        const grouped = await getWeeklyContractForToday(userId);
+        setContractItems(grouped);
+      } catch (e) {
+        console.error('Error refreshing contract after edit:', e);
+      }
+    }
+  }, [userId]);
 
   // ---- Add new task/event (opens same form as FAB) ----
 
@@ -377,8 +411,13 @@ export default function MorningSparkV2Screen() {
     if (!sparkId) return;
     setCommitting(true);
     try {
+      // Build points map so the dashboard can show scores without re-computing
+      const pointsMap: Record<string, number> = {};
+      for (const item of committedItems) {
+        pointsMap[item.id] = item.points;
+      }
       // Save using the committed items' score, not the full contract score
-      await commitMorningSparkV2(sparkId, userId, committedTargetScore, Array.from(committedTaskIds));
+      await commitMorningSparkV2(sparkId, userId, committedTargetScore, Array.from(committedTaskIds), pointsMap);
       // ContractCloseStep handles the celebration animation
       // After 3 seconds, navigate to dashboard
       setTimeout(() => {
@@ -390,7 +429,7 @@ export default function MorningSparkV2Screen() {
     } finally {
       setCommitting(false);
     }
-  }, [sparkId, userId, committedTargetScore, committedTaskIds, router]);
+  }, [sparkId, userId, committedTargetScore, committedTaskIds, committedItems, router]);
 
   // ---- Step navigation ----
 
@@ -832,6 +871,23 @@ export default function MorningSparkV2Screen() {
           config={addNewConfig || undefined}
         />
       </Modal>
+
+      {/* Edit task modal — triggered from contract review step card tap */}
+      <ActionDetailsModal
+        visible={editTaskModalVisible}
+        task={editingTask}
+        onClose={() => {
+          setEditTaskModalVisible(false);
+          setEditingTask(null);
+        }}
+        onDelete={(_task) => {
+          setEditTaskModalVisible(false);
+          setEditingTask(null);
+          handleEditSubmitSuccess();
+        }}
+        onEdit={() => handleEditSubmitSuccess()}
+        onRefreshAssociatedItems={() => handleEditSubmitSuccess()}
+      />
     </SafeAreaView>
   );
 }

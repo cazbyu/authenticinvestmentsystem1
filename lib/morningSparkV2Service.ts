@@ -659,6 +659,11 @@ export async function triageBrainDumpItem(
 
 /**
  * Get today's tasks grouped by connection type (roles/wellness/goals/other).
+ *
+ * Uses `v_tasks_with_recurrence_expanded` to properly surface recurring goal
+ * activities as individual daily occurrences rather than raw template rows.
+ * The view is powered by `fn_expand_recurrence_dates()` and is already used
+ * by the calendar and dashboard.
  */
 export async function getWeeklyContractForToday(userId: string): Promise<GroupedContractItems> {
   const supabase = getSupabaseClient();
@@ -666,65 +671,75 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
 
   console.log('[Contract] Querying tasks for userId:', userId, 'today:', today);
 
-  const taskSelect = 'id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea';
+  const viewSelect = 'id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule, status';
 
-  // 1) Get tasks due today, overdue, or starting today
-  const { data: dateTasks, error } = await supabase
-    .from('0008-ap-tasks')
-    .select(taskSelect)
+  // ── Query A: Today's occurrences from the recurrence-expanded view ──
+  // Returns non-recurring tasks due today + virtual occurrences of recurring tasks
+  const { data: todayTasks, error: errorA } = await supabase
+    .from('v_tasks_with_recurrence_expanded')
+    .select(viewSelect)
     .eq('user_id', userId)
+    .eq('occurrence_date', today)
+    .or('is_virtual_occurrence.eq.true,recurrence_rule.is.null')
+    .is('completed_at', null)
+    .neq('status', 'cancelled')
+    .neq('status', 'archived');
+
+  // ── Query B: Overdue non-recurring tasks ──
+  const { data: overdueTasks, error: errorB } = await supabase
+    .from('v_tasks_with_recurrence_expanded')
+    .select(viewSelect)
+    .eq('user_id', userId)
+    .lt('occurrence_date', today)
+    .eq('is_virtual_occurrence', false)
+    .is('completed_at', null)
+    .neq('status', 'cancelled')
+    .neq('status', 'archived');
+
+  // ── Query C: Events with start_date = today but no due_date ──
+  // The view uses due_date as occurrence_date, so start_date-only events get
+  // occurrence_date = NULL and are missed by queries A/B.
+  const { data: startDateEvents, error: errorC } = await supabase
+    .from('0008-ap-tasks')
+    .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea')
+    .eq('user_id', userId)
+    .eq('start_date', today)
+    .is('due_date', null)
     .is('deleted_at', null)
     .is('completed_at', null)
     .neq('status', 'cancelled')
-    .neq('status', 'archived')
-    .or(`due_date.eq.${today},due_date.lt.${today},start_date.eq.${today}`)
-    .order('is_urgent', { ascending: false })
-    .order('is_important', { ascending: false })
-    .order('start_time', { ascending: true, nullsFirst: false });
+    .neq('status', 'archived');
 
-  if (error) {
-    console.error('[Contract] Error fetching tasks:', error.message, error.details, error.hint, error.code);
+  if (errorA || errorB) {
+    const err = errorA || errorB;
+    console.error('[Contract] Error fetching tasks:', err!.message, err!.details, err!.hint, err!.code);
     return { events: [], roles: [], wellness: [], goals: [], unassigned: [] };
   }
-
-  // 2) Get goal-linked tasks (leading indicators) that have NO due_date and NO start_date.
-  //    These are recurring activities tied to goals — they should always show.
-  const { data: goalJoinIds } = await supabase
-    .from('0008-ap-universal-goals-join')
-    .select('parent_id')
-    .eq('parent_type', 'task');
-
-  let goalActivityTasks: any[] = [];
-  if (goalJoinIds && goalJoinIds.length > 0) {
-    const goalLinkedTaskIds = goalJoinIds.map((g: any) => g.parent_id);
-    const { data: goalTasks } = await supabase
-      .from('0008-ap-tasks')
-      .select(taskSelect)
-      .eq('user_id', userId)
-      .is('deleted_at', null)
-      .is('completed_at', null)
-      .neq('status', 'cancelled')
-      .neq('status', 'archived')
-      .is('due_date', null)
-      .is('start_date', null)
-      .in('id', goalLinkedTaskIds);
-
-    goalActivityTasks = goalTasks || [];
+  if (errorC) {
+    console.warn('[Contract] Error fetching start_date events:', errorC.message);
   }
 
-  // 3) Merge and de-duplicate (a goal task with a due_date could appear in both)
-  const seenIds = new Set<string>();
+  // ── Merge and de-duplicate ──
+  // Use source_task_id + occurrence_date as the dedup key (same pattern as useCalendarEvents.ts)
+  const seen = new Set<string>();
   const tasks: any[] = [];
-  for (const t of (dateTasks || [])) {
-    if (!seenIds.has(t.id)) {
-      seenIds.add(t.id);
+
+  function addTask(t: any) {
+    const key = `${t.source_task_id || t.id}::${t.occurrence_date || t.start_date || 'none'}`;
+    if (!seen.has(key)) {
+      seen.add(key);
       tasks.push(t);
     }
   }
-  for (const t of goalActivityTasks) {
-    if (!seenIds.has(t.id)) {
-      seenIds.add(t.id);
-      tasks.push(t);
+
+  for (const t of (todayTasks || [])) addTask(t);
+  for (const t of (overdueTasks || [])) addTask(t);
+  // Query C results don't have source_task_id — use id directly
+  for (const t of (startDateEvents || [])) {
+    const key = `${t.id}::${t.start_date || 'none'}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      tasks.push({ ...t, source_task_id: t.id, is_virtual_occurrence: false, occurrence_date: t.start_date });
     }
   }
 
@@ -733,22 +748,45 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     return { events: [], roles: [], wellness: [], goals: [], unassigned: [] };
   }
   console.log('[Contract] Found', tasks.length, 'tasks (',
-    (dateTasks || []).length, 'date-based +', goalActivityTasks.length, 'goal activities)');
+    (todayTasks || []).length, 'today +',
+    (overdueTasks || []).length, 'overdue +',
+    (startDateEvents || []).length, 'start-date events)');
 
-  const taskIds = tasks.map(t => t.id);
+  // ── Fetch missing columns (one_thing, is_deposit_idea) from base table ──
+  // The view doesn't include these columns
+  const allSourceTaskIds = [...new Set(tasks.map(t => t.source_task_id || t.id))];
+  const oneThingMap = new Map<string, { one_thing: boolean; is_deposit_idea: boolean }>();
+
+  if (allSourceTaskIds.length > 0) {
+    const { data: extraCols } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, one_thing, is_deposit_idea')
+      .in('id', allSourceTaskIds);
+
+    if (extraCols) {
+      for (const row of extraCols) {
+        oneThingMap.set(row.id, { one_thing: row.one_thing || false, is_deposit_idea: row.is_deposit_idea || false });
+      }
+    }
+  }
+
+  // ── Fetch role / domain / goal joins using source_task_id ──
+  // Virtual occurrences have source_task_id pointing to the template row in 0008-ap-tasks.
+  // The join tables link to that real row, so we use source_task_id as the lookup key.
+  const lookupIds = allSourceTaskIds; // all unique real task IDs
 
   // Fetch role joins
   const { data: roleJoins } = await supabase
     .from('0008-ap-universal-roles-join')
     .select('parent_id, role:0008-ap-roles(id, label)')
-    .in('parent_id', taskIds)
+    .in('parent_id', lookupIds)
     .eq('parent_type', 'task');
 
   // Fetch domain joins
   const { data: domainJoins } = await supabase
     .from('0008-ap-universal-domains-join')
     .select('parent_id, domain:0008-ap-domains(id, name)')
-    .in('parent_id', taskIds)
+    .in('parent_id', lookupIds)
     .eq('parent_type', 'task');
 
   // Fetch goal joins — include weekly_target from the goal itself
@@ -759,10 +797,10 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
       twelve_wk_goal:0008-ap-goals-12wk(id, title, weekly_target),
       custom_goal:0008-ap-goals-custom(id, title, weekly_target)
     `)
-    .in('parent_id', taskIds)
+    .in('parent_id', lookupIds)
     .eq('parent_type', 'task');
 
-  // Build lookup maps
+  // Build lookup maps (keyed by source_task_id / real task id)
   const roleMap = new Map<string, RoleTag[]>();
   const domainMap = new Map<string, DomainTag[]>();
   const goalMap = new Map<string, GoalTag[]>();
@@ -814,8 +852,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     }
   }
 
-  // Count completed tasks this week per goal (for weekly occurrence tracking)
-  // Get the current week boundaries (Monday-Sunday)
+  // ── Count completed occurrences this week per goal (using the expanded view) ──
   const todayDate = new Date(today);
   const dayOfWeek = todayDate.getDay(); // 0=Sun, 1=Mon, ...
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -826,58 +863,50 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   const weekStartStr = formatLocalDate(weekStart);
   const weekEndStr = formatLocalDate(weekEnd);
 
-  // Get all completed tasks this week that are linked to goals
-  const allGoalIds = Array.from(goalMetaMap.keys());
+  // Collect template IDs for goal-linked tasks
+  const goalLinkedTemplateIds: string[] = [];
+  for (const [lookupId] of goalMap) {
+    goalLinkedTemplateIds.push(lookupId);
+  }
+
   const weeklyActualMap = new Map<string, number>();
 
-  if (allGoalIds.length > 0) {
-    // Find task IDs linked to these goals
-    const { data: goalTaskJoins } = await supabase
-      .from('0008-ap-universal-goals-join')
-      .select('parent_id, twelve_wk_goal_id, custom_goal_id')
-      .eq('parent_type', 'task')
-      .or(allGoalIds.map(gid => `twelve_wk_goal_id.eq.${gid},custom_goal_id.eq.${gid}`).join(','));
+  if (goalLinkedTemplateIds.length > 0) {
+    // Use the expanded view to count completed occurrences this week
+    const { data: completedThisWeek } = await supabase
+      .from('v_tasks_with_recurrence_expanded')
+      .select('source_task_id, occurrence_date, completed_at')
+      .eq('user_id', userId)
+      .gte('occurrence_date', weekStartStr)
+      .lte('occurrence_date', weekEndStr)
+      .not('completed_at', 'is', null)
+      .in('source_task_id', goalLinkedTemplateIds);
 
-    if (goalTaskJoins && goalTaskJoins.length > 0) {
-      const goalTaskIds = goalTaskJoins.map((gj: any) => gj.parent_id);
-
-      // Count completed tasks from this week
-      const { data: completedThisWeek } = await supabase
-        .from('0008-ap-tasks')
-        .select('id, completed_at')
-        .in('id', goalTaskIds)
-        .not('completed_at', 'is', null)
-        .gte('completed_at', weekStartStr + 'T00:00:00')
-        .lte('completed_at', weekEndStr + 'T23:59:59')
-        .is('deleted_at', null);
-
-      if (completedThisWeek) {
-        // Map completed task IDs back to goal IDs
-        const taskToGoal = new Map<string, string>();
-        for (const gj of goalTaskJoins) {
-          const goalId = (gj as any).twelve_wk_goal_id || (gj as any).custom_goal_id;
-          if (goalId) taskToGoal.set((gj as any).parent_id, goalId);
-        }
-        for (const ct of completedThisWeek) {
-          const goalId = taskToGoal.get(ct.id);
-          if (goalId) {
-            weeklyActualMap.set(goalId, (weeklyActualMap.get(goalId) || 0) + 1);
-          }
+    if (completedThisWeek) {
+      // Map completed source_task_ids back to goal IDs
+      for (const ct of completedThisWeek) {
+        const goals = goalMap.get(ct.source_task_id);
+        if (goals && goals.length > 0) {
+          const goalId = goals[0].id;
+          weeklyActualMap.set(goalId, (weeklyActualMap.get(goalId) || 0) + 1);
         }
       }
     }
   }
 
-  // Build enriched items and group
+  // ── Build enriched items and group ──
   const grouped: GroupedContractItems = { events: [], roles: [], wellness: [], goals: [], unassigned: [] };
 
   // Temporary map to accumulate tasks per goal
   const goalGroupMap = new Map<string, GoalContractGroup>();
 
   for (const task of tasks) {
-    const roles = roleMap.get(task.id) || [];
-    const domains = domainMap.get(task.id) || [];
-    const goals = goalMap.get(task.id) || [];
+    // Use source_task_id for join lookups (points to real row in 0008-ap-tasks)
+    const lookupId = task.source_task_id || task.id;
+    const roles = roleMap.get(lookupId) || [];
+    const domains = domainMap.get(lookupId) || [];
+    const goals = goalMap.get(lookupId) || [];
+    const extra = oneThingMap.get(lookupId) || { one_thing: false, is_deposit_idea: false };
 
     const item: WeeklyContractItem = {
       id: task.id,
@@ -891,8 +920,8 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
       is_important: task.is_important || false,
       is_all_day: task.is_all_day || false,
       completed_at: task.completed_at,
-      points: calculateTaskPoints(task, roles, domains, goals),
-      one_thing: task.one_thing || false,
+      points: calculateTaskPoints({ ...task, ...extra }, roles, domains, goals),
+      one_thing: extra.one_thing,
       roles,
       domains,
       goals,
@@ -912,14 +941,22 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     } else if (goals.length > 0) {
       // Add to the FIRST goal's group
       const primaryGoal = goals[0];
+
+      // Check if weekly target is already met — skip if so
+      const meta = goalMetaMap.get(primaryGoal.id);
+      const weeklyActual = weeklyActualMap.get(primaryGoal.id) || 0;
+      if (meta?.weeklyTarget && weeklyActual >= meta.weeklyTarget) {
+        // Weekly target already met — don't show this activity
+        continue;
+      }
+
       if (!goalGroupMap.has(primaryGoal.id)) {
-        const meta = goalMetaMap.get(primaryGoal.id);
         goalGroupMap.set(primaryGoal.id, {
           goalId: primaryGoal.id,
           goalTitle: primaryGoal.title,
           goalType: primaryGoal.goal_type,
           weeklyTarget: meta?.weeklyTarget ?? null,
-          weeklyActual: weeklyActualMap.get(primaryGoal.id) || 0,
+          weeklyActual,
           tasks: [],
         });
       }
@@ -1089,6 +1126,7 @@ export async function commitMorningSparkV2(
   userId: string,
   targetScore: number,
   committedTaskIds?: string[],
+  committedTaskPoints?: Record<string, number>,
 ): Promise<void> {
   const supabase = getSupabaseClient();
 
@@ -1100,6 +1138,11 @@ export async function commitMorningSparkV2(
   // Save committed task IDs if the column exists (graceful fallback)
   if (committedTaskIds && committedTaskIds.length > 0) {
     updatePayload.committed_task_ids = committedTaskIds;
+  }
+
+  // Save pre-calculated points per task so the dashboard doesn't need to re-compute
+  if (committedTaskPoints && Object.keys(committedTaskPoints).length > 0) {
+    updatePayload.committed_task_points = committedTaskPoints;
   }
 
   const { error } = await supabase

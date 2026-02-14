@@ -656,13 +656,7 @@ export default function ContractReviewStep({
         {/* Events section — today's scheduled events shown at top */}
         {renderFlatSection('events', "Today's Events", '\u{1F4C5}', grouped.events)}
 
-        {/* Roles section */}
-        {renderFlatSection('roles', 'Roles', '\u{1F465}', grouped.roles)}
-
-        {/* Wellness section */}
-        {renderFlatSection('wellness', 'Wellness Zones', '\u{1F9D8}', grouped.wellness)}
-
-        {/* Goals section — parent goal headers with nested tasks */}
+        {/* Goals section — parent goal headers with nested tasks (above Roles/Wellness) */}
         {grouped.goals.length > 0 && (
           <View style={styles.sectionContainer}>
             <TouchableOpacity
@@ -690,54 +684,72 @@ export default function ContractReviewStep({
                 const targetMet =
                   goalGroup.weeklyTarget !== null &&
                   goalGroup.weeklyActual >= goalGroup.weeklyTarget;
+                const goalExpandKey = `goal_${goalGroup.goalId}`;
+                const isGoalExpanded = expanded[goalExpandKey] !== false; // default expanded
 
                 return (
                   <View key={goalGroup.goalId} style={styles.goalGroupContainer}>
-                    {/* Goal parent header */}
-                    <View style={[styles.goalHeader, { backgroundColor: isDarkMode ? colors.surface : '#F0F7FF' }]}>
+                    {/* Goal parent header — individually collapsible */}
+                    <TouchableOpacity
+                      style={[styles.goalHeader, { backgroundColor: isDarkMode ? colors.surface : '#F0F7FF' }]}
+                      onPress={() => toggleSection(goalExpandKey)}
+                      activeOpacity={0.7}
+                    >
                       <View style={styles.goalHeaderLeft}>
                         <Text style={styles.goalIcon}>{'\u{1F3AF}'}</Text>
                         <Text style={[styles.goalTitle, { color: colors.text }]} numberOfLines={1}>
                           {goalGroup.goalTitle}
                         </Text>
                       </View>
-                      {goalGroup.weeklyTarget !== null && (
-                        <View
-                          style={[
-                            styles.weeklyProgressBadge,
-                            {
-                              backgroundColor: targetMet ? '#3DA87A20' : '#5B9BD520',
-                              borderColor: targetMet ? '#3DA87A' : '#5B9BD5',
-                            },
-                          ]}
-                        >
-                          <Text
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {goalGroup.weeklyTarget !== null && (
+                          <View
                             style={[
-                              styles.weeklyProgressText,
-                              { color: targetMet ? '#3DA87A' : '#5B9BD5' },
+                              styles.weeklyProgressBadge,
+                              {
+                                backgroundColor: targetMet ? '#3DA87A20' : '#5B9BD520',
+                                borderColor: targetMet ? '#3DA87A' : '#5B9BD5',
+                              },
                             ]}
                           >
-                            {targetMet
-                              ? `\u2713 ${goalGroup.weeklyActual}/${goalGroup.weeklyTarget} this week`
-                              : `${goalGroup.weeklyActual}/${goalGroup.weeklyTarget} this week`}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+                            <Text
+                              style={[
+                                styles.weeklyProgressText,
+                                { color: targetMet ? '#3DA87A' : '#5B9BD5' },
+                              ]}
+                            >
+                              {targetMet
+                                ? `\u2713 ${goalGroup.weeklyActual}/${goalGroup.weeklyTarget} this week`
+                                : `${goalGroup.weeklyActual}/${goalGroup.weeklyTarget} this week`}
+                            </Text>
+                          </View>
+                        )}
+                        <Text style={[styles.chevron, { color: colors.textSecondary }]}>
+                          {isGoalExpanded ? '\u25B2' : '\u25BC'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
 
-                    {/* Goal's child tasks */}
-                    {goalGroup.tasks.map((item) => (
-                      <TaskCard
-                        key={item.id} item={item} colors={colors} isDarkMode={isDarkMode}
-                        onAdjust={onAdjust} onCommitToTask={onCommitToTask}
-                        isCommitted={committedTaskIds.has(item.id)} onEdit={onEdit}
-                      />
-                    ))}
+                    {/* Goal's child tasks — shown when this goal group is expanded */}
+                    {isGoalExpanded &&
+                      goalGroup.tasks.map((item) => (
+                        <TaskCard
+                          key={item.id} item={item} colors={colors} isDarkMode={isDarkMode}
+                          onAdjust={onAdjust} onCommitToTask={onCommitToTask}
+                          isCommitted={committedTaskIds.has(item.id)} onEdit={onEdit}
+                        />
+                      ))}
                   </View>
                 );
               })}
           </View>
         )}
+
+        {/* Roles section */}
+        {renderFlatSection('roles', 'Roles', '\u{1F465}', grouped.roles)}
+
+        {/* Wellness section */}
+        {renderFlatSection('wellness', 'Wellness Zones', '\u{1F9D8}', grouped.wellness)}
 
         {/* Unassigned section (was "Other") */}
         {renderFlatSection('unassigned', 'Unassigned', '\u{1F4CB}', grouped.unassigned)}

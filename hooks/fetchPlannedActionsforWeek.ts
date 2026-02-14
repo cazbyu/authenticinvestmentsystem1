@@ -359,24 +359,24 @@ async function fetchLeadingIndicators(
       .in('parent_id', taskIds)
       .eq('parent_type', 'task');
 
-    // Count completed occurrences for each task this week
+    // Count completed occurrences for each task this week (using recurrence-expanded view)
     const { data: completedOccurrences, error: occError } = await supabase
-      .from('0008-ap-tasks')
-      .select('parent_task_id')
-      .in('parent_task_id', taskIds)
-      .eq('status', 'completed')
-      .gte('due_date', week.startDate)
-      .lte('due_date', week.endDate)
-      .is('deleted_at', null);
+      .from('v_tasks_with_recurrence_expanded')
+      .select('source_task_id')
+      .eq('user_id', userId)
+      .in('source_task_id', taskIds)
+      .not('completed_at', 'is', null)
+      .gte('occurrence_date', week.startDate)
+      .lte('occurrence_date', week.endDate);
 
     if (occError) {
       console.error('[fetchLeadingIndicators] Error fetching occurrences:', occError);
     }
 
-    // Count occurrences per task
+    // Count occurrences per task (keyed by source_task_id = template id)
     const occurrenceCounts: Record<string, number> = {};
     (completedOccurrences || []).forEach((occ: any) => {
-      occurrenceCounts[occ.parent_task_id] = (occurrenceCounts[occ.parent_task_id] || 0) + 1;
+      occurrenceCounts[occ.source_task_id] = (occurrenceCounts[occ.source_task_id] || 0) + 1;
     });
 
     // Build action summaries

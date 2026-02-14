@@ -129,11 +129,13 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
         return;
       }
 
-      // Get committed task IDs from V2 Morning Spark
+      // Get committed task IDs and pre-calculated points from V2 Morning Spark
       const committedTaskIds: string[] = spark.committed_task_ids || [];
+      const committedTaskPoints: Record<string, number> = spark.committed_task_points || {};
       const hasV2CommittedIds = committedTaskIds.length > 0;
 
       console.log('[TodaysCommitment] Loading. V2 committed IDs:', committedTaskIds.length,
+        'points map entries:', Object.keys(committedTaskPoints).length,
         'committed_at:', spark.committed_at);
 
       let events: CommittedEvent[] = [];
@@ -141,9 +143,10 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
 
       if (hasV2CommittedIds) {
         // V2 flow: Load ONLY the tasks/events the user committed to
+        // Note: 'points' is NOT a column in 0008-ap-tasks — use committedTaskPoints map instead
         const { data: committedData } = await supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, start_date, start_time, end_time, due_date, points, priority, completed_at, status')
+          .select('id, title, type, start_date, start_time, end_time, due_date, priority, completed_at, status')
           .in('id', committedTaskIds);
 
         const allItems = committedData || [];
@@ -155,7 +158,7 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
             title: e.title,
             start_time: e.start_time || `${today}T09:00:00`,
             end_time: e.end_time,
-            points: e.points || 3,
+            points: committedTaskPoints[e.id] || 3,
             completed_at: e.completed_at,
           }));
 
@@ -164,7 +167,7 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
           .map(t => ({
             id: t.id,
             title: t.title,
-            points: t.points || 3,
+            points: committedTaskPoints[t.id] || 3,
             priority: t.priority,
             due_date: t.due_date,
             start_time: t.start_time,
@@ -173,9 +176,10 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
           }));
       } else {
         // V1 fallback: Load all events/tasks for today (legacy behavior)
+        // Points default to 3 since the tasks table has no 'points' column
         const { data: eventsData } = await supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, start_date, start_time, end_time, points, completed_at')
+          .select('id, title, type, start_date, start_time, end_time, completed_at')
           .eq('user_id', userId)
           .eq('type', 'event')
           .eq('start_date', today)
@@ -184,7 +188,7 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
 
         const { data: tasksData } = await supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_time, end_time, points, priority, completed_at')
+          .select('id, title, type, due_date, start_time, end_time, priority, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
           .eq('due_date', today)
@@ -196,14 +200,14 @@ export function TodaysCommitment({ userId, onRefresh }: TodaysCommitmentProps) {
           title: e.title,
           start_time: e.start_time || `${today}T09:00:00`,
           end_time: e.end_time,
-          points: e.points || 3,
+          points: 3,
           completed_at: e.completed_at,
         }));
 
         tasks = (tasksData || []).map(t => ({
           id: t.id,
           title: t.title,
-          points: t.points || 3,
+          points: 3,
           priority: t.priority,
           due_date: t.due_date,
           start_time: t.start_time,

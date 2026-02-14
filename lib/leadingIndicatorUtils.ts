@@ -254,26 +254,26 @@ export async function fetchLeadingIndicatorsForToday(
     console.debug(LOG_TAG, 'week plans found:', weekPlanMap.size);
 
     // ------------------------------------------------------------------
-    // 6. Count completed child occurrences this week
+    // 6. Count completed occurrences this week (using recurrence-expanded view)
     // ------------------------------------------------------------------
     const { data: occurrences, error: occErr } = await supabase
-      .from('0008-ap-tasks')
-      .select('parent_task_id')
-      .in('parent_task_id', recurringTaskIds)
-      .eq('status', 'completed')
-      .is('deleted_at', null)
-      .gte('due_date', weekStartStr)
-      .lte('due_date', weekEndStr);
+      .from('v_tasks_with_recurrence_expanded')
+      .select('source_task_id')
+      .eq('user_id', userId)
+      .in('source_task_id', recurringTaskIds)
+      .not('completed_at', 'is', null)
+      .gte('occurrence_date', weekStartStr)
+      .lte('occurrence_date', weekEndStr);
 
     if (occErr) {
       console.error(LOG_TAG, 'occurrences error:', occErr);
       return [];
     }
 
-    // Build a count map: parent_task_id -> completions this week
+    // Build a count map: source_task_id (template) -> completions this week
     const completionMap = new Map<string, number>();
     for (const occ of occurrences ?? []) {
-      const pid = occ.parent_task_id as string;
+      const pid = occ.source_task_id as string;
       completionMap.set(pid, (completionMap.get(pid) ?? 0) + 1);
     }
 
