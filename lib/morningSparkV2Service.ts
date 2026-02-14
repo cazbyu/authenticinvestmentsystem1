@@ -665,10 +665,12 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
 
   console.log('[Contract] Querying tasks for userId:', userId, 'today:', today);
 
-  // Get tasks due today or overdue — only INCOMPLETE, non-cancelled tasks
-  const { data: tasks, error } = await supabase
+  const taskSelect = 'id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea';
+
+  // 1) Get tasks due today, overdue, or starting today
+  const { data: dateTasks, error } = await supabase
     .from('0008-ap-tasks')
-    .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea')
+    .select(taskSelect)
     .eq('user_id', userId)
     .is('deleted_at', null)
     .is('completed_at', null)
@@ -683,14 +685,54 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     console.error('[Contract] Error fetching tasks:', error.message, error.details, error.hint, error.code);
     return { roles: [], wellness: [], goals: [], unassigned: [] };
   }
-  if (!tasks || tasks.length === 0) {
-    console.log('[Contract] No tasks found for today:', today, '— this might be a query issue.');
-    console.log('[Contract] Query filters: user_id=', userId, 'deleted_at IS NULL, completed_at IS NULL, status != cancelled/archived');
-    console.log('[Contract] OR clause: due_date.eq.', today, 'OR due_date.lt.', today, 'OR start_date.eq.', today);
+
+  // 2) Get goal-linked tasks (leading indicators) that have NO due_date and NO start_date.
+  //    These are recurring activities tied to goals — they should always show.
+  const { data: goalJoinIds } = await supabase
+    .from('0008-ap-universal-goals-join')
+    .select('parent_id')
+    .eq('parent_type', 'task');
+
+  let goalActivityTasks: any[] = [];
+  if (goalJoinIds && goalJoinIds.length > 0) {
+    const goalLinkedTaskIds = goalJoinIds.map((g: any) => g.parent_id);
+    const { data: goalTasks } = await supabase
+      .from('0008-ap-tasks')
+      .select(taskSelect)
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .is('completed_at', null)
+      .neq('status', 'cancelled')
+      .neq('status', 'archived')
+      .is('due_date', null)
+      .is('start_date', null)
+      .in('id', goalLinkedTaskIds);
+
+    goalActivityTasks = goalTasks || [];
+  }
+
+  // 3) Merge and de-duplicate (a goal task with a due_date could appear in both)
+  const seenIds = new Set<string>();
+  const tasks: any[] = [];
+  for (const t of (dateTasks || [])) {
+    if (!seenIds.has(t.id)) {
+      seenIds.add(t.id);
+      tasks.push(t);
+    }
+  }
+  for (const t of goalActivityTasks) {
+    if (!seenIds.has(t.id)) {
+      seenIds.add(t.id);
+      tasks.push(t);
+    }
+  }
+
+  if (tasks.length === 0) {
+    console.log('[Contract] No tasks found for today:', today);
     return { roles: [], wellness: [], goals: [], unassigned: [] };
   }
-  console.log('[Contract] Found', tasks.length, 'tasks for', today,
-    '— types:', tasks.map(t => t.type).join(', '));
+  console.log('[Contract] Found', tasks.length, 'tasks (',
+    (dateTasks || []).length, 'date-based +', goalActivityTasks.length, 'goal activities)');
 
   const taskIds = tasks.map(t => t.id);
 
