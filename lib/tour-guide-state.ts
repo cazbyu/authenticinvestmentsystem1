@@ -382,17 +382,18 @@ async function fetchGoals(
 
   if (!goals || goals.length === 0) return [];
 
-  // For each goal, count linked tasks
-  // Note: 0008-ap-task-12wkgoals has no FK to tasks, so we can't use PostgREST joins.
+  // For each goal, count linked tasks via 0008-ap-universal-goals-join
+  // (polymorphic join: twelve_wk_goal_id + parent_type/parent_id)
   const goalsWithActivity: GoalSummary[] = await Promise.all(
     goals.map(async (goal) => {
       // Step 1: Get task IDs linked to this goal
       const { data: goalLinks } = await supabase
-        .from('0008-ap-task-12wkgoals')
-        .select('task_id')
-        .eq('goal_id', goal.id);
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .eq('twelve_wk_goal_id', goal.id)
+        .eq('parent_type', 'task');
 
-      const taskIds = (goalLinks || []).map((link: any) => link.task_id).filter(Boolean);
+      const taskIds = (goalLinks || []).map((link: any) => link.parent_id).filter(Boolean);
 
       if (taskIds.length === 0) {
         return {
