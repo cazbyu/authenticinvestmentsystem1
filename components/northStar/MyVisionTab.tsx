@@ -209,22 +209,15 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
       const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
 
-      const { data: existing } = await supabase
+      const { error } = await supabase
         .from('0008-ap-north-star')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .upsert({
+          user_id: user.id,
+          [fieldName]: editText.trim(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
 
-      if (existing) {
-        await supabase
-          .from('0008-ap-north-star')
-          .update({ [fieldName]: editText.trim() })
-          .eq('user_id', user.id);
-      } else {
-        await supabase
-          .from('0008-ap-north-star')
-          .insert({ user_id: user.id, [fieldName]: editText.trim() });
-      }
+      if (error) throw error;
 
       // Refresh data
       await fetchNorthStarData();

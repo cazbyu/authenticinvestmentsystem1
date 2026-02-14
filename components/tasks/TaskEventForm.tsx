@@ -596,7 +596,7 @@ export default function TaskEventForm({
       reflectionMode,
       title: initialData.title || initialData.reflection_title || '',
       dueDate: initialData.due_date || formatLocalDate(new Date()),
-      dueTime: (initialData.type === 'task' ? initialData.end_time : '') || '',
+      dueTime: (initialData.type === 'task' ? (initialData.due_time || initialData.end_time) : '') || '',
       startDate: initialData.start_date || formatLocalDate(new Date()),
       endDate: initialData.end_date || formatLocalDate(new Date()),
       startTime: initialData.start_time || '',
@@ -1352,9 +1352,9 @@ export default function TaskEventForm({
         console.log('[TaskEventForm] Editing task - Initial status:', initialData.status, 'Initial completed_at:', initialData.completed_at);
       }
 
-      // For recurring tasks/events without a date, default to today
+      // For tasks, always require a due_date (default to today)
       const effectiveDueDate = formData.type === 'task'
-        ? (formData.dueDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
+        ? (formData.dueDate || formatLocalDate(new Date()))
         : null;
       const effectiveStartDate = formData.type === 'event'
         ? (formData.startDate || (formData.recurrenceRule ? formatLocalDate(new Date()) : null))
@@ -1375,10 +1375,11 @@ export default function TaskEventForm({
         end_date: formData.type === 'event' ? formData.endDate : null,
         start_time: formData.type === 'event' && formData.startTime && !formData.isAnytime
           ? formatTimeForDatabase(formData.startTime, effectiveStartDate)
-          : dueTimeFormatted,
+          : null,
         end_time: formData.type === 'event' && formData.endTime && !formData.isAnytime
           ? formatTimeForDatabase(formData.endTime, formData.endDate || effectiveStartDate)
-          : dueTimeFormatted,
+          : null,
+        due_time: formData.type === 'task' ? dueTimeFormatted : null,
         is_all_day: formData.isAnytime,
         is_urgent: formData.isUrgent,
         is_important: formData.isImportant,
@@ -1414,7 +1415,7 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
 
       // Sanitize: Convert any empty strings to null for timestamp fields
       const sanitizeTimestamps = (payload: any) => {
-        const timestampFields = ['start_time', 'end_time', 'completed_at'];
+        const timestampFields = ['start_time', 'end_time', 'due_time', 'completed_at'];
         timestampFields.forEach(field => {
           if (payload[field] === '') {
             console.warn(`[TaskEventForm] Converting empty string to null for field: ${field}`);

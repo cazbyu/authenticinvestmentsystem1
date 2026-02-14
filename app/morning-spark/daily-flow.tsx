@@ -36,13 +36,15 @@ import TaskEventForm from '@/components/tasks/TaskEventForm';
 
 // Import Morning Spark Components
 import { ScheduleSection } from '@/components/morning-spark/ScheduleSection';
-import { UrgentTasksSection } from '@/components/morning-spark/UrgentTasksSection';
+// UrgentTasksSection removed — tasks now shown in unified ScheduleSection
 import { BrainDumpSection } from '@/components/morning-spark/BrainDumpSection';
 import { FollowUpSection } from '@/components/morning-spark/FollowUpSection';
-import { RemainingTasksSection } from '@/components/morning-spark/RemainingTasksSection';
+// RemainingTasksSection removed — tasks now shown in unified ScheduleSection
 import { FinalCommitmentSection } from '@/components/morning-spark/FinalCommitmentSection';
 import { ReflectionsSection } from '@/components/morning-spark/ReflectionsSection';
 import { TodaysMenuModal } from '@/components/morning-spark/TodaysMenuModal';
+import { LeadingIndicatorsSection } from '@/components/morning-spark/LeadingIndicatorsSection';
+import { fetchLeadingIndicatorsForToday, LeadingIndicator } from '@/lib/leadingIndicatorUtils';
 
 export default function DailyFlowScreen() {
   const router = useRouter();
@@ -127,6 +129,10 @@ export default function DailyFlowScreen() {
   
   // Today's Menu modal state
   const [showTodaysMenuModal, setShowTodaysMenuModal] = useState(false);
+
+  // Leading indicators state
+  const [leadingIndicators, setLeadingIndicators] = useState<LeadingIndicator[]>([]);
+  const [loadingIndicators, setLoadingIndicators] = useState(false);
   
   // Collapsible section state
   const [showReflections, setShowReflections] = useState(false);
@@ -178,11 +184,12 @@ export default function DailyFlowScreen() {
         await loadDropdownCounts(user.id);
       }
 
-      // Load urgent tasks and task count for EL1, EL2, and EL3
+      // Load urgent tasks, task count, and leading indicators
       if (spark.fuel_level === 1 || spark.fuel_level === 2 || spark.fuel_level === 3) {
         await Promise.all([
           loadUrgentTasks(user.id),
-          loadAllTasksCount(user.id) // ✅ Pass user.id directly
+          loadAllTasksCount(user.id),
+          loadLeadingIndicators(user.id),
         ]);
       }
       
@@ -676,15 +683,14 @@ export default function DailyFlowScreen() {
           })
           .eq('id', rescheduleItem.id);
       } else {
-        // Update task
+        // Update task — use due_time (not start_time) for tasks
         if (rescheduleTime === 'anytime') {
           await supabase
             .from('0008-ap-tasks')
             .update({
               due_date: rescheduleDate,
               is_anytime: true,
-              start_time: null,
-              end_time: null,
+              due_time: null,
             })
             .eq('id', rescheduleItem.id);
         } else {
@@ -693,8 +699,7 @@ export default function DailyFlowScreen() {
             .update({
               due_date: rescheduleDate,
               is_anytime: false,
-              start_time: rescheduleTime,
-              end_time: rescheduleTime,
+              due_time: rescheduleTime,
             })
             .eq('id', rescheduleItem.id);
         }
@@ -923,6 +928,51 @@ export default function DailyFlowScreen() {
       Alert.alert('Error', 'Failed to load tasks. Please try again.');
     } finally {
       setLoadingAllTasks(false);
+    }
+  }
+
+  async function loadLeadingIndicators(uid: string) {
+    try {
+      setLoadingIndicators(true);
+      const indicators = await fetchLeadingIndicatorsForToday(uid);
+      setLeadingIndicators(indicators);
+    } catch (error) {
+      console.error('Error loading leading indicators:', error);
+    } finally {
+      setLoadingIndicators(false);
+    }
+  }
+
+  async function handleCommitIndicator(indicator: LeadingIndicator) {
+    try {
+      const supabase = getSupabaseClient();
+      const today = toLocalISOString(new Date()).split('T')[0];
+
+      // Create a child task occurrence for today
+      const { error } = await supabase.from('0008-ap-tasks').insert({
+        user_id: userId,
+        parent_task_id: indicator.taskId,
+        type: 'task',
+        title: indicator.title,
+        due_date: today,
+        status: 'pending',
+      });
+
+      if (error) {
+        console.error('Error committing indicator:', error);
+        Alert.alert('Error', 'Failed to add task. Please try again.');
+        return;
+      }
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      // Reload to reflect the change
+      await loadData();
+    } catch (error) {
+      console.error('Error committing indicator:', error);
+      Alert.alert('Error', 'Failed to add task. Please try again.');
     }
   }
 
@@ -1459,17 +1509,17 @@ export default function DailyFlowScreen() {
   }
 
   function getScheduleMessage(): string {
-    const hasEvents = actionsData && (actionsData.overdue.length > 0 || actionsData.today.length > 0);
-    
+    const hasItems = actionsData && (actionsData.overdue.length > 0 || actionsData.today.length > 0);
+
     if (fuelLevel === 1) {
-      if (!hasEvents) {
-        return "Nothing is currently on your calendar. Let's focus on doing something though.";
+      if (!hasItems) {
+        return "Nothing is currently on your schedule. Let's focus on doing something though.";
       }
-      return 'Should we reschedule any of these to protect your energy?';
+      return 'Here are your events and tasks. Should we reschedule any to protect your energy?';
     } else if (fuelLevel === 2) {
-      return "These are the events you have on today's calendar. Are there any Big Rocks you would like to add?";
+      return "Here's your full schedule — events and tasks. Commit to what you can handle today.";
     } else {
-      return "These are the events you have on today's calendar. You're energized - what Big Rocks can you add to maximize this momentum?";
+      return "Here's your full schedule — you're energized! Commit and make serious progress today.";
     }
   }
 
@@ -1572,9 +1622,10 @@ export default function DailyFlowScreen() {
           />
         )}
 
-        {/* Scheduled Events Section */}
+        {/* Unified Schedule Section — events + tasks + overdue for all fuel levels */}
         <ScheduleSection
           events={actionsData?.today || []}
+          overdue={actionsData?.overdue || []}
           colors={colors}
           formatTimeDisplay={formatTimeDisplay}
           getScheduleMessage={getScheduleMessage}
@@ -1583,39 +1634,13 @@ export default function DailyFlowScreen() {
           openRescheduleModal={openRescheduleModal}
         />
 
-        {/* Urgent Tasks Section - EL1 Only */}
-        {fuelLevel === 1 && (
-          <UrgentTasksSection
-            fuelLevel={fuelLevel}
-            urgentTasks={urgentTasks || []}
-            colors={colors}
-            itemCommitmentStates={itemCommitmentStates}
-            handleCommitItem={handleCommitItem}
-            openRescheduleModal={openRescheduleModal}
-            getVisibleItems={getVisibleItems}
-            getCommittedItems={getCommittedItems}
-            getPriorityColor={getPriorityColor}
-          />
-        )}
-
-        {/* Remaining Tasks Section - EL1 Only */}
-        {fuelLevel === 1 && (
-          <RemainingTasksSection
-            fuelLevel={fuelLevel}
-            allTasks={allTasks || []}
-            allTasksCount={allTasksCount}
-            colors={colors}
-            loadingAllTasks={loadingAllTasks}
-            itemCommitmentStates={itemCommitmentStates}
-            handleCommitItem={handleCommitItem}
-            openRescheduleModal={openRescheduleModal}
-            getVisibleItems={getVisibleItems}
-            getCommittedItems={getCommittedItems}
-            getPriorityColor={getPriorityColor}
-            loadAllTasks={loadAllTasks}
-            toLocalISOString={toLocalISOString}
-          />
-        )}
+        {/* Leading Indicators — Goal-linked recurring actions for today */}
+        <LeadingIndicatorsSection
+          indicators={leadingIndicators}
+          loading={loadingIndicators}
+          colors={colors}
+          onCommit={handleCommitIndicator}
+        />
 
         {/* Collapsible Review Sections - EL1, EL2, and EL3 */}
         {(fuelLevel === 1 || fuelLevel === 2 || fuelLevel === 3) && (
@@ -1739,58 +1764,6 @@ export default function DailyFlowScreen() {
                 )
               )}
             </View>
-
-            {/* EL2: Tasks Section with Urgent at Top */}
-            {fuelLevel === 2 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
-                  You have {urgentTasks.length} Urgent task{urgentTasks.length !== 1 ? 's' : ''} - knock those out to give yourself some peace of mind, then try to use your creative time to accomplish tasks which are most Important.
-                </Text>
-                
-                <RemainingTasksSection
-                  fuelLevel={fuelLevel}
-                  allTasks={allTasks || []}
-                  allTasksCount={allTasksCount}
-                  colors={colors}
-                  loadingAllTasks={loadingAllTasks}
-                  itemCommitmentStates={itemCommitmentStates}
-                  handleCommitItem={handleCommitItem}
-                  openRescheduleModal={openRescheduleModal}
-                  getVisibleItems={getVisibleItems}
-                  getCommittedItems={getCommittedItems}
-                  getPriorityColor={getPriorityColor}
-                  loadAllTasks={loadAllTasks}
-                  toLocalISOString={toLocalISOString}
-                  urgentTasks={urgentTasks}
-                />
-              </View>
-            )}
-
-            {/* EL3: Tasks Section with Energetic Messaging */}
-            {fuelLevel === 3 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionDescription, { color: colors.textSecondary, marginBottom: 12, paddingHorizontal: 16 }]}>
-                  You have {urgentTasks.length} Urgent task{urgentTasks.length !== 1 ? 's' : ''} - blast through those, then tackle your most Important work while you're in the zone!
-                </Text>
-                
-                <RemainingTasksSection
-                  fuelLevel={fuelLevel}
-                  allTasks={allTasks || []}
-                  allTasksCount={allTasksCount}
-                  colors={colors}
-                  loadingAllTasks={loadingAllTasks}
-                  itemCommitmentStates={itemCommitmentStates}
-                  handleCommitItem={handleCommitItem}
-                  openRescheduleModal={openRescheduleModal}
-                  getVisibleItems={getVisibleItems}
-                  getCommittedItems={getCommittedItems}
-                  getPriorityColor={getPriorityColor}
-                  loadAllTasks={loadAllTasks}
-                  toLocalISOString={toLocalISOString}
-                  urgentTasks={urgentTasks}
-                />
-              </View>
-            )}
 
             {/* Delegations Section */}
             <View style={styles.section}>

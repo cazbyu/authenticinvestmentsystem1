@@ -185,7 +185,7 @@ export async function getScheduledActions(userId: string): Promise<ScheduledActi
     .from('0008-ap-tasks')
     .select('*')
     .eq('user_id', userId)
-    .eq('type', 'event')
+    .in('type', ['task', 'event'])
     .is('completed_at', null)
     .is('deleted_at', null)
     .or(`start_date.eq.${today},start_date.lt.${today},due_date.eq.${today},due_date.lt.${today}`)

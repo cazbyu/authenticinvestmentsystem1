@@ -568,16 +568,19 @@ export function ActionDetailsModal({
                       <View style={styles.metadataHalf}>
                         <Text style={styles.metadataLabel}>Time Due</Text>
                         <Text style={styles.metadataValue}>
-                          {task.is_all_day ? 'Anytime' : formatTime(task.start_time)}
+                          {task.is_all_day ? 'Anytime' : formatTime(task.due_time || task.start_time)}
                         </Text>
                       </View>
                     </View>
                   </View>
                 )}
-                {task.type === 'event' && task.due_date && (
+                {task.type === 'event' && task.start_date && (
                   <View style={styles.metadataItem}>
-                    <Text style={styles.metadataLabel}>Due Date</Text>
-                    <Text style={styles.metadataValue}>{formatDateTime(task.due_date, true)}</Text>
+                    <Text style={styles.metadataLabel}>Date</Text>
+                    <Text style={styles.metadataValue}>
+                      {formatDateTime(task.start_date, true)}
+                      {task.end_date && task.end_date !== task.start_date ? ` — ${formatDateTime(task.end_date, true)}` : ''}
+                    </Text>
                   </View>
                 )}
                 {task.type === 'event' && task.start_time && (
