@@ -855,12 +855,10 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
       goals,
     };
 
-    // Categorize: roles first, then domains (wellness), then goals, else unassigned
-    if (roles.length > 0) {
-      grouped.roles.push(item);
-    } else if (domains.length > 0) {
-      grouped.wellness.push(item);
-    } else if (goals.length > 0) {
+    // Categorize: goals FIRST (highest priority), then roles, wellness, unassigned.
+    // A task linked to a goal should always appear under that goal,
+    // even if it also has role or domain tags.
+    if (goals.length > 0) {
       // Add to the FIRST goal's group
       const primaryGoal = goals[0];
       if (!goalGroupMap.has(primaryGoal.id)) {
@@ -875,6 +873,10 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
         });
       }
       goalGroupMap.get(primaryGoal.id)!.tasks.push(item);
+    } else if (roles.length > 0) {
+      grouped.roles.push(item);
+    } else if (domains.length > 0) {
+      grouped.wellness.push(item);
     } else {
       grouped.unassigned.push(item);
     }
@@ -1377,8 +1379,8 @@ export async function getSparkQuestion(userId: string): Promise<SparkQuestion | 
 
 /**
  * Save a quick question response from the Morning Spark Remember step.
- * Uses upsert on (user_id, question_id) so answering the same question
- * again updates rather than duplicates.
+ * The unique constraint is (user_id, question_id, week_start) so we
+ * include the current week start to upsert correctly.
  */
 export async function saveSparkQuestionResponse(
   userId: string,
@@ -1387,6 +1389,14 @@ export async function saveSparkQuestionResponse(
   domain: string
 ): Promise<boolean> {
   const supabase = getSupabaseClient();
+
+  // Calculate current week start (Monday) for the unique constraint
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() + mondayOffset);
+  const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
 
   const { error } = await supabase
     .from('0008-ap-question-responses')
@@ -1397,9 +1407,10 @@ export async function saveSparkQuestionResponse(
         response_text: responseText.trim(),
         context_type: 'morning_spark',
         domain,
+        week_start: weekStartStr,
         used_in_synthesis: false,
       },
-      { onConflict: 'user_id,question_id' }
+      { onConflict: 'user_id,question_id,week_start' }
     );
 
   if (error) {
