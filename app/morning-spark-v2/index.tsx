@@ -22,7 +22,6 @@ import EnergyCheckStep from '@/components/morning-spark-v2/EnergyCheckStep';
 import BrainDumpTriageStep from '@/components/morning-spark-v2/BrainDumpTriageStep';
 import { RememberStep } from '@/components/morning-spark-v2/RememberStep';
 import ContractReviewStep from '@/components/morning-spark-v2/ContractReviewStep';
-import { DelegationStep } from '@/components/morning-spark-v2/DelegationStep';
 import ContractCloseStep from '@/components/morning-spark-v2/ContractCloseStep';
 import { DelegateModal } from '@/components/morning-spark/DelegateModal';
 import { RescheduleModal } from '@/components/morning-spark/RescheduleModal';
@@ -67,7 +66,6 @@ const STEPS = [
   { key: 'triage', label: 'Brain Dump Triage', icon: '\uD83E\uDDE0', color: '#8B5CF6' },
   { key: 'remember', label: 'Remember', icon: '\u2728', color: '#D4A843' },
   { key: 'contract', label: 'Contract', icon: '\uD83D\uDCCB', color: '#3B82F6' },
-  { key: 'delegate', label: 'Delegate', icon: '\uD83D\uDC65', color: '#16A34A' },
   { key: 'close', label: 'Close', icon: '\u270D\uFE0F', color: '#D97706' },
 ];
 
@@ -109,7 +107,7 @@ export default function MorningSparkV2Screen() {
   });
   const [contractLoading, setContractLoading] = useState(false);
 
-  // Step E: Delegation
+  // Delegation data (shown in Close step)
   const [delegations, setDelegations] = useState<DelegationItem[]>([]);
   const [delegationLoading, setDelegationLoading] = useState(false);
 
@@ -600,7 +598,9 @@ export default function MorningSparkV2Screen() {
           setContractLoading(false);
         });
     }
+    // When entering Close step (step 4), fetch delegations + coaching summary
     if (nextStep === 4) {
+      // Fetch delegations for the close step display
       setDelegationLoading(true);
       getDelegations(userId)
         .then((items) => {
@@ -608,10 +608,8 @@ export default function MorningSparkV2Screen() {
           setDelegationLoading(false);
         })
         .catch(() => setDelegationLoading(false));
-    }
 
-    // When entering Close step, fetch coaching summary for committed items
-    if (nextStep === 5) {
+      // Fetch coaching summary for committed items
       setCloseCoachLoading(true);
       buildFullState(userId)
         .then((userState) => {
@@ -808,9 +806,6 @@ export default function MorningSparkV2Screen() {
           />
         )}
         {currentStep === 4 && (
-          <DelegationStep delegations={delegations} loading={delegationLoading} />
-        )}
-        {currentStep === 5 && (
           <ContractCloseStep
             aspiration={aspiration}
             committedItems={committedItems}
@@ -828,8 +823,8 @@ export default function MorningSparkV2Screen() {
         )}
       </View>
 
-      {/* Bottom navigation bar for steps 0-4 (step 5 has its own commit button) */}
-      {currentStep < 5 && (
+      {/* Bottom navigation bar for steps 0-3 (step 4 Close has its own commit button) */}
+      {currentStep < 4 && (
         <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
           <TouchableOpacity
             style={[styles.navButton, { backgroundColor: colors.surface }]}
