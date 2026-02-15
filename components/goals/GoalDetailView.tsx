@@ -373,6 +373,9 @@ useEffect(() => {
 
   useEffect(() => {
     if (activeTab === 'act') {
+      // Don't fetch actions until timeline is loaded (for goal types that need one)
+      const needsTimeline = currentGoal.goal_type === '12week' || currentGoal.goal_type === 'custom';
+      if (needsTimeline && !timeline) return; // Wait for timeline to load
       fetchActions();
     } else if (activeTab === 'ideas') {
       fetchIdeas();
@@ -386,8 +389,21 @@ useEffect(() => {
   const fetchActions = async () => {
     setLoading(true);
     try {
-      // Fetch ALL actions for the goal (needed for one-time/boost actions)
-      const result = await fetchGoalActions(currentGoal.id, currentGoal.goal_type);
+      // Fetch both in parallel for faster loading
+      const [result, weekResult] = await Promise.all([
+        // Fetch ALL actions for the goal (needed for one-time/boost actions)
+        fetchGoalActions(currentGoal.id, currentGoal.goal_type),
+        // Fetch week-specific recurring actions if we have timeline info
+        (timeline && cycleWeeks.length > 0)
+          ? fetchGoalActionsForWeek(
+              [currentGoal.id],
+              displayedWeekNumber,
+              { id: timeline.id, source: timeline.source },
+              cycleWeeks
+            )
+          : Promise.resolve({} as Record<string, any[]>),
+      ]);
+
       setRecurringActions(result.recurringActions);
       setOneTimeActions(result.oneTimeActions);
 
@@ -401,30 +417,20 @@ useEffect(() => {
         }))
       });
 
-      // Fetch week-specific recurring actions if we have timeline info
+      const actionsForGoal = weekResult[currentGoal.id] || [];
+      setWeekFilteredActions(actionsForGoal);
+
       if (timeline && cycleWeeks.length > 0) {
-        const weekResult = await fetchGoalActionsForWeek(
-          [currentGoal.id],
-          displayedWeekNumber,
-          { id: timeline.id, source: timeline.source },
-          cycleWeeks
-        );
-
-        const actionsForGoal = weekResult[currentGoal.id] || [];
-        setWeekFilteredActions(actionsForGoal);
-
         console.log('[GoalDetailView] Week-filtered actions:', {
           weekNumber: displayedWeekNumber,
           count: actionsForGoal.length,
-          actions: actionsForGoal.map(a => ({
+          actions: actionsForGoal.map((a: any) => ({
             title: a.title,
             target: a.weeklyTarget,
             actual: a.weeklyActual,
             selectedWeeks: a.selectedWeeks
           }))
         });
-      } else {
-        setWeekFilteredActions([]);
       }
     } catch (error) {
       console.error('[GoalDetailView] Error fetching goal actions:', error);
