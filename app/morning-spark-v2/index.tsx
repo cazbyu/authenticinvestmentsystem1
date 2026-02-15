@@ -136,6 +136,9 @@ export default function MorningSparkV2Screen() {
   // Delegated task IDs — tracks which items were delegated (auto-committed with blue state)
   const [delegatedTaskIds, setDelegatedTaskIds] = useState<Set<string>>(new Set());
 
+  // Action counts — running tally of actions taken during contract review
+  const [actionCounts, setActionCounts] = useState({ committed: 0, rescheduled: 0, delegated: 0, deleted: 0 });
+
   const [committing, setCommitting] = useState(false);
 
   // Alignment Coach state
@@ -286,6 +289,7 @@ export default function MorningSparkV2Screen() {
           next.delete(taskId);
           return next;
         });
+        setActionCounts((prev) => ({ ...prev, deleted: prev.deleted + 1 }));
         // Refresh contract items so deleted task disappears
         const grouped = await getWeeklyContractForToday(userId);
         setContractItems(grouped);
@@ -312,6 +316,7 @@ export default function MorningSparkV2Screen() {
           next.add(taskId);
           return next;
         });
+        setActionCounts((prev) => ({ ...prev, delegated: prev.delegated + 1, committed: prev.committed + 1 }));
         // Refresh contract items to reflect delegation
         const grouped = await getWeeklyContractForToday(userId);
         setContractItems(grouped);
@@ -335,6 +340,7 @@ export default function MorningSparkV2Screen() {
           next.delete(taskId);
           return next;
         });
+        setActionCounts((prev) => ({ ...prev, rescheduled: prev.rescheduled + 1 }));
         // Refresh contract items — rescheduled item moves off today
         const grouped = await getWeeklyContractForToday(userId);
         setContractItems(grouped);
@@ -356,6 +362,7 @@ export default function MorningSparkV2Screen() {
         next.add(taskId);
         return next;
       });
+      setActionCounts((prev) => ({ ...prev, committed: prev.committed + 1 }));
     },
     [],
   );
@@ -803,6 +810,7 @@ export default function MorningSparkV2Screen() {
             targetScore={targetScore}
             coachMessage={contractCoachMessage}
             coachTone={contractCoachTone}
+            actionCounts={actionCounts}
           />
         )}
         {currentStep === 4 && (

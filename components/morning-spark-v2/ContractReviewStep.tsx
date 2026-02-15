@@ -102,6 +102,7 @@ interface ContractReviewStepProps {
   targetScore: number;
   coachMessage?: string | null;
   coachTone?: CoachTone;
+  actionCounts: { committed: number; rescheduled: number; delegated: number; deleted: number };
 }
 
 /** Flat sections (roles, wellness, unassigned) — goals handled separately */
@@ -490,6 +491,7 @@ export default function ContractReviewStep({
   targetScore,
   coachMessage,
   coachTone,
+  actionCounts,
 }: ContractReviewStepProps) {
   const { colors, isDarkMode } = useTheme();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
@@ -623,6 +625,44 @@ export default function ContractReviewStep({
           </View>
         )}
       </View>
+
+      {/* Action counts bar — shows running tally of actions taken */}
+      {(actionCounts.committed + actionCounts.rescheduled + actionCounts.delegated + actionCounts.deleted) > 0 && (
+        <View style={styles.actionCountsBar}>
+          {actionCounts.committed > 0 && (
+            <View style={[styles.actionCountItem, { backgroundColor: '#3DA87A15' }]}>
+              <Text style={styles.actionCountEmoji}>{'\u{1FAF6}'}</Text>
+              <Text style={[styles.actionCountText, { color: '#3DA87A' }]}>
+                {actionCounts.committed} Committed
+              </Text>
+            </View>
+          )}
+          {actionCounts.rescheduled > 0 && (
+            <View style={[styles.actionCountItem, { backgroundColor: '#5B9BD515' }]}>
+              <Text style={styles.actionCountEmoji}>{'\u{1F4C5}'}</Text>
+              <Text style={[styles.actionCountText, { color: '#5B9BD5' }]}>
+                {actionCounts.rescheduled} Rescheduled
+              </Text>
+            </View>
+          )}
+          {actionCounts.delegated > 0 && (
+            <View style={[styles.actionCountItem, { backgroundColor: '#5B9BD515' }]}>
+              <Text style={styles.actionCountEmoji}>{'\u{1F465}'}</Text>
+              <Text style={[styles.actionCountText, { color: '#5B9BD5' }]}>
+                {actionCounts.delegated} Delegated
+              </Text>
+            </View>
+          )}
+          {actionCounts.deleted > 0 && (
+            <View style={[styles.actionCountItem, { backgroundColor: '#C7605B15' }]}>
+              <Text style={styles.actionCountEmoji}>{'\u{1F5D1}\uFE0F'}</Text>
+              <Text style={[styles.actionCountText, { color: '#C7605B' }]}>
+                {actionCounts.deleted} Deleted
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       <ScrollView
         style={styles.scrollArea}
@@ -820,6 +860,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 3, gap: 4,
   },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
+
+  // ── Action counts ──
+  actionCountsBar: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
+    gap: 6, paddingHorizontal: 16, marginBottom: 10,
+  },
+  actionCountItem: {
+    flexDirection: 'row', alignItems: 'center', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3, gap: 3,
+  },
+  actionCountEmoji: { fontSize: 11 },
+  actionCountText: { fontSize: 11, fontWeight: '600' },
   legendText: { fontSize: 11, fontWeight: '600' },
 
   // ── Loading ──

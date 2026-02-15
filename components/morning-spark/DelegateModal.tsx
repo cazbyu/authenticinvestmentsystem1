@@ -65,7 +65,7 @@ export function DelegateModal({
         .select('id, name, email')
         .eq('user_id', userId)
         .is('deleted_at', null)
-        .order('name');
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
