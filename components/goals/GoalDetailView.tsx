@@ -208,8 +208,8 @@ useEffect(() => {
     const week = cycleWeeks.find(w => w.week_number === weekNumber);
     if (!week) return '';
 
-    const start = new Date(week.start_date);
-    const end = new Date(week.end_date);
+    const start = parseLocalDate(week.start_date);
+    const end = parseLocalDate(week.end_date);
 
     const formatDay = (d: Date) => d.getDate();
     const formatMonth = (d: Date) => d.toLocaleDateString('en-US', { month: 'short' });
@@ -1628,18 +1628,14 @@ console.log('[DEBUG] completedDays array:', completedDays);
   };
 
   const renderActTab = () => {
-    // Show spinner while timeline is loading OR actions are loading
-    // This prevents "No Actions Yet" from flashing before data arrives
+    // Show a subtle inline spinner while data loads — keeps the page structure visible
     const needsTimeline = currentGoal.goal_type === '12week' || currentGoal.goal_type === 'custom';
     const isStillLoading = loading || (needsTimeline && (loadingTimeline || !timeline));
 
     if (isStillLoading) {
       return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Loading actions...
-          </Text>
+        <View style={[styles.tabContent, { paddingTop: 40, alignItems: 'center' }]}>
+          <ActivityIndicator size="small" color={colors.primary} />
         </View>
       );
     }
