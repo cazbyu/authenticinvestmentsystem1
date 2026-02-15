@@ -614,6 +614,7 @@ export default function Goals() {
     setTimelineDaysLeft(null);
     setExpandedGoals({});
     setSelectedGoal(null);
+    setSelectedGoalForDetail(null);
     setSelectedGoalForAction(null);
     setEditingAction(null);
     setEditingActionGoal(null);
@@ -1475,30 +1476,42 @@ export default function Goals() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
-      <GoalBankTabbedHeader
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        authenticScore={authenticScore}
-        showBackButton={!!selectedTimeline}
-        onBackPress={handleBackToTimelines}
-        timelineTitle={selectedTimeline?.title}
-        daysRemaining={timelineDaysLeft?.days_left}
-        cycleProgressPercentage={timelineDaysLeft?.pct_elapsed}
-        backgroundColor="#f8fafc"
-        isSubHeader={true}
-      />
+      {selectedGoalForDetail ? (
+        <GoalDetailView
+          goal={selectedGoalForDetail}
+          onClose={handleCloseGoalDetail}
+          onGoalUpdated={handleGoalDetailUpdated}
+          onAddAction={handleAddActionFromGoalDetail}
+          authenticScore={authenticScore}
+        />
+      ) : (
+        <>
+          <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
+          <GoalBankTabbedHeader
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            authenticScore={authenticScore}
+            showBackButton={!!selectedTimeline}
+            onBackPress={handleBackToTimelines}
+            timelineTitle={selectedTimeline?.title}
+            daysRemaining={timelineDaysLeft?.days_left}
+            cycleProgressPercentage={timelineDaysLeft?.pct_elapsed}
+            backgroundColor="#f8fafc"
+            isSubHeader={true}
+          />
 
-      {renderMainContent()}
+          {renderMainContent()}
 
-      {/* FAB for creating goals - show when on goals tab or viewing a timeline */}
-      {(activeTab === 'goals' || selectedTimeline) && (
-        <DraggableFab onPress={() => {
-  console.log('[Goals] FAB pressed, opening CreateGoalModal');
-  setCreateGoalModalVisible(true);
-}} size={44} backgroundColor="#10b981">
-  <Plus size={28} color="#ffffff" />
-</DraggableFab>
+          {/* FAB for creating goals - show when on goals tab or viewing a timeline */}
+          {(activeTab === 'goals' || selectedTimeline) && (
+            <DraggableFab onPress={() => {
+              console.log('[Goals] FAB pressed, opening CreateGoalModal');
+              setCreateGoalModalVisible(true);
+            }} size={44} backgroundColor="#10b981">
+              <Plus size={28} color="#ffffff" />
+            </DraggableFab>
+          )}
+        </>
       )}
 
       {/* Modals */}
@@ -1718,18 +1731,6 @@ export default function Goals() {
         onClose={() => setSettingsSidebarVisible(false)}
       />
       
-      {/* Goal Detail View Modal */}
-      {selectedGoalForDetail && (
-        <Modal visible={true} animationType="slide" presentationStyle="pageSheet">
-          <GoalDetailView
-            goal={selectedGoalForDetail}
-            onClose={handleCloseGoalDetail}
-            onGoalUpdated={handleGoalDetailUpdated}
-            onAddAction={handleAddActionFromGoalDetail}
-            authenticScore={authenticScore}
-          />
-        </Modal>
-      )}
     </SafeAreaView>
   );
 }

@@ -10,7 +10,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { ArrowLeft, Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare, Calendar as CalendarIcon, Check } from 'lucide-react-native';
+import { Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare, Calendar as CalendarIcon, Check } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
 import { EditGoalModal } from './EditGoalModal';
@@ -1202,20 +1202,17 @@ useEffect(() => {
           onPress={onClose}
           hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
         >
-          <ArrowLeft size={24} color="#ffffff" />
-          <Text style={styles.backText}>Goal Bank</Text>
+          <Text style={styles.backButtonText}>{'\u2190'}</Text>
         </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitleText} numberOfLines={1}>
+            {currentGoal.title}
+          </Text>
+        </View>
         <View style={styles.scoreContainer}>
           <Text style={styles.scoreLabel}>Authentic Score</Text>
           <Text style={styles.scoreValue}>{authenticScore}</Text>
         </View>
-      </View>
-
-      <View style={styles.headerTitle}>
-        <Target size={28} color="#ffffff" style={styles.titleIcon} />
-        <Text style={styles.title} numberOfLines={2}>
-          {currentGoal.title}
-        </Text>
       </View>
 
       <View style={styles.headerBottom}>
@@ -2188,76 +2185,71 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 48,
-    paddingBottom: 8,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
   },
   headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    paddingVertical: 4,
   },
-  backText: {
+  backButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerTitleText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
   },
   scoreContainer: {
     alignItems: 'flex-end',
   },
   scoreLabel: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    marginBottom: 2,
   },
   scoreValue: {
     color: '#ffffff',
     fontSize: 24,
     fontWeight: '700',
   },
-  headerTitle: {
+  headerBottom: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  titleIcon: {
-    marginTop: 4,
-  },
-  title: {
-    color: '#ffffff',
-    fontSize: 24,
-    fontWeight: '700',
-    flex: 1,
-  },
-  headerBottom: {
-    marginTop: 8,
   },
   toggleGroup: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 8,
+    borderRadius: 16,
     padding: 2,
   },
   toggleButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 6,
+    borderRadius: 14,
     alignItems: 'center',
   },
   activeToggle: {
     backgroundColor: '#ffffff',
   },
   toggleText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    color: '#ffffff',
+    fontSize: 11,
     fontWeight: '600',
   },
   activeToggleText: {
