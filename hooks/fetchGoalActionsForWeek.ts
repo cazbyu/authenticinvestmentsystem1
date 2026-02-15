@@ -40,19 +40,13 @@ export type TaskWithLogs = {
   [k: string]: any; // carry through task fields from DB
 };
 
-/** Small helpers to normalize week objects coming from different views/shapes */
-const startOf = (w?: TimelineWeekInput) =>
-  w?.week_start ?? w?.start_date ?? w?.startDate;
-
-const endOf = (w?: TimelineWeekInput) =>
-  w?.week_end ?? w?.end_date ?? w?.endDate;
-
-const numberOf = (w?: TimelineWeekInput) =>
-  (typeof w?.week_number === 'number' ? w?.week_number : w?.weekNumber) as number | undefined;
-
 /**
  * Fetch action tasks + occurrences for given goals within a specific week.
- * Includes detailed console.debug() logging at each step.
+ *
+ * Uses the v_goal_detail_week_actions DB view for a single-query fetch.
+ * The view pre-computes weekly_actual, completed_dates, occurrences,
+ * selected_weeks, and associations (roles, domains, key relationships)
+ * all server-side, replacing 7+ sequential client queries.
  */
 export async function fetchGoalActionsForWeek(
   goalIds: string[],
@@ -82,219 +76,96 @@ export async function fetchGoalActionsForWeek(
       return {};
     }
 
-    // Resolve the requested week from the provided weeks
-    const week = cycleWeeks.find(w => numberOf(w) === weekNumber);
+    // ---- Single query using DB view (replaces 7+ sequential queries) ----
+    // The view joins tasks → goal joins → week plans → timeline weeks
+    // and pre-computes weekly_actual, occurrences, selected_weeks, and associations
+    const timelineCol = timeline.source === 'global'
+      ? 'user_global_timeline_id'
+      : 'user_custom_timeline_id';
 
-    const weekStartDate = startOf(week);
-    const weekEndDate = endOf(week);
-
-    console.log('[fetchGoalActionsForWeek] resolved week:', {
-      weekNumber,
-      found: Boolean(week),
-      weekStartDate,
-      weekEndDate,
-    });
-
-    if (!weekStartDate || !weekEndDate) {
-      console.warn('[fetchGoalActionsForWeek] missing week bounds — returning {}');
-      return {};
-    }
-
-    // ---- 1) Join: which parent tasks are linked to the requested goals?
-    // Build OR filter for both goal types since we might have mixed goals
-    const twelveWkFilter = `twelve_wk_goal_id.in.(${goalIds.join(',')})`;
-    const customFilter = `custom_goal_id.in.(${goalIds.join(',')})`;
-    const orFilter = `${twelveWkFilter},${customFilter}`;
-    console.log('[fetchGoalActionsForWeek] universal-goals-join query filter:', orFilter);
-
-    const { data: goalJoins, error: joinsErr } = await supabase
-      .from('0008-ap-universal-goals-join')
-      .select('parent_id, twelve_wk_goal_id, custom_goal_id, goal_type')
-      .or(orFilter)
-      .eq('parent_type', 'task');
-
-    if (joinsErr) {
-      console.error('[fetchGoalActionsForWeek] error loading goal joins:', joinsErr);
-      return {};
-    }
-
-    const taskIds = (goalJoins ?? []).map(j => j.parent_id);
-    console.log('[fetchGoalActionsForWeek] goalJoins:', {
-      count: goalJoins?.length ?? 0,
-      taskIdsCount: taskIds.length,
-      sample: goalJoins?.slice(0, 3),
-    });
-
-    if (taskIds.length === 0) {
-      console.log('[fetchGoalActionsForWeek] no parent tasks linked — returning {}');
-      return {};
-    }
-
-    // ---- 2) Load the parent action tasks (only "count" type, not completed/cancelled)
-    const { data: tasksData, error: tasksErr } = await supabase
-      .from('0008-ap-tasks')
+    let query = supabase
+      .from('v_goal_detail_week_actions')
       .select('*')
-      .eq('user_id', user.id)
-      .in('id', taskIds)
-      .eq('input_kind', 'count')
-      .is('deleted_at', null)
-      .not('status', 'in', '(completed,cancelled)');
-
-    if (tasksErr) {
-      console.error('[fetchGoalActionsForWeek] error fetching tasks:', tasksErr);
-      return {};
-    }
-    console.log('[fetchGoalActionsForWeek] tasks fetched:', {
-      count: tasksData?.length ?? 0,
-      sample: tasksData?.slice(0, 3),
-    });
-
-    if (!tasksData || tasksData.length === 0) {
-      console.log('[fetchGoalActionsForWeek] 0 tasks after filtering — returning {}');
-      return {};
-    }
-
-    // ---- 3) Week-plan rows for the target week (to get target_days)
-    let weekPlanQuery = supabase
-      .from('0008-ap-task-week-plan')
-      .select('*')
-      .in('task_id', taskIds)
+      .in('goal_id', goalIds)
       .eq('week_number', weekNumber)
-      .eq(timeline.source === 'global' ? 'user_global_timeline_id' : 'user_custom_timeline_id', timeline.id)
-      .is('deleted_at', null);
+      .eq('user_id', user.id)
+      .eq(timelineCol, timeline.id);
 
-    const { data: weekPlansData, error: weekPlansErr } = await weekPlanQuery;
-    if (weekPlansErr) {
-      console.error('[fetchGoalActionsForWeek] error fetching week plans:', weekPlansErr);
-      return {};
-    }
-    console.log('[fetchGoalActionsForWeek] week plans fetched:', {
-      count: weekPlansData?.length ?? 0,
-      sample: weekPlansData?.slice(0, 3),
-    });
+    const { data: viewData, error: viewError } = await query;
 
-    const tasksWithWeekPlans = tasksData.filter(task =>
-      (weekPlansData ?? []).some(wp => wp.task_id === task.id)
-    );
-    console.log('[fetchGoalActionsForWeek] tasks that have a week plan in this week:', {
-      count: tasksWithWeekPlans.length,
-      ids: tasksWithWeekPlans.slice(0, 10).map(t => t.id),
-    });
-
-    if (tasksWithWeekPlans.length === 0) {
-      console.log('[fetchGoalActionsForWeek] no tasks have a week plan for this week — returning {}');
+    if (viewError) {
+      console.error('[fetchGoalActionsForWeek] error fetching from view:', viewError);
       return {};
     }
 
-    // ---- 4) Occurrences (completed child rows) during the week
-    const { data: occurrenceData, error: occErr } = await supabase
-      .from('0008-ap-tasks')
-      .select('*')
-      .in('parent_task_id', tasksWithWeekPlans.map(t => t.id))
-      .is('deleted_at', null)
-      .eq('status', 'completed')
-      .gte('due_date', weekStartDate)
-      .lte('due_date', weekEndDate);
+    const rows = viewData ?? [];
+    console.log('[fetchGoalActionsForWeek] view returned:', rows.length, 'rows');
 
-    if (occErr) {
-      console.error('[fetchGoalActionsForWeek] error fetching occurrences:', occErr);
+    if (rows.length === 0) {
       return {};
     }
-    console.log('[fetchGoalActionsForWeek] occurrences fetched:', {
-      count: occurrenceData?.length ?? 0,
-      sample: occurrenceData?.slice(0, 3),
-    });
 
-    // ---- 5) Fetch roles, domains, and key relationships for tasks
-    const tasksWithWeekPlanIds = tasksWithWeekPlans.map(t => t.id);
-    console.log('[fetchGoalActionsForWeek] fetching associations for task IDs:', tasksWithWeekPlanIds);
-
-    const { data: rolesData, error: rolesErr } = await supabase
-      .from('0008-ap-universal-roles-join')
-      .select('parent_id, role:0008-ap-roles(id, label, color)')
-      .in('parent_id', tasksWithWeekPlanIds)
-      .eq('parent_type', 'task');
-
-    const { data: domainsData, error: domainsErr } = await supabase
-      .from('0008-ap-universal-domains-join')
-      .select('parent_id, domain:0008-ap-domains(id, name)')
-      .in('parent_id', tasksWithWeekPlanIds)
-      .eq('parent_type', 'task');
-
-    const { data: krData, error: krErr } = await supabase
-      .from('0008-ap-universal-key-relationships-join')
-      .select('parent_id, key_relationship:0008-ap-key-relationships(id, name)')
-      .in('parent_id', tasksWithWeekPlanIds)
-      .eq('parent_type', 'task');
-
-    if (rolesErr || domainsErr || krErr) {
-      console.error('[fetchGoalActionsForWeek] error fetching associations:', rolesErr || domainsErr || krErr);
-    }
-
-    // ---- 6) Fetch all week plans for tasks to determine selectedWeeks
-    const { data: allWeekPlans, error: allWeekPlansErr } = await supabase
-      .from('0008-ap-task-week-plan')
-      .select('*')
-      .in('task_id', tasksWithWeekPlanIds)
-      .eq(timeline.source === 'global' ? 'user_global_timeline_id' : 'user_custom_timeline_id', timeline.id)
-      .is('deleted_at', null);
-
-    if (allWeekPlansErr) {
-      console.error('[fetchGoalActionsForWeek] error fetching all week plans:', allWeekPlansErr);
-    }
-
-    console.log('[fetchGoalActionsForWeek] all week plans for tasks:', {
-      count: allWeekPlans?.length ?? 0,
-    });
-
-    // ---- 7) Group results by goal
+    // ---- Group results by goal ----
     const grouped: Record<string, TaskWithLogs[]> = {};
 
-    for (const task of tasksWithWeekPlans) {
-      const goalJoin = (goalJoins ?? []).find(gj => gj.parent_id === task.id);
-      if (!goalJoin) continue;
-
-      const weekPlan = (weekPlansData ?? []).find(wp => wp.task_id === task.id);
-      if (!weekPlan) continue;
-
-      const goalId: string | undefined = goalJoin.twelve_wk_goal_id || goalJoin.custom_goal_id;
+    for (const row of rows) {
+      const goalId = row.goal_id;
       if (!goalId) continue;
 
-      const relevantOccurrences =
-        (occurrenceData ?? []).filter(occ => occ.parent_task_id === task.id);
+      // Parse pre-aggregated JSON arrays from the view
+      const occurrences: any[] = Array.isArray(row.occurrences) ? row.occurrences : [];
+      const selectedWeeks: number[] = Array.isArray(row.selected_weeks) ? row.selected_weeks : [];
+      const roles = Array.isArray(row.roles) ? row.roles : [];
+      const domains = Array.isArray(row.domains) ? row.domains : [];
+      const keyRelationships = Array.isArray(row.key_relationships) ? row.key_relationships : [];
 
-      const taskLogs: TaskLog[] = relevantOccurrences.map(occ => ({
+      const weeklyTarget = row.target_days ?? 0;
+      const weeklyActual = Math.min(row.weekly_actual ?? 0, weeklyTarget);
+
+      const taskLogs: TaskLog[] = occurrences.map((occ: any) => ({
         id: occ.id,
-        task_id: task.id,
+        task_id: row.task_id,
         measured_on: occ.due_date,
         week_number: weekNumber,
         day_of_week: new Date(occ.due_date).getDay(),
         value: 1,
         completed: true,
-        created_at: occ.created_at,
+        created_at: occ.completed_at || row.created_at,
       }));
 
-      const weeklyActual = taskLogs.length;
-      const weeklyTarget = weekPlan.target_days ?? 0;
-      const cappedWeeklyActual = Math.min(weeklyActual, weeklyTarget);
-
-      // Get associations for this task
-      const taskRoles = rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [];
-      const taskDomains = domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [];
-      const taskKRs = krData?.filter(kr => kr.parent_id === task.id).map(kr => kr.key_relationship).filter(Boolean) || [];
-
-      // Get all weeks this task is scheduled for
-      const selectedWeeks = allWeekPlans?.filter(wp => wp.task_id === task.id).map(wp => wp.week_number) || [];
-
       const taskWithLogs: TaskWithLogs = {
-        ...task,
-        goal_type: goalJoin.goal_type === 'twelve_wk_goal' ? '12week' : 'custom',
+        id: row.task_id,
+        title: row.title,
+        description: row.description,
+        status: row.status,
+        type: row.type,
+        recurrence_rule: row.recurrence_rule,
+        input_kind: row.input_kind,
+        unit: row.unit,
+        is_urgent: row.is_urgent,
+        is_important: row.is_important,
+        due_date: row.due_date,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        is_all_day: row.is_all_day,
+        is_anytime: row.is_anytime,
+        sort_order: row.sort_order,
+        tags: row.tags,
+        one_thing: row.one_thing,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        deleted_at: row.deleted_at,
+        location: row.location,
+        times_rescheduled: row.times_rescheduled,
+        goal_type: row.goal_join_type === 'twelve_wk_goal' ? '12week' : 'custom',
         logs: taskLogs,
-        weeklyActual: cappedWeeklyActual,
+        weeklyActual,
         weeklyTarget,
-        roles: taskRoles as Array<{ id: string; label: string; color?: string }>,
-        domains: taskDomains as Array<{ id: string; name: string }>,
-        keyRelationships: taskKRs as Array<{ id: string; name: string }>,
+        roles: roles as Array<{ id: string; label: string; color?: string }>,
+        domains: domains as Array<{ id: string; name: string }>,
+        keyRelationships: keyRelationships as Array<{ id: string; name: string }>,
         selectedWeeks: selectedWeeks.sort((a, b) => a - b),
       };
 

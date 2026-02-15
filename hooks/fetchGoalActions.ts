@@ -101,13 +101,14 @@ function getWeekBounds(): { weekStart: string; weekEnd: string } {
 }
 
 /**
- * Fetch recurring actions (leading indicators) and one-time actions (boosts) for a specific goal
+ * Fetch recurring actions (leading indicators) and one-time actions (boosts) for a specific goal.
  *
- * @param goalId - The ID of the goal
- * @param goalType - The type of goal ('1y', '12week', or 'custom')
- * @param weekStart - Optional week start date (defaults to current week Monday)
- * @param weekEnd - Optional week end date (defaults to current week Sunday)
- * @returns Object containing recurring and one-time actions
+ * Uses the v_goal_detail_actions DB view for a single-query fetch with pre-aggregated
+ * associations (roles, domains, key relationships). Falls back to multi-query approach
+ * only for 1y goals (which aggregate from child goals).
+ *
+ * For recurring tasks, a second query fetches completed occurrences in the current week
+ * to compute weeklyActual and completedDates.
  */
 export async function fetchGoalActions(
   goalId: string,
@@ -128,266 +129,188 @@ export async function fetchGoalActions(
     const bounds = weekStart && weekEnd ? { weekStart, weekEnd } : getWeekBounds();
     const { weekStart: wStart, weekEnd: wEnd } = bounds;
 
-    console.log('[fetchGoalActions] Fetching for:', {
-      goalId,
-      goalType,
-      weekStart: wStart,
-      weekEnd: wEnd,
-    });
+    console.log('[fetchGoalActions] Fetching for:', { goalId, goalType, weekStart: wStart, weekEnd: wEnd });
 
-    // Determine the correct column name for the goal join
-    // Annual goals (1y) aggregate from child 12-week goals
-    // They don't have direct task links in universal-goals-join
+    // Annual goals aggregate from child 12-week goals
     if (goalType === '1y') {
-      // For annual goals, find child 12-week goals and aggregate their actions
       const { data: childGoals, error: childError } = await supabase
         .from('0008-ap-goals-12wk')
         .select('id')
         .eq('parent_goal_id', goalId)
         .is('deleted_at', null);
 
-      if (childError) {
-        console.error('[fetchGoalActions] Error fetching child goals:', childError);
+      if (childError || !childGoals || childGoals.length === 0) {
         return { recurringActions: [], oneTimeActions: [] };
       }
 
-      if (!childGoals || childGoals.length === 0) {
-        console.log('[fetchGoalActions] No child goals found for annual goal');
-        return { recurringActions: [], oneTimeActions: [] };
-      }
-
-      // Aggregate actions from all child goals
-      let allRecurring: RecurringActionResult[] = [];
-      let allOneTime: OneTimeActionResult[] = [];
-
-      for (const childGoal of childGoals) {
-        const childResult = await fetchGoalActions(childGoal.id, '12week', weekStart, weekEnd);
-        allRecurring = [...allRecurring, ...childResult.recurringActions];
-        allOneTime = [...allOneTime, ...childResult.oneTimeActions];
-      }
+      // Fetch all child goals in parallel
+      const childResults = await Promise.all(
+        childGoals.map(cg => fetchGoalActions(cg.id, '12week', weekStart, weekEnd))
+      );
 
       return {
-        recurringActions: allRecurring,
-        oneTimeActions: allOneTime,
+        recurringActions: childResults.flatMap(r => r.recurringActions),
+        oneTimeActions: childResults.flatMap(r => r.oneTimeActions),
       };
     }
 
-    const goalJoinColumn = goalType === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
+    // ---- Single query using DB view (replaces 4+ separate queries) ----
+    const { data: viewData, error: viewError } = await supabase
+      .from('v_goal_detail_actions')
+      .select('*')
+      .eq('goal_id', goalId)
+      .eq('user_id', user.id);
 
-    // ============================================
-    // STEP 1: Fetch Recurring Actions (Leading Indicators)
-    // ============================================
-
-    // 1a. Get task IDs linked to this goal
-    const { data: recurringJoins, error: recurringJoinsError } = await supabase
-      .from('0008-ap-universal-goals-join')
-      .select('parent_id')
-      .eq(goalJoinColumn, goalId)
-      .eq('parent_type', 'task');
-
-    if (recurringJoinsError) {
-      console.error('[fetchGoalActions] Error fetching recurring joins:', recurringJoinsError);
-      throw recurringJoinsError;
+    if (viewError) {
+      console.error('[fetchGoalActions] Error fetching from view:', viewError);
+      throw viewError;
     }
 
-    const recurringTaskIds = recurringJoins?.map(j => j.parent_id).filter(Boolean) || [];
+    const allRows = viewData ?? [];
+    console.log('[fetchGoalActions] View returned:', allRows.length, 'rows');
 
-    console.log('[fetchGoalActions] Found task IDs:', recurringTaskIds.length);
+    if (allRows.length === 0) {
+      return { recurringActions: [], oneTimeActions: [] };
+    }
 
-    let recurringActions: RecurringActionResult[] = [];
+    // Split into recurring vs one-time
+    const recurringRows = allRows.filter(r => r.recurrence_rule != null);
+    const oneTimeRows = allRows.filter(r => r.recurrence_rule == null && r.status !== 'cancelled');
 
-    if (recurringTaskIds.length > 0) {
-      // 1b. Fetch parent recurring tasks (only those with recurrence_rule)
-      const { data: recurringTasks, error: recurringTasksError } = await supabase
+    // For recurring tasks, fetch completed occurrences in the current week (single bulk query)
+    let allOccurrences: any[] = [];
+    const recurringIds = recurringRows.map(r => r.task_id);
+
+    if (recurringIds.length > 0) {
+      const { data: occData, error: occError } = await supabase
         .from('0008-ap-tasks')
-        .select('*')
-        .in('id', recurringTaskIds)
-        .eq('user_id', user.id)
-        .not('recurrence_rule', 'is', null)
+        .select('id, parent_task_id, due_date, completed_at, status')
+        .in('parent_task_id', recurringIds)
+        .eq('status', 'completed')
+        .gte('due_date', wStart)
+        .lte('due_date', wEnd)
         .is('deleted_at', null)
-        .is('parent_task_id', null) // Only parent tasks, not occurrences
-        .order('title');
+        .order('due_date');
 
-      if (recurringTasksError) {
-        console.error('[fetchGoalActions] Error fetching recurring tasks:', recurringTasksError);
-        throw recurringTasksError;
+      if (!occError) {
+        allOccurrences = occData ?? [];
       }
+    }
 
-      console.log('[fetchGoalActions] Recurring tasks found:', recurringTasks?.length || 0);
+    // Assemble recurring actions
+    const recurringActions: RecurringActionResult[] = recurringRows.map(row => {
+      const taskOccurrences = allOccurrences.filter(occ => occ.parent_task_id === row.task_id);
+      const completedDates = taskOccurrences.map(occ => occ.due_date);
+      const weeklyActual = taskOccurrences.length;
 
-      if (recurringTasks && recurringTasks.length > 0) {
-        // 1c. For each recurring task, fetch completed occurrences in the week
-        for (const task of recurringTasks) {
-          const { data: completedOccurrences, error: occurrencesError } = await supabase
-            .from('0008-ap-tasks')
-            .select('id, due_date, completed_at, status')
-            .eq('parent_task_id', task.id)
-            .eq('status', 'completed')
-            .gte('due_date', wStart)
-            .lte('due_date', wEnd)
-            .is('deleted_at', null)
-            .order('due_date');
-
-          if (occurrencesError) {
-            console.error('[fetchGoalActions] Error fetching occurrences for task:', task.id, occurrencesError);
-            continue;
+      let weeklyTarget = 0;
+      if (row.recurrence_rule) {
+        const rule = row.recurrence_rule.toUpperCase();
+        if (rule.includes('FREQ=DAILY')) {
+          weeklyTarget = 7;
+        } else if (rule.includes('FREQ=WEEKLY')) {
+          weeklyTarget = 1;
+        } else if (rule.includes('BYDAY')) {
+          const byDayMatch = rule.match(/BYDAY=([^;]+)/);
+          if (byDayMatch) {
+            weeklyTarget = byDayMatch[1].split(',').length;
           }
-
-          const completedDates = completedOccurrences?.map(occ => occ.due_date) || [];
-          const weeklyActual = completedOccurrences?.length || 0;
-
-          // Get weekly target from task metadata or default to recurrence frequency
-          // This could be enhanced by fetching from 0008-ap-task-week-plan if available
-          let weeklyTarget = 0;
-          if (task.recurrence_rule) {
-            // Simple heuristic: if DAILY, target is 7, if WEEKLY, target is 1
-            const rule = task.recurrence_rule.toUpperCase();
-            if (rule.includes('FREQ=DAILY')) {
-              weeklyTarget = 7;
-            } else if (rule.includes('FREQ=WEEKLY')) {
-              weeklyTarget = 1;
-            } else if (rule.includes('BYDAY')) {
-              // Count the days in BYDAY
-              const byDayMatch = rule.match(/BYDAY=([^;]+)/);
-              if (byDayMatch) {
-                const days = byDayMatch[1].split(',');
-                weeklyTarget = days.length;
-              }
-            }
-          }
-
-          // Fetch associations (roles, domains, key relationships)
-          const [rolesData, domainsData, krData] = await Promise.all([
-            supabase
-              .from('0008-ap-universal-roles-join')
-              .select('role:0008-ap-roles(id, label, color)')
-              .eq('parent_id', task.id)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-domains-join')
-              .select('domain:0008-ap-domains(id, name)')
-              .eq('parent_id', task.id)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-key-relationships-join')
-              .select('key_relationship:0008-ap-key-relationships(id, name)')
-              .eq('parent_id', task.id)
-              .eq('parent_type', 'task'),
-          ]);
-
-          const roles = rolesData.data?.map((r: any) => r.role).filter(Boolean) || [];
-          const domains = domainsData.data?.map((d: any) => d.domain).filter(Boolean) || [];
-          const keyRelationships = krData.data?.map((kr: any) => kr.key_relationship).filter(Boolean) || [];
-
-          const logs = completedOccurrences?.map(occ => ({
-            id: occ.id,
-            measured_on: occ.due_date,
-            completed: true,
-            due_date: occ.due_date,
-          })) || [];
-
-          recurringActions.push({
-            ...task,
-            weeklyTarget,
-            weeklyActual,
-            completedDates,
-            logs,
-            roles,
-            domains,
-            keyRelationships,
-          });
         }
       }
-    }
 
-    // ============================================
-    // STEP 2: Fetch One-Time Actions (Boosts)
-    // ============================================
+      // Associations come pre-aggregated from the view as JSON arrays
+      const roles = Array.isArray(row.roles) ? row.roles : [];
+      const domains = Array.isArray(row.domains) ? row.domains : [];
+      const keyRelationships = Array.isArray(row.key_relationships) ? row.key_relationships : [];
 
-    // 2a. Get task IDs for one-time actions
-    const { data: oneTimeJoins, error: oneTimeJoinsError } = await supabase
-      .from('0008-ap-universal-goals-join')
-      .select('parent_id')
-      .eq(goalJoinColumn, goalId)
-      .eq('parent_type', 'task');
+      const logs = taskOccurrences.map(occ => ({
+        id: occ.id,
+        measured_on: occ.due_date,
+        completed: true,
+        due_date: occ.due_date,
+      }));
 
-    if (oneTimeJoinsError) {
-      console.error('[fetchGoalActions] Error fetching one-time joins:', oneTimeJoinsError);
-      throw oneTimeJoinsError;
-    }
+      return {
+        id: row.task_id,
+        title: row.title,
+        description: row.description,
+        recurrence_rule: row.recurrence_rule,
+        input_kind: row.input_kind,
+        status: row.status,
+        type: row.type,
+        due_date: row.due_date,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        is_urgent: row.is_urgent,
+        is_important: row.is_important,
+        is_all_day: row.is_all_day,
+        is_anytime: row.is_anytime,
+        sort_order: row.sort_order,
+        tags: row.tags,
+        unit: row.unit,
+        one_thing: row.one_thing,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        completed_at: row.completed_at,
+        location: row.location,
+        times_rescheduled: row.times_rescheduled,
+        weeklyTarget,
+        weeklyActual,
+        completedDates,
+        logs,
+        roles,
+        domains,
+        keyRelationships,
+      };
+    });
 
-    const oneTimeTaskIds = oneTimeJoins?.map(j => j.parent_id).filter(Boolean) || [];
+    // Assemble one-time actions (no occurrences needed)
+    const oneTimeActions: OneTimeActionResult[] = oneTimeRows.map(row => {
+      const pointsEarned = calculateTaskPoints(row);
+      const roles = Array.isArray(row.roles) ? row.roles : [];
+      const domains = Array.isArray(row.domains) ? row.domains : [];
+      const keyRelationships = Array.isArray(row.key_relationships) ? row.key_relationships : [];
 
-    let oneTimeActions: OneTimeActionResult[] = [];
-
-    if (oneTimeTaskIds.length > 0) {
-      // 2b. Fetch one-time tasks (no recurrence_rule, both pending and completed)
-      const { data: oneTimeTasks, error: oneTimeTasksError } = await supabase
-        .from('0008-ap-tasks')
-        .select('*')
-        .in('id', oneTimeTaskIds)
-        .eq('user_id', user.id)
-        .is('recurrence_rule', null)
-        .neq('status', 'cancelled')
-        .is('deleted_at', null)
-        .order('due_date', { ascending: true, nullsFirst: false });
-
-      if (oneTimeTasksError) {
-        console.error('[fetchGoalActions] Error fetching one-time tasks:', oneTimeTasksError);
-        throw oneTimeTasksError;
-      }
-
-      console.log('[fetchGoalActions] One-time tasks found:', oneTimeTasks?.length || 0);
-
-      if (oneTimeTasks && oneTimeTasks.length > 0) {
-        for (const task of oneTimeTasks) {
-          // Calculate points for this boost
-          const pointsEarned = calculateTaskPoints(task);
-
-          // Fetch associations
-          const [rolesData, domainsData, krData] = await Promise.all([
-            supabase
-              .from('0008-ap-universal-roles-join')
-              .select('role:0008-ap-roles(id, label, color)')
-              .eq('parent_id', task.id)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-domains-join')
-              .select('domain:0008-ap-domains(id, name)')
-              .eq('parent_id', task.id)
-              .eq('parent_type', 'task'),
-            supabase
-              .from('0008-ap-universal-key-relationships-join')
-              .select('key_relationship:0008-ap-key-relationships(id, name)')
-              .eq('parent_id', task.id)
-              .eq('parent_type', 'task'),
-          ]);
-
-          const roles = rolesData.data?.map((r: any) => r.role).filter(Boolean) || [];
-          const domains = domainsData.data?.map((d: any) => d.domain).filter(Boolean) || [];
-          const keyRelationships = krData.data?.map((kr: any) => kr.key_relationship).filter(Boolean) || [];
-
-          oneTimeActions.push({
-            ...task,
-            completedAt: task.completed_at,
-            pointsEarned,
-            roles,
-            domains,
-            keyRelationships,
-          });
-        }
-      }
-    }
+      return {
+        id: row.task_id,
+        title: row.title,
+        description: row.description,
+        status: row.status,
+        type: row.type,
+        due_date: row.due_date,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        is_urgent: row.is_urgent,
+        is_important: row.is_important,
+        is_all_day: row.is_all_day,
+        is_anytime: row.is_anytime,
+        sort_order: row.sort_order,
+        tags: row.tags,
+        unit: row.unit,
+        one_thing: row.one_thing,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        completed_at: row.completed_at,
+        completedAt: row.completed_at,
+        pointsEarned,
+        location: row.location,
+        times_rescheduled: row.times_rescheduled,
+        roles,
+        domains,
+        keyRelationships,
+      };
+    });
 
     console.log('[fetchGoalActions] Final result:', {
       recurringActionsCount: recurringActions.length,
       oneTimeActionsCount: oneTimeActions.length,
     });
 
-    return {
-      recurringActions,
-      oneTimeActions,
-    };
+    return { recurringActions, oneTimeActions };
 
   } catch (error) {
     console.error('[fetchGoalActions] Unexpected error:', error);
