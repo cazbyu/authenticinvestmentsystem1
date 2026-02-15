@@ -80,6 +80,8 @@ export function GoalDetailView({
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('act');
   const [loading, setLoading] = useState(true);
+  const [refreshingWeek, setRefreshingWeek] = useState(false); // Background refresh (no spinner)
+  const initialLoadDone = React.useRef(false); // Track whether first load is complete
   const [recurringActions, setRecurringActions] = useState<RecurringActionResult[]>([]);
   const [oneTimeActions, setOneTimeActions] = useState<OneTimeActionResult[]>([]);
   // Week-specific actions from fetchGoalActionsForWeek (has correct weeklyTarget)
@@ -173,6 +175,7 @@ useEffect(() => {
   // Update currentGoal when goal prop changes
   useEffect(() => {
     setCurrentGoal(goal);
+    initialLoadDone.current = false; // Reset so new goal gets full spinner
   }, [goal]);
 
   // Calculate current week bounds (Sunday to Saturday)
@@ -387,7 +390,12 @@ useEffect(() => {
   }, [currentGoal.id, activeTab, refreshTrigger, timeRange, displayedWeekNumber, timeline, cycleWeeks, loadingTimeline]);
 
   const fetchActions = async () => {
-    setLoading(true);
+    // Only show full spinner on initial load; week navigation keeps current data visible
+    if (!initialLoadDone.current) {
+      setLoading(true);
+    } else {
+      setRefreshingWeek(true);
+    }
     try {
       // Fetch both in parallel for faster loading
       const [result, weekResult] = await Promise.all([
@@ -407,36 +415,16 @@ useEffect(() => {
       setRecurringActions(result.recurringActions);
       setOneTimeActions(result.oneTimeActions);
 
-      console.log('[GoalDetailView] One-time actions:', {
-        count: result.oneTimeActions.length,
-        actions: result.oneTimeActions.map(a => ({
-          id: a.id,
-          title: a.title,
-          status: a.status,
-          due_date: a.due_date
-        }))
-      });
-
       const actionsForGoal = weekResult[currentGoal.id] || [];
       setWeekFilteredActions(actionsForGoal);
 
-      if (timeline && cycleWeeks.length > 0) {
-        console.log('[GoalDetailView] Week-filtered actions:', {
-          weekNumber: displayedWeekNumber,
-          count: actionsForGoal.length,
-          actions: actionsForGoal.map((a: any) => ({
-            title: a.title,
-            target: a.weeklyTarget,
-            actual: a.weeklyActual,
-            selectedWeeks: a.selectedWeeks
-          }))
-        });
-      }
+      initialLoadDone.current = true;
     } catch (error) {
       console.error('[GoalDetailView] Error fetching goal actions:', error);
       Alert.alert('Error', 'Failed to load actions for this goal');
     } finally {
       setLoading(false);
+      setRefreshingWeek(false);
     }
   };
 
@@ -1657,7 +1645,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
     }
 
     return (
-      <View style={styles.tabContent}>
+      <View style={[styles.tabContent, refreshingWeek && { opacity: 0.5 }]}>
         {weekFilteredActions.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
