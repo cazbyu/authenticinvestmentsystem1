@@ -373,9 +373,9 @@ useEffect(() => {
 
   useEffect(() => {
     if (activeTab === 'act') {
-      // Don't fetch actions until timeline is loaded (for goal types that need one)
+      // Don't fetch actions until timeline is fully loaded (for goal types that need one)
       const needsTimeline = currentGoal.goal_type === '12week' || currentGoal.goal_type === 'custom';
-      if (needsTimeline && !timeline) return; // Wait for timeline to load
+      if (needsTimeline && (loadingTimeline || !timeline)) return; // Wait for timeline to finish loading
       fetchActions();
     } else if (activeTab === 'ideas') {
       fetchIdeas();
@@ -384,7 +384,7 @@ useEffect(() => {
     } else if (activeTab === 'analytics') {
       fetchAnalytics();
     }
-  }, [currentGoal.id, activeTab, refreshTrigger, timeRange, displayedWeekNumber, timeline, cycleWeeks]);
+  }, [currentGoal.id, activeTab, refreshTrigger, timeRange, displayedWeekNumber, timeline, cycleWeeks, loadingTimeline]);
 
   const fetchActions = async () => {
     setLoading(true);
@@ -1640,7 +1640,12 @@ console.log('[DEBUG] completedDays array:', completedDays);
   };
 
   const renderActTab = () => {
-    if (loading) {
+    // Show spinner while timeline is loading OR actions are loading
+    // This prevents "No Actions Yet" from flashing before data arrives
+    const needsTimeline = currentGoal.goal_type === '12week' || currentGoal.goal_type === 'custom';
+    const isStillLoading = loading || (needsTimeline && (loadingTimeline || !timeline));
+
+    if (isStillLoading) {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
