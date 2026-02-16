@@ -92,7 +92,7 @@ const DEFAULT_SPARK_LIST: SparkListOption[] = [
 ];
 
 // Default prompt (fallback)
-const DEFAULT_PROMPT = 'Finish this sentence: At my absolute core, before anything else I am a...';
+const DEFAULT_PROMPT = 'At my absolute core, before anything else I am a...';
 
 // Confirmation text that fades in after selection
 const CONFIRMATION_TEXT = 'This foundational identity anchors everything else—your Mission (purpose), Vision (direction), and Core Values (guardrails).';
@@ -2900,11 +2900,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   heroPromptText: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 20,
-    lineHeight: 22,
+    lineHeight: 26,
     paddingHorizontal: 8,
   },
 
