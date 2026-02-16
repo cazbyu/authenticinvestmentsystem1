@@ -707,8 +707,8 @@ export default function WeeklyAlignmentScreen() {
         )}
       </View>
 
-      {/* Alignment Coach floating bubble overlay */}
-      {guidedModeEnabled && (
+      {/* Alignment Coach floating bubble overlay — disabled auto-popup for now */}
+      {/* guidedModeEnabled && (
         <TourGuideBubble
           latestResponse={coach.latestResponse}
           isLoading={coach.isLoading}
@@ -722,7 +722,7 @@ export default function WeeklyAlignmentScreen() {
           stepColor={currentStepData.color}
           stepLabel={currentStepData.label}
         />
-      )}
+      ) */}
 
       {/* Capture Overlay for coach-suggested captures */}
       {captureOverlay && (

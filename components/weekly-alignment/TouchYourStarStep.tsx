@@ -1674,26 +1674,6 @@ export function TouchYourStarStep({
                   );
                 })}
 
-                {/* "Give Me Some Reflective Questions" navigational card */}
-                <TouchableOpacity
-                  style={[
-                    styles.reflectiveQuestionsCard,
-                    { borderColor: colors.border, backgroundColor: colors.background },
-                  ]}
-                  onPress={handleStartReflectiveQuestions}
-                >
-                  <Lightbulb size={20} color="#ed1c24" />
-                  <View style={styles.reflectiveQuestionsCardText}>
-                    <Text style={[styles.reflectiveQuestionsCardTitle, { color: colors.text }]}>
-                      Give Me Some Reflective Questions
-                    </Text>
-                    <Text style={[styles.reflectiveQuestionsCardSubtitle, { color: colors.textSecondary }]}>
-                      Not sure? Explore prompts to help you discover your core identity
-                    </Text>
-                  </View>
-                  <ChevronRight size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-
                 {/* Custom "Something else..." option */}
                 {sparkListOptions.filter(s => s.isCustom).map((spark) => {
                   const isSelected = selectedIdentity === 'custom';
@@ -1739,6 +1719,26 @@ export function TouchYourStarStep({
                     </TouchableOpacity>
                   );
                 })}
+
+                {/* "Give Me Some Reflective Questions" navigational card */}
+                <TouchableOpacity
+                  style={[
+                    styles.reflectiveQuestionsCard,
+                    { borderColor: colors.border, backgroundColor: colors.background },
+                  ]}
+                  onPress={handleStartReflectiveQuestions}
+                >
+                  <Lightbulb size={20} color="#ed1c24" />
+                  <View style={styles.reflectiveQuestionsCardText}>
+                    <Text style={[styles.reflectiveQuestionsCardTitle, { color: colors.text }]}>
+                      Give Me Some Reflective Questions
+                    </Text>
+                    <Text style={[styles.reflectiveQuestionsCardSubtitle, { color: colors.textSecondary }]}>
+                      Not sure? Explore prompts to help you discover your core identity
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
 
               {/* Confirmation Text - Fades in after selection */}
