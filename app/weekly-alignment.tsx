@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -110,10 +110,22 @@ export default function WeeklyAlignmentScreen() {
   // Intro sequence state
   const [hasIdentity, setHasIdentity] = useState(false);
   const [introSequenceComplete, setIntroSequenceComplete] = useState(false);
+  const contentOpacity = useRef(new Animated.Value(0.08)).current; // Start nearly invisible/blurry
 
   // Week dates state
   const [weekStartDate, setWeekStartDate] = useState<string>('');
   const [weekEndDate, setWeekEndDate] = useState<string>('');
+
+  // Fade step content in when intro sequence completes
+  useEffect(() => {
+    if (introSequenceComplete) {
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [introSequenceComplete]);
 
   // Alignment Coach hook (2-way coaching for all steps)
   const coach = useAlignmentCoach(userId, guidedModeEnabled);
@@ -542,7 +554,8 @@ export default function WeeklyAlignmentScreen() {
         onIntroSequenceComplete={() => setIntroSequenceComplete(true)}
       />
 
-      {/* Header */}
+      {/* Header + Step Content — fades in after intro sequence */}
+      <Animated.View style={[styles.contentWrapper, { opacity: contentOpacity }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={goToPreviousStep}
@@ -706,6 +719,7 @@ export default function WeeklyAlignmentScreen() {
           />
         )}
       </View>
+      </Animated.View>
 
       {/* Alignment Coach floating bubble overlay — disabled auto-popup for now */}
       {/* guidedModeEnabled && (
@@ -750,6 +764,9 @@ export default function WeeklyAlignmentScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  contentWrapper: {
     flex: 1,
   },
   loadingContainer: {

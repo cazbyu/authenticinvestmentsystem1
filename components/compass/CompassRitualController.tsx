@@ -40,6 +40,7 @@ import {
   CORNER_PADDING_X,
   CORNER_PADDING_Y,
   ALIGNMENT_SWEEP_ANGLES,
+  POST_IGNITION_DOCK_DELAY,
   getStepConfig,
   INTRO_MESSAGES,
   INTRO_FADE_IN,
@@ -240,31 +241,34 @@ export function CompassRitualController({
   }, []);
 
   const handleIgnitionDone = useCallback(() => {
-    ignitionPhaseRef.current = 'shrinking';
-
-    const cornerScale = CORNER_SIZE / FULL_SIZE;
-    const { x: dockX, y: dockY } = computeDockXY();
-
-    compassScale.value = withTiming(cornerScale, {
-      duration: SHRINK_DURATION,
-      easing: Easing.out(Easing.cubic),
-    });
-
-    compassX.value = withTiming(dockX, {
-      duration: SHRINK_DURATION,
-      easing: Easing.out(Easing.cubic),
-    });
-
-    compassY.value = withTiming(dockY, {
-      duration: SHRINK_DURATION,
-      easing: Easing.out(Easing.cubic),
-    });
-
-    // After shrink completes, notify parent
+    // Hold compass at center for an extra moment before shrinking
     setTimeout(() => {
-      ignitionPhaseRef.current = 'docked';
-      onIgnitionComplete();
-    }, SHRINK_DURATION + 50);
+      ignitionPhaseRef.current = 'shrinking';
+
+      const cornerScale = CORNER_SIZE / FULL_SIZE;
+      const { x: dockX, y: dockY } = computeDockXY();
+
+      compassScale.value = withTiming(cornerScale, {
+        duration: SHRINK_DURATION,
+        easing: Easing.out(Easing.cubic),
+      });
+
+      compassX.value = withTiming(dockX, {
+        duration: SHRINK_DURATION,
+        easing: Easing.out(Easing.cubic),
+      });
+
+      compassY.value = withTiming(dockY, {
+        duration: SHRINK_DURATION,
+        easing: Easing.out(Easing.cubic),
+      });
+
+      // After shrink completes, notify parent
+      setTimeout(() => {
+        ignitionPhaseRef.current = 'docked';
+        onIgnitionComplete();
+      }, SHRINK_DURATION + 50);
+    }, POST_IGNITION_DOCK_DELAY);
   }, [onIgnitionComplete, computeDockXY]);
 
   // ============================================
@@ -519,25 +523,26 @@ const styles = StyleSheet.create({
     left: 0,
   },
   introTextContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '42%',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    top: '55%',
+    paddingHorizontal: 24,
   },
   introTextBlock: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 28,
+    paddingVertical: 20,
     borderRadius: 16,
-    maxWidth: 340,
+    maxWidth: 360,
     alignItems: 'center',
   },
   introText: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '600',
     fontStyle: 'italic',
     textAlign: 'center',
-    lineHeight: 30,
+    lineHeight: 38,
     letterSpacing: 0.3,
   },
   step6Overlay: {

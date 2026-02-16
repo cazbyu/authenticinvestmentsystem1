@@ -51,14 +51,14 @@ export const ALIGNMENT_SWEEP_ANGLES = [0, 270, 90, 180];
 
 /** Configuration for the opening ignition ceremony animation */
 export const IGNITION_CONFIG = {
-  /** Gold spindle total spin (1.5 full clockwise rotations) */
-  goldSpinDegrees: 540,
-  /** Silver spindle total spin (2 counter-clockwise rotations) */
-  silverSpinDegrees: -720,
+  /** Gold spindle total spin (1 full clockwise rotation) */
+  goldSpinDegrees: 360,
+  /** Silver spindle total spin (1.5 counter-clockwise rotations) */
+  silverSpinDegrees: -540,
   /** Duration of the free-spin phase in ms */
-  spinDuration: 3000,
+  spinDuration: 4000,
   /** Duration of the deceleration phase in ms */
-  decelerateDuration: 1500,
+  decelerateDuration: 2000,
   /** Final angle after deceleration (North) */
   finalAngle: 0,
 };
@@ -78,6 +78,9 @@ export const FADE_DURATION = 500;
 
 /** Delay after ignition before shrink begins (ms) */
 export const POST_IGNITION_DELAY = 300;
+
+/** Extra hold time after ignition before compass shrinks to corner (ms) */
+export const POST_IGNITION_DOCK_DELAY = 1000;
 
 // ============================================
 // INTRO SEQUENCE CONFIG
