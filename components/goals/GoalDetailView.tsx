@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
+
+const ActivityLogModal = React.lazy(() => import('./ActivityLogModal'));
 import { Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare, Calendar as CalendarIcon, Check } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
@@ -101,6 +103,16 @@ export function GoalDetailView({
   // EditGoalModal state
   const [showEditGoalModal, setShowEditGoalModal] = useState(false);
   const [currentGoal, setCurrentGoal] = useState(goal);
+
+  // ActivityLogModal state
+  const [activityLogState, setActivityLogState] = useState({
+    visible: false,
+    taskId: '',
+    taskTitle: '',
+    date: '',
+    templateType: '' as string,
+    dataSchema: {} as any,
+  });
 
   // Get createTaskWithWeekPlan from useGoals hook
   const { createTaskWithWeekPlan } = useGoals();
@@ -1485,34 +1497,67 @@ console.log('[DEBUG] completedDays array:', completedDays);
             
             const isMissed = isPastDay && !isCompleted && isAvailable;
 
+            const hasTracking = !!action.tracking_template;
+
+            // Compute the date string for this day column
+            const getDateForDayIndex = (dayIdx: number) => {
+              const week = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
+              if (!week) return '';
+              const [yr, mo, dy] = week.start_date.split('-').map(Number);
+              const weekStartDate = new Date(yr, mo - 1, dy);
+              const weekStartDayOfWeek = weekStartDate.getDay();
+              const daysToAdd = (dayIdx - weekStartDayOfWeek + 7) % 7;
+              const targetDate = new Date(yr, mo - 1, dy + daysToAdd);
+              return formatLocalDate(targetDate);
+            };
+
             return (
-              <TouchableOpacity
-                key={index}
-                style={styles.liDayColumn}
-                onPress={() => isAvailable && handleToggleDayForWeek(action.id, index)}
-                disabled={!isAvailable}
-                activeOpacity={0.6}
-              >
-                <Text style={[styles.liDayLabel, { color: colors.text }]}>{label}</Text>
-                <View style={[
-                  styles.liBubble,
-                  // Completed state - green
-                  isCompleted && styles.liBubbleCompleted,
-                  // Missed state - red (past, available, not completed)
-                  isMissed && styles.liBubbleMissed,
-                  // Custom scheduled days get yellow (only if not completed/missed)
-                  hasSpecificDays && isAvailable && !isCompleted && !isMissed && styles.liBubbleScheduled,
-                  // Disabled state
-                  !isAvailable && styles.liBubbleDisabled,
-                ]}>
-                  {isCompleted && (
-                    <Check size={16} color="#22c55e" strokeWidth={3} />
-                  )}
-                  {isMissed && (
-                    <X size={16} color="#ef4444" strokeWidth={3} />
-                  )}
-                </View>
-              </TouchableOpacity>
+              <View key={index} style={styles.liDayColumn}>
+                {/* Day label — tappable for activity log when tracking is configured */}
+                {hasTracking ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const dateStr = getDateForDayIndex(index);
+                      setActivityLogState({
+                        visible: true,
+                        taskId: action.id,
+                        taskTitle: action.title,
+                        date: dateStr,
+                        templateType: action.tracking_template as string,
+                        dataSchema: action.data_schema || {},
+                      });
+                    }}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                  >
+                    <Text style={[styles.liDayLabel, styles.liDayLabelTappable]}>{label}</Text>
+                    <View style={styles.liDayLabelIndicator} />
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={[styles.liDayLabel, { color: colors.text }]}>{label}</Text>
+                )}
+
+                {/* Day dot/bubble — toggles completion (unchanged) */}
+                <TouchableOpacity
+                  onPress={() => isAvailable && handleToggleDayForWeek(action.id, index)}
+                  disabled={!isAvailable}
+                  activeOpacity={0.6}
+                >
+                  <View style={[
+                    styles.liBubble,
+                    isCompleted && styles.liBubbleCompleted,
+                    isMissed && styles.liBubbleMissed,
+                    hasSpecificDays && isAvailable && !isCompleted && !isMissed && styles.liBubbleScheduled,
+                    !isAvailable && styles.liBubbleDisabled,
+                  ]}>
+                    {isCompleted && (
+                      <Check size={16} color="#22c55e" strokeWidth={3} />
+                    )}
+                    {isMissed && (
+                      <X size={16} color="#ef4444" strokeWidth={3} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
             );
           })}
         </View>
@@ -2064,6 +2109,8 @@ console.log('[DEBUG] completedDays array:', completedDays);
       recurrence_rule: editingAction.recurrence_rule,
       selectedWeeks: editingAction.selectedWeeks || [],
       weeklyTarget: editingAction.weeklyTarget,
+      tracking_template: editingAction.tracking_template,
+      data_schema: editingAction.data_schema,
     }}
     mode="edit"
   />
@@ -2171,6 +2218,21 @@ console.log('[DEBUG] completedDays array:', completedDays);
           </View>
         </View>
       </Modal>
+
+      {/* ActivityLogModal - Detail tracking for sub-task logging */}
+      {activityLogState.visible && (
+        <Suspense fallback={null}>
+          <ActivityLogModal
+            visible={activityLogState.visible}
+            onClose={() => setActivityLogState(prev => ({ ...prev, visible: false }))}
+            taskId={activityLogState.taskId}
+            taskTitle={activityLogState.taskTitle}
+            date={activityLogState.date}
+            templateType={activityLogState.templateType}
+            dataSchema={activityLogState.dataSchema}
+          />
+        </Suspense>
+      )}
     </View>
   );
 }
@@ -2472,6 +2534,20 @@ const styles = StyleSheet.create({
   marginBottom: 4,
   fontWeight: '500',
 },
+  liDayLabelTappable: {
+    fontSize: 12,
+    marginBottom: 2,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  liDayLabelIndicator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3b82f6',
+    alignSelf: 'center',
+    marginBottom: 2,
+  },
 liBubble: {
   width: 30,
   height: 30,
