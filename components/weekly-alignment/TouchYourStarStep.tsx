@@ -95,15 +95,16 @@ const DEFAULT_PROMPT = 'Finish this sentence: At my absolute core, before anythi
 // Confirmation text that fades in after selection
 const CONFIRMATION_TEXT = 'This foundational identity anchors everything else—your Mission (purpose), Vision (direction), and Core Values (guardrails).';
 
-type FlowState = 
+type FlowState =
   | 'loading'
-  | 'hero-question'       // Select identity from Spark List
-  | 'identity-hub'        // Main screen: shows identity, offers Mission/Vision/Values
-  | 'choice'              // "I Have One Ready" vs "Guide Me Through"
-  | 'direct-input'        // Text input for statement
-  | 'guided-questions'    // Question flow
-  | 'synthesis'           // AI suggestions
-  | 'value-entry';        // Special: entering a single value
+  | 'hero-question'           // Select identity from Spark List
+  | 'identity-hub'            // Main screen: shows identity, offers Mission/Vision/Values
+  | 'choice'                  // "I Have One Ready" vs "Guide Me Through"
+  | 'direct-input'            // Text input for statement
+  | 'guided-questions'        // Question flow
+  | 'synthesis'               // AI suggestions
+  | 'value-entry'             // Special: entering a single value
+  | 'reflective-questions';   // Reflective questions to discover core identity
 
 type DomainType = 'mission' | 'vision' | 'values';
 
@@ -157,6 +158,14 @@ export function TouchYourStarStep({
   const [responses, setResponses] = useState<QuestionResponse[]>([]);
   const [currentAnswer, setCurrentAnswer] = useState('');
   
+  // Reflective questions state (for discovering core identity)
+  const [reflectiveQuestions, setReflectiveQuestions] = useState<PowerQuestion[]>([]);
+  const [reflectiveIndex, setReflectiveIndex] = useState(0);
+  const [reflectiveAnswer, setReflectiveAnswer] = useState('');
+  const [reflectiveSaved, setReflectiveSaved] = useState(false);
+  const [reflectiveLoading, setReflectiveLoading] = useState(false);
+  const [reflectiveAllDone, setReflectiveAllDone] = useState(false);
+
   // Direct input state
   const [directInput, setDirectInput] = useState('');
 
@@ -265,6 +274,12 @@ export function TouchYourStarStep({
       setCurrentValueName('');
       setCurrentValueCommitment('');
       setFlowState('identity-hub');
+      return true;
+    } else if (currentFlowState === 'reflective-questions') {
+      // From reflective questions, go back to hero-question
+      setReflectiveAnswer('');
+      setReflectiveSaved(false);
+      setFlowState('hero-question');
       return true;
     } else if (currentFlowState === 'hero-question') {
       // At the root - let parent handle exit
@@ -683,6 +698,128 @@ export function TouchYourStarStep({
         });
     } catch (error) {
       console.error('Error saving response:', error);
+    }
+  }
+
+  // ============================================
+  // REFLECTIVE QUESTIONS (for discovering identity)
+  // ============================================
+
+  async function loadReflectiveQuestions(): Promise<PowerQuestion[]> {
+    setReflectiveLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      // Get already-answered reflective question IDs
+      const { data: answeredData } = await supabase
+        .from('0008-ap-question-responses')
+        .select('question_id')
+        .eq('user_id', userId)
+        .eq('context_type', 'reflective_identity');
+
+      const answeredIds = (answeredData || []).map(r => r.question_id);
+
+      // Query reflective identity questions: power_question=1, no identity, no strategy
+      let query = supabase
+        .from('0008-ap-power-questions')
+        .select('id, question_text, question_context, ob_priority')
+        .eq('power_question', 1)
+        .is('core_identity', null)
+        .is('strategy_type', null)
+        .eq('is_active', true)
+        .order('ob_priority', { ascending: true });
+
+      // Exclude already-answered
+      if (answeredIds.length > 0) {
+        query = query.not('id', 'in', `(${answeredIds.join(',')})`);
+      }
+
+      const { data: questionsData, error } = await query;
+
+      if (error) {
+        console.error('Error loading reflective questions:', error);
+        return [];
+      }
+
+      const questions = (questionsData || []).map((q: any) => ({
+        id: q.id,
+        question_text: q.question_text,
+        question_context: q.question_context,
+        display_order: q.ob_priority,
+      }));
+
+      setReflectiveQuestions(questions);
+      setReflectiveIndex(0);
+      setReflectiveAnswer('');
+      setReflectiveSaved(false);
+      setReflectiveAllDone(questions.length === 0);
+
+      return questions;
+    } catch (error) {
+      console.error('Error loading reflective questions:', error);
+      return [];
+    } finally {
+      setReflectiveLoading(false);
+    }
+  }
+
+  async function saveReflectiveResponse() {
+    const question = reflectiveQuestions[reflectiveIndex];
+    if (!question || !reflectiveAnswer.trim()) return;
+
+    setSaving(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      await supabase
+        .from('0008-ap-question-responses')
+        .upsert({
+          user_id: userId,
+          question_id: question.id,
+          response_text: reflectiveAnswer.trim(),
+          context_type: 'reflective_identity',
+          domain: 'identity',
+          week_start: weekStartDate,
+        }, {
+          onConflict: 'user_id,question_id,week_start',
+          ignoreDuplicates: false,
+        });
+
+      trackQuestionAnswered(question.id, 'reflective_identity');
+      setReflectiveSaved(true);
+    } catch (error) {
+      console.error('Error saving reflective response:', error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleNextReflectiveQuestion() {
+    const nextIndex = reflectiveIndex + 1;
+    if (nextIndex < reflectiveQuestions.length) {
+      setReflectiveIndex(nextIndex);
+      setReflectiveAnswer('');
+      setReflectiveSaved(false);
+      trackQuestionShown(reflectiveQuestions[nextIndex].id, 'reflective_identity');
+    } else {
+      setReflectiveAllDone(true);
+    }
+  }
+
+  function handleReflectiveReadyToAnswer() {
+    setReflectiveAnswer('');
+    setReflectiveSaved(false);
+    setFlowState('hero-question');
+  }
+
+  async function handleStartReflectiveQuestions() {
+    const questions = await loadReflectiveQuestions();
+    if (questions.length > 0) {
+      trackQuestionShown(questions[0].id, 'reflective_identity');
+      setFlowState('reflective-questions');
+    } else {
+      setReflectiveAllDone(true);
+      setFlowState('reflective-questions');
     }
   }
 
@@ -1288,6 +1425,139 @@ export function TouchYourStarStep({
     );
   }
 
+  // REFLECTIVE QUESTIONS SCREEN — for discovering core identity
+  if (flowState === 'reflective-questions') {
+    const currentReflectiveQ = reflectiveQuestions[reflectiveIndex];
+
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={styles.headerSection}>
+            <View style={styles.headerRow}>
+              <View style={styles.compassPlaceholder} />
+              <View style={styles.headerTextContainer}>
+                <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>Who Are You at Your Core?</Text>
+              </View>
+            </View>
+          </View>
+
+          {reflectiveLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#ed1c24" />
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                Loading reflective questions...
+              </Text>
+            </View>
+          ) : reflectiveAllDone ? (
+            /* All questions answered */
+            <View style={[styles.questionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.questionText, { color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center' }]}>
+                You've explored all available reflective questions. You're ready to choose your core identity.
+              </Text>
+              <TouchableOpacity
+                style={[styles.continueButton, { backgroundColor: '#ed1c24', marginTop: 24 }]}
+                onPress={handleReflectiveReadyToAnswer}
+              >
+                <Text style={styles.continueButtonText}>Choose My Identity</Text>
+                <ChevronRight size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ) : currentReflectiveQ ? (
+            <>
+              {/* Question Card */}
+              <View style={[styles.questionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.reflectiveQuestionHeader}>
+                  <Lightbulb size={20} color="#ed1c24" />
+                  <Text style={[styles.reflectiveQuestionLabel, { color: '#ed1c24' }]}>
+                    Reflective Question {reflectiveIndex + 1} of {reflectiveQuestions.length}
+                  </Text>
+                </View>
+
+                <Text style={[styles.questionText, { color: colors.text }]}>
+                  {currentReflectiveQ.question_text}
+                </Text>
+
+                {currentReflectiveQ.question_context && (
+                  <Text style={[styles.questionContext, { color: colors.textSecondary }]}>
+                    {currentReflectiveQ.question_context}
+                  </Text>
+                )}
+
+                <TextInput
+                  style={[
+                    styles.answerInput,
+                    {
+                      color: colors.text,
+                      backgroundColor: colors.background,
+                      borderColor: reflectiveAnswer.trim() ? '#ed1c24' : colors.border,
+                    },
+                  ]}
+                  placeholder="Write your thoughts here..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={reflectiveAnswer}
+                  onChangeText={setReflectiveAnswer}
+                  multiline
+                  textAlignVertical="top"
+                  editable={!reflectiveSaved}
+                />
+              </View>
+
+              {/* Action buttons */}
+              {!reflectiveSaved ? (
+                <TouchableOpacity
+                  style={[
+                    styles.continueButton,
+                    { backgroundColor: reflectiveAnswer.trim() ? '#ed1c24' : '#cccccc' },
+                  ]}
+                  onPress={saveReflectiveResponse}
+                  disabled={!reflectiveAnswer.trim() || saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.continueButtonText}>Record My Response</Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.reflectiveButtonGroup}>
+                  {/* "I'm ready to answer" — outlined */}
+                  <TouchableOpacity
+                    style={[styles.reflectiveOutlinedButton, { borderColor: '#ed1c24' }]}
+                    onPress={handleReflectiveReadyToAnswer}
+                  >
+                    <Text style={[styles.reflectiveOutlinedButtonText, { color: '#ed1c24' }]}>
+                      I'm Ready to Answer
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* "Give Me Additional Reflective Questions" — filled */}
+                  <TouchableOpacity
+                    style={[styles.continueButton, { backgroundColor: '#ed1c24' }]}
+                    onPress={handleNextReflectiveQuestion}
+                  >
+                    <Text style={styles.continueButtonText}>Give Me Additional Reflective Questions</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          ) : null}
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
   // HERO QUESTION SCREEN - With compass ceremony and animations
   if (flowState === 'hero-question') {
     const isCustomSelected = selectedIdentity === 'custom';
@@ -1370,11 +1640,10 @@ export function TouchYourStarStep({
 
               {/* Spark List - Single line options, compact */}
               <View style={styles.sparkListCompact}>
-                {sparkListOptions.map((spark) => {
-                  const isSelected = spark.isCustom 
-                    ? selectedIdentity === 'custom'
-                    : selectedIdentity === spark.label;
-                  
+                {/* Non-custom identity options (Child of God → Steward) */}
+                {sparkListOptions.filter(s => !s.isCustom).map((spark) => {
+                  const isSelected = selectedIdentity === spark.label;
+
                   return (
                     <TouchableOpacity
                       key={spark.id}
@@ -1386,12 +1655,8 @@ export function TouchYourStarStep({
                         },
                       ]}
                       onPress={() => {
-                        if (spark.isCustom) {
-                          setSelectedIdentity('custom');
-                        } else {
-                          setSelectedIdentity(spark.label);
-                          setCustomIdentity('');
-                        }
+                        setSelectedIdentity(spark.label);
+                        setCustomIdentity('');
                       }}
                     >
                       <View style={[
@@ -1402,29 +1667,73 @@ export function TouchYourStarStep({
                           <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
                         )}
                       </View>
-                      
-                      {spark.isCustom ? (
-                        isSelected ? (
-                          <TextInput
-                            ref={customInputRef}
-                            style={[
-                              styles.customInputInline,
-                              { color: colors.text, borderColor: '#ed1c24' },
-                            ]}
-                            placeholder="Enter your identity..."
-                            placeholderTextColor={colors.textSecondary}
-                            value={customIdentity}
-                            onChangeText={setCustomIdentity}
-                            autoCapitalize="words"
-                          />
-                        ) : (
-                          <Text style={[styles.sparkLabelCompact, { color: colors.textSecondary }]}>
-                            Something else...
-                          </Text>
-                        )
+                      <Text style={[styles.sparkLabelCompact, { color: colors.text }]}>
+                        {spark.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {/* "Give Me Some Reflective Questions" navigational card */}
+                <TouchableOpacity
+                  style={[
+                    styles.reflectiveQuestionsCard,
+                    { borderColor: colors.border, backgroundColor: colors.background },
+                  ]}
+                  onPress={handleStartReflectiveQuestions}
+                >
+                  <Lightbulb size={20} color="#ed1c24" />
+                  <View style={styles.reflectiveQuestionsCardText}>
+                    <Text style={[styles.reflectiveQuestionsCardTitle, { color: colors.text }]}>
+                      Give Me Some Reflective Questions
+                    </Text>
+                    <Text style={[styles.reflectiveQuestionsCardSubtitle, { color: colors.textSecondary }]}>
+                      Not sure? Explore prompts to help you discover your core identity
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* Custom "Something else..." option */}
+                {sparkListOptions.filter(s => s.isCustom).map((spark) => {
+                  const isSelected = selectedIdentity === 'custom';
+
+                  return (
+                    <TouchableOpacity
+                      key={spark.id}
+                      style={[
+                        styles.sparkOptionCompact,
+                        {
+                          backgroundColor: isSelected ? '#ed1c2415' : colors.background,
+                          borderColor: isSelected ? '#ed1c24' : colors.border,
+                        },
+                      ]}
+                      onPress={() => setSelectedIdentity('custom')}
+                    >
+                      <View style={[
+                        styles.radioCircle,
+                        { borderColor: isSelected ? '#ed1c24' : colors.border },
+                      ]}>
+                        {isSelected && (
+                          <View style={[styles.radioFill, { backgroundColor: '#ed1c24' }]} />
+                        )}
+                      </View>
+                      {isSelected ? (
+                        <TextInput
+                          ref={customInputRef}
+                          style={[
+                            styles.customInputInline,
+                            { color: colors.text, borderColor: '#ed1c24' },
+                          ]}
+                          placeholder="Enter your identity..."
+                          placeholderTextColor={colors.textSecondary}
+                          value={customIdentity}
+                          onChangeText={setCustomIdentity}
+                          autoCapitalize="words"
+                        />
                       ) : (
-                        <Text style={[styles.sparkLabelCompact, { color: colors.text }]}>
-                          {spark.label}
+                        <Text style={[styles.sparkLabelCompact, { color: colors.textSecondary }]}>
+                          Something else...
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -3125,6 +3434,55 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     marginTop: 8,
+  },
+
+  // Reflective Questions Card (in spark list)
+  reflectiveQuestionsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    gap: 12,
+  },
+  reflectiveQuestionsCardText: {
+    flex: 1,
+  },
+  reflectiveQuestionsCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  reflectiveQuestionsCardSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  // Reflective Questions Flow
+  reflectiveQuestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  reflectiveQuestionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  reflectiveButtonGroup: {
+    gap: 12,
+  },
+  reflectiveOutlinedButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  reflectiveOutlinedButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
 

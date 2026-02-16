@@ -41,6 +41,10 @@ import {
   CORNER_PADDING_Y,
   ALIGNMENT_SWEEP_ANGLES,
   getStepConfig,
+  INTRO_MESSAGES,
+  INTRO_FADE_IN,
+  INTRO_FADE_OUT,
+  INTRO_BACKDROP_FADE,
 } from '@/lib/compassRitualSequence';
 
 // ============================================
@@ -62,6 +66,12 @@ interface CompassRitualControllerProps {
   colors: any;
   /** Measured dock position (absolute screen coordinates of the placeholder) */
   dockPosition?: { x: number; y: number } | null;
+  /** Whether to show the inspirational intro text sequence */
+  showIntroSequence?: boolean;
+  /** Whether the user already has a core identity (hides final "Finish this sentence..." message) */
+  hasIdentity?: boolean;
+  /** Called when the intro text sequence finishes and backdrop fades out */
+  onIntroSequenceComplete?: () => void;
 }
 
 // ============================================
@@ -76,6 +86,9 @@ export function CompassRitualController({
   alignmentSweepIndex,
   colors,
   dockPosition,
+  showIntroSequence = false,
+  hasIdentity = false,
+  onIntroSequenceComplete,
 }: CompassRitualControllerProps) {
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -99,6 +112,18 @@ export function CompassRitualController({
 
   // Step 6 overlay
   const overlayOpacity = useSharedValue(0);
+
+  // ---- Intro sequence state ----
+  const [introMessageIndex, setIntroMessageIndex] = useState(-1);
+  const [introComplete, setIntroComplete] = useState(!showIntroSequence);
+  const introTextOpacity = useSharedValue(0);
+  const introBackdropOpacity = useSharedValue(showIntroSequence ? 1 : 0);
+  const introTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Filter messages based on identity status
+  const introMessages = INTRO_MESSAGES.filter(
+    (msg) => !msg.noIdentityOnly || !hasIdentity,
+  );
 
   // ---- React state for post-ignition spindle angles ----
   // SpindleGold/SpindleSilver manage their own Reanimated internals;
@@ -147,6 +172,56 @@ export function CompassRitualController({
       },
     );
   }, [isIgnitionComplete]);
+
+  // ============================================
+  // INTRO TEXT SEQUENCE
+  // ============================================
+  useEffect(() => {
+    if (!showIntroSequence || introComplete) return;
+
+    // Schedule each message as a separate timeout
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    introMessages.forEach((msg, idx) => {
+      // Fade in
+      timers.push(
+        setTimeout(() => {
+          setIntroMessageIndex(idx);
+          introTextOpacity.value = withTiming(1, { duration: INTRO_FADE_IN });
+        }, msg.startMs),
+      );
+
+      // Fade out
+      timers.push(
+        setTimeout(() => {
+          introTextOpacity.value = withTiming(0, { duration: INTRO_FADE_OUT });
+        }, msg.startMs + INTRO_FADE_IN + msg.holdMs),
+      );
+    });
+
+    // After last message fully fades: fade backdrop and signal complete
+    const lastMsg = introMessages[introMessages.length - 1];
+    const sequenceEndMs = lastMsg.startMs + INTRO_FADE_IN + lastMsg.holdMs + INTRO_FADE_OUT;
+
+    timers.push(
+      setTimeout(() => {
+        introBackdropOpacity.value = withTiming(0, { duration: INTRO_BACKDROP_FADE });
+      }, sequenceEndMs),
+    );
+
+    timers.push(
+      setTimeout(() => {
+        setIntroComplete(true);
+        onIntroSequenceComplete?.();
+      }, sequenceEndMs + INTRO_BACKDROP_FADE),
+    );
+
+    introTimersRef.current = timers;
+
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, [showIntroSequence]); // Run once on mount if intro is enabled
 
   const computeDockXY = useCallback(() => {
     const cornerScale = CORNER_SIZE / FULL_SIZE;
@@ -274,10 +349,19 @@ export function CompassRitualController({
     opacity: overlayOpacity.value,
   }));
 
+  const introTextStyle = useAnimatedStyle(() => ({
+    opacity: introTextOpacity.value,
+  }));
+
+  const introBackdropStyle = useAnimatedStyle(() => ({
+    opacity: introBackdropOpacity.value,
+  }));
+
   // ============================================
   // RENDER
   // ============================================
   const isIgniting = !isIgnitionComplete;
+  const introActive = showIntroSequence && !introComplete;
 
   const handleOverlayLayout = useCallback(() => {
     if (overlayRef.current) {
@@ -293,12 +377,20 @@ export function CompassRitualController({
     <View
       ref={overlayRef}
       style={styles.overlay}
-      pointerEvents={isIgniting ? 'auto' : 'none'}
+      pointerEvents={(isIgniting || introActive) ? 'auto' : 'none'}
       onLayout={handleOverlayLayout}
     >
       {/* Ignition backdrop — blocks interaction during ceremony */}
-      {isIgniting && (
+      {isIgniting && !showIntroSequence && (
         <View style={[styles.ignitionBackdrop, { backgroundColor: colors.background }]} />
+      )}
+
+      {/* Intro sequence backdrop — animated opacity so it fades out smoothly */}
+      {showIntroSequence && (
+        <Animated.View
+          style={[styles.ignitionBackdrop, { backgroundColor: colors.background }, introBackdropStyle]}
+          pointerEvents={introActive ? 'auto' : 'none'}
+        />
       )}
 
       {/* Compass container — transforms handle position/scale/opacity */}
@@ -382,6 +474,17 @@ export function CompassRitualController({
         )}
       </Animated.View>
 
+      {/* Intro text sequence overlay */}
+      {showIntroSequence && introMessageIndex >= 0 && (
+        <Animated.View style={[styles.introTextContainer, introTextStyle]} pointerEvents="none">
+          <View style={[styles.introTextBlock, { backgroundColor: `${colors.background}E6` }]}>
+            <Text style={[styles.introText, { color: colors.text }]}>
+              {introMessages[introMessageIndex]?.text ?? ''}
+            </Text>
+          </View>
+        </Animated.View>
+      )}
+
       {/* Step 6: "Thinking done — time to act" overlay */}
       <Animated.View style={[styles.step6Overlay, overlayStyle]} pointerEvents="none">
         <Text style={[styles.step6Text, { color: colors.textSecondary }]}>
@@ -414,6 +517,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+  },
+  introTextContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    top: '55%',
+  },
+  introTextBlock: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  introText: {
+    fontSize: 22,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 30,
+    letterSpacing: 0.3,
   },
   step6Overlay: {
     ...StyleSheet.absoluteFillObject,

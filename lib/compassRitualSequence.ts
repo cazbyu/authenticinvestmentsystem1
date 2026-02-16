@@ -80,6 +80,46 @@ export const FADE_DURATION = 500;
 export const POST_IGNITION_DELAY = 300;
 
 // ============================================
+// INTRO SEQUENCE CONFIG
+// ============================================
+
+/** Individual intro message configuration */
+export interface IntroMessage {
+  /** Display text */
+  text: string;
+  /** Start time from sequence begin (ms) */
+  startMs: number;
+  /** Duration the text is fully visible (ms) */
+  holdMs: number;
+  /** Whether this message only shows when user has no identity */
+  noIdentityOnly?: boolean;
+}
+
+/** Fade-in duration for each intro message (ms) */
+export const INTRO_FADE_IN = 300;
+
+/** Fade-out duration for each intro message (ms) */
+export const INTRO_FADE_OUT = 300;
+
+/** Gap between fade-out of one message and fade-in of next (ms) */
+export const INTRO_GAP = 200;
+
+/** The intro text sequence — times are absolute from sequence start */
+export const INTRO_MESSAGES: IntroMessage[] = [
+  { text: 'Welcome to your Weekly Alignment',                                                    startMs: 0,     holdMs: 2000 },
+  { text: 'This tool helps you connect and re-connect\nwith the Five Power Questions',            startMs: 2700,  holdMs: 2300 },
+  { text: 'Who Am I?',                                                                           startMs: 5500,  holdMs: 1200 },
+  { text: 'Why Am I Here?',                                                                      startMs: 7200,  holdMs: 1200 },
+  { text: 'Where Do I Want to Go?',                                                              startMs: 8900,  holdMs: 1200 },
+  { text: 'Where Am I Going?',                                                                   startMs: 10600, holdMs: 1200 },
+  { text: 'Am I Doing the Work?',                                                                startMs: 12300, holdMs: 1200 },
+  { text: 'Finish this sentence:\nAt my absolute core, before anything else I am a . . .', startMs: 14000, holdMs: 2500, noIdentityOnly: true },
+];
+
+/** Duration of backdrop fade-out after last intro message (ms) */
+export const INTRO_BACKDROP_FADE = 500;
+
+// ============================================
 // SIZE CONSTANTS
 // ============================================
 

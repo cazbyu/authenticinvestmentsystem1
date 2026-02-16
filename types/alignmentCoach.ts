@@ -99,7 +99,8 @@ export type Step1FlowState =
   | 'direct-input'
   | 'guided-questions'
   | 'synthesis'
-  | 'value-entry';
+  | 'value-entry'
+  | 'reflective-questions';
 
 /** North Star domain being worked on */
 export type NorthStarDomain = 'mission' | 'vision' | 'values';

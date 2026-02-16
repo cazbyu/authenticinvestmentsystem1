@@ -107,6 +107,10 @@ export default function WeeklyAlignmentScreen() {
   // Compass dock position — measured from step content placeholder via onLayout
   const [compassDockPosition, setCompassDockPosition] = useState<{ x: number; y: number } | null>(null);
 
+  // Intro sequence state
+  const [hasIdentity, setHasIdentity] = useState(false);
+  const [introSequenceComplete, setIntroSequenceComplete] = useState(false);
+
   // Week dates state
   const [weekStartDate, setWeekStartDate] = useState<string>('');
   const [weekEndDate, setWeekEndDate] = useState<string>('');
@@ -201,6 +205,17 @@ export default function WeeklyAlignmentScreen() {
       
       setWeekStartDate(weekStart);
       setWeekEndDate(weekEnd);
+
+      // Check if user has a core identity (for intro sequence)
+      const { data: northStarData } = await supabase
+        .from('0008-ap-north-star')
+        .select('core_identity')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (northStarData?.core_identity) {
+        setHasIdentity(true);
+      }
 
       // Check if there's already a weekly alignment for this week
       const { data: existing } = await supabase
@@ -522,6 +537,9 @@ export default function WeeklyAlignmentScreen() {
         alignmentSweepIndex={alignmentSweepIndex}
         colors={colors}
         dockPosition={compassDockPosition}
+        showIntroSequence={true}
+        hasIdentity={hasIdentity}
+        onIntroSequenceComplete={() => setIntroSequenceComplete(true)}
       />
 
       {/* Header */}
