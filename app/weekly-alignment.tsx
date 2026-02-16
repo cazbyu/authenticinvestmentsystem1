@@ -618,6 +618,7 @@ export default function WeeklyAlignmentScreen() {
             onCoachTrigger={guidedModeEnabled ? handleStep1CoachTrigger : undefined}
             onStep1ContextChange={guidedModeEnabled ? handleStep1ContextChange : undefined}
             onCompassDockLayout={(position) => setCompassDockPosition(position)}
+            introSequenceComplete={introSequenceComplete}
           />
         )}
 

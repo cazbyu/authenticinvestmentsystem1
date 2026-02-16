@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    top: '42%',
+    top: '44%',
     alignItems: 'center',
     paddingHorizontal: 24,
   },

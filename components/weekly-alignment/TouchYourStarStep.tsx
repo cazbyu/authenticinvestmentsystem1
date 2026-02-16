@@ -41,6 +41,8 @@ interface TouchYourStarStepProps {
   onStep1ContextChange?: (context: Step1Context) => void;
   /** Reports the measured position of the compass placeholder for docking the floating compass */
   onCompassDockLayout?: (position: { x: number; y: number }) => void;
+  /** Whether the intro text sequence has finished — controls hero prompt visibility */
+  introSequenceComplete?: boolean;
 }
 
 interface NorthStarData {
@@ -120,6 +122,7 @@ export function TouchYourStarStep({
   onCoachTrigger,
   onStep1ContextChange,
   onCompassDockLayout,
+  introSequenceComplete = true,
 }: TouchYourStarStepProps) {
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -130,6 +133,9 @@ export function TouchYourStarStep({
   // Note: Compass ceremony now handled by CompassRitualController at parent level
   const compassPlaceholderRef = useRef<View>(null);
   const dockLayoutReported = useRef(false);
+
+  // Hero prompt opacity — stays invisible until intro text sequence completes
+  const heroPromptOpacity = useRef(new Animated.Value(introSequenceComplete ? 1 : 0)).current;
 
   const handleCompassPlaceholderLayout = useCallback(() => {
     if (dockLayoutReported.current || !onCompassDockLayout) return;
@@ -142,6 +148,17 @@ export function TouchYourStarStep({
       }
     });
   }, [onCompassDockLayout]);
+
+  // Fade in hero prompt text when intro sequence finishes
+  useEffect(() => {
+    if (introSequenceComplete) {
+      Animated.timing(heroPromptOpacity, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [introSequenceComplete]);
 
   // Identity state
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
@@ -1633,10 +1650,10 @@ export function TouchYourStarStep({
                 Who Are You at Your Core?
               </Text>
               
-              {/* Prompt Text (from A/B testing or default) */}
-              <Text style={[styles.heroPromptText, { color: '#ed1c24' }]}>
+              {/* Prompt Text (from A/B testing or default) — hidden until intro sequence fades out */}
+              <Animated.Text style={[styles.heroPromptText, { color: '#ed1c24', opacity: heroPromptOpacity }]}>
                 {heroPrompt?.prompt_text || DEFAULT_PROMPT}
-              </Text>
+              </Animated.Text>
 
               {/* Spark List - Single line options, compact */}
               <View style={styles.sparkListCompact}>
