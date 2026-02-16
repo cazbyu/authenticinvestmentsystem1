@@ -115,7 +115,7 @@ export const INTRO_MESSAGES: IntroMessage[] = [
   { text: "Let's help you connect with\nyour Five Power Questions",                              startMs: 2700,  holdMs: 2300 },
   { text: 'First, Who Am I?',                                                                    startMs: 5500,  holdMs: 1800 },
   { text: 'To help you answer this\nfinish this sentence . . .',                                 startMs: 8000,  holdMs: 2000, noIdentityOnly: true },
-  { text: 'At my absolute core,\nbefore anything else I am a . . .',                             startMs: 10800, holdMs: 2500, noIdentityOnly: true },
+  { text: 'At my absolute core,\nI am a . . .',                             startMs: 10800, holdMs: 2500, noIdentityOnly: true },
 ];
 
 /** Duration of backdrop fade-out after last intro message (ms) */
