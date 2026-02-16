@@ -113,13 +113,9 @@ export const INTRO_GAP = 200;
 export const INTRO_MESSAGES: IntroMessage[] = [
   { text: 'Welcome to Weekly Alignment',                                                         startMs: 0,     holdMs: 2000 },
   { text: "Let's help you connect with\nyour Five Power Questions",                              startMs: 2700,  holdMs: 2300 },
-  { text: 'First, Who Am I?',                                                                    startMs: 5500,  holdMs: 1200 },
-  { text: 'Why Am I Here?',                                                                      startMs: 7200,  holdMs: 1200 },
-  { text: 'Where Do I Want to Go?',                                                              startMs: 8900,  holdMs: 1200 },
-  { text: 'Where Am I Going?',                                                                   startMs: 10600, holdMs: 1200 },
-  { text: 'Am I Doing the Work?',                                                                startMs: 12300, holdMs: 1200 },
-  { text: 'To help you answer this\nfinish this sentence . . .',                                 startMs: 14000, holdMs: 2000, noIdentityOnly: true },
-  { text: 'At my absolute core,\nbefore anything else I am a . . .',                             startMs: 16800, holdMs: 2500, noIdentityOnly: true, isHeroPrompt: true },
+  { text: 'First, Who Am I?',                                                                    startMs: 5500,  holdMs: 1800 },
+  { text: 'To help you answer this\nfinish this sentence . . .',                                 startMs: 8000,  holdMs: 2000, noIdentityOnly: true },
+  { text: 'At my absolute core,\nbefore anything else I am a . . .',                             startMs: 10800, holdMs: 2500, noIdentityOnly: true },
 ];
 
 /** Duration of backdrop fade-out after last intro message (ms) */
