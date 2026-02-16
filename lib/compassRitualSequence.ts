@@ -92,6 +92,12 @@ export const CORNER_SIZE = 72;
 /** Padding from screen edge when docked (px) */
 export const CORNER_PADDING = 16;
 
+/** Horizontal offset when docked — aligns with step content padding (px) */
+export const CORNER_PADDING_X = 16;
+
+/** Vertical offset when docked — below navigation header, aligns with step header row (px) */
+export const CORNER_PADDING_Y = 16;
+
 // ============================================
 // HELPERS
 // ============================================

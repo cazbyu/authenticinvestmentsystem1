@@ -37,7 +37,8 @@ import {
   FADE_DURATION,
   FULL_SIZE,
   CORNER_SIZE,
-  CORNER_PADDING,
+  CORNER_PADDING_X,
+  CORNER_PADDING_Y,
   ALIGNMENT_SWEEP_ANGLES,
   getStepConfig,
 } from '@/lib/compassRitualSequence';
@@ -59,6 +60,8 @@ interface CompassRitualControllerProps {
   alignmentSweepIndex?: number;
   /** Theme colors */
   colors: any;
+  /** Measured dock position (absolute screen coordinates of the placeholder) */
+  dockPosition?: { x: number; y: number } | null;
 }
 
 // ============================================
@@ -72,6 +75,7 @@ export function CompassRitualController({
   onIgnitionComplete,
   alignmentSweepIndex,
   colors,
+  dockPosition,
 }: CompassRitualControllerProps) {
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -80,6 +84,10 @@ export function CompassRitualController({
   const compassX = useSharedValue(screenWidth / 2 - FULL_SIZE / 2);
   const compassY = useSharedValue(screenHeight / 3 - FULL_SIZE / 2);
   const compassOpacity = useSharedValue(1);
+
+  // Overlay ref for measuring its window offset
+  const overlayRef = useRef<View>(null);
+  const overlayOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Ignition ceremony spindle rotations (Reanimated for smooth spin)
   const goldIgnitionRotation = useSharedValue(0);
@@ -140,18 +148,35 @@ export function CompassRitualController({
     ignitionPhaseRef.current = 'shrinking';
 
     const cornerScale = CORNER_SIZE / FULL_SIZE;
+    // The visual offset from translateX/Y to the compass's visual top-left
+    // is FULL_SIZE/2 * (1 - cornerScale) = 120 * 0.7 = 84
+    const scaleOffset = (FULL_SIZE / 2) * (1 - cornerScale);
+
+    // Compute docking translateX/Y so the visual compass aligns with the placeholder
+    let dockX = CORNER_PADDING_X;
+    let dockY = CORNER_PADDING_Y;
+
+    if (dockPosition) {
+      // dockPosition is in window coords; overlay offset converts to overlay coords
+      const overlayX = overlayOffsetRef.current.x;
+      const overlayY = overlayOffsetRef.current.y;
+      // Visual top-left = translateXY + scaleOffset, so:
+      // translateXY = visualTarget - scaleOffset
+      dockX = (dockPosition.x - overlayX) - scaleOffset;
+      dockY = (dockPosition.y - overlayY) - scaleOffset;
+    }
 
     compassScale.value = withTiming(cornerScale, {
       duration: SHRINK_DURATION,
       easing: Easing.out(Easing.cubic),
     });
 
-    compassX.value = withTiming(CORNER_PADDING, {
+    compassX.value = withTiming(dockX, {
       duration: SHRINK_DURATION,
       easing: Easing.out(Easing.cubic),
     });
 
-    compassY.value = withTiming(CORNER_PADDING, {
+    compassY.value = withTiming(dockY, {
       duration: SHRINK_DURATION,
       easing: Easing.out(Easing.cubic),
     });
@@ -161,7 +186,25 @@ export function CompassRitualController({
       ignitionPhaseRef.current = 'docked';
       onIgnitionComplete();
     }, SHRINK_DURATION + 50);
-  }, [onIgnitionComplete]);
+  }, [onIgnitionComplete, dockPosition]);
+
+  // ============================================
+  // UPDATE DOCK POSITION IF IT ARRIVES AFTER DOCKING
+  // ============================================
+  useEffect(() => {
+    if (!isIgnitionComplete || !dockPosition || ignitionPhaseRef.current !== 'docked') return;
+
+    const cornerScale = CORNER_SIZE / FULL_SIZE;
+    const scaleOffset = (FULL_SIZE / 2) * (1 - cornerScale);
+    const overlayX = overlayOffsetRef.current.x;
+    const overlayY = overlayOffsetRef.current.y;
+
+    const dockX = (dockPosition.x - overlayX) - scaleOffset;
+    const dockY = (dockPosition.y - overlayY) - scaleOffset;
+
+    compassX.value = withTiming(dockX, { duration: 300, easing: Easing.out(Easing.cubic) });
+    compassY.value = withTiming(dockY, { duration: 300, easing: Easing.out(Easing.cubic) });
+  }, [dockPosition, isIgnitionComplete]);
 
   // ============================================
   // STEP CHANGE → GOLD SPINDLE
@@ -250,8 +293,23 @@ export function CompassRitualController({
   // ============================================
   const isIgniting = !isIgnitionComplete;
 
+  const handleOverlayLayout = useCallback(() => {
+    if (overlayRef.current) {
+      (overlayRef.current as any).measureInWindow((x: number, y: number) => {
+        if (x !== undefined && y !== undefined) {
+          overlayOffsetRef.current = { x, y };
+        }
+      });
+    }
+  }, []);
+
   return (
-    <View style={styles.overlay} pointerEvents={isIgniting ? 'auto' : 'none'}>
+    <View
+      ref={overlayRef}
+      style={styles.overlay}
+      pointerEvents={isIgniting ? 'auto' : 'none'}
+      onLayout={handleOverlayLayout}
+    >
       {/* Ignition backdrop — blocks interaction during ceremony */}
       {isIgniting && (
         <View style={[styles.ignitionBackdrop, { backgroundColor: colors.background }]} />

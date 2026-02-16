@@ -104,6 +104,9 @@ export default function WeeklyAlignmentScreen() {
   const [silverFocusAngle, setSilverFocusAngle] = useState<number | undefined>(undefined);
   const [alignmentSweepIndex, setAlignmentSweepIndex] = useState<number | undefined>(undefined);
 
+  // Compass dock position — measured from step content placeholder via onLayout
+  const [compassDockPosition, setCompassDockPosition] = useState<{ x: number; y: number } | null>(null);
+
   // Week dates state
   const [weekStartDate, setWeekStartDate] = useState<string>('');
   const [weekEndDate, setWeekEndDate] = useState<string>('');
@@ -518,6 +521,7 @@ export default function WeeklyAlignmentScreen() {
         onIgnitionComplete={() => setIgnitionComplete(true)}
         alignmentSweepIndex={alignmentSweepIndex}
         colors={colors}
+        dockPosition={compassDockPosition}
       />
 
       {/* Header */}
@@ -582,6 +586,7 @@ export default function WeeklyAlignmentScreen() {
             weekEndDate={weekEndDate}
             onCoachTrigger={guidedModeEnabled ? handleStep1CoachTrigger : undefined}
             onStep1ContextChange={guidedModeEnabled ? handleStep1ContextChange : undefined}
+            onCompassDockLayout={(position) => setCompassDockPosition(position)}
           />
         )}
 

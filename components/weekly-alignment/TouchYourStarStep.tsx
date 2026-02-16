@@ -14,7 +14,6 @@ import {
 import { ChevronRight, ChevronLeft, Edit3, Lightbulb, HelpCircle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { NorthStarIcon } from '@/components/icons/CustomIcons';
-import { MiniCompass } from '@/components/compass/MiniCompass';
 import { 
   trackQuestionShown, 
   trackQuestionAnswered, 
@@ -40,6 +39,8 @@ interface TouchYourStarStepProps {
   onCoachTrigger?: (trigger: CoachTrigger, context: Step1Context) => void;
   /** Fired when Step 1 UI state changes — keeps parent context fresh for 2-way chat */
   onStep1ContextChange?: (context: Step1Context) => void;
+  /** Reports the measured position of the compass placeholder for docking the floating compass */
+  onCompassDockLayout?: (position: { x: number; y: number }) => void;
 }
 
 interface NorthStarData {
@@ -117,6 +118,7 @@ export function TouchYourStarStep({
   weekEndDate,
   onCoachTrigger,
   onStep1ContextChange,
+  onCompassDockLayout,
 }: TouchYourStarStepProps) {
   // Core state
   const [flowState, setFlowState] = useState<FlowState>('loading');
@@ -125,7 +127,21 @@ export function TouchYourStarStep({
   
   // Compass ceremony state
   // Note: Compass ceremony now handled by CompassRitualController at parent level
-  
+  const compassPlaceholderRef = useRef<View>(null);
+  const dockLayoutReported = useRef(false);
+
+  const handleCompassPlaceholderLayout = useCallback(() => {
+    if (dockLayoutReported.current || !onCompassDockLayout) return;
+    const node = compassPlaceholderRef.current;
+    if (!node) return;
+    (node as any).measureInWindow((x: number, y: number) => {
+      if (x !== undefined && y !== undefined) {
+        dockLayoutReported.current = true;
+        onCompassDockLayout({ x, y });
+      }
+    });
+  }, [onCompassDockLayout]);
+
   // Identity state
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const [customIdentity, setCustomIdentity] = useState('');
@@ -1304,9 +1320,12 @@ export function TouchYourStarStep({
             {/* Header with Tooltip (? icon in top right) */}
             <View style={styles.headerSection}>
               <View style={styles.headerRow}>
-                <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-                  <MiniCompass size={56} />
-                </View>
+                {/* Space reserved for the floating CompassRitualController */}
+                <View
+                  ref={compassPlaceholderRef}
+                  style={styles.compassPlaceholder}
+                  onLayout={handleCompassPlaceholderLayout}
+                />
                 <View style={styles.headerTextContainer}>
                   <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                   <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
@@ -1466,9 +1485,8 @@ export function TouchYourStarStep({
         {/* Header */}
         <View style={styles.headerSection}>
           <View style={styles.headerRow}>
-            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-              <MiniCompass size={56} />
-            </View>
+            {/* Space reserved for the floating CompassRitualController */}
+            <View style={styles.compassPlaceholder} />
             <View style={styles.headerTextContainer}>
               <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
@@ -1797,9 +1815,8 @@ export function TouchYourStarStep({
       >
         <View style={styles.headerSection}>
           <View style={styles.headerRow}>
-            <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-              <MiniCompass size={56} />
-            </View>
+            {/* Space reserved for the floating CompassRitualController */}
+            <View style={styles.compassPlaceholder} />
             <View style={styles.headerTextContainer}>
               <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
@@ -1894,9 +1911,9 @@ export function TouchYourStarStep({
         >
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
-              <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-                <MiniCompass size={56} />
-              </View>
+              {/* Spacer for floating CompassRitualController */}
+              {/* Space reserved for the floating CompassRitualController */}
+              <View style={styles.compassPlaceholder} />
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
@@ -2045,9 +2062,9 @@ export function TouchYourStarStep({
         >
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
-              <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-                <MiniCompass size={56} />
-              </View>
+              {/* Spacer for floating CompassRitualController */}
+              {/* Space reserved for the floating CompassRitualController */}
+              <View style={styles.compassPlaceholder} />
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
@@ -2154,9 +2171,9 @@ export function TouchYourStarStep({
         >
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
-              <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-                <MiniCompass size={56} />
-              </View>
+              {/* Spacer for floating CompassRitualController */}
+              {/* Space reserved for the floating CompassRitualController */}
+              <View style={styles.compassPlaceholder} />
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
@@ -2352,9 +2369,9 @@ export function TouchYourStarStep({
         >
           <View style={styles.headerSection}>
             <View style={styles.headerRow}>
-              <View style={[styles.compassContainer, { backgroundColor: '#ed1c2415' }]}>
-                <MiniCompass size={56} />
-              </View>
+              {/* Spacer for floating CompassRitualController */}
+              {/* Space reserved for the floating CompassRitualController */}
+              <View style={styles.compassPlaceholder} />
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: '#ed1c24' }]}>Step 1</Text>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>Touch Your Star</Text>
@@ -2496,12 +2513,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  compassContainer: {
+  compassPlaceholder: {
     width: 72,
     height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   headerTextContainer: {
     flex: 1,
