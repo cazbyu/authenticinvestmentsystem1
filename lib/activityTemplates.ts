@@ -99,7 +99,8 @@ export function getResolvedFields(
   if (!config) return [];
 
   if (templateType === 'checklist') {
-    const items = dataSchema?.checklist_items || [];
+    // Support both checklist_items (correct) and categories (legacy save bug)
+    const items = dataSchema?.checklist_items || dataSchema?.categories || [];
     return items.map((item) => ({
       key: `item_${item}`,
       label: item,

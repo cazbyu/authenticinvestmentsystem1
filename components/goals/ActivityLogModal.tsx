@@ -216,7 +216,7 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
       // Build details object
       let details: Record<string, any>;
       if (templateType === 'checklist') {
-        details = buildChecklistDetails(formValues, dataSchema?.checklist_items || []);
+        details = buildChecklistDetails(formValues, dataSchema?.checklist_items || dataSchema?.categories || []);
       } else {
         details = {};
         resolvedFields.forEach((field) => {

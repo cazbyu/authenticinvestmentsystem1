@@ -662,9 +662,9 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         selectedKeyRelationshipIds,
         tracking_template: trackingTemplate || undefined,
         data_schema: trackingTemplate && dataSchemaCategories.length > 0
-          ? { categories: dataSchemaCategories }
-          : trackingTemplate === 'checklist' && dataSchemaCategories.length > 0
-          ? { checklist_items: dataSchemaCategories }
+          ? trackingTemplate === 'checklist'
+            ? { checklist_items: dataSchemaCategories }
+            : { categories: dataSchemaCategories }
           : undefined,
         attachments: attachedFiles, // Include attachments in task data
         selectedWeeks: selectedWeeks.map(weekNumber => {
