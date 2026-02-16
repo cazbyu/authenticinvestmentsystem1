@@ -96,6 +96,8 @@ export interface IntroMessage {
   holdMs: number;
   /** Whether this message only shows when user has no identity */
   noIdentityOnly?: boolean;
+  /** Whether this message should appear as the "hero prompt" (lower position, red text) */
+  isHeroPrompt?: boolean;
 }
 
 /** Fade-in duration for each intro message (ms) */
@@ -116,7 +118,7 @@ export const INTRO_MESSAGES: IntroMessage[] = [
   { text: 'Where Do I Want to Go?',                                                              startMs: 8900,  holdMs: 1200 },
   { text: 'Where Am I Going?',                                                                   startMs: 10600, holdMs: 1200 },
   { text: 'Am I Doing the Work?',                                                                startMs: 12300, holdMs: 1200 },
-  { text: 'Finish this sentence:\nAt my absolute core, before anything else I am a . . .', startMs: 14000, holdMs: 2500, noIdentityOnly: true },
+  { text: 'Finish this sentence:\nAt my absolute core, before anything else I am a . . .', startMs: 14000, holdMs: 2500, noIdentityOnly: true, isHeroPrompt: true },
 ];
 
 /** Duration of backdrop fade-out after last intro message (ms) */

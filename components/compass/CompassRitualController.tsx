@@ -479,15 +479,32 @@ export function CompassRitualController({
       </Animated.View>
 
       {/* Intro text sequence overlay */}
-      {showIntroSequence && introMessageIndex >= 0 && (
-        <Animated.View style={[styles.introTextContainer, introTextStyle]} pointerEvents="none">
-          <View style={[styles.introTextBlock, { backgroundColor: `${colors.background}E6` }]}>
-            <Text style={[styles.introText, { color: colors.text }]}>
-              {introMessages[introMessageIndex]?.text ?? ''}
-            </Text>
-          </View>
-        </Animated.View>
-      )}
+      {showIntroSequence && introMessageIndex >= 0 && (() => {
+        const currentMsg = introMessages[introMessageIndex];
+        const isHeroPrompt = currentMsg?.isHeroPrompt;
+
+        return (
+          <Animated.View
+            style={[
+              isHeroPrompt ? styles.introHeroPromptContainer : styles.introTextContainer,
+              introTextStyle,
+            ]}
+            pointerEvents="none"
+          >
+            <View style={[
+              styles.introTextBlock,
+              !isHeroPrompt && { backgroundColor: `${colors.background}E6` },
+            ]}>
+              <Text style={[
+                isHeroPrompt ? styles.introHeroPromptText : styles.introText,
+                { color: isHeroPrompt ? '#ed1c24' : colors.text },
+              ]}>
+                {currentMsg?.text ?? ''}
+              </Text>
+            </View>
+          </Animated.View>
+        );
+      })()}
 
       {/* Step 6: "Thinking done — time to act" overlay */}
       <Animated.View style={[styles.step6Overlay, overlayStyle]} pointerEvents="none">
@@ -530,6 +547,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
+  introHeroPromptContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '48%',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
   introTextBlock: {
     paddingHorizontal: 28,
     paddingVertical: 20,
@@ -544,6 +569,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 38,
     letterSpacing: 0.3,
+  },
+  introHeroPromptText: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 26,
+    paddingHorizontal: 8,
   },
   step6Overlay: {
     ...StyleSheet.absoluteFillObject,
