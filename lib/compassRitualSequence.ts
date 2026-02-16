@@ -113,7 +113,7 @@ export const INTRO_GAP = 200;
 export const INTRO_MESSAGES: IntroMessage[] = [
   { text: 'Welcome to Weekly Alignment',                                                    startMs: 0,     holdMs: 2000 },
   { text: 'Let's help you connect with your Five Power Questions',            startMs: 2700,  holdMs: 2300 },
-  { text: 'Who Am I?',                                                                           startMs: 5500,  holdMs: 1200 },
+  { text: 'First, Who Am I?',                                                                           startMs: 5500,  holdMs: 1200 },
   { text: 'Why Am I Here?',                                                                      startMs: 7200,  holdMs: 1200 },
   { text: 'Where Do I Want to Go?',                                                              startMs: 8900,  holdMs: 1200 },
   { text: 'Where Am I Going?',                                                                   startMs: 10600, holdMs: 1200 },
