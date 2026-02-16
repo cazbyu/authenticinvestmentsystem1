@@ -426,6 +426,7 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
     } else if (templateType === 'measurement') {
       summary = `${details.value || 0}`;
       if (details.unit) summary += ` ${details.unit}`;
+      if (details.duration) summary += ` · ${details.duration}`;
     } else if (templateType === 'journal') {
       summary = (details.entry || '').substring(0, 80);
       if ((details.entry || '').length > 80) summary += '...';

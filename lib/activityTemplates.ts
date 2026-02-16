@@ -64,6 +64,7 @@ export const TEMPLATE_CONFIGS: Record<TemplateType, TemplateConfig> = {
     fields: [
       { key: 'value', label: 'Value', type: 'number', required: true, placeholder: '0' },
       { key: 'unit', label: 'Unit', type: 'text', placeholder: 'lbs, miles, etc.' },
+      { key: 'duration', label: 'Duration', type: 'text', placeholder: 'mm:ss (e.g., 5:30)' },
     ],
     extractPrimaryMetric: (d) => Number(d.value) || 0,
   },
