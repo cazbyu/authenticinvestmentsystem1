@@ -95,6 +95,7 @@ export type CoachTrigger =
 export type Step1FlowState =
   | 'hero-question'
   | 'identity-hub'
+  | 'domain-intro'
   | 'choice'
   | 'direct-input'
   | 'guided-questions'

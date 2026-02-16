@@ -101,7 +101,8 @@ type FlowState =
   | 'loading'
   | 'hero-question'           // Select identity from Spark List
   | 'identity-hub'            // Main screen: shows identity, offers Mission/Vision/Values
-  | 'choice'                  // "I Have One Ready" vs "Guide Me Through"
+  | 'domain-intro'            // Inspirational overlay before domain choice screen
+  | 'choice'                  // "I Can Finish the Sentence" vs "Let Me Ponder with Some Questions" vs "Skip for Now"
   | 'direct-input'            // Text input for statement
   | 'guided-questions'        // Question flow
   | 'synthesis'               // AI suggestions
@@ -109,6 +110,30 @@ type FlowState =
   | 'reflective-questions';   // Reflective questions to discover core identity
 
 type DomainType = 'mission' | 'vision' | 'values';
+
+const DOMAIN_ORDER: DomainType[] = ['mission', 'vision', 'values'];
+
+const DOMAIN_INTRO_CONFIG: Record<DomainType, { question: string; promptTemplate: string }> = {
+  mission: {
+    question: 'Second, Why Am I Here?',
+    promptTemplate: 'As a {identity},\nmy mission is . . .',
+  },
+  vision: {
+    question: 'Third, Where Do I Want to Go?',
+    promptTemplate: 'As a {identity},\nin 5 years I envision . . .',
+  },
+  values: {
+    question: 'Fourth, What Do I Stand For?',
+    promptTemplate: 'As a {identity},\nI am committed to . . .',
+  },
+};
+
+// Domain intro overlay timing (ms)
+const DOMAIN_INTRO_FADE_IN = 400;
+const DOMAIN_INTRO_HOLD = 2000;
+const DOMAIN_INTRO_FADE_OUT = 400;
+const DOMAIN_INTRO_GAP = 300;
+const DOMAIN_INTRO_BACKDROP_FADE = 500;
 
 export function TouchYourStarStep({
   userId,
@@ -137,6 +162,13 @@ export function TouchYourStarStep({
   // Hero prompt opacity — stays invisible until intro text sequence completes
   const heroPromptOpacity = useRef(new Animated.Value(introSequenceComplete ? 1 : 0)).current;
 
+  // Domain intro overlay state
+  const [domainIntroMessageIndex, setDomainIntroMessageIndex] = useState(-1);
+  const domainIntroTextOpacity = useRef(new Animated.Value(0)).current;
+  const domainIntroBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const domainIntroTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const isFirstTimeFlowRef = useRef(false);
+
   const handleCompassPlaceholderLayout = useCallback(() => {
     if (dockLayoutReported.current || !onCompassDockLayout) return;
     const node = compassPlaceholderRef.current;
@@ -159,6 +191,78 @@ export function TouchYourStarStep({
       }).start();
     }
   }, [introSequenceComplete]);
+
+  // Domain intro overlay animation — runs two-message sequence when flowState is 'domain-intro'
+  useEffect(() => {
+    if (flowState !== 'domain-intro') return;
+
+    // Clear any previous timers
+    domainIntroTimersRef.current.forEach(clearTimeout);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Message 1: Power question (e.g. "Second, Why Am I Here?")
+    const msg1Start = 300;
+    timers.push(setTimeout(() => {
+      setDomainIntroMessageIndex(0);
+      Animated.timing(domainIntroTextOpacity, {
+        toValue: 1, duration: DOMAIN_INTRO_FADE_IN, useNativeDriver: true,
+      }).start();
+    }, msg1Start));
+
+    // Message 1 fade out
+    const msg1FadeOut = msg1Start + DOMAIN_INTRO_FADE_IN + DOMAIN_INTRO_HOLD;
+    timers.push(setTimeout(() => {
+      Animated.timing(domainIntroTextOpacity, {
+        toValue: 0, duration: DOMAIN_INTRO_FADE_OUT, useNativeDriver: true,
+      }).start();
+    }, msg1FadeOut));
+
+    // Message 2: Prompt template (e.g. "As a Seeker of Truth, my mission is...")
+    const msg2Start = msg1FadeOut + DOMAIN_INTRO_FADE_OUT + DOMAIN_INTRO_GAP;
+    timers.push(setTimeout(() => {
+      setDomainIntroMessageIndex(1);
+      Animated.timing(domainIntroTextOpacity, {
+        toValue: 1, duration: DOMAIN_INTRO_FADE_IN, useNativeDriver: true,
+      }).start();
+    }, msg2Start));
+
+    // Message 2 fade out
+    const msg2FadeOut = msg2Start + DOMAIN_INTRO_FADE_IN + DOMAIN_INTRO_HOLD;
+    timers.push(setTimeout(() => {
+      Animated.timing(domainIntroTextOpacity, {
+        toValue: 0, duration: DOMAIN_INTRO_FADE_OUT, useNativeDriver: true,
+      }).start();
+    }, msg2FadeOut));
+
+    // Backdrop fade out
+    const backdropFadeStart = msg2FadeOut + DOMAIN_INTRO_FADE_OUT;
+    timers.push(setTimeout(() => {
+      Animated.timing(domainIntroBackdropOpacity, {
+        toValue: 0, duration: DOMAIN_INTRO_BACKDROP_FADE, useNativeDriver: true,
+      }).start();
+    }, backdropFadeStart));
+
+    // Transition to choice screen
+    const transitionTime = backdropFadeStart + DOMAIN_INTRO_BACKDROP_FADE;
+    timers.push(setTimeout(() => {
+      setDomainIntroMessageIndex(-1);
+      resetDomainState();
+      setFlowState('choice');
+    }, transitionTime));
+
+    domainIntroTimersRef.current = timers;
+
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, [flowState, currentDomain]);
+
+  // Cleanup domain intro timers on unmount
+  useEffect(() => {
+    return () => {
+      domainIntroTimersRef.current.forEach(clearTimeout);
+    };
+  }, []);
 
   // Identity state
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
@@ -255,17 +359,22 @@ export function TouchYourStarStep({
       // From identity-hub, exit the step (identity already selected)
       // User can tap "Edit" on Core Identity card to change their identity
       return false;
+    } else if (currentFlowState === 'domain-intro') {
+      // From domain intro overlay, cancel animation and go to identity-hub
+      domainIntroTimersRef.current.forEach(clearTimeout);
+      isFirstTimeFlowRef.current = false;
+      setDomainIntroMessageIndex(-1);
+      setFlowState('identity-hub');
+      return true;
     } else if (currentFlowState === 'choice') {
       // From choice, go back to identity-hub (domain skipped)
-      // Note: onStep1ContextChange useEffect will fire when flowState changes,
-      // and domain_skipped trigger is fired via ref to avoid stale closure
       if (onCoachTriggerRef.current) {
-        // Lightweight context — full context will arrive via onStep1ContextChange
         onCoachTriggerRef.current('domain_skipped', {
           flow_state: 'identity-hub',
           domain_completion: { identity: true, mission: false, vision: false, values: false },
         } as Step1Context);
       }
+      isFirstTimeFlowRef.current = false;
       setFlowState('identity-hub');
       return true;
     } else if (currentFlowState === 'direct-input') {
@@ -908,20 +1017,23 @@ export function TouchYourStarStep({
         identity: identityValue,
       }));
 
-      // Slide animation to identity hub
+      // Slide animation then start domain intro walk-through
       Animated.timing(slideAnim, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }).start(() => {
-        setFlowState('identity-hub');
         slideAnim.setValue(0);
+
+        // Start the guided domain intro sequence (Mission → Vision → Values)
+        isFirstTimeFlowRef.current = true;
+        startDomainIntro('mission');
 
         // Fire coach trigger after identity save completes
         if (onCoachTrigger) {
-          // Build context with updated identity
           const ctx = buildCurrentStep1Context();
-          ctx.flow_state = 'identity-hub';
+          ctx.flow_state = 'domain-intro';
+          ctx.current_domain = 'mission';
           ctx.domain_completion = { ...ctx.domain_completion, identity: true };
           onCoachTrigger('identity_selected', ctx);
         }
@@ -979,14 +1091,13 @@ export function TouchYourStarStep({
       if (onCoachTrigger) {
         const ctx = buildCurrentStep1Context();
         ctx.flow_state = 'identity-hub';
-        // Update domain completion to reflect the save
         if (currentDomain === 'mission') ctx.domain_completion = { ...ctx.domain_completion, mission: true };
         if (currentDomain === 'vision') ctx.domain_completion = { ...ctx.domain_completion, vision: true };
         onCoachTrigger('domain_completed', ctx);
       }
 
-      resetDomainState();
-      setFlowState('identity-hub');
+      // Advance to next domain intro or identity-hub
+      advanceToNextDomainOrHub();
 
     } catch (error) {
       console.error('Error saving statement:', error);
@@ -1049,9 +1160,9 @@ export function TouchYourStarStep({
         onCoachTrigger('domain_completed', ctx);
       }
 
-      resetDomainState();
+      // Advance to next domain intro or identity-hub
       setEditingValueIndex(null);
-      setFlowState('identity-hub');
+      advanceToNextDomainOrHub();
 
     } catch (error) {
       console.error('Error saving value:', error);
@@ -1112,8 +1223,8 @@ export function TouchYourStarStep({
         onCoachTrigger('domain_completed', ctx);
       }
 
-      resetDomainState();
-      setFlowState('identity-hub');
+      // Advance to next domain intro or identity-hub
+      advanceToNextDomainOrHub();
 
     } catch (error) {
       console.error('Error saving multiple values:', error);
@@ -1395,6 +1506,39 @@ export function TouchYourStarStep({
       ctx.current_domain = domain;
       onCoachTrigger('domain_started', ctx);
     }
+  }
+
+  /** Start an inspirational intro overlay before a domain's choice screen */
+  function startDomainIntro(domain: DomainType) {
+    setCurrentDomain(domain);
+    setDomainIntroMessageIndex(-1);
+    domainIntroTextOpacity.setValue(0);
+    domainIntroBackdropOpacity.setValue(0);
+    setFlowState('domain-intro');
+
+    // Fade backdrop in
+    Animated.timing(domainIntroBackdropOpacity, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }
+
+  /** Advance to next domain intro, or go to identity-hub if all done */
+  function advanceToNextDomainOrHub() {
+    const nextIndex = DOMAIN_ORDER.indexOf(currentDomain) + 1;
+    resetDomainState();
+    if (nextIndex < DOMAIN_ORDER.length && isFirstTimeFlowRef.current) {
+      startDomainIntro(DOMAIN_ORDER[nextIndex]);
+    } else {
+      isFirstTimeFlowRef.current = false;
+      setFlowState('identity-hub');
+    }
+  }
+
+  /** Skip current domain and advance to next intro */
+  function handleDomainSkip() {
+    advanceToNextDomainOrHub();
   }
 
   function getDomainConfig(domain: DomainType) {
@@ -2129,6 +2273,48 @@ export function TouchYourStarStep({
     );
   }
 
+  // DOMAIN INTRO OVERLAY
+  if (flowState === 'domain-intro') {
+    const introConfig = DOMAIN_INTRO_CONFIG[currentDomain];
+    const identity = northStarData.identity || 'Steward';
+    const messages = [
+      introConfig.question,
+      introConfig.promptTemplate.replace('{identity}', identity),
+    ];
+    const currentMessage = domainIntroMessageIndex >= 0
+      ? messages[domainIntroMessageIndex]
+      : '';
+
+    return (
+      <View style={styles.container}>
+        {/* Dimmed backdrop */}
+        <Animated.View
+          style={[
+            styles.domainIntroBackdrop,
+            { backgroundColor: colors.background, opacity: domainIntroBackdropOpacity },
+          ]}
+          pointerEvents="none"
+        />
+        {/* Centered text */}
+        {domainIntroMessageIndex >= 0 && (
+          <Animated.View
+            style={[styles.domainIntroTextContainer, { opacity: domainIntroTextOpacity }]}
+            pointerEvents="none"
+          >
+            <View style={[styles.domainIntroTextBlock, { backgroundColor: `${colors.background}E6` }]}>
+              <Text style={[
+                styles.domainIntroText,
+                { color: domainIntroMessageIndex === 1 ? '#ed1c24' : colors.text },
+              ]}>
+                {currentMessage}
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+      </View>
+    );
+  }
+
   // CHOICE SCREEN
   if (flowState === 'choice') {
     const config = getDomainConfig(currentDomain);
@@ -2179,7 +2365,7 @@ export function TouchYourStarStep({
             >
               <Edit3 size={20} color="#ed1c24" />
               <Text style={[styles.choiceButtonText, { color: '#ed1c24' }]}>
-                I Have One Ready
+                I Can Finish the Sentence
               </Text>
             </TouchableOpacity>
 
@@ -2197,7 +2383,17 @@ export function TouchYourStarStep({
             >
               <Lightbulb size={20} color="#FFFFFF" />
               <Text style={[styles.choiceButtonText, { color: '#FFFFFF' }]}>
-                Guide Me Through
+                Let Me Ponder with Some Questions
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.skipButton}
+              onPress={() => handleDomainSkip()}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
+                Skip for Now
               </Text>
             </TouchableOpacity>
           </View>
@@ -2206,6 +2402,7 @@ export function TouchYourStarStep({
         <TouchableOpacity
           style={styles.skipButton}
           onPress={() => {
+            isFirstTimeFlowRef.current = false;
             resetDomainState();
             setFlowState('identity-hub');
           }}
@@ -3500,6 +3697,34 @@ const styles = StyleSheet.create({
   reflectiveOutlinedButtonText: {
     fontSize: 16,
     fontWeight: '700',
+  },
+
+  // Domain intro overlay styles
+  domainIntroBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+  },
+  domainIntroTextContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 11,
+    paddingHorizontal: 32,
+  },
+  domainIntroTextBlock: {
+    paddingHorizontal: 28,
+    paddingVertical: 20,
+    borderRadius: 16,
+    maxWidth: 360,
+    alignItems: 'center',
+  },
+  domainIntroText: {
+    fontSize: 28,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 38,
+    letterSpacing: 0.3,
   },
 });
 
