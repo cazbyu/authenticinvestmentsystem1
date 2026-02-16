@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -62,7 +62,10 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
   const config = TEMPLATE_CONFIGS[templateType];
-  const resolvedFields = getResolvedFields(templateType, dataSchema);
+  const resolvedFields = useMemo(
+    () => getResolvedFields(templateType, dataSchema),
+    [templateType, dataSchema]
+  );
 
   const formatDate = (dateStr: string) => {
     const d = parseLocalDate(dateStr);
