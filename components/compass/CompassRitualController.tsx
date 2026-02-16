@@ -89,6 +89,10 @@ export function CompassRitualController({
   const overlayRef = useRef<View>(null);
   const overlayOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Always-current dock position ref (avoids stale closure in handleIgnitionDone)
+  const dockPositionRef = useRef(dockPosition);
+  useEffect(() => { dockPositionRef.current = dockPosition; }, [dockPosition]);
+
   // Ignition ceremony spindle rotations (Reanimated for smooth spin)
   const goldIgnitionRotation = useSharedValue(0);
   const silverIgnitionRotation = useSharedValue(0);
@@ -144,27 +148,27 @@ export function CompassRitualController({
     );
   }, [isIgnitionComplete]);
 
+  const computeDockXY = useCallback(() => {
+    const cornerScale = CORNER_SIZE / FULL_SIZE;
+    const scaleOffset = (FULL_SIZE / 2) * (1 - cornerScale);
+
+    const pos = dockPositionRef.current;
+    if (pos) {
+      const overlayX = overlayOffsetRef.current.x;
+      const overlayY = overlayOffsetRef.current.y;
+      return {
+        x: (pos.x - overlayX) - scaleOffset,
+        y: (pos.y - overlayY) - scaleOffset,
+      };
+    }
+    return { x: CORNER_PADDING_X, y: CORNER_PADDING_Y };
+  }, []);
+
   const handleIgnitionDone = useCallback(() => {
     ignitionPhaseRef.current = 'shrinking';
 
     const cornerScale = CORNER_SIZE / FULL_SIZE;
-    // The visual offset from translateX/Y to the compass's visual top-left
-    // is FULL_SIZE/2 * (1 - cornerScale) = 120 * 0.7 = 84
-    const scaleOffset = (FULL_SIZE / 2) * (1 - cornerScale);
-
-    // Compute docking translateX/Y so the visual compass aligns with the placeholder
-    let dockX = CORNER_PADDING_X;
-    let dockY = CORNER_PADDING_Y;
-
-    if (dockPosition) {
-      // dockPosition is in window coords; overlay offset converts to overlay coords
-      const overlayX = overlayOffsetRef.current.x;
-      const overlayY = overlayOffsetRef.current.y;
-      // Visual top-left = translateXY + scaleOffset, so:
-      // translateXY = visualTarget - scaleOffset
-      dockX = (dockPosition.x - overlayX) - scaleOffset;
-      dockY = (dockPosition.y - overlayY) - scaleOffset;
-    }
+    const { x: dockX, y: dockY } = computeDockXY();
 
     compassScale.value = withTiming(cornerScale, {
       duration: SHRINK_DURATION,
@@ -186,25 +190,7 @@ export function CompassRitualController({
       ignitionPhaseRef.current = 'docked';
       onIgnitionComplete();
     }, SHRINK_DURATION + 50);
-  }, [onIgnitionComplete, dockPosition]);
-
-  // ============================================
-  // UPDATE DOCK POSITION IF IT ARRIVES AFTER DOCKING
-  // ============================================
-  useEffect(() => {
-    if (!isIgnitionComplete || !dockPosition || ignitionPhaseRef.current !== 'docked') return;
-
-    const cornerScale = CORNER_SIZE / FULL_SIZE;
-    const scaleOffset = (FULL_SIZE / 2) * (1 - cornerScale);
-    const overlayX = overlayOffsetRef.current.x;
-    const overlayY = overlayOffsetRef.current.y;
-
-    const dockX = (dockPosition.x - overlayX) - scaleOffset;
-    const dockY = (dockPosition.y - overlayY) - scaleOffset;
-
-    compassX.value = withTiming(dockX, { duration: 300, easing: Easing.out(Easing.cubic) });
-    compassY.value = withTiming(dockY, { duration: 300, easing: Easing.out(Easing.cubic) });
-  }, [dockPosition, isIgnitionComplete]);
+  }, [onIgnitionComplete, computeDockXY]);
 
   // ============================================
   // STEP CHANGE → GOLD SPINDLE

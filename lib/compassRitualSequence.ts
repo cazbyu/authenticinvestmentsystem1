@@ -51,14 +51,14 @@ export const ALIGNMENT_SWEEP_ANGLES = [0, 270, 90, 180];
 
 /** Configuration for the opening ignition ceremony animation */
 export const IGNITION_CONFIG = {
-  /** Gold spindle total spin (2 full clockwise rotations) */
-  goldSpinDegrees: 720,
-  /** Silver spindle total spin (3 counter-clockwise rotations) */
-  silverSpinDegrees: -1080,
+  /** Gold spindle total spin (1.5 full clockwise rotations) */
+  goldSpinDegrees: 540,
+  /** Silver spindle total spin (2 counter-clockwise rotations) */
+  silverSpinDegrees: -720,
   /** Duration of the free-spin phase in ms */
-  spinDuration: 2000,
+  spinDuration: 3000,
   /** Duration of the deceleration phase in ms */
-  decelerateDuration: 1000,
+  decelerateDuration: 1500,
   /** Final angle after deceleration (North) */
   finalAngle: 0,
 };
