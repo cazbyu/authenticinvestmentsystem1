@@ -31,6 +31,7 @@ interface ActivityLogEntry {
   primary_metric: number | null;
   details: Record<string, any>;
   notes: string | null;
+  note_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +61,7 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
   const config = TEMPLATE_CONFIGS[templateType];
   const resolvedFields = useMemo(
@@ -73,6 +75,16 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+  };
+
+  const buildEnrichedNoteContent = (rawNotes: string, logDate: string, tmplType: string) => {
+    const d = parseLocalDate(logDate);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dateLabel = !isNaN(d.getTime())
+      ? `${monthNames[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+      : logDate;
+    const templateLabel = tmplType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    return `[Activity Log - ${dateLabel} | ${templateLabel}] ${rawNotes}`;
   };
 
   const resetForm = useCallback(() => {
@@ -89,6 +101,7 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
     setFormValues(defaults);
     setNotes('');
     setEditingEntryId(null);
+    setEditingNoteId(null);
   }, [resolvedFields]);
 
   const fetchEntries = useCallback(async () => {
@@ -123,6 +136,63 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
 
   const handleFieldChange = (key: string, value: any) => {
     setFormValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // Create or update a universal note linked to the parent task
+  const saveUniversalNote = async (
+    supabase: any,
+    userId: string,
+    rawNotes: string,
+    existingNoteId: string | null,
+  ): Promise<string | null> => {
+    const trimmed = rawNotes.trim();
+
+    if (!trimmed && existingNoteId) {
+      // Notes cleared — remove universal note
+      await supabase
+        .from('0008-ap-universal-notes-join')
+        .delete()
+        .eq('note_id', existingNoteId);
+      await supabase
+        .from('0008-ap-notes')
+        .delete()
+        .eq('id', existingNoteId);
+      return null;
+    }
+
+    if (!trimmed) return null;
+
+    const enrichedContent = buildEnrichedNoteContent(trimmed, date, templateType);
+
+    if (existingNoteId) {
+      // Update existing note
+      await supabase
+        .from('0008-ap-notes')
+        .update({ content: enrichedContent })
+        .eq('id', existingNoteId);
+      return existingNoteId;
+    }
+
+    // Create new note + join
+    const { data: noteData, error: noteError } = await supabase
+      .from('0008-ap-notes')
+      .insert({ user_id: userId, content: enrichedContent })
+      .select('id')
+      .single();
+
+    if (noteError) throw noteError;
+
+    const { error: joinError } = await supabase
+      .from('0008-ap-universal-notes-join')
+      .insert({
+        parent_id: taskId,
+        parent_type: 'task',
+        note_id: noteData.id,
+        user_id: userId,
+      });
+
+    if (joinError) throw joinError;
+    return noteData.id;
   };
 
   const handleSave = async () => {
@@ -160,20 +230,25 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
       const primaryMetric = config.extractPrimaryMetric(details);
 
       if (editingEntryId) {
-        // Update existing entry
+        // Update existing entry — sync universal note
+        const noteId = await saveUniversalNote(supabase, auth.user.id, notes, editingNoteId);
+
         const { error } = await supabase
           .from('0008-ap-activity-log')
           .update({
             primary_metric: primaryMetric,
             details,
             notes: notes.trim() || null,
+            note_id: noteId,
           })
           .eq('id', editingEntryId);
 
         if (error) throw error;
         eventBus.emit(EVENTS.ACTIVITY_LOG_UPDATED, { taskId, date, entryId: editingEntryId });
       } else {
-        // Insert new entry
+        // Insert new entry — create universal note if notes provided
+        const noteId = await saveUniversalNote(supabase, auth.user.id, notes, null);
+
         const { error } = await supabase
           .from('0008-ap-activity-log')
           .insert({
@@ -184,6 +259,7 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
             primary_metric: primaryMetric,
             details,
             notes: notes.trim() || null,
+            note_id: noteId,
           });
 
         if (error) throw error;
@@ -202,6 +278,7 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
 
   const handleEditEntry = (entry: ActivityLogEntry) => {
     setEditingEntryId(entry.id);
+    setEditingNoteId(entry.note_id || null);
     setNotes(entry.notes || '');
 
     if (templateType === 'checklist') {
@@ -221,6 +298,7 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
   };
 
   const handleDeleteEntry = (entryId: string) => {
+    const entry = existingEntries.find((e) => e.id === entryId);
     Alert.alert('Delete Entry', 'Are you sure you want to delete this entry?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -229,6 +307,19 @@ const ActivityLogModal: React.FC<ActivityLogModalProps> = ({
         onPress: async () => {
           try {
             const supabase = getSupabaseClient();
+
+            // Clean up universal note if one exists
+            if (entry?.note_id) {
+              await supabase
+                .from('0008-ap-universal-notes-join')
+                .delete()
+                .eq('note_id', entry.note_id);
+              await supabase
+                .from('0008-ap-notes')
+                .delete()
+                .eq('id', entry.note_id);
+            }
+
             const { error } = await supabase
               .from('0008-ap-activity-log')
               .delete()
