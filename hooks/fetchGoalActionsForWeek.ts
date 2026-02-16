@@ -144,6 +144,8 @@ export async function fetchGoalActionsForWeek(
         recurrence_rule: row.recurrence_rule,
         input_kind: row.input_kind,
         unit: row.unit,
+        tracking_template: row.tracking_template,
+        data_schema: row.data_schema,
         is_urgent: row.is_urgent,
         is_important: row.is_important,
         due_date: row.due_date,

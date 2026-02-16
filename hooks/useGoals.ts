@@ -525,6 +525,7 @@ export function useGoals(options: UseGoalsOptions = {}) {
           supabase.from(DB.UNIVERSAL_ROLES_JOIN).delete().eq('parent_id', taskId).eq('parent_type', 'task'),
           supabase.from(DB.UNIVERSAL_DOMAINS_JOIN).delete().eq('parent_id', taskId).eq('parent_type', 'task'),
           supabase.from(DB.UNIVERSAL_KEY_REL_JOIN).delete().eq('parent_id', taskId).eq('parent_type', 'task'),
+          supabase.from(DB.UNIVERSAL_GOALS_JOIN).delete().eq('parent_id', taskId).eq('parent_type', 'task'),
           supabase.from(DB.TASK_WEEK_PLAN).delete().eq('task_id', taskId),
         ]);
       } else {
