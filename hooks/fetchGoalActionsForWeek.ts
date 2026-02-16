@@ -29,6 +29,8 @@ export type TaskWithLogs = {
   id: string;
   title: string;
   recurrence_rule?: string;
+  tracking_template?: string | null;
+  data_schema?: any;
   logs: TaskLog[];
   weeklyActual: number;
   weeklyTarget: number;

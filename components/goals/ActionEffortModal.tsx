@@ -12,11 +12,12 @@ import {
   Switch,
   Platform,
 } from 'react-native';
-import { X, Lock, ChevronDown, ChevronUp, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
+import { X, Lock, ChevronDown, ChevronUp, Paperclip, Image as ImageIcon, File, Dumbbell, DollarSign, Ruler, BookOpen, ListChecks, Plus as PlusIcon } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Timeline } from '@/hooks/useGoals';
+import { TEMPLATE_TYPES, TEMPLATE_CONFIGS, TemplateType } from '@/lib/activityTemplates';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
 import {
   getDefaultStartTime,
@@ -126,6 +127,12 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   const [rolesExpanded, setRolesExpanded] = useState(false);
   const [keyRelationshipsExpanded, setKeyRelationshipsExpanded] = useState(false);
 
+  // Detail tracking template state
+  const [trackingTemplate, setTrackingTemplate] = useState<TemplateType | null>(null);
+  const [dataSchemaCategories, setDataSchemaCategories] = useState<string[]>([]);
+  const [newCategoryText, setNewCategoryText] = useState('');
+  const [trackingExpanded, setTrackingExpanded] = useState(false);
+
   // Attachment state (matching TaskEventForm pattern)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
@@ -220,6 +227,12 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setSelectedCustomDays([]);
     setAttachedFiles([]);
 
+    // Reset tracking template
+    setTrackingTemplate(null);
+    setDataSchemaCategories([]);
+    setNewCategoryText('');
+    setTrackingExpanded(false);
+
     // Reset collapsed states
     setDomainsExpanded(false);
     setRolesExpanded(false);
@@ -281,6 +294,14 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setTitle(initialData.title || '');
     setNotes('');
     setAttachedFiles([]);
+
+    // Load tracking template
+    setTrackingTemplate(initialData.tracking_template || null);
+    setDataSchemaCategories(initialData.data_schema?.categories || []);
+    setNewCategoryText('');
+    if (initialData.tracking_template) {
+      setTrackingExpanded(true);
+    }
 
     // Parse frequency - prioritize weeklyTarget for preset frequencies
     // (weeklyTarget is the source of truth for "X days per week" selections)
@@ -639,6 +660,12 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         selectedRoleIds,
         selectedDomainIds,
         selectedKeyRelationshipIds,
+        tracking_template: trackingTemplate || undefined,
+        data_schema: trackingTemplate && dataSchemaCategories.length > 0
+          ? { categories: dataSchemaCategories }
+          : trackingTemplate === 'checklist' && dataSchemaCategories.length > 0
+          ? { checklist_items: dataSchemaCategories }
+          : undefined,
         attachments: attachedFiles, // Include attachments in task data
         selectedWeeks: selectedWeeks.map(weekNumber => {
           const processedWeek = processedWeeks.find(w => w.week_number === weekNumber);
@@ -976,6 +1003,158 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                       </View>
                     )}
                   </View>
+                </View>
+              )}
+
+              {/* Detail Tracking Template - Hidden in Quick Add Mode */}
+              {!quickAddMode && (
+                <View style={styles.collapsibleSection}>
+                  <TouchableOpacity
+                    style={styles.collapsibleHeader}
+                    onPress={() => setTrackingExpanded(!trackingExpanded)}
+                  >
+                    <View style={styles.collapsibleHeaderLeft}>
+                      <Text style={styles.collapsibleLabel}>Detail Tracking</Text>
+                      {trackingTemplate && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>
+                            {TEMPLATE_CONFIGS[trackingTemplate].label}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    {trackingExpanded ? (
+                      <ChevronUp size={20} color="#6b7280" />
+                    ) : (
+                      <ChevronDown size={20} color="#6b7280" />
+                    )}
+                  </TouchableOpacity>
+
+                  {trackingExpanded && (
+                    <View style={styles.collapsibleContent}>
+                      <Text style={styles.trackingHelpText}>
+                        Choose a template to enable detail logging when tapping day labels.
+                      </Text>
+                      <View style={styles.templateSelector}>
+                        {TEMPLATE_TYPES.map((tmpl) => {
+                          const config = TEMPLATE_CONFIGS[tmpl];
+                          const isSelected = trackingTemplate === tmpl;
+                          const IconComponent = tmpl === 'workout' ? Dumbbell
+                            : tmpl === 'financial' ? DollarSign
+                            : tmpl === 'measurement' ? Ruler
+                            : tmpl === 'journal' ? BookOpen
+                            : ListChecks;
+                          return (
+                            <TouchableOpacity
+                              key={tmpl}
+                              style={[
+                                styles.templateButton,
+                                isSelected && styles.templateButtonSelected,
+                              ]}
+                              onPress={() => {
+                                setTrackingTemplate(isSelected ? null : tmpl);
+                                if (!isSelected) {
+                                  setDataSchemaCategories([]);
+                                  setNewCategoryText('');
+                                }
+                              }}
+                            >
+                              <IconComponent
+                                size={16}
+                                color={isSelected ? '#ffffff' : '#6b7280'}
+                              />
+                              <Text
+                                style={[
+                                  styles.templateButtonText,
+                                  isSelected && styles.templateButtonTextSelected,
+                                ]}
+                              >
+                                {config.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      {/* Category configuration - shown when template has a categoryField or is checklist */}
+                      {trackingTemplate && (
+                        TEMPLATE_CONFIGS[trackingTemplate].categoryField || trackingTemplate === 'checklist'
+                      ) && (
+                        <View style={styles.categoryConfig}>
+                          <Text style={styles.categoryConfigLabel}>
+                            {trackingTemplate === 'checklist' ? 'Checklist Items' : 'Categories'}
+                          </Text>
+                          <Text style={styles.categoryConfigHint}>
+                            {trackingTemplate === 'checklist'
+                              ? 'Define the sub-items that can be checked off'
+                              : 'Define options for the category dropdown'}
+                          </Text>
+
+                          {/* Existing categories as chips */}
+                          <View style={styles.categoryChips}>
+                            {dataSchemaCategories.map((cat, idx) => (
+                              <View key={idx} style={styles.categoryChip}>
+                                <Text style={styles.categoryChipText}>{cat}</Text>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    setDataSchemaCategories(
+                                      dataSchemaCategories.filter((_, i) => i !== idx)
+                                    );
+                                  }}
+                                  style={styles.categoryChipRemove}
+                                >
+                                  <X size={12} color="#6b7280" />
+                                </TouchableOpacity>
+                              </View>
+                            ))}
+                          </View>
+
+                          {/* Add new category */}
+                          <View style={styles.categoryAddRow}>
+                            <TextInput
+                              style={styles.categoryAddInput}
+                              value={newCategoryText}
+                              onChangeText={setNewCategoryText}
+                              placeholder={
+                                trackingTemplate === 'checklist'
+                                  ? 'e.g., Warm-up'
+                                  : trackingTemplate === 'workout'
+                                  ? 'e.g., Legs'
+                                  : trackingTemplate === 'financial'
+                                  ? 'e.g., Savings'
+                                  : 'Add category...'
+                              }
+                              placeholderTextColor="#9ca3af"
+                              maxLength={50}
+                              onSubmitEditing={() => {
+                                const trimmed = newCategoryText.trim();
+                                if (trimmed && !dataSchemaCategories.includes(trimmed)) {
+                                  setDataSchemaCategories([...dataSchemaCategories, trimmed]);
+                                  setNewCategoryText('');
+                                }
+                              }}
+                            />
+                            <TouchableOpacity
+                              style={[
+                                styles.categoryAddButton,
+                                !newCategoryText.trim() && styles.categoryAddButtonDisabled,
+                              ]}
+                              onPress={() => {
+                                const trimmed = newCategoryText.trim();
+                                if (trimmed && !dataSchemaCategories.includes(trimmed)) {
+                                  setDataSchemaCategories([...dataSchemaCategories, trimmed]);
+                                  setNewCategoryText('');
+                                }
+                              }}
+                              disabled={!newCategoryText.trim()}
+                            >
+                              <PlusIcon size={16} color={newCategoryText.trim() ? '#ffffff' : '#9ca3af'} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -1690,6 +1869,107 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Detail Tracking Template styles
+  trackingHelpText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  templateSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  templateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  templateButtonSelected: {
+    backgroundColor: '#1f2937',
+    borderColor: '#1f2937',
+  },
+  templateButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  templateButtonTextSelected: {
+    color: '#ffffff',
+  },
+  categoryConfig: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  categoryConfigLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  categoryConfigHint: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 12,
+  },
+  categoryChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    color: '#374151',
+  },
+  categoryChipRemove: {
+    padding: 2,
+  },
+  categoryAddRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  categoryAddInput: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  categoryAddButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#0078d4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryAddButtonDisabled: {
+    backgroundColor: '#e5e7eb',
   },
 });
 

@@ -11,6 +11,7 @@ const ManageCustomTimelinesModal = lazy(() => import('@/components/timelines/Man
 const ManageGlobalTimelinesModal = lazy(() => import('@/components/timelines/ManageGlobalTimelinesModal').then(m => ({ default: m.ManageGlobalTimelinesModal })));
 const ManageTimelinesView = lazy(() => import('@/components/timelines/ManageTimelinesView').then(m => ({ default: m.ManageTimelinesView })));
 const WithdrawalForm = lazy(() => import('@/components/journal/WithdrawalForm').then(m => ({ default: m.WithdrawalForm })));
+const ActivityLogModal = lazy(() => import('@/components/goals/ActivityLogModal'));
 import { GoalBankTabbedHeader, GoalBankTab } from '@/components/goals/GoalBankTabbedHeader';
 import { MyGoalsView, UnifiedGoal } from '@/components/goals/MyGoalsView';
 import { GoalDetailView } from '@/components/goals/GoalDetailView';
@@ -23,6 +24,7 @@ import { fetchGoalActionsForWeek } from '@/hooks/fetchGoalActionsForWeek';
 import { calculateAuthenticScore, calculateTotalGoalProgress } from '@/lib/taskUtils';
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
+import { TemplateType } from '@/lib/activityTemplates';
 import { getWeeklyCompletionCountWithTarget, syncCompletionAcrossViews, completionEvents } from '@/lib/completionSync';
 import { Plus, ChevronLeft, ChevronRight, Target, Users, Minus, X } from 'lucide-react-native';
 import { DraggableFab } from '@/components/DraggableFab';
@@ -438,6 +440,31 @@ export default function Goals() {
     }
   };
 
+  const handleDayLabelPress = useCallback((actionId: string, date: string) => {
+    // Find the action across all goal actions
+    for (const goalId in weekGoalActions) {
+      const action = weekGoalActions[goalId]?.find((a: any) => a.id === actionId);
+      if (action) {
+        if (!action.tracking_template) {
+          Alert.alert(
+            'No Detail Tracking',
+            'This action does not have detail tracking configured. Edit the action to add a tracking template.'
+          );
+          return;
+        }
+        setActivityLogState({
+          visible: true,
+          taskId: actionId,
+          taskTitle: action.title,
+          date,
+          templateType: action.tracking_template as string,
+          dataSchema: action.data_schema || {},
+        });
+        return;
+      }
+    }
+  }, [weekGoalActions]);
+
   // Undo state for delete operations
   const [undoState, setUndoState] = useState<{
     taskId: string;
@@ -567,7 +594,15 @@ export default function Goals() {
   const [manageCustomTimelinesModalVisible, setManageCustomTimelinesModalVisible] = useState(false);
   const [manageGlobalTimelinesModalVisible, setManageGlobalTimelinesModalVisible] = useState(false);
   const [withdrawalFormVisible, setWithdrawalFormVisible] = useState(false);
-  
+  const [activityLogState, setActivityLogState] = useState<{
+    visible: boolean;
+    taskId: string;
+    taskTitle: string;
+    date: string;
+    templateType: string;
+    dataSchema: any;
+  } | null>(null);
+
   // Selected items
   const [selectedGoal, setSelectedGoal] = useState<any>(null);
   const [selectedGoalForAction, setSelectedGoalForAction] = useState<any>(null);
@@ -1434,6 +1469,7 @@ export default function Goals() {
                   }}
                   selectedWeekNumber={currentWeek?.week_number}
                   onToggleCompletion={handleToggleCompletion}
+                  onDayLabelPress={handleDayLabelPress}
                   onEditAction={(action) => handleEditAction(action, goal)}
                   onDeleteAction={handleDeleteAction}
                   onToggleExpanded={() => toggleGoalExpanded(goal.id)}
@@ -1617,6 +1653,18 @@ export default function Goals() {
             refreshScore(true);
           }}
         />
+
+        {activityLogState && (
+          <ActivityLogModal
+            visible={activityLogState.visible}
+            onClose={() => setActivityLogState(null)}
+            taskId={activityLogState.taskId}
+            taskTitle={activityLogState.taskTitle}
+            date={activityLogState.date}
+            templateType={activityLogState.templateType as TemplateType}
+            dataSchema={activityLogState.dataSchema}
+          />
+        )}
       </Suspense>
 
       {/* Delete Confirmation Modal */}

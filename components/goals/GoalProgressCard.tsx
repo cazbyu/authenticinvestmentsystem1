@@ -10,12 +10,16 @@ const DayDot = memo(function DayDot({
   dayName,
   hasLog,
   onToggle,
+  onLabelPress,
+  trackingTemplate,
   disabled
 }: {
   date: string;
   dayName: string;
   hasLog: boolean;
   onToggle: (date: string) => void;
+  onLabelPress?: (date: string) => void;
+  trackingTemplate?: string | null;
   disabled: boolean;
 }) {
   const [isToggling, setIsToggling] = useState(false);
@@ -32,9 +36,24 @@ const DayDot = memo(function DayDot({
     }
   }, [date, disabled, isToggling, onToggle]);
 
+  const handleLabelPress = useCallback(() => {
+    if (onLabelPress) onLabelPress(date);
+  }, [date, onLabelPress]);
+
   return (
     <View style={styles.dayDotContainer}>
-      <Text style={styles.dayLabelText}>{dayName}</Text>
+      {onLabelPress && trackingTemplate ? (
+        <TouchableOpacity
+          onPress={handleLabelPress}
+          hitSlop={{ top: 8, bottom: 4, left: 8, right: 8 }}
+          activeOpacity={0.6}
+        >
+          <Text style={[styles.dayLabelText, styles.dayLabelTappable]}>{dayName}</Text>
+          <View style={styles.dayLabelIndicator} />
+        </TouchableOpacity>
+      ) : (
+        <Text style={styles.dayLabelText}>{dayName}</Text>
+      )}
       <TouchableOpacity
         style={[
           styles.dayDot,
@@ -61,12 +80,14 @@ interface TaskWithLogs {
   id: string;
   title: string;
   input_kind?: string;
+  tracking_template?: string | null;
+  data_schema?: any;
   logs: Array<{
-    measured_on: string;   // ✅ correct field
-    week_number: number;   // ✅ optional but available
-    day_of_week?: number;  // ✅ nullable in schema
-    value: number;         // ✅ numeric, default 1
-    completed: boolean;    // ✅ derive from value > 0
+    measured_on: string;
+    week_number: number;
+    day_of_week?: number;
+    value: number;
+    completed: boolean;
   }>;
   weeklyActual: number;
   weeklyTarget: number;
@@ -81,6 +102,7 @@ interface GoalProgressCardProps {
   loadingWeekActions?: boolean;
   onAddAction?: () => void; // Renamed from onAddTask
   onToggleCompletion?: (actionId: string, date: string, completed: boolean) => Promise<void>;
+  onDayLabelPress?: (actionId: string, date: string) => void; // Opens ActivityLogModal
   onEdit?: () => void; // New onEdit prop
   onPress?: () => void;
   compact?: boolean;
@@ -100,6 +122,7 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   loadingWeekActions = false,
   onAddAction,
   onToggleCompletion,
+  onDayLabelPress,
   onEdit,
   onPress,
   compact = false,
@@ -461,6 +484,10 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                                   console.error('[GoalProgressCard] Error in day dot toggle:', error);
                                 }
                               }}
+                              onLabelPress={onDayLabelPress ? (date: string) => {
+                                onDayLabelPress(action.id, date);
+                              } : undefined}
+                              trackingTemplate={action.tracking_template}
                               disabled={!onToggleCompletion}
                             />
                           );
@@ -819,6 +846,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6b7280',
     textAlign: 'center',
+  },
+  dayLabelTappable: {
+    color: '#0078d4',
+  },
+  dayLabelIndicator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#0078d4',
+    alignSelf: 'center',
+    marginTop: 1,
   },
   dayDot: {
     width: 22,

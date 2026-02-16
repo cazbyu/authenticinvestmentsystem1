@@ -54,4 +54,7 @@ export const EVENTS = {
   REFLECTION_CREATED: 'reflection:created',
   REFLECTION_UPDATED: 'reflection:updated',
   REFLECTION_DELETED: 'reflection:deleted',
+  ACTIVITY_LOG_CREATED: 'activityLog:created',
+  ACTIVITY_LOG_UPDATED: 'activityLog:updated',
+  ACTIVITY_LOG_DELETED: 'activityLog:deleted',
 } as const;

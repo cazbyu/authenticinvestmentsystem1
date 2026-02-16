@@ -487,6 +487,8 @@ export function useGoals(options: UseGoalsOptions = {}) {
     selectedRoleIds?: string[];
     selectedDomainIds?: string[];
     selectedKeyRelationshipIds?: string[];
+    tracking_template?: string;
+    data_schema?: any;
     selectedWeeks: Array<{ weekNumber: number; targetDays: number }>;
     id?: string; // For editing existing tasks
   }, selectedTimeline?: Timeline): Promise<{ id: string } | null> => {
@@ -505,6 +507,8 @@ export function useGoals(options: UseGoalsOptions = {}) {
         const updateTaskPayload: any = {
           title: taskData.title,
           recurrence_rule: taskData.recurrenceRule,
+          tracking_template: taskData.tracking_template || null,
+          data_schema: taskData.data_schema || null,
           updated_at: toLocalISOString(new Date()),
         };
 
@@ -536,10 +540,12 @@ export function useGoals(options: UseGoalsOptions = {}) {
           is_twelve_week_goal: timeline.source === 'global',
           recurrence_rule: taskData.recurrenceRule,
           
-          // --- THIS IS THE FIX ---
           // Conditionally add the correct timeline foreign key to the main task record
           ...(timeline.source === 'global' && { user_global_timeline_id: timeline.id }),
           ...(timeline.source === 'custom' && { custom_timeline_id: timeline.id }),
+          // Detail tracking template configuration
+          ...(taskData.tracking_template && { tracking_template: taskData.tracking_template }),
+          ...(taskData.data_schema && { data_schema: taskData.data_schema }),
         };
 
         const { data: insertedTask, error: taskError } = await supabase
