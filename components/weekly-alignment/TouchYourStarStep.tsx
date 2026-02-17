@@ -28,6 +28,7 @@ interface TouchYourStarStepProps {
   onNext: () => void;
   onRegisterBackHandler?: (handler: () => boolean) => void;
   onDataCapture: (data: {
+    identity?: string;
     missionReflection?: string;
     visionAcknowledged?: boolean;
     valuesAcknowledged?: boolean;
@@ -1396,6 +1397,7 @@ export function TouchYourStarStep({
     }
     
     onDataCapture({
+      identity: northStarData.identity,
       missionReflection: northStarData.mission,
       visionAcknowledged: !!northStarData.vision,
       valuesAcknowledged: !!(northStarData.values && northStarData.values.length > 0),
@@ -1581,13 +1583,11 @@ export function TouchYourStarStep({
   }
 
   function getDomainConfig(domain: DomainType) {
-    const identity = northStarData.identity || 'Steward';
-    
     switch (domain) {
       case 'mission':
         return {
           title: 'Define Your Mission',
-          subtitle: `As a ${identity}, my mission is...`,
+          subtitle: 'My mission is...',
           placeholder: 'To...',
           hint: 'Your mission describes your core purpose—what you do and why.',
           buttonText: 'My Mission is to...',
@@ -1595,7 +1595,7 @@ export function TouchYourStarStep({
       case 'vision':
         return {
           title: 'Define Your Vision',
-          subtitle: `As a ${identity}, in 5 years I envision...`,
+          subtitle: 'In 5 years, I envision...',
           placeholder: 'A world/life where...',
           hint: 'Your vision paints a picture of your desired future—where you are headed.',
           buttonText: 'In 5 years, I envision...',
@@ -1603,7 +1603,7 @@ export function TouchYourStarStep({
       case 'values':
         return {
           title: 'Define Your Core Values',
-          subtitle: `As a ${identity}, I am committed to...`,
+          subtitle: 'I am committed to...',
           placeholder: 'Value Name: I am committed to...',
           hint: 'Core values are actionable principles that guide your decisions.',
           buttonText: 'I am committed to...',

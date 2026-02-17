@@ -39,6 +39,7 @@ import { useAlignmentCoach } from '@/hooks/useAlignmentCoach';
 // Types
 interface WeeklyAlignmentData {
   // Step 1: Touch Your Star
+  identity?: string;
   missionReflection?: string;
   visionAcknowledged?: boolean;
   valuesAcknowledged?: boolean;
