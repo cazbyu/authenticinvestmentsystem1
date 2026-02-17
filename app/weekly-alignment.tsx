@@ -18,6 +18,14 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString, getWeekStart, getWeekEnd, formatLocalDate } from '@/lib/dateUtils';
 import { recordNorthStarVisit } from '@/lib/northStarVisits';
+import {
+  STEP_TRANSITIONS,
+  STEP_TRANSITION_FADE_IN,
+  STEP_TRANSITION_HOLD,
+  STEP_TRANSITION_FADE_OUT,
+  STEP_TRANSITION_BACKDROP_FADE,
+} from '@/lib/compassRitualSequence';
+import type { StepTransitionData } from '@/lib/compassRitualSequence';
 import type { WeekPlanItem } from '@/types/weekPlan';
 import type { CaptureOffer, Step1Context, StepContext, CoachTrigger, AlignmentStep } from '@/types/alignmentCoach';
 import type { CaptureData } from '@/types/chatBubble';
@@ -109,6 +117,15 @@ export default function WeeklyAlignmentScreen() {
   // Compass dock position — measured from step content placeholder via onLayout
   const [compassDockPosition, setCompassDockPosition] = useState<{ x: number; y: number } | null>(null);
 
+  // Inter-step transition state
+  const [interStepTransition, setInterStepTransition] = useState<{ goldAngle: number; silverAngle: number } | null>(null);
+  const [stepTransitionActive, setStepTransitionActive] = useState(false);
+  const [stepTransitionMessage, setStepTransitionMessage] = useState('');
+  const pendingStepRef = useRef<number | null>(null);
+  const transitionBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const transitionTextOpacity = useRef(new Animated.Value(0)).current;
+  const transitionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   // Intro sequence state
   const [hasIdentity, setHasIdentity] = useState(false);
   const [introSequenceComplete, setIntroSequenceComplete] = useState(false);
@@ -128,6 +145,13 @@ export default function WeeklyAlignmentScreen() {
       }).start();
     }
   }, [introSequenceComplete]);
+
+  // Clean up transition timers on unmount
+  useEffect(() => {
+    return () => {
+      transitionTimersRef.current.forEach(clearTimeout);
+    };
+  }, []);
 
   // Alignment Coach hook (2-way coaching for all steps)
   const coach = useAlignmentCoach(userId, guidedModeEnabled);
@@ -258,19 +282,103 @@ export default function WeeklyAlignmentScreen() {
     }));
   }
 
-  function goToNextStep() {
-    if (currentStep < STEPS.length - 1) {
-      if (currentStep === 0) {
-        recordNorthStarVisit('weekly_alignment_step');
-      }
-      const nextStep = currentStep + 1;
-      setCurrentStep(nextStep);
-      setStepBackHandler(null);
-      coach.onStepChange(STEPS[nextStep].key);
+  /** Immediately change to a step (no transition overlay) */
+  function changeToStep(stepIndex: number) {
+    setCurrentStep(stepIndex);
+    setStepBackHandler(null);
+    coach.onStepChange(STEPS[stepIndex].key);
+  }
 
+  function goToNextStep() {
+    if (currentStep >= STEPS.length - 1) return;
+
+    if (currentStep === 0) {
+      recordNorthStarVisit('weekly_alignment_step');
+    }
+
+    const transitionKey = `${currentStep}_to_${currentStep + 1}`;
+    const transitionConfig = STEP_TRANSITIONS[transitionKey];
+
+    if (!transitionConfig) {
+      // No transition configured — just change step
+      changeToStep(currentStep + 1);
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
+      return;
+    }
+
+    // Build dynamic message from accumulated alignment data
+    const transitionData: StepTransitionData = {
+      identity: alignmentData.identity,
+      hasMission: !!alignmentData.missionReflection,
+      hasVision: !!alignmentData.visionAcknowledged,
+      hasValues: !!alignmentData.valuesAcknowledged,
+    };
+
+    const nextStep = currentStep + 1;
+    pendingStepRef.current = nextStep;
+    setStepTransitionMessage(transitionConfig.getMessage(transitionData));
+    setStepTransitionActive(true);
+
+    // Clear any previous timers
+    transitionTimersRef.current.forEach(clearTimeout);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Reset animated values
+    transitionBackdropOpacity.setValue(0);
+    transitionTextOpacity.setValue(0);
+
+    // 1. Fade in backdrop
+    Animated.timing(transitionBackdropOpacity, {
+      toValue: 1, duration: 300, useNativeDriver: true,
+    }).start();
+
+    // 2. After short delay, fade in text + trigger compass spin
+    timers.push(setTimeout(() => {
+      Animated.timing(transitionTextOpacity, {
+        toValue: 1, duration: STEP_TRANSITION_FADE_IN, useNativeDriver: true,
+      }).start();
+
+      // Trigger compass spin to next step's cardinal direction
+      setInterStepTransition({
+        goldAngle: transitionConfig.transitionGoldAngle,
+        silverAngle: transitionConfig.transitionSilverAngle,
+      });
+    }, 300));
+
+    // 3. Fade out text after hold
+    const fadeOutStart = 300 + STEP_TRANSITION_FADE_IN + STEP_TRANSITION_HOLD;
+    timers.push(setTimeout(() => {
+      Animated.timing(transitionTextOpacity, {
+        toValue: 0, duration: STEP_TRANSITION_FADE_OUT, useNativeDriver: true,
+      }).start();
+    }, fadeOutStart));
+
+    // 4. Fade backdrop
+    const backdropFadeStart = fadeOutStart + STEP_TRANSITION_FADE_OUT;
+    timers.push(setTimeout(() => {
+      Animated.timing(transitionBackdropOpacity, {
+        toValue: 0, duration: STEP_TRANSITION_BACKDROP_FADE, useNativeDriver: true,
+      }).start();
+    }, backdropFadeStart));
+
+    // 5. Complete transition — change actual step
+    const completeTime = backdropFadeStart + STEP_TRANSITION_BACKDROP_FADE;
+    timers.push(setTimeout(() => {
+      setStepTransitionActive(false);
+      setInterStepTransition(null);
+      const nextStepToLoad = pendingStepRef.current;
+      if (nextStepToLoad !== null) {
+        changeToStep(nextStepToLoad);
+        pendingStepRef.current = null;
+      }
+    }, completeTime));
+
+    transitionTimersRef.current = timers;
+
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
   }
 
@@ -556,7 +664,31 @@ export default function WeeklyAlignmentScreen() {
         showIntroSequence={true}
         hasIdentity={hasIdentity}
         onIntroSequenceComplete={() => setIntroSequenceComplete(true)}
+        interStepTransition={interStepTransition}
+        onInterStepSpinComplete={() => setInterStepTransition(null)}
       />
+
+      {/* Step Transition Overlay — shown between steps */}
+      {stepTransitionActive && (
+        <View style={styles.stepTransitionOverlay}>
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFillObject,
+              { backgroundColor: colors.background, opacity: transitionBackdropOpacity },
+            ]}
+          />
+          <Animated.View
+            style={[styles.stepTransitionTextContainer, { opacity: transitionTextOpacity }]}
+            pointerEvents="none"
+          >
+            <View style={[styles.stepTransitionTextBlock, { backgroundColor: `${colors.background}E6` }]}>
+              <Text style={[styles.stepTransitionText, { color: colors.text }]}>
+                {stepTransitionMessage}
+              </Text>
+            </View>
+          </Animated.View>
+        </View>
+      )}
 
       {/* Header + Step Content — fades in after intro sequence */}
       <Animated.View style={[styles.contentWrapper, { opacity: contentOpacity }]}>
@@ -897,5 +1029,35 @@ const styles = StyleSheet.create({
   redirectText: {
     fontSize: 14,
     fontStyle: 'italic',
+  },
+  // Step transition overlay styles
+  stepTransitionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepTransitionTextContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '40%',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  } as any,
+  stepTransitionTextBlock: {
+    paddingHorizontal: 28,
+    paddingVertical: 20,
+    borderRadius: 16,
+    maxWidth: 360,
+    alignItems: 'center',
+  },
+  stepTransitionText: {
+    fontSize: 24,
+    fontWeight: '600' as const,
+    fontStyle: 'italic' as const,
+    textAlign: 'center' as const,
+    lineHeight: 34,
+    letterSpacing: 0.3,
   },
 });
