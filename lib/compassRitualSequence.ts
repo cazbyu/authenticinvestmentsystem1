@@ -138,6 +138,77 @@ export const CORNER_PADDING_X = 16;
 export const CORNER_PADDING_Y = 16;
 
 // ============================================
+// STEP TRANSITION CONFIG (inter-step overlays)
+// ============================================
+
+/** Data available for building dynamic transition messages */
+export interface StepTransitionData {
+  identity?: string;
+  hasMission?: boolean;
+  hasVision?: boolean;
+  hasValues?: boolean;
+}
+
+/** Configuration for the transition overlay between two steps */
+export interface StepTransitionConfig {
+  /** Generate the overlay message based on what the user accomplished */
+  getMessage: (data: StepTransitionData) => string;
+  /** Gold spindle target angle during transition spin */
+  transitionGoldAngle: number;
+  /** Silver spindle target angle during transition spin */
+  transitionSilverAngle: number;
+}
+
+/** Maps each step transition (fromIndex_to_toIndex) to its config */
+export const STEP_TRANSITIONS: Record<string, StepTransitionConfig> = {
+  '0_to_1': {
+    getMessage: (data) => {
+      const parts: string[] = [];
+      if (data.hasMission || data.hasVision) {
+        const items = [
+          data.hasMission && 'a Mission Statement',
+          data.hasVision && 'a Vision',
+        ].filter(Boolean);
+        parts.push(`You've created ${items.join(' and ')}!`);
+      }
+      parts.push("Now let's focus on aligning the roles in your life.");
+      return parts.join(' ');
+    },
+    transitionGoldAngle: 270,
+    transitionSilverAngle: 270,
+  },
+  '1_to_2': {
+    getMessage: () => "Time to check in on your wellness.",
+    transitionGoldAngle: 90,
+    transitionSilverAngle: 90,
+  },
+  '2_to_3': {
+    getMessage: () => "Let's review your goals and campaigns.",
+    transitionGoldAngle: 180,
+    transitionSilverAngle: 180,
+  },
+  '3_to_4': {
+    getMessage: () => "Time for an alignment check.",
+    transitionGoldAngle: 0,
+    transitionSilverAngle: 0,
+  },
+  '4_to_5': {
+    getMessage: () => "Time to deploy your week.",
+    transitionGoldAngle: 0,
+    transitionSilverAngle: 0,
+  },
+};
+
+/** Fade-in duration for inter-step transition text (ms) */
+export const STEP_TRANSITION_FADE_IN = 400;
+/** Hold time for inter-step transition text (ms) */
+export const STEP_TRANSITION_HOLD = 2500;
+/** Fade-out duration for inter-step transition text (ms) */
+export const STEP_TRANSITION_FADE_OUT = 400;
+/** Backdrop fade-out duration after inter-step text (ms) */
+export const STEP_TRANSITION_BACKDROP_FADE = 500;
+
+// ============================================
 // HELPERS
 // ============================================
 
