@@ -2591,6 +2591,16 @@ export function TouchYourStarStep({
             </TouchableOpacity>
           </View>
 
+          <TouchableOpacity
+            style={[styles.skipButton, { marginTop: 8 }]}
+            onPress={() => advanceToNextDomainOrHub()}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
+              I'll Decide Later
+            </Text>
+          </TouchableOpacity>
+
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -2900,6 +2910,16 @@ export function TouchYourStarStep({
                 <ChevronRight size={20} color="#FFFFFF" />
               </>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={() => advanceToNextDomainOrHub()}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.skipButtonText, { color: colors.textSecondary }]}>
+              I'll Decide Later
+            </Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
