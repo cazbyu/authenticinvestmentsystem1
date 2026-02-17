@@ -439,26 +439,31 @@ export function WingCheckRolesStep({
     });
   }
 
+  // Ref to hold the latest roles data for intro phases (avoids stale closure)
+  const rolesRef = useRef<Role[]>([]);
+
   /**
    * Run the step intro sequence starting from a given phase.
    * Each phase shows an overlay, then transitions to the appropriate flow state.
+   * Uses rolesRef to access fresh roles data (state may be stale in closures).
    */
   async function runStepIntroPhase(phase: number) {
     if (!isStepIntroActiveRef.current) return;
 
+    const currentRoles = rolesRef.current;
+
     if (phase === 0) {
-      // Phase 0: "Activate Your Roles"
       setStepIntroPhase(0);
-      await showIntroOverlayMessage('Activate Your Roles');
 
-      if (!isStepIntroActiveRef.current) return;
-
-      if (roles.length === 0) {
-        // No roles — go to activate-roles flow, intro will continue when they return
+      if (currentRoles.length === 0) {
+        // No roles — show "Activate Your Roles" then go to activate-roles flow
+        await showIntroOverlayMessage('Activate Your Roles');
+        if (!isStepIntroActiveRef.current) return;
         setFlowState('activate-roles');
         return; // Will resume from phase 1 when roles are loaded
       }
-      // Already has roles — skip to phase 1
+
+      // Already has roles — skip directly to phase 1 (prioritize question)
       runStepIntroPhase(1);
 
     } else if (phase === 1) {
@@ -467,7 +472,8 @@ export function WingCheckRolesStep({
       const weekLabel = weekStartDate && weekEndDate
         ? `${formatShortDate(weekStartDate)} – ${formatShortDate(weekEndDate)}`
         : 'this week';
-      const msg = `You have ${roles.length} role${roles.length !== 1 ? 's' : ''}. For the week of ${weekLabel}, which are your top focus?`;
+      const roleCount = currentRoles.length;
+      const msg = `You have ${roleCount} role${roleCount !== 1 ? 's' : ''}. For the week of ${weekLabel}, which are your top focus?`;
       await showIntroOverlayMessage(msg, 3000);
 
       if (!isStepIntroActiveRef.current) return;
@@ -483,10 +489,10 @@ export function WingCheckRolesStep({
 
       if (!isStepIntroActiveRef.current) return;
 
-      // Go to main hub — intro is done
+      // Go to review-roles (Design Your Legacy view) — intro is done
       setStepIntroPhase(3);
       isStepIntroActiveRef.current = false;
-      setFlowState('main');
+      setFlowState('review-roles');
       onStepIntroComplete?.();
     }
   }
@@ -543,11 +549,12 @@ export function WingCheckRolesStep({
 
       const activeRoles = rolesData || [];
       setRoles(activeRoles);
+      rolesRef.current = activeRoles; // Keep ref in sync for intro phases
 
       const prioritized = activeRoles
         .filter(r => r.priority_order !== null && r.priority_order !== undefined)
         .sort((a, b) => (a.priority_order || 0) - (b.priority_order || 0));
-      
+
       setPrioritizedRoles(prioritized);
       setSelectedRoleIds(prioritized.map(r => r.id));
 
@@ -563,7 +570,9 @@ export function WingCheckRolesStep({
 
       // If returning from activate-roles during intro sequence, continue intro
       if (isStepIntroActiveRef.current && activeRoles.length > 0) {
+        rolesRef.current = activeRoles; // Update ref with fresh roles
         setLoading(false);
+        setFlowState('step-intro');
         // Roles now exist — advance to phase 1 (prioritize question)
         runStepIntroPhase(1);
         return;
@@ -872,6 +881,7 @@ async function loadRoleItemsData(role: Role) {
 
       const freshRoles = updatedRoles || [];
       setRoles(freshRoles);
+      rolesRef.current = freshRoles;
       const freshPrioritized = freshRoles
         .filter(r => r.priority_order !== null && r.priority_order !== undefined)
         .sort((a, b) => (a.priority_order || 0) - (b.priority_order || 0));
@@ -3589,6 +3599,7 @@ const styles = StyleSheet.create({
   roleCard: {
     width: '30%',
     minWidth: 90,
+    maxWidth: 130,
     aspectRatio: 1,
     borderRadius: 12,
     padding: 12,
