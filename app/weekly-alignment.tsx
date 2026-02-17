@@ -126,6 +126,9 @@ export default function WeeklyAlignmentScreen() {
   const transitionTextOpacity = useRef(new Animated.Value(0)).current;
   const transitionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // Per-step intro tracking (which steps have shown their guided intro)
+  const [stepIntroShown, setStepIntroShown] = useState<Record<number, boolean>>({});
+
   // Intro sequence state
   const [hasIdentity, setHasIdentity] = useState(false);
   const [introSequenceComplete, setIntroSequenceComplete] = useState(false);
@@ -773,6 +776,8 @@ export default function WeeklyAlignmentScreen() {
             weekEndDate={weekEndDate}
             onCoachTrigger={guidedModeEnabled ? handleStepCoachTrigger : undefined}
             onCompassFocus={handleCompassFocus}
+            showStepIntro={guidedModeEnabled && !stepIntroShown[1]}
+            onStepIntroComplete={() => setStepIntroShown(prev => ({ ...prev, 1: true }))}
           />
         )}
 

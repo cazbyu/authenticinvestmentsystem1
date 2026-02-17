@@ -19,7 +19,7 @@
 // - Section 8: Key Relationships (placeholder)
 // ============================================================================
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -45,7 +45,7 @@ import {
   Pencil,
   Plus,
 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { RoleIcon } from '@/components/icons/RoleIcon';
 import { RoleIcon as RolesIcon } from '@/components/icons/CustomIcons';
@@ -126,6 +126,10 @@ interface WingCheckRolesStepProps {
   weekStartDate: string;
   weekEndDate: string;
   onCompassFocus?: (angle: number) => void;
+  /** Whether the coach-guided step intro should play */
+  showStepIntro?: boolean;
+  /** Called when the step intro sequence finishes */
+  onStepIntroComplete?: () => void;
 }
 
 interface Role {
@@ -177,7 +181,8 @@ interface QuestionResponse {
 }
 
 // Flow states for the step
-type FlowState = 
+type FlowState =
+  | 'step-intro'       // Coach-guided intro overlay sequence
   | 'loading'
   | 'activate-roles'
   | 'main'
@@ -208,6 +213,8 @@ export function WingCheckRolesStep({
   weekStartDate,
   weekEndDate,
   onCompassFocus,
+  showStepIntro = false,
+  onStepIntroComplete,
 }: WingCheckRolesStepProps) {
   const router = useRouter();
   
@@ -300,6 +307,18 @@ export function WingCheckRolesStep({
   // Animation
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  // Step intro state (coach-guided intro sequence)
+  // Phase 0: "Activate Your Roles" → if no roles go to activate-roles, else skip to phase 1
+  // Phase 1: "You have X roles..." → go to prioritize
+  // Phase 2: "Design Your Legacy" → go to review-roles or main
+  // Phase 3: Done → main hub
+  const [stepIntroPhase, setStepIntroPhase] = useState(0);
+  const [stepIntroText, setStepIntroText] = useState('');
+  const stepIntroTextOpacity = useRef(new Animated.Value(0)).current;
+  const stepIntroBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const isStepIntroActiveRef = useRef(false);
+  const stepIntroTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   // Refs for escort scroll-to-section behavior
   const reflectionScrollRef = useRef<ScrollView>(null);
   const oneThingSectionY = useRef<number>(0);
@@ -324,7 +343,7 @@ export function WingCheckRolesStep({
       onRegisterBackHandler(() => {
         const currentFlowState = flowStateRef.current;
         
-        if (currentFlowState === 'main' || currentFlowState === 'activate-roles') {
+        if (currentFlowState === 'step-intro' || currentFlowState === 'main' || currentFlowState === 'activate-roles') {
           return false;
         } else if (currentFlowState === 'prioritize') {
           setFlowState('main');
@@ -352,6 +371,125 @@ export function WingCheckRolesStep({
       updateStepTimestamp(userId, weekStartDate, weekEndDate, 'step_2_started');
     }
   }, [userId, weekStartDate, weekEndDate]);
+
+  // Reload roles when screen regains focus (e.g., returning from Manage Roles page)
+  // Only triggers during the step intro's activate-roles phase
+  const hasLoadedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasLoadedOnce.current) {
+        hasLoadedOnce.current = true;
+        return; // Skip the first focus (component mount — loadData() already runs)
+      }
+      // If we're in activate-roles during the intro, reload to pick up new roles
+      if (isStepIntroActiveRef.current && flowStateRef.current === 'activate-roles') {
+        loadData();
+      }
+    }, [])
+  );
+
+  // Clean up step intro timers on unmount
+  useEffect(() => {
+    return () => {
+      stepIntroTimersRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
+  /**
+   * Show a step intro overlay message: fade in → hold → fade out.
+   * Returns a promise that resolves when the fade-out completes.
+   */
+  function showIntroOverlayMessage(text: string, holdMs: number = 2200): Promise<void> {
+    return new Promise((resolve) => {
+      const timers = stepIntroTimersRef.current;
+      setStepIntroText(text);
+      stepIntroTextOpacity.setValue(0);
+      stepIntroBackdropOpacity.setValue(0);
+
+      // Fade in backdrop
+      Animated.timing(stepIntroBackdropOpacity, {
+        toValue: 1, duration: 300, useNativeDriver: true,
+      }).start();
+
+      // Fade in text slightly after backdrop
+      const fadeInTimer = setTimeout(() => {
+        Animated.timing(stepIntroTextOpacity, {
+          toValue: 1, duration: 400, useNativeDriver: true,
+        }).start();
+      }, 150);
+      timers.push(fadeInTimer);
+
+      // Fade out text after hold
+      const fadeOutTimer = setTimeout(() => {
+        Animated.timing(stepIntroTextOpacity, {
+          toValue: 0, duration: 400, useNativeDriver: true,
+        }).start();
+      }, 150 + 400 + holdMs);
+      timers.push(fadeOutTimer);
+
+      // Fade backdrop and resolve
+      const completeTimer = setTimeout(() => {
+        Animated.timing(stepIntroBackdropOpacity, {
+          toValue: 0, duration: 400, useNativeDriver: true,
+        }).start(() => {
+          resolve();
+        });
+      }, 150 + 400 + holdMs + 400);
+      timers.push(completeTimer);
+    });
+  }
+
+  /**
+   * Run the step intro sequence starting from a given phase.
+   * Each phase shows an overlay, then transitions to the appropriate flow state.
+   */
+  async function runStepIntroPhase(phase: number) {
+    if (!isStepIntroActiveRef.current) return;
+
+    if (phase === 0) {
+      // Phase 0: "Activate Your Roles"
+      setStepIntroPhase(0);
+      await showIntroOverlayMessage('Activate Your Roles');
+
+      if (!isStepIntroActiveRef.current) return;
+
+      if (roles.length === 0) {
+        // No roles — go to activate-roles flow, intro will continue when they return
+        setFlowState('activate-roles');
+        return; // Will resume from phase 1 when roles are loaded
+      }
+      // Already has roles — skip to phase 1
+      runStepIntroPhase(1);
+
+    } else if (phase === 1) {
+      // Phase 1: "You have X roles. For the week of ..., which are your top focus?"
+      setStepIntroPhase(1);
+      const weekLabel = weekStartDate && weekEndDate
+        ? `${formatShortDate(weekStartDate)} – ${formatShortDate(weekEndDate)}`
+        : 'this week';
+      const msg = `You have ${roles.length} role${roles.length !== 1 ? 's' : ''}. For the week of ${weekLabel}, which are your top focus?`;
+      await showIntroOverlayMessage(msg, 3000);
+
+      if (!isStepIntroActiveRef.current) return;
+
+      // Go to prioritize flow, intro will continue when they save
+      setFlowState('prioritize');
+      return; // Will resume from phase 2 when prioritization completes
+
+    } else if (phase === 2) {
+      // Phase 2: "Design Your Legacy"
+      setStepIntroPhase(2);
+      await showIntroOverlayMessage('Design Your Legacy');
+
+      if (!isStepIntroActiveRef.current) return;
+
+      // Go to main hub — intro is done
+      setStepIntroPhase(3);
+      isStepIntroActiveRef.current = false;
+      setFlowState('main');
+      onStepIntroComplete?.();
+    }
+  }
 
   function resetReflectionState() {
     setPurposeResponse('');
@@ -412,6 +550,24 @@ export function WingCheckRolesStep({
       
       setPrioritizedRoles(prioritized);
       setSelectedRoleIds(prioritized.map(r => r.id));
+
+      // If step intro is active, start the intro sequence instead of normal flow
+      if (showStepIntro && !isStepIntroActiveRef.current) {
+        isStepIntroActiveRef.current = true;
+        setFlowState('step-intro');
+        setLoading(false);
+        // Kick off the intro sequence (async, runs in background)
+        runStepIntroPhase(0);
+        return;
+      }
+
+      // If returning from activate-roles during intro sequence, continue intro
+      if (isStepIntroActiveRef.current && activeRoles.length > 0) {
+        setLoading(false);
+        // Roles now exist — advance to phase 1 (prioritize question)
+        runStepIntroPhase(1);
+        return;
+      }
 
       if (activeRoles.length === 0) {
         setFlowState('activate-roles');
@@ -704,7 +860,32 @@ async function loadRoleItemsData(role: Role) {
         if (updateError) throw updateError;
       }
 
-      await loadData();
+      // Reload roles data (updates prioritizedRoles)
+      const supabase2 = getSupabaseClient();
+      const { data: updatedRoles } = await supabase2
+        .from('0008-ap-roles')
+        .select('id, label, category, icon, color, purpose, dream, is_active, priority_order, preset_role_id')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('priority_order', { ascending: true, nullsFirst: false })
+        .order('label', { ascending: true });
+
+      const freshRoles = updatedRoles || [];
+      setRoles(freshRoles);
+      const freshPrioritized = freshRoles
+        .filter(r => r.priority_order !== null && r.priority_order !== undefined)
+        .sort((a, b) => (a.priority_order || 0) - (b.priority_order || 0));
+      setPrioritizedRoles(freshPrioritized);
+      setSelectedRoleIds(freshPrioritized.map(r => r.id));
+
+      // If in step intro, advance to phase 2 ("Design Your Legacy") instead of main
+      if (isStepIntroActiveRef.current) {
+        setFlowState('step-intro');
+        setSaving(false);
+        runStepIntroPhase(2);
+        return;
+      }
+
       slideToState('main');
     } catch (error) {
       console.error('Error saving priorities:', error);
@@ -1229,6 +1410,30 @@ async function loadRoleItemsData(role: Role) {
           <Text style={styles.inlineSaveButtonText}>{label}</Text>
         )}
       </TouchableOpacity>
+    );
+  }
+
+  // ===== RENDER: STEP INTRO STATE =====
+  if (flowState === 'step-intro') {
+    return (
+      <View style={stepIntroStyles.container}>
+        <Animated.View
+          style={[
+            stepIntroStyles.backdrop,
+            { backgroundColor: colors.background, opacity: stepIntroBackdropOpacity },
+          ]}
+        />
+        <Animated.View
+          style={[
+            stepIntroStyles.textContainer,
+            { opacity: stepIntroTextOpacity },
+          ]}
+        >
+          <Text style={[stepIntroStyles.text, { color: ROLES_COLOR }]}>
+            {stepIntroText}
+          </Text>
+        </Animated.View>
+      </View>
     );
   }
 
@@ -2902,6 +3107,31 @@ async function loadRoleItemsData(role: Role) {
     </ScrollView>
   );
 }
+
+// ============================================================================
+// STEP INTRO STYLES
+// ============================================================================
+const stepIntroStyles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 30,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  textContainer: {
+    paddingHorizontal: 32,
+    alignItems: 'center',
+  },
+  text: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 34,
+  },
+});
 
 // ============================================================================
 // STYLES
