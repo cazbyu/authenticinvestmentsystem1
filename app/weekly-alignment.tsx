@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ChevronLeft, ChevronRight, CheckCircle2, Compass, X } from 'lucide-react-native';
+import { NorthStarIcon } from '@/components/icons/CustomIcons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString, getWeekStart, getWeekEnd, formatLocalDate } from '@/lib/dateUtils';
@@ -456,11 +457,13 @@ export default function WeeklyAlignmentScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <Compass size={48} color={colors.primary} />
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 16 }} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Preparing your weekly alignment...
+          <View style={styles.loadingCompassCircle}>
+            <NorthStarIcon size={56} color="#231f20" />
+          </View>
+          <Text style={[styles.loadingTitle, { color: colors.text }]}>
+            Weekly Alignment
           </Text>
+          <ActivityIndicator size="small" color={colors.textSecondary} style={{ marginTop: 12 }} />
         </View>
       </SafeAreaView>
     );
@@ -775,6 +778,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+  },
+  loadingCompassCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontWeight: '700',
   },
   loadingText: {
     marginTop: 16,

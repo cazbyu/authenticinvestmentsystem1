@@ -92,7 +92,7 @@ const DEFAULT_SPARK_LIST: SparkListOption[] = [
 ];
 
 // Default prompt (fallback)
-const DEFAULT_PROMPT = 'At my absolute core, before anything else I am a...';
+const DEFAULT_PROMPT = 'Finish this sentence: Before anything else I am a . . .';
 
 // Confirmation text that fades in after selection
 const CONFIRMATION_TEXT = 'This foundational identity anchors everything else—your Mission (purpose), Vision (direction), and Core Values (guardrails).';
@@ -161,6 +161,8 @@ export function TouchYourStarStep({
 
   // Hero prompt opacity — stays invisible until intro text sequence completes
   const heroPromptOpacity = useRef(new Animated.Value(introSequenceComplete ? 1 : 0)).current;
+  // Hero prompt throb scale — pulses to attract attention
+  const heroPromptScale = useRef(new Animated.Value(1)).current;
 
   // Domain intro overlay state
   const [domainIntroMessageIndex, setDomainIntroMessageIndex] = useState(-1);
@@ -181,14 +183,30 @@ export function TouchYourStarStep({
     });
   }, [onCompassDockLayout]);
 
-  // Fade in hero prompt text when intro sequence finishes
+  // Fade in hero prompt text when intro sequence finishes, then start throbbing
   useEffect(() => {
     if (introSequenceComplete) {
       Animated.timing(heroPromptOpacity, {
         toValue: 1,
         duration: 500,
         useNativeDriver: true,
-      }).start();
+      }).start(() => {
+        // Start pulsing loop to attract attention
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(heroPromptScale, {
+              toValue: 1.06,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+            Animated.timing(heroPromptScale, {
+              toValue: 1,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      });
     }
   }, [introSequenceComplete]);
 
@@ -268,7 +286,15 @@ export function TouchYourStarStep({
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const [customIdentity, setCustomIdentity] = useState('');
   const [sparkListOptions, setSparkListOptions] = useState<SparkListOption[]>(DEFAULT_SPARK_LIST);
-  
+
+  // Stop throbbing when user selects an identity
+  useEffect(() => {
+    if (selectedIdentity) {
+      heroPromptScale.stopAnimation();
+      heroPromptScale.setValue(1);
+    }
+  }, [selectedIdentity]);
+
   // Prompt state (for A/B testing)
   const [heroPrompt, setHeroPrompt] = useState<PromptData | null>(null);
   const [promptShownAt, setPromptShownAt] = useState<Date | null>(null);
@@ -1794,8 +1820,8 @@ export function TouchYourStarStep({
                 Who Are You at Your Core?
               </Text>
               
-              {/* Prompt Text (from A/B testing or default) — hidden until intro sequence fades out */}
-              <Animated.Text style={[styles.heroPromptText, { color: '#ed1c24', opacity: heroPromptOpacity }]}>
+              {/* Prompt Text (from A/B testing or default) — hidden until intro sequence fades out, throbs to attract attention */}
+              <Animated.Text style={[styles.heroPromptText, { color: '#ed1c24', opacity: heroPromptOpacity, transform: [{ scale: heroPromptScale }] }]}>
                 {heroPrompt?.prompt_text || DEFAULT_PROMPT}
               </Animated.Text>
 
