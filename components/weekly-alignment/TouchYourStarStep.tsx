@@ -113,18 +113,15 @@ type DomainType = 'mission' | 'vision' | 'values';
 
 const DOMAIN_ORDER: DomainType[] = ['mission', 'vision', 'values'];
 
-const DOMAIN_INTRO_CONFIG: Record<DomainType, { question: string; promptTemplate: string }> = {
+const DOMAIN_INTRO_CONFIG: Record<DomainType, { question: string }> = {
   mission: {
-    question: 'Second, Why Am I Here?',
-    promptTemplate: 'As a {identity},\nmy mission is . . .',
+    question: 'Why Am I Here?',
   },
   vision: {
-    question: 'Third, Where Do I Want to Go?',
-    promptTemplate: 'As a {identity},\nin 5 years I envision . . .',
+    question: 'Where Do I Want to Go?',
   },
   values: {
-    question: 'Fourth, What Do I Stand For?',
-    promptTemplate: 'As a {identity},\nI am committed to . . .',
+    question: 'What Do I Stand For?',
   },
 };
 
@@ -132,7 +129,6 @@ const DOMAIN_INTRO_CONFIG: Record<DomainType, { question: string; promptTemplate
 const DOMAIN_INTRO_FADE_IN = 400;
 const DOMAIN_INTRO_HOLD = 2000;
 const DOMAIN_INTRO_FADE_OUT = 400;
-const DOMAIN_INTRO_GAP = 300;
 const DOMAIN_INTRO_BACKDROP_FADE = 500;
 
 export function TouchYourStarStep({
@@ -170,6 +166,10 @@ export function TouchYourStarStep({
   const domainIntroBackdropOpacity = useRef(new Animated.Value(0)).current;
   const domainIntroTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const isFirstTimeFlowRef = useRef(false);
+
+  // Choice screen subtitle throb — pulses the red prompt text to attract attention
+  const choiceSubtitleScale = useRef(new Animated.Value(1)).current;
+  const choiceThrobRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const handleCompassPlaceholderLayout = useCallback(() => {
     if (dockLayoutReported.current || !onCompassDockLayout) return;
@@ -210,7 +210,7 @@ export function TouchYourStarStep({
     }
   }, [introSequenceComplete]);
 
-  // Domain intro overlay animation — runs two-message sequence when flowState is 'domain-intro'
+  // Domain intro overlay animation — shows single question then fades to choice screen
   useEffect(() => {
     if (flowState !== 'domain-intro') return;
 
@@ -218,42 +218,25 @@ export function TouchYourStarStep({
     domainIntroTimersRef.current.forEach(clearTimeout);
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // Message 1: Power question (e.g. "Second, Why Am I Here?")
-    const msg1Start = 300;
+    // Show the question (e.g. "Why Am I Here?")
+    const msgStart = 300;
     timers.push(setTimeout(() => {
       setDomainIntroMessageIndex(0);
       Animated.timing(domainIntroTextOpacity, {
         toValue: 1, duration: DOMAIN_INTRO_FADE_IN, useNativeDriver: true,
       }).start();
-    }, msg1Start));
+    }, msgStart));
 
-    // Message 1 fade out
-    const msg1FadeOut = msg1Start + DOMAIN_INTRO_FADE_IN + DOMAIN_INTRO_HOLD;
+    // Fade out
+    const msgFadeOut = msgStart + DOMAIN_INTRO_FADE_IN + DOMAIN_INTRO_HOLD;
     timers.push(setTimeout(() => {
       Animated.timing(domainIntroTextOpacity, {
         toValue: 0, duration: DOMAIN_INTRO_FADE_OUT, useNativeDriver: true,
       }).start();
-    }, msg1FadeOut));
-
-    // Message 2: Prompt template (e.g. "As a Seeker of Truth, my mission is...")
-    const msg2Start = msg1FadeOut + DOMAIN_INTRO_FADE_OUT + DOMAIN_INTRO_GAP;
-    timers.push(setTimeout(() => {
-      setDomainIntroMessageIndex(1);
-      Animated.timing(domainIntroTextOpacity, {
-        toValue: 1, duration: DOMAIN_INTRO_FADE_IN, useNativeDriver: true,
-      }).start();
-    }, msg2Start));
-
-    // Message 2 fade out
-    const msg2FadeOut = msg2Start + DOMAIN_INTRO_FADE_IN + DOMAIN_INTRO_HOLD;
-    timers.push(setTimeout(() => {
-      Animated.timing(domainIntroTextOpacity, {
-        toValue: 0, duration: DOMAIN_INTRO_FADE_OUT, useNativeDriver: true,
-      }).start();
-    }, msg2FadeOut));
+    }, msgFadeOut));
 
     // Backdrop fade out
-    const backdropFadeStart = msg2FadeOut + DOMAIN_INTRO_FADE_OUT;
+    const backdropFadeStart = msgFadeOut + DOMAIN_INTRO_FADE_OUT;
     timers.push(setTimeout(() => {
       Animated.timing(domainIntroBackdropOpacity, {
         toValue: 0, duration: DOMAIN_INTRO_BACKDROP_FADE, useNativeDriver: true,
@@ -294,6 +277,36 @@ export function TouchYourStarStep({
       heroPromptScale.setValue(1);
     }
   }, [selectedIdentity]);
+
+  // Start/stop throb on choice screen subtitle
+  useEffect(() => {
+    if (flowState === 'choice') {
+      choiceSubtitleScale.setValue(1);
+      const throbAnim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(choiceSubtitleScale, {
+            toValue: 1.06,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(choiceSubtitleScale, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      choiceThrobRef.current = throbAnim;
+      throbAnim.start();
+    } else {
+      // Stop throb when leaving choice screen
+      if (choiceThrobRef.current) {
+        choiceThrobRef.current.stop();
+        choiceThrobRef.current = null;
+      }
+      choiceSubtitleScale.setValue(1);
+    }
+  }, [flowState]);
 
   // Prompt state (for A/B testing)
   const [heroPrompt, setHeroPrompt] = useState<PromptData | null>(null);
@@ -2302,14 +2315,6 @@ export function TouchYourStarStep({
   // DOMAIN INTRO OVERLAY
   if (flowState === 'domain-intro') {
     const introConfig = DOMAIN_INTRO_CONFIG[currentDomain];
-    const identity = northStarData.identity || 'Steward';
-    const messages = [
-      introConfig.question,
-      introConfig.promptTemplate.replace('{identity}', identity),
-    ];
-    const currentMessage = domainIntroMessageIndex >= 0
-      ? messages[domainIntroMessageIndex]
-      : '';
 
     return (
       <View style={styles.container}>
@@ -2330,9 +2335,9 @@ export function TouchYourStarStep({
             <View style={[styles.domainIntroTextBlock, { backgroundColor: `${colors.background}E6` }]}>
               <Text style={[
                 styles.domainIntroText,
-                { color: domainIntroMessageIndex === 1 ? '#ed1c24' : colors.text },
+                { color: colors.text },
               ]}>
-                {currentMessage}
+                {introConfig.question}
               </Text>
             </View>
           </Animated.View>
@@ -2372,9 +2377,9 @@ export function TouchYourStarStep({
             {config.title}
           </Text>
           
-          <Text style={[styles.choiceSubtitle, { color: '#ed1c24' }]}>
+          <Animated.Text style={[styles.choiceSubtitle, { color: '#ed1c24', transform: [{ scale: choiceSubtitleScale }] }]}>
             {config.subtitle}
-          </Text>
+          </Animated.Text>
           
           <Text style={[styles.choiceDescription, { color: colors.textSecondary }]}>
             {config.hint}
@@ -3313,10 +3318,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   choiceSubtitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
     textAlign: 'center',
+    lineHeight: 26,
   },
   choiceDescription: {
     fontSize: 14,
