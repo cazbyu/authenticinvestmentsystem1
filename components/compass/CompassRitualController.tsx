@@ -73,6 +73,10 @@ interface CompassRitualControllerProps {
   hasIdentity?: boolean;
   /** Called when the intro text sequence finishes and backdrop fades out */
   onIntroSequenceComplete?: () => void;
+  /** Trigger an inter-step spin: both spindles animate to these angles */
+  interStepTransition?: { goldAngle: number; silverAngle: number } | null;
+  /** Called when the inter-step spin animation completes */
+  onInterStepSpinComplete?: () => void;
 }
 
 // ============================================
@@ -90,6 +94,8 @@ export function CompassRitualController({
   showIntroSequence = false,
   hasIdentity = false,
   onIntroSequenceComplete,
+  interStepTransition,
+  onInterStepSpinComplete,
 }: CompassRitualControllerProps) {
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -328,6 +334,24 @@ export function CompassRitualController({
 
     setGoldAngle(angle);
   }, [alignmentSweepIndex, isIgnitionComplete, currentStep]);
+
+  // ============================================
+  // INTER-STEP TRANSITION SPIN
+  // ============================================
+  useEffect(() => {
+    if (!isIgnitionComplete || !interStepTransition) return;
+
+    // Animate both spindles to the transition target angles
+    setGoldAngle(interStepTransition.goldAngle);
+    setSilverAngle(interStepTransition.silverAngle);
+
+    // Signal completion after spindles have reached their targets
+    const timer = setTimeout(() => {
+      onInterStepSpinComplete?.();
+    }, TRANSITION_DURATION + 200); // spindle animation + small buffer
+
+    return () => clearTimeout(timer);
+  }, [interStepTransition, isIgnitionComplete]);
 
   // ============================================
   // ANIMATED STYLES
