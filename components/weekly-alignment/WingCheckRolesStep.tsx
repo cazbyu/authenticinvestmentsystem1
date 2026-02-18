@@ -251,7 +251,6 @@ export function WingCheckRolesStep({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [oneThingSaveType, setOneThingSaveType] = useState<'task' | 'event'>('task');
   const [selectedDate, setSelectedDate] = useState('');
-  const [selectedEndDate, setSelectedEndDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('09:00');
   const [selectedEndTime, setSelectedEndTime] = useState('10:00');
   const [isAllDay, setIsAllDay] = useState(true);
@@ -507,7 +506,6 @@ export function WingCheckRolesStep({
     setOneThingText('');
     setExistingOneThingTask(null);
     setSelectedDate('');
-    setSelectedEndDate('');
     setIsAllDay(true);
     setIdeaText('');
     setRoseText('');
@@ -1019,19 +1017,15 @@ async function loadRoleItemsData(role: Role) {
       };
 
       if (oneThingSaveType === 'task') {
-        // Task: due date is the end of the range (or the single selected date)
-        insertData.due_date = selectedEndDate || selectedDate;
-        insertData.start_date = selectedDate;
+        insertData.due_date = selectedDate;
         insertData.is_anytime = true;
       } else if (isAllDay) {
-        // All-day event: spans from selectedDate to selectedEndDate
+        // All-day event
         insertData.start_date = selectedDate;
-        insertData.due_date = selectedEndDate || selectedDate;
         insertData.is_anytime = true;
       } else {
-        // Timed event: use start_date + start_time + end_time
+        // Timed event
         insertData.start_date = selectedDate;
-        insertData.due_date = selectedEndDate || selectedDate;
         insertData.start_time = `${selectedTime}:00`;
         insertData.end_time = `${selectedEndTime}:00`;
         insertData.is_anytime = false;
@@ -2836,11 +2830,7 @@ async function loadRoleItemsData(role: Role) {
                   const dayDate = new Date(d.value + 'T12:00:00');
                   const dayName = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
                   const dayNum = dayDate.getDate();
-                  const isStart = selectedDate === d.value;
-                  const isEnd = selectedEndDate === d.value;
-                  const isInRange = selectedDate && selectedEndDate
-                    ? d.value >= selectedDate && d.value <= selectedEndDate
-                    : isStart;
+                  const isSelected = selectedDate === d.value;
                   const isToday = d.value === formatLocalDate(new Date());
 
                   return (
@@ -2848,40 +2838,25 @@ async function loadRoleItemsData(role: Role) {
                       key={d.value}
                       style={[
                         gcStyles.dayCell,
-                        isInRange && { backgroundColor: `${categoryColor}20` },
-                        isStart && { backgroundColor: categoryColor, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
-                        isEnd && { backgroundColor: categoryColor, borderTopRightRadius: 20, borderBottomRightRadius: 20 },
-                        isStart && isEnd && { borderRadius: 20 },
+                        isSelected && { backgroundColor: categoryColor, borderRadius: 20 },
                       ]}
-                      onPress={() => {
-                        if (!selectedDate || (selectedDate && selectedEndDate) || d.value < selectedDate) {
-                          // First tap: set start date, clear end date
-                          setSelectedDate(d.value);
-                          setSelectedEndDate('');
-                        } else if (d.value === selectedDate) {
-                          // Tap same day again: single-day selection
-                          setSelectedEndDate('');
-                        } else {
-                          // Second tap: set end date (range)
-                          setSelectedEndDate(d.value);
-                        }
-                      }}
+                      onPress={() => setSelectedDate(d.value)}
                       activeOpacity={0.7}
                     >
                       <Text style={[
                         gcStyles.dayName,
-                        { color: (isStart || isEnd) ? '#FFFFFF' : colors.textSecondary },
+                        { color: isSelected ? '#FFFFFF' : colors.textSecondary },
                       ]}>
                         {dayName}
                       </Text>
                       <View style={[
                         gcStyles.dayNumCircle,
-                        isToday && !isStart && !isEnd && { borderWidth: 2, borderColor: categoryColor },
+                        isToday && !isSelected && { borderWidth: 2, borderColor: categoryColor },
                       ]}>
                         <Text style={[
                           gcStyles.dayNum,
-                          { color: (isStart || isEnd) ? '#FFFFFF' : isToday ? categoryColor : colors.text },
-                          (isStart || isEnd) && { fontWeight: '800' },
+                          { color: isSelected ? '#FFFFFF' : isToday ? categoryColor : colors.text },
+                          isSelected && { fontWeight: '800' },
                         ]}>
                           {dayNum}
                         </Text>
@@ -2891,25 +2866,12 @@ async function loadRoleItemsData(role: Role) {
                 })}
               </View>
 
-              {/* Date range summary */}
+              {/* Selected date summary */}
               {selectedDate && (
                 <View style={gcStyles.rangeSummary}>
                   <Text style={[gcStyles.rangeSummaryText, { color: colors.text }]}>
-                    {selectedEndDate && selectedEndDate !== selectedDate
-                      ? `${formatShortDate(selectedDate)} → ${formatShortDate(selectedEndDate)}`
-                      : formatShortDate(selectedDate)
-                    }
+                    {formatShortDate(selectedDate)}
                   </Text>
-                  {selectedEndDate && selectedEndDate !== selectedDate && (
-                    <Text style={[gcStyles.rangeDays, { color: colors.textSecondary }]}>
-                      {(() => {
-                        const start = new Date(selectedDate + 'T12:00:00');
-                        const end = new Date(selectedEndDate + 'T12:00:00');
-                        const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                        return `${days} day${days !== 1 ? 's' : ''}`;
-                      })()}
-                    </Text>
-                  )}
                 </View>
               )}
 
@@ -3248,10 +3210,6 @@ const gcStyles = StyleSheet.create({
   rangeSummaryText: {
     fontSize: 15,
     fontWeight: '600',
-  },
-  rangeDays: {
-    fontSize: 13,
-    fontStyle: 'italic',
   },
   allDayRow: {
     flexDirection: 'row',
