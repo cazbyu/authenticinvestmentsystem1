@@ -251,8 +251,10 @@ export function WingCheckRolesStep({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [oneThingSaveType, setOneThingSaveType] = useState<'task' | 'event'>('task');
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedEndDate, setSelectedEndDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('09:00');
   const [selectedEndTime, setSelectedEndTime] = useState('10:00');
+  const [isAllDay, setIsAllDay] = useState(true);
   const [existingOneThingTask, setExistingOneThingTask] = useState<Task | null>(null);
   
   // Capture inputs
@@ -485,7 +487,7 @@ export function WingCheckRolesStep({
     } else if (phase === 2) {
       // Phase 2: "Design Your Legacy"
       setStepIntroPhase(2);
-      await showIntroOverlayMessage('Design Your Legacy');
+      await showIntroOverlayMessage('Design Your Legacy This Week');
 
       if (!isStepIntroActiveRef.current) return;
 
@@ -504,6 +506,9 @@ export function WingCheckRolesStep({
     setEditingDream(false);
     setOneThingText('');
     setExistingOneThingTask(null);
+    setSelectedDate('');
+    setSelectedEndDate('');
+    setIsAllDay(true);
     setIdeaText('');
     setRoseText('');
     setThornText('');
@@ -1014,11 +1019,19 @@ async function loadRoleItemsData(role: Role) {
       };
 
       if (oneThingSaveType === 'task') {
-        insertData.due_date = selectedDate;
+        // Task: due date is the end of the range (or the single selected date)
+        insertData.due_date = selectedEndDate || selectedDate;
+        insertData.start_date = selectedDate;
+        insertData.is_anytime = true;
+      } else if (isAllDay) {
+        // All-day event: spans from selectedDate to selectedEndDate
+        insertData.start_date = selectedDate;
+        insertData.due_date = selectedEndDate || selectedDate;
         insertData.is_anytime = true;
       } else {
-        // Event: use start_date + start_time + end_time
+        // Timed event: use start_date + start_time + end_time
         insertData.start_date = selectedDate;
+        insertData.due_date = selectedEndDate || selectedDate;
         insertData.start_time = `${selectedTime}:00`;
         insertData.end_time = `${selectedEndTime}:00`;
         insertData.is_anytime = false;
@@ -1654,7 +1667,7 @@ async function loadRoleItemsData(role: Role) {
               </View>
               <View style={styles.headerTextContainer}>
                 <Text style={[styles.stepLabel, { color: ROLES_COLOR }]}>Step 2</Text>
-                <Text style={[styles.stepTitle, { color: colors.text }]}>Design Your Legacy</Text>
+                <Text style={[styles.stepTitle, { color: colors.text }]}>Design Your Legacy This Week</Text>
               </View>
               <TouchableOpacity
                 style={styles.tooltipButton}
@@ -1679,7 +1692,7 @@ async function loadRoleItemsData(role: Role) {
               <View style={[styles.identityIconContainer, { backgroundColor: ROLES_COLOR }]}>
                 <RolesIcon size={14} color="#FFFFFF" />
               </View>
-              <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>DESIGN YOUR LEGACY</Text>
+              <Text style={[styles.identityLabel, { color: ROLES_COLOR }]}>DESIGN YOUR LEGACY THIS WEEK</Text>
             </View>
             <Text style={[styles.identitySubtext, { color: colors.textSecondary }]}>
               Tap a role to open your Living Vision Board
@@ -2800,7 +2813,7 @@ async function loadRoleItemsData(role: Role) {
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* ===== DATE PICKER MODAL (for ONE Thing Task/Event) ===== */}
+        {/* ===== DATE PICKER MODAL — Google Calendar Style ===== */}
         <Modal
           visible={showDatePicker}
           transparent
@@ -2810,40 +2823,118 @@ async function loadRoleItemsData(role: Role) {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {oneThingSaveType === 'event' ? 'Pick Day & Time' : 'Pick a Day'}
+                {oneThingSaveType === 'event' ? 'Schedule Event' : 'Schedule Task'}
               </Text>
-              
+
               <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
                 "{oneThingText}"
               </Text>
 
-              {/* Day selection */}
-              <View style={styles.dayGrid}>
-                {weekDates.map((d) => (
-                  <TouchableOpacity
-                    key={d.value}
-                    style={[
-                      styles.dayButton,
-                      {
-                        backgroundColor: selectedDate === d.value ? categoryColor : colors.surface,
-                        borderColor: selectedDate === d.value ? categoryColor : colors.border,
-                      },
-                    ]}
-                    onPress={() => setSelectedDate(d.value)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.dayButtonText,
-                      { color: selectedDate === d.value ? '#FFFFFF' : colors.text },
-                    ]}>
-                      {d.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              {/* ── Week Calendar Strip (Google Calendar style) ── */}
+              <View style={gcStyles.weekStrip}>
+                {weekDates.map((d) => {
+                  const dayDate = new Date(d.value + 'T12:00:00');
+                  const dayName = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+                  const dayNum = dayDate.getDate();
+                  const isStart = selectedDate === d.value;
+                  const isEnd = selectedEndDate === d.value;
+                  const isInRange = selectedDate && selectedEndDate
+                    ? d.value >= selectedDate && d.value <= selectedEndDate
+                    : isStart;
+                  const isToday = d.value === formatLocalDate(new Date());
+
+                  return (
+                    <TouchableOpacity
+                      key={d.value}
+                      style={[
+                        gcStyles.dayCell,
+                        isInRange && { backgroundColor: `${categoryColor}20` },
+                        isStart && { backgroundColor: categoryColor, borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
+                        isEnd && { backgroundColor: categoryColor, borderTopRightRadius: 20, borderBottomRightRadius: 20 },
+                        isStart && isEnd && { borderRadius: 20 },
+                      ]}
+                      onPress={() => {
+                        if (!selectedDate || (selectedDate && selectedEndDate) || d.value < selectedDate) {
+                          // First tap: set start date, clear end date
+                          setSelectedDate(d.value);
+                          setSelectedEndDate('');
+                        } else if (d.value === selectedDate) {
+                          // Tap same day again: single-day selection
+                          setSelectedEndDate('');
+                        } else {
+                          // Second tap: set end date (range)
+                          setSelectedEndDate(d.value);
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[
+                        gcStyles.dayName,
+                        { color: (isStart || isEnd) ? '#FFFFFF' : colors.textSecondary },
+                      ]}>
+                        {dayName}
+                      </Text>
+                      <View style={[
+                        gcStyles.dayNumCircle,
+                        isToday && !isStart && !isEnd && { borderWidth: 2, borderColor: categoryColor },
+                      ]}>
+                        <Text style={[
+                          gcStyles.dayNum,
+                          { color: (isStart || isEnd) ? '#FFFFFF' : isToday ? categoryColor : colors.text },
+                          (isStart || isEnd) && { fontWeight: '800' },
+                        ]}>
+                          {dayNum}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              {/* Time selection (events only) — vertical 15-min increments, 12-hour format */}
+              {/* Date range summary */}
+              {selectedDate && (
+                <View style={gcStyles.rangeSummary}>
+                  <Text style={[gcStyles.rangeSummaryText, { color: colors.text }]}>
+                    {selectedEndDate && selectedEndDate !== selectedDate
+                      ? `${formatShortDate(selectedDate)} → ${formatShortDate(selectedEndDate)}`
+                      : formatShortDate(selectedDate)
+                    }
+                  </Text>
+                  {selectedEndDate && selectedEndDate !== selectedDate && (
+                    <Text style={[gcStyles.rangeDays, { color: colors.textSecondary }]}>
+                      {(() => {
+                        const start = new Date(selectedDate + 'T12:00:00');
+                        const end = new Date(selectedEndDate + 'T12:00:00');
+                        const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                        return `${days} day${days !== 1 ? 's' : ''}`;
+                      })()}
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* ── All Day / Timed toggle (events only) ── */}
               {oneThingSaveType === 'event' && (
+                <View style={gcStyles.allDayRow}>
+                  <Text style={[gcStyles.allDayLabel, { color: colors.text }]}>All day</Text>
+                  <TouchableOpacity
+                    style={[
+                      gcStyles.toggleTrack,
+                      { backgroundColor: isAllDay ? categoryColor : colors.border },
+                    ]}
+                    onPress={() => setIsAllDay(!isAllDay)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[
+                      gcStyles.toggleThumb,
+                      { transform: [{ translateX: isAllDay ? 20 : 2 }] },
+                    ]} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* ── Time pickers (only when not all-day for events) ── */}
+              {oneThingSaveType === 'event' && !isAllDay && (
                 <View style={styles.timeRow}>
                   <View style={styles.timePickerRow}>
                     <Text style={[styles.timePickerLabel, { color: colors.textSecondary }]}>Start</Text>
@@ -2873,9 +2964,7 @@ async function loadRoleItemsData(role: Role) {
                             ]}
                             onPress={() => {
                               setSelectedTime(val);
-                              // Auto-advance end time to +1hr, validate
-                              const startIdx = idx;
-                              const endIdx = Math.min(startIdx + 4, TIME_SLOTS.length - 1);
+                              const endIdx = Math.min(idx + 4, TIME_SLOTS.length - 1);
                               setSelectedEndTime(TIME_SLOTS[endIdx]);
                             }}
                             activeOpacity={0.7}
@@ -2904,7 +2993,6 @@ async function loadRoleItemsData(role: Role) {
                     >
                       {TIME_SLOTS.map((val) => {
                         const isSelected = selectedEndTime === val;
-                        // Disable times at or before start
                         const isDisabled = val <= selectedTime;
                         return (
                           <TouchableOpacity
@@ -2917,9 +3005,7 @@ async function loadRoleItemsData(role: Role) {
                                 opacity: isDisabled ? 0.3 : 1,
                               },
                             ]}
-                            onPress={() => {
-                              if (!isDisabled) setSelectedEndTime(val);
-                            }}
+                            onPress={() => { if (!isDisabled) setSelectedEndTime(val); }}
                             disabled={isDisabled}
                             activeOpacity={0.7}
                           >
@@ -2944,7 +3030,7 @@ async function loadRoleItemsData(role: Role) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.modalConfirm, { backgroundColor: categoryColor }]}
+                  style={[styles.modalConfirm, { backgroundColor: selectedDate ? categoryColor : colors.border }]}
                   onPress={confirmSaveOneThing}
                   disabled={!selectedDate}
                   activeOpacity={0.8}
@@ -3069,7 +3155,7 @@ async function loadRoleItemsData(role: Role) {
             </View>
             <View style={styles.actionButtonTextWrap}>
               <Text style={[styles.actionButtonText, { color: hasMinimumPriorities ? ROLES_COLOR : colors.text }]}>
-                Design Your Legacy
+                Design Your Legacy This Week
               </Text>
               <Text style={[styles.actionButtonSubtext, { color: colors.textSecondary }]}>
                 Set purpose, dream & ONE Thing for each role
@@ -3117,6 +3203,88 @@ async function loadRoleItemsData(role: Role) {
     </ScrollView>
   );
 }
+
+// ============================================================================
+// GOOGLE CALENDAR STYLE DATE PICKER
+// ============================================================================
+const gcStyles = StyleSheet.create({
+  weekStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+  dayCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+  },
+  dayName: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  dayNumCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayNum: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  rangeSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  rangeSummaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  rangeDays: {
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  allDayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  allDayLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  toggleTrack: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+});
 
 // ============================================================================
 // STEP INTRO STYLES
