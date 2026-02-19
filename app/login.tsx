@@ -142,20 +142,25 @@ export default function LoginScreen() {
           console.error('[SignUp] Error checking/creating profile:', profileCheckError);
         }
 
+        // Auto-login path: Supabase returned a session immediately.
         if (authData.session) {
-          console.log('[SignUp] Auto-signed in with session');
-          Alert.alert(
-            'Success!',
-            'Your account has been created and you are now signed in.',
-            [{ text: 'OK', onPress: () => router.replace('/(tabs)/dashboard') }]
-          );
+          console.log('[SignUp] Auto-signed in with session, navigating to dashboard');
         } else {
-          console.log('[SignUp] Email confirmation may be required');
-          Alert.alert(
-            'Success!',
-            'Your account has been created. You can now sign in.',
-            [{ text: 'OK', onPress: () => setIsSignUp(false) }]
-          );
+          // Email-confirm flow: Supabase requires confirmation but we still
+          // navigate to the dashboard. The VerificationBanner will remind the
+          // user to verify without blocking them.
+          console.log('[SignUp] No immediate session (email confirm may be on); navigating to dashboard anyway');
+          // Attempt a manual sign-in so the user lands with a live session.
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
+          if (signInError) {
+            // If sign-in fails (e.g. Supabase requires confirm first) the
+            // onAuthStateChange listener in AuthContext will pick up the
+            // session once the user verifies. For now we still redirect.
+            console.warn('[SignUp] Auto sign-in after signup failed (confirm required?):', signInError.message);
+          }
         }
 
         setEmail('');
@@ -163,6 +168,9 @@ export default function LoginScreen() {
         setConfirmPassword('');
         setFirstName('');
         setLastName('');
+
+        // Always redirect to dashboard — the Soft Wall banner handles the rest.
+        router.replace('/(tabs)/dashboard');
       }
     } catch (err) {
       console.error('[SignUp] Unexpected error:', err);
