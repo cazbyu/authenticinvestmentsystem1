@@ -143,7 +143,10 @@ export function DepositIdeaDetailModal({
     if (!depositIdea?.id) return;
     setLoadingAssociatedItems(true);
     try {
-      const items = await fetchAssociatedItems(depositIdea.id, 'depositIdea');
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const items = await fetchAssociatedItems(depositIdea.id, 'depositIdea', user.id);
       setAssociatedItems(items);
     } catch (error) {
       console.error('Error loading associated items:', error);

@@ -123,7 +123,11 @@ export function ActionDetailsModal({
     if (!task?.id) return;
     setLoadingAssociatedItems(true);
     try {
-      const items = await fetchAssociatedItems(task.id, 'task');
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const parentType = task.type === 'event' ? 'event' : 'task';
+      const items = await fetchAssociatedItems(task.id, parentType, user.id);
       setAssociatedItems(items);
     } catch (error) {
       console.error('Error loading associated items:', error);
@@ -258,7 +262,9 @@ export function ActionDetailsModal({
   };
 
   const handleSaveNote = async () => {
-    if (!newNoteText.trim() || !task?.id) return;
+    const hasContent = newNoteText.trim().length > 0;
+    const hasAttachments = noteAttachments.length > 0;
+    if ((!hasContent && !hasAttachments) || !task?.id) return;
 
     setSavingNote(true);
     try {
@@ -266,12 +272,13 @@ export function ActionDetailsModal({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not found');
 
-      // Create the note
+      // Create the note (allow attachments-only with placeholder content)
+      const noteContent = newNoteText.trim() || (hasAttachments ? 'Attached files' : '');
       const { data: noteData, error: noteError } = await supabase
         .from('0008-ap-notes')
         .insert({
           user_id: user.id,
-          content: newNoteText.trim(),
+          content: noteContent,
         })
         .select()
         .single();
@@ -630,7 +637,14 @@ export function ActionDetailsModal({
       {/* Follow Through Form Modal */}
       {followThroughFormVisible && (
         <TaskEventForm
-          visible={followThroughFormVisible}
+          mode="create"
+          onSubmitSuccess={() => {
+            setFollowThroughFormVisible(false);
+            if (onRefreshAssociatedItems) {
+              onRefreshAssociatedItems();
+            }
+            loadAssociatedItems();
+          }}
           onClose={() => {
             setFollowThroughFormVisible(false);
             if (onRefreshAssociatedItems) {
@@ -638,9 +652,9 @@ export function ActionDetailsModal({
             }
             loadAssociatedItems();
           }}
-          initialType={followThroughPreSelectedType}
+          preSelectedType={followThroughPreSelectedType}
           parentId={task.id}
-          parentType="task"
+          parentType={task.type === 'event' ? 'event' : 'task'}
         />
       )}
 
@@ -754,10 +768,10 @@ export function ActionDetailsModal({
                 style={[
                   styles.noteModalButton,
                   styles.noteSaveButton,
-                  (!newNoteText.trim() || savingNote) && styles.noteSaveButtonDisabled
+                  ((!newNoteText.trim() && noteAttachments.length === 0) || savingNote) && styles.noteSaveButtonDisabled
                 ]}
                 onPress={handleSaveNote}
-                disabled={!newNoteText.trim() || savingNote}
+                disabled={(!newNoteText.trim() && noteAttachments.length === 0) || savingNote}
               >
                 {savingNote ? (
                   <ActivityIndicator size="small" color="#ffffff" />

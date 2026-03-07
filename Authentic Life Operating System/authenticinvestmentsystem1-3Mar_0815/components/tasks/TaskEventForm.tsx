@@ -127,7 +127,7 @@ interface FormData {
 
   // Parent relationship fields (for follow-through items)
   parentId?: string;
-  parentType?: 'task' | 'depositIdea' | 'reflection';
+  parentType?: 'task' | 'event' | 'depositIdea' | 'reflection';
 }
 
 interface TaskEventFormProps {
@@ -137,7 +137,7 @@ interface TaskEventFormProps {
   onClose: () => void;
   preSelectedType?: 'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection';
   parentId?: string;
-  parentType?: 'task' | 'depositIdea' | 'reflection';
+  parentType?: 'task' | 'event' | 'depositIdea' | 'reflection';
   config?: ActivityConfig; // Speed Dial config - moved inside interface
 }
 
@@ -1482,8 +1482,8 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
       }
       mainRecordId = mainRecord.id;
 
-      // Handle joins for all types
-      const parentType = 'task';
+      // Handle joins for the new task/event (use its type for role/domain/etc. joins)
+      const parentType = formData.type;
 
       // Clear existing joins if editing
       if (mode === 'edit' && initialData?.id) {

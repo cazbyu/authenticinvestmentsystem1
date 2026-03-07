@@ -132,7 +132,10 @@ export function ReflectionDetailsModal({
     if (!reflection?.id) return;
     setLoadingAssociatedItems(true);
     try {
-      const items = await fetchAssociatedItems(reflection.id, 'reflection');
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const items = await fetchAssociatedItems(reflection.id, 'reflection', user.id);
       setAssociatedItems(items);
     } catch (error) {
       console.error('Error loading associated items:', error);
