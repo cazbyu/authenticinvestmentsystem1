@@ -8,8 +8,9 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { X, ChevronLeft, ChevronRight, Download } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export interface ImageAttachment {
@@ -81,9 +82,20 @@ export default function ImageViewerModal({
               {currentIndex + 1} / {images.length}
             </Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={28} color="#ffffff" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {(currentImage.public_url || (currentImage as any).uri) && (
+              <TouchableOpacity
+                onPress={() => Linking.openURL(currentImage.public_url || (currentImage as any).uri)}
+                style={styles.downloadButton}
+              >
+                <Download size={22} color="#ffffff" />
+                <Text style={styles.downloadText}>Open / Download</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <X size={28} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.imageContainer}>
@@ -100,7 +112,7 @@ export default function ImageViewerModal({
           ) : (
             <View style={styles.imageWrapper}>
               <Image
-                source={{ uri: currentImage.public_url }}
+                source={{ uri: currentImage.public_url || (currentImage as any).uri }}
                 style={{
                   width: screenWidth,
                   height: screenHeight - 120,
@@ -182,6 +194,25 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  downloadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  downloadText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
   },
   imageCounter: {
     fontSize: 16,

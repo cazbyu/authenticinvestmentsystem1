@@ -317,27 +317,28 @@ export function ReflectionDetailsModal({
                 <View style={styles.attachmentsGallery}>
                   {allCombinedAttachments.map((file, idx) => {
                     const isImage = file.file_type?.startsWith('image/');
+                    const url = file.public_url || (file as any).uri || '';
                     return (
                       <TouchableOpacity
                         key={idx}
                         style={styles.attachmentItem}
                         onPress={() => {
-                          if (isImage) {
-                            const imageAttachments = allCombinedAttachments.filter(f =>
-                              f.file_type?.startsWith('image/')
-                            );
+                          if (isImage && url) {
+                            const imageAttachments = allCombinedAttachments
+                              .filter(f => f.file_type?.startsWith('image/') && (f.public_url || (f as any).uri))
+                              .map(f => ({ ...f, public_url: f.public_url || (f as any).uri }));
                             const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
                             setSelectedImages(imageAttachments);
                             setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
                             setImageViewerVisible(true);
-                          } else {
-                            Linking.openURL(file.public_url || file.uri);
+                          } else if (url) {
+                            Linking.openURL(url);
                           }
                         }}
                       >
-                        {isImage ? (
+                        {isImage && url ? (
                           <Image
-                            source={{ uri: file.public_url || file.uri }}
+                            source={{ uri: url }}
                             style={styles.attachmentImage}
                             resizeMode="cover"
                           />
@@ -345,7 +346,7 @@ export function ReflectionDetailsModal({
                           <View style={styles.attachmentDocument}>
                             <Text style={styles.attachmentDocText}>📄</Text>
                             <Text style={styles.attachmentName} numberOfLines={1}>
-                              {file.file_name || file.name}
+                              {file.file_name || (file as any).name}
                             </Text>
                           </View>
                         )}

@@ -224,6 +224,46 @@ export async function deleteNoteAttachment(
 }
 
 /**
+ * Fetches note attachments for parent items (tasks, events, deposit ideas).
+ * Returns a map of parent_id -> NoteAttachment[] for items that have notes with attachments.
+ */
+export async function fetchAttachmentsForParents(
+  parentIds: string[],
+  userId: string
+): Promise<Map<string, NoteAttachment[]>> {
+  try {
+    if (parentIds.length === 0) return new Map();
+
+    const supabase = getSupabaseClient();
+    const { data: joinData, error: joinError } = await supabase
+      .from('0008-ap-universal-notes-join')
+      .select('parent_id, note_id')
+      .in('parent_id', parentIds)
+      .eq('user_id', userId);
+
+    if (joinError) throw joinError;
+    if (!joinData || joinData.length === 0) return new Map();
+
+    const noteIds = [...new Set(joinData.map((j: { note_id: string }) => j.note_id))];
+    const attachmentsByNote = await fetchAttachmentsForNotes(noteIds);
+
+    const attachmentsByParent = new Map<string, NoteAttachment[]>();
+    for (const join of joinData) {
+      const noteAttachments = attachmentsByNote.get(join.note_id) || [];
+      if (noteAttachments.length > 0) {
+        const existing = attachmentsByParent.get(join.parent_id) || [];
+        attachmentsByParent.set(join.parent_id, [...existing, ...noteAttachments]);
+      }
+    }
+
+    return attachmentsByParent;
+  } catch (error) {
+    console.error('Error fetching attachments for parents:', error);
+    return new Map();
+  }
+}
+
+/**
  * Fetches attachments for multiple notes in batch
  */
 export async function fetchAttachmentsForNotes(

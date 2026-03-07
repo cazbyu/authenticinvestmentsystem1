@@ -32,7 +32,7 @@ import {
 } from '@/lib/reflectionUtils';
 import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { fetchAttachmentsForNotes, NoteAttachment, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
+import { fetchAttachmentsForNotes, fetchAttachmentsForParents, NoteAttachment, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import ImageViewerModal, { ImageAttachment } from './ImageViewerModal';
 import * as DocumentPicker from 'expo-document-picker';
@@ -351,12 +351,16 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
 
     // Fetch notes for all note-backed items
     const parentIds = noteBackedItems.map(item => item.id);
-    const notesMap = await fetchNotesForItems(parentIds, user.id);
+    const [notesMap, noteAttachmentsMap] = await Promise.all([
+      fetchNotesForItems(parentIds, user.id),
+      fetchAttachmentsForParents(parentIds, user.id),
+    ]);
 
     console.log('[DailyNotes] Notes map for items:', {
       itemCount: noteBackedItems.length,
       notesCount: notesMap.size,
       itemsWithNotes: noteBackedItems.filter(item => notesMap.has(item.id)).length,
+      itemsWithAttachments: noteBackedItems.filter(item => (noteAttachmentsMap.get(item.id) || []).length > 0).length,
     });
 
     const reflectionItems: TimelineItem[] = reflections.map((r) => ({
@@ -381,7 +385,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         created_at: item.created_at,
         parent_type: item.parent_type || undefined,
         title: item.title || getItemTypeLabel(resolvedType),
-        noteAttachments: [],
+        noteAttachments: noteAttachmentsMap.get(item.id) || [],
         parentItem: {
           id: item.id,
           title: item.title || undefined,
@@ -835,7 +839,11 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
                 const noteAttachments = item.noteAttachments || [];
                 const allAttachments = [...reflectionAttachments, ...noteAttachments];
                 const imageAttachments = allAttachments
-                  .filter((attachment) => attachment.file_type?.startsWith('image/')) as ImageAttachment[];
+                  .filter((attachment) => attachment.file_type?.startsWith('image/'))
+                  .map((att) => ({
+                    ...att,
+                    public_url: att.public_url || (att as any).uri || '',
+                  })) as ImageAttachment[];
                 const documentAttachments = allAttachments.filter(
                   (attachment) => attachment.file_type && !attachment.file_type.startsWith('image/')
                 );
@@ -877,12 +885,16 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
 
                     {imageAttachments.length > 0 && (
                       <View style={styles.imagePreviewContainer}>
-                        {imageAttachments.slice(0, 3).map((attachment, index) => (
+                        {imageAttachments
+                          .filter((att) => att.public_url)
+                          .slice(0, 3)
+                          .map((attachment, index) => (
                           <TouchableOpacity
                             key={attachment.id}
                             onPress={() => {
-                              setSelectedImages(imageAttachments);
-                              setSelectedImageIndex(index);
+                              const validImages = imageAttachments.filter((att) => att.public_url);
+                              setSelectedImages(validImages);
+                              setSelectedImageIndex(Math.min(index, validImages.length - 1));
                               setImageViewerVisible(true);
                             }}
                             style={styles.imageThumbnail}
@@ -894,17 +906,18 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
                             />
                           </TouchableOpacity>
                         ))}
-                        {imageAttachments.length > 3 && (
+                        {imageAttachments.filter((att) => att.public_url).length > 3 && (
                           <TouchableOpacity
                             onPress={() => {
-                              setSelectedImages(imageAttachments);
+                              const validImages = imageAttachments.filter((att) => att.public_url);
+                              setSelectedImages(validImages);
                               setSelectedImageIndex(3);
                               setImageViewerVisible(true);
                             }}
                             style={[styles.imageThumbnail, styles.moreImagesThumbnail]}
                           >
                             <View style={styles.moreImagesOverlay}>
-                              <Text style={styles.moreImagesText}>+{imageAttachments.length - 3}</Text>
+                              <Text style={styles.moreImagesText}>+{imageAttachments.filter((att) => att.public_url).length - 3}</Text>
                             </View>
                           </TouchableOpacity>
                         )}
@@ -933,7 +946,8 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
                               {attachment.file_name}
                             </Text>
                           </TouchableOpacity>
-                        ))}
+                          );
+                        })}
                       </View>
                     )}
                   </TouchableOpacity>
