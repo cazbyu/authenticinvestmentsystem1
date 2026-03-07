@@ -946,8 +946,7 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
                               {attachment.file_name}
                             </Text>
                           </TouchableOpacity>
-                          );
-                        })}
+                        ))}
                       </View>
                     )}
                   </TouchableOpacity>
