@@ -2127,6 +2127,89 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
                   Is this {formData.reflectionMode === 'rose' ? 'celebration' : formData.reflectionMode === 'thorn' ? 'challenge' : 'idea'} associated with any roles, wellness zones, or goals?
                 </Text>
               </View>
+
+              {/* Advanced Options Toggle - for reflection types */}
+              <TouchableOpacity
+                style={[styles.advancedToggle, { borderColor: colors.border }]}
+                onPress={() => setShowAdvanced(!showAdvanced)}
+              >
+                <Text style={[styles.advancedToggleText, { color: colors.primary }]}>
+                  {showAdvanced ? 'Hide Advanced Options' : 'Advanced Options'}
+                </Text>
+                {showAdvanced ? (
+                  <ChevronUp size={18} color={colors.primary} />
+                ) : (
+                  <ChevronDown size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+
+              {/* Advanced Options Content - for reflection types */}
+              {showAdvanced && (
+                <>
+                  {/* Goal Toggle */}
+                  <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                    <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                      {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                    </View>
+                  </View>
+
+                  {/* Goal picker (shows when Goal toggle ON) */}
+                  {formData.isGoal && (
+                    <View style={styles.field}>
+                      <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
+                      {availableGoals.length === 0 ? (
+                        <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
+                      ) : (
+                        <View style={styles.toggleSwitchContainer}>
+                          {availableGoals.map(g => {
+                            const active = formData.selectedGoal?.id === g.id;
+                            return (
+                              <View
+                                key={`${g.goal_type}-${g.id}`}
+                                style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                              >
+                                <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
+                                  {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
+                                </Text>
+                                <Switch
+                                  value={active}
+                                  onValueChange={() => handleGoalPick(g.id)}
+                                  trackColor={{ false: colors.border, true: colors.primary }}
+                                  thumbColor={colors.surface}
+                                />
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Roles */}
+                  {renderToggleSwitchGrid(
+                    'Roles',
+                    roles,
+                    formData.selectedRoleIds,
+                    (id) => handleMultiSelect('selectedRoleIds', id)
+                  )}
+
+                  {/* Key Relationships */}
+                  {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid(
+                    'Key Relationships',
+                    filteredKeyRelationships,
+                    formData.selectedKeyRelationshipIds,
+                    (id) => handleMultiSelect('selectedKeyRelationshipIds', id)
+                  )}
+
+                  {/* Wellness Zones */}
+                  {renderToggleSwitchGrid(
+                    'Wellness Zones',
+                    domains,
+                    formData.selectedDomainIds,
+                    (id) => handleMultiSelect('selectedDomainIds', id)
+                  )}
+                </>
+              )}
             </View>
           )}
 

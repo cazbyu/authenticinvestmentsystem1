@@ -21,7 +21,9 @@ import {
   List,
   ListOrdered,
   Image as ImageIcon,
-  File
+  File,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react-native';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import { getAttachmentSignedUrl } from '@/lib/reflectionUtils';
@@ -101,6 +103,7 @@ export default function JournalForm({
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [showFollowUpCalendar, setShowFollowUpCalendar] = useState(false);
   const [followUpDate, setFollowUpDate] = useState<string | null>(null);
@@ -124,6 +127,21 @@ export default function JournalForm({
       }
     }
   }, [visible, mode, initialData]);
+
+  // Auto-expand Advanced section when editing with existing tags
+  useEffect(() => {
+    if (mode === 'edit' && initialData) {
+      const hasAdvancedData =
+        (initialData.roles && initialData.roles.length > 0) ||
+        (initialData.domains && initialData.domains.length > 0) ||
+        (initialData.keyRelationships && initialData.keyRelationships.length > 0);
+      if (hasAdvancedData) {
+        setShowAdvanced(true);
+      }
+    } else {
+      setShowAdvanced(false);
+    }
+  }, [mode, initialData]);
 
   useEffect(() => {
     // Filter key relationships based on selected roles
@@ -782,121 +800,140 @@ export default function JournalForm({
               )}
             </View>
 
-            {/* Helper Text */}
-            {(roles.length > 0 || domains.length > 0 || filteredKeyRelationships.length > 0) && (
-              <View style={styles.section}>
-                <Text style={[styles.helperText, { fontStyle: 'italic' }]}>
-                  Is this reflection associated with any of the following roles or domains? If so, check those that are applicable.
-                </Text>
-              </View>
-            )}
+            {/* Advanced Options Toggle */}
+            <TouchableOpacity
+              style={[styles.advancedToggle, { borderColor: colors.border }]}
+              onPress={() => setShowAdvanced(!showAdvanced)}
+            >
+              <Text style={[styles.advancedToggleText, { color: colors.primary }]}>
+                {showAdvanced ? 'Hide Advanced Options' : 'Advanced Options'}
+              </Text>
+              {showAdvanced ? (
+                <ChevronUp size={18} color={colors.primary} />
+              ) : (
+                <ChevronDown size={18} color={colors.primary} />
+              )}
+            </TouchableOpacity>
 
-            {/* Roles */}
-            {roles.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.checkboxContainer}>
-                  <Text style={styles.label}>Roles</Text>
-                  <View style={styles.checkboxList}>
-                    {roles.map((role) => (
-                      <TouchableOpacity
-                        key={role.id}
-                        style={styles.checkboxRow}
-                        onPress={() => toggleRole(role.id)}
-                      >
-                        <View
-                          style={[
-                            styles.checkboxSquare,
-                            { borderColor: colors.border },
-                            selectedRoleIds.includes(role.id) && {
-                              backgroundColor: colors.primary,
-                              borderColor: colors.primary,
-                            },
-                          ]}
-                        >
-                          {selectedRoleIds.includes(role.id) && (
-                            <Text style={styles.checkmark}>✓</Text>
-                          )}
-                        </View>
-                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                          {role.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+            {/* Advanced Options Content */}
+            {showAdvanced && (
+              <>
+                {(roles.length > 0 || domains.length > 0 || filteredKeyRelationships.length > 0) && (
+                  <View style={styles.section}>
+                    <Text style={[styles.helperText, { fontStyle: 'italic' }]}>
+                      Is this reflection associated with any of the following roles or domains? If so, check those that are applicable.
+                    </Text>
                   </View>
-                </View>
-              </View>
-            )}
+                )}
 
-            {/* Domains */}
-            {domains.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.checkboxContainer}>
-                  <Text style={styles.label}>Domains</Text>
-                  <View style={styles.checkboxList}>
-                    {domains.map((domain) => (
-                      <TouchableOpacity
-                        key={domain.id}
-                        style={styles.checkboxRow}
-                        onPress={() => toggleDomain(domain.id)}
-                      >
-                        <View
-                          style={[
-                            styles.checkboxSquare,
-                            { borderColor: colors.border },
-                            selectedDomainIds.includes(domain.id) && {
-                              backgroundColor: colors.primary,
-                              borderColor: colors.primary,
-                            },
-                          ]}
-                        >
-                          {selectedDomainIds.includes(domain.id) && (
-                            <Text style={styles.checkmark}>✓</Text>
-                          )}
-                        </View>
-                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                          {domain.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                {/* Roles */}
+                {roles.length > 0 && (
+                  <View style={styles.section}>
+                    <View style={styles.checkboxContainer}>
+                      <Text style={styles.label}>Roles</Text>
+                      <View style={styles.checkboxList}>
+                        {roles.map((role) => (
+                          <TouchableOpacity
+                            key={role.id}
+                            style={styles.checkboxRow}
+                            onPress={() => toggleRole(role.id)}
+                          >
+                            <View
+                              style={[
+                                styles.checkboxSquare,
+                                { borderColor: colors.border },
+                                selectedRoleIds.includes(role.id) && {
+                                  backgroundColor: colors.primary,
+                                  borderColor: colors.primary,
+                                },
+                              ]}
+                            >
+                              {selectedRoleIds.includes(role.id) && (
+                                <Text style={styles.checkmark}>✓</Text>
+                              )}
+                            </View>
+                            <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                              {role.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
-            )}
+                )}
 
-            {/* Key Relationships */}
-            {filteredKeyRelationships.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.checkboxContainer}>
-                  <Text style={styles.label}>Key Relationships</Text>
-                  <View style={styles.checkboxList}>
-                    {filteredKeyRelationships.map((kr) => (
-                      <TouchableOpacity
-                        key={kr.id}
-                        style={styles.checkboxRow}
-                        onPress={() => toggleKeyRelationship(kr.id)}
-                      >
-                        <View
-                          style={[
-                            styles.checkboxSquare,
-                            { borderColor: colors.border },
-                            selectedKeyRelationshipIds.includes(kr.id) && {
-                              backgroundColor: colors.primary,
-                              borderColor: colors.primary,
-                            },
-                          ]}
-                        >
-                          {selectedKeyRelationshipIds.includes(kr.id) && (
-                            <Text style={styles.checkmark}>✓</Text>
-                          )}
-                        </View>
-                        <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                          {kr.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                {/* Domains */}
+                {domains.length > 0 && (
+                  <View style={styles.section}>
+                    <View style={styles.checkboxContainer}>
+                      <Text style={styles.label}>Domains</Text>
+                      <View style={styles.checkboxList}>
+                        {domains.map((domain) => (
+                          <TouchableOpacity
+                            key={domain.id}
+                            style={styles.checkboxRow}
+                            onPress={() => toggleDomain(domain.id)}
+                          >
+                            <View
+                              style={[
+                                styles.checkboxSquare,
+                                { borderColor: colors.border },
+                                selectedDomainIds.includes(domain.id) && {
+                                  backgroundColor: colors.primary,
+                                  borderColor: colors.primary,
+                                },
+                              ]}
+                            >
+                              {selectedDomainIds.includes(domain.id) && (
+                                <Text style={styles.checkmark}>✓</Text>
+                              )}
+                            </View>
+                            <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                              {domain.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
+                )}
+
+                {/* Key Relationships */}
+                {filteredKeyRelationships.length > 0 && (
+                  <View style={styles.section}>
+                    <View style={styles.checkboxContainer}>
+                      <Text style={styles.label}>Key Relationships</Text>
+                      <View style={styles.checkboxList}>
+                        {filteredKeyRelationships.map((kr) => (
+                          <TouchableOpacity
+                            key={kr.id}
+                            style={styles.checkboxRow}
+                            onPress={() => toggleKeyRelationship(kr.id)}
+                          >
+                            <View
+                              style={[
+                                styles.checkboxSquare,
+                                { borderColor: colors.border },
+                                selectedKeyRelationshipIds.includes(kr.id) && {
+                                  backgroundColor: colors.primary,
+                                  borderColor: colors.primary,
+                                },
+                              ]}
+                            >
+                              {selectedKeyRelationshipIds.includes(kr.id) && (
+                                <Text style={styles.checkmark}>✓</Text>
+                              )}
+                            </View>
+                            <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                              {kr.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </>
             )}
 
             {/* Actions */}
@@ -1326,5 +1363,21 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     attachmentOptionText: {
       fontSize: 16,
       fontWeight: '500',
+    },
+    advancedToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      marginHorizontal: 0,
+      marginTop: 4,
+      marginBottom: 16,
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      gap: 6,
+    },
+    advancedToggleText: {
+      fontSize: 14,
+      fontWeight: '600',
     },
   });
