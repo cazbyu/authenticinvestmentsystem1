@@ -14,7 +14,7 @@ export interface MonthlyStatistics {
 }
 
 export interface ItemDetail {
-  type: 'rose' | 'thorn' | 'reflection' | 'note';
+  type: 'rose' | 'thorn' | 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
   title: string;
 }
 

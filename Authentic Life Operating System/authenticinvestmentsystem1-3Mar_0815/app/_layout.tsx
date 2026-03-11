@@ -36,6 +36,7 @@ export default function RootLayout() {
                   <Stack.Screen name="calendar" />
                   <Stack.Screen name="followup" />
                   <Stack.Screen name="reflections" />
+                  <Stack.Screen name="journal" />
                   <Stack.Screen name="settings" />
                   <Stack.Screen name="coach" />
                   <Stack.Screen name="terms" />

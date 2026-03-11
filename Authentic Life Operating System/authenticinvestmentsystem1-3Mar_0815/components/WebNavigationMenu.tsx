@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { X, Home, Target, User, Activity, Calendar, Clock, Settings, MessageCircle, Info, Mail } from 'lucide-react-native';
+import { X, Home, Target, User, Activity, Calendar, Clock, Settings, MessageCircle, Info, Mail, BookText } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface WebNavigationMenuProps {
@@ -26,6 +26,7 @@ export function WebNavigationMenu({ visible, onClose }: WebNavigationMenuProps) 
     { icon: Calendar, label: 'Calendar', route: '/calendar' },
     { icon: Clock, label: 'Follow Up', route: '/followup' },
     { icon: MessageCircle, label: 'Reflections', route: '/reflections' },
+    { icon: BookText, label: 'Journal', route: '/journal' },
     { icon: MessageCircle, label: 'Coach', route: '/coach' },
     { icon: Settings, label: 'Settings', route: '/settings' },
     { icon: MessageCircle, label: 'Suggestions', route: '/suggestions' },

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { fetchMonthlyDates, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
-import { ChevronLeft, FileText } from 'lucide-react-native';
+import { ChevronLeft, FileText, SquareCheck, Calendar, TrendingDown } from 'lucide-react-native';
 
 const roseImage = require('@/assets/images/rose-81.png');
 const thornImage = require('@/assets/images/thorn-81.png');
@@ -99,13 +99,19 @@ export default function MonthlyIndexView({
       case 'task':
         return (
           <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
-            <FileText size={14} color="#0078d4" />
+            <SquareCheck size={14} color="#2563eb" />
           </View>
         );
       case 'event':
         return (
-          <View style={[styles.iconCircle, { backgroundColor: '#d1fae5' }]}>
-            <FileText size={14} color="#10b981" />
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <Calendar size={14} color="#2563eb" />
+          </View>
+        );
+      case 'withdrawal':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#fee2e2' }]}>
+            <TrendingDown size={14} color="#dc2626" />
           </View>
         );
       case 'note':
