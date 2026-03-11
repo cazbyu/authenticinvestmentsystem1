@@ -6,10 +6,16 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { fetchMonthlyDates, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
-import { ChevronLeft, Flower, XOctagon, FileText, BookOpen } from 'lucide-react-native';
+import { ChevronLeft, FileText } from 'lucide-react-native';
+
+const roseImage = require('@/assets/images/rose-81.png');
+const thornImage = require('@/assets/images/thorn-81.png');
+const reflectionImage = require('@/assets/images/reflections-72.png');
+const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
 interface MonthlyIndexViewProps {
   year: number;
@@ -63,25 +69,57 @@ export default function MonthlyIndexView({
   };
 
   const getIconForItemType = (type: ItemDetail['type']) => {
-    const iconProps = { size: 14 };
+    const imageSize = 20;
 
     switch (type) {
       case 'rose':
-        return <Flower {...iconProps} color="#16a34a" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#fce7f3' }]}>
+            <Image source={roseImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
       case 'thorn':
-        return <XOctagon {...iconProps} color="#f59e0b" />;
-      case 'task':
-        return <FileText {...iconProps} color="#0078d4" />;
-      case 'event':
-        return <FileText {...iconProps} color="#10b981" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#f3f4f6' }]}>
+            <Image source={thornImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
       case 'depositIdea':
-        return <FileText {...iconProps} color="#8b5cf6" />;
-      case 'note':
-        return <FileText {...iconProps} color="#0078d4" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
+            <Image source={depositIdeaImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
       case 'reflection':
-        return <BookOpen {...iconProps} color="#8b5cf6" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#ede9fe' }]}>
+            <Image source={reflectionImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      case 'task':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <FileText size={14} color="#0078d4" />
+          </View>
+        );
+      case 'event':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#d1fae5' }]}>
+            <FileText size={14} color="#10b981" />
+          </View>
+        );
+      case 'note':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <FileText size={14} color="#0078d4" />
+          </View>
+        );
       default:
-        return <FileText {...iconProps} color="#0078d4" />;
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
+            <FileText size={14} color="#0078d4" />
+          </View>
+        );
     }
   };
 
@@ -270,8 +308,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconContainer: {
-    width: 14,
-    height: 14,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
