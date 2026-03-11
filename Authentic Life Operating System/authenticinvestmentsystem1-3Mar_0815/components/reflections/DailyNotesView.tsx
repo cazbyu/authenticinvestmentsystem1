@@ -37,7 +37,7 @@ import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import ImageViewerModal, { ImageAttachment } from './ImageViewerModal';
 import * as DocumentPicker from 'expo-document-picker';
 
-type TimelineItemType = 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
+type TimelineItemType = 'reflection' | 'rose' | 'thorn' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
 
 interface ParentItemData {
   id: string;
@@ -63,6 +63,8 @@ interface TimelineItem {
   parentItem?: ParentItemData;
   isActive?: boolean;
   priorityColor?: string;
+  roles?: Array<{ id: string; label: string; color?: string }>;
+  domains?: Array<{ id: string; name: string; color?: string }>;
 }
 
 interface DailyHistoryItemRow {
@@ -363,15 +365,25 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       itemsWithAttachments: noteBackedItems.filter(item => (noteAttachmentsMap.get(item.id) || []).length > 0).length,
     });
 
-    const reflectionItems: TimelineItem[] = reflections.map((r) => ({
-      id: r.id,
-      type: 'reflection' as TimelineItemType,
-      created_at: r.created_at,
-      content: r.content,
-      date: r.date,
-      title: r.reflection_title?.trim() || 'Reflection',
-      attachments: reflectionAttachmentsMap.get(r.id) || [],
-    }));
+    const reflectionItems: TimelineItem[] = reflections.map((r) => {
+      const reflectionSubType: TimelineItemType = r.daily_rose
+        ? 'rose'
+        : r.daily_thorn
+          ? 'thorn'
+          : 'reflection';
+      const fallbackTitle = r.daily_rose ? 'Rose' : r.daily_thorn ? 'Thorn' : 'Reflection';
+      return {
+        id: r.id,
+        type: reflectionSubType,
+        created_at: r.created_at,
+        content: r.content,
+        date: r.date,
+        title: r.reflection_title?.trim() || fallbackTitle,
+        attachments: reflectionAttachmentsMap.get(r.id) || [],
+        roles: r.roles,
+        domains: r.domains,
+      };
+    });
 
     const noteItems: TimelineItem[] = noteBackedItems.map((item) => {
       const resolvedType: TimelineItemType = item.type === 'event'
@@ -465,6 +477,10 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
         return '#f59e0b';
       case 'note':
         return '#9333ea'; // purple-600
+      case 'rose':
+        return '#16a34a'; // green-600
+      case 'thorn':
+        return '#f59e0b'; // amber-500
       case 'reflection':
         return colors.primary;
       default:
@@ -540,6 +556,10 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
         return 'Withdrawal';
       case 'note':
         return 'Note';
+      case 'rose':
+        return 'Rose';
+      case 'thorn':
+        return 'Thorn';
       case 'reflection':
         return 'Reflection';
       default:
@@ -946,6 +966,24 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
                               {attachment.file_name}
                             </Text>
                           </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Role and Wellness Zone tags */}
+                    {((item.roles && item.roles.length > 0) || (item.domains && item.domains.length > 0)) && (
+                      <View style={styles.associationTagsContainer}>
+                        {item.roles?.map((role) => (
+                          <View key={role.id} style={[styles.associationTag, { backgroundColor: role.color ? `${role.color}20` : '#e0f2fe', borderColor: role.color || '#0078d4' }]}>
+                            <Users size={12} color={role.color || '#0078d4'} />
+                            <Text style={[styles.associationTagText, { color: role.color || '#0078d4' }]}>{role.label}</Text>
+                          </View>
+                        ))}
+                        {item.domains?.map((domain) => (
+                          <View key={domain.id} style={[styles.associationTag, { backgroundColor: domain.color ? `${domain.color}20` : '#f0fdf4', borderColor: domain.color || '#16a34a' }]}>
+                            <Activity size={12} color={domain.color || '#16a34a'} />
+                            <Text style={[styles.associationTagText, { color: domain.color || '#16a34a' }]}>{domain.name}</Text>
+                          </View>
                         ))}
                       </View>
                     )}
@@ -1470,6 +1508,28 @@ const styles = StyleSheet.create({
   documentFileName: {
     fontSize: 12,
     flex: 1,
+  },
+  associationTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  associationTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  associationTagText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   tagsRow: {
     flexDirection: 'row',

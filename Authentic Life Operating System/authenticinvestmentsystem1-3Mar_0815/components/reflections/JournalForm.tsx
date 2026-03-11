@@ -517,7 +517,8 @@ export default function JournalForm({
         await Promise.all(uploadPromises);
       }
 
-      Alert.alert('Success', mode === 'edit' ? 'Reflection updated successfully' : 'Reflection saved successfully');
+      const typeName = initialData?.daily_rose ? 'Rose' : initialData?.daily_thorn ? 'Thorn' : 'Reflection';
+      Alert.alert('Success', mode === 'edit' ? `${typeName} updated successfully` : 'Reflection saved successfully');
       eventBus.emit(mode === 'edit' ? EVENTS.REFLECTION_UPDATED : EVENTS.REFLECTION_CREATED);
       onSaveSuccess?.();
       onClose();
@@ -668,7 +669,7 @@ export default function JournalForm({
                 ? 'Edit Rose'
                 : initialData?.daily_thorn
                   ? 'Edit Thorn'
-                  : 'Edit Deposit Idea'
+                  : 'Edit Reflection'
               : reflectionType === 'rose'
                 ? 'New Rose'
                 : reflectionType === 'thorn'
