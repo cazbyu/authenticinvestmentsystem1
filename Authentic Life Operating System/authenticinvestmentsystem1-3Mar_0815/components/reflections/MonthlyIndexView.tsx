@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { fetchMonthlyDates, DateWithContent, ItemDetail } from '@/lib/monthlyHistoryData';
-import { ChevronLeft, FileText, SquareCheck, Calendar, TrendingDown } from 'lucide-react-native';
+import { ChevronLeft, FileText, SquareCheck, Calendar, TrendingDown, Target } from 'lucide-react-native';
 
 const roseImage = require('@/assets/images/rose-81.png');
 const thornImage = require('@/assets/images/thorn-81.png');
@@ -68,8 +68,17 @@ export default function MonthlyIndexView({
     });
   };
 
-  const getIconForItemType = (type: ItemDetail['type']) => {
+  const getIconForItemType = (type: ItemDetail['type'], item?: ItemDetail) => {
     const imageSize = 20;
+
+    // If item has a goal (leading indicator), show Target icon
+    if (item?.goal_title) {
+      return (
+        <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
+          <Target size={14} color="#d97706" />
+        </View>
+      );
+    }
 
     switch (type) {
       case 'rose':
@@ -137,10 +146,11 @@ export default function MonthlyIndexView({
     return items.map((item, index) => (
       <View key={index} style={styles.itemRow}>
         <View style={styles.iconContainer}>
-          {getIconForItemType(item.type)}
+          {getIconForItemType(item.type, item)}
         </View>
         <Text style={[styles.itemText, { color: colors.textSecondary }]} numberOfLines={1}>
           {item.title}
+          {item.goal_title ? <Text style={{ color: '#d97706', fontSize: 13 }}> ({item.goal_title})</Text> : null}
         </Text>
         {item.has_notes && (
           <FileText size={14} color="#6b7280" style={styles.noteIcon} />

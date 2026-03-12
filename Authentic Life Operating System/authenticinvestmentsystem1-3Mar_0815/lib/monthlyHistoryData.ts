@@ -17,6 +17,7 @@ export interface ItemDetail {
   type: 'rose' | 'thorn' | 'reflection' | 'task' | 'event' | 'depositIdea' | 'withdrawal' | 'note';
   title: string;
   has_notes?: boolean;
+  goal_title?: string | null;
 }
 
 export interface DateWithContent {
