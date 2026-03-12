@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
-import { SquareCheck, BookOpen, Calendar } from 'lucide-react-native';
+import { SquareCheck, BookOpen, Calendar, FileText } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';
@@ -1008,9 +1008,14 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.title} numberOfLines={1}>
-            {item.description}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={1}>
+              {item.description}
+            </Text>
+            {item.has_notes && (
+              <FileText size={14} color="#6b7280" style={styles.noteIcon} />
+            )}
+          </View>
           {(previewText || item.linkedCounts) ? (
             <View style={styles.previewRow}>
               {previewText ? (
@@ -1234,11 +1239,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   title: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1f2937',
     lineHeight: 20,
+    flex: 1,
+  },
+  noteIcon: {
+    flexShrink: 0,
   },
   previewRow: {
     flexDirection: 'row',
