@@ -142,6 +142,9 @@ export default function MonthlyIndexView({
         <Text style={[styles.itemText, { color: colors.textSecondary }]} numberOfLines={1}>
           {item.title}
         </Text>
+        {item.has_notes && (
+          <FileText size={14} color="#6b7280" style={styles.noteIcon} />
+        )}
       </View>
     ));
   };
@@ -329,6 +332,10 @@ const styles = StyleSheet.create({
   itemText: {
     fontSize: 14,
     flex: 1,
+  },
+  noteIcon: {
+    marginLeft: 6,
+    flexShrink: 0,
   },
   listContent: {
     paddingBottom: 32,
