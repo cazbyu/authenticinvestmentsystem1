@@ -49,7 +49,7 @@ export default function DailyViewModal({
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <View style={styles.headerContent}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>
-              Daily Reflection
+              Daily Action & Reflection Journal
             </Text>
             <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
               {formatDateHeader(selectedDate)}

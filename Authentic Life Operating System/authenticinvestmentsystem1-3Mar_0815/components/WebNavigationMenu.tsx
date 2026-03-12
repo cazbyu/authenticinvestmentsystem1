@@ -25,7 +25,6 @@ export function WebNavigationMenu({ visible, onClose }: WebNavigationMenuProps) 
     { icon: Activity, label: 'Wellness', route: '/(tabs)/wellness' },
     { icon: Calendar, label: 'Calendar', route: '/calendar' },
     { icon: Clock, label: 'Follow Up', route: '/followup' },
-    { icon: MessageCircle, label: 'Reflections', route: '/reflections' },
     { icon: BookText, label: 'Journal', route: '/journal' },
     { icon: MessageCircle, label: 'Coach', route: '/coach' },
     { icon: Settings, label: 'Settings', route: '/settings' },

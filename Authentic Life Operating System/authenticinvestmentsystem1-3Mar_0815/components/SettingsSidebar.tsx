@@ -19,7 +19,6 @@ import {
   Heart,
   Target,
   Calendar,
-  BookOpen,
   BookText,
   Clock,
   MessageCircle,
@@ -103,7 +102,6 @@ export function SettingsSidebar({ visible, onClose }: SettingsSidebarProps) {
       title: 'Tools & Views',
       items: [
         { icon: Clock, label: 'Follow Up', route: '/follow-up' },
-        { icon: BookOpen, label: 'Reflections', route: '/reflections' },
         { icon: BookText, label: 'Journal', route: '/journal' },
       ],
     },

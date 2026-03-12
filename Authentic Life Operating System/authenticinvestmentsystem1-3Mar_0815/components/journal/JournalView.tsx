@@ -436,7 +436,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       // 3) Reflections
       let reflectionsQuery = supabase
         .from('0008-ap-reflections')
-        .select('id, content, date, created_at, reflection_type, daily_rose, daily_thorn')
+        .select('id, content, date, created_at, reflection_type, daily_rose, daily_thorn, reflection_title')
         .eq('user_id', user.id)
         .eq('archived', false);
 
@@ -524,7 +524,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
           journalEntries.push({
             id: r.id,
             date: r.created_at,
-            description: r.content.substring(0, 100) + (r.content.length > 100 ? '...' : ''),
+            description: r.reflection_title || (r.content.substring(0, 100) + (r.content.length > 100 ? '...' : '')),
             type: 'reflection',
             amount: 0,
             balance: 0,
@@ -929,8 +929,8 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       return krName;
     }
 
-    // Show content preview for reflections
-    if (entry.source_data?.content) {
+    // For reflections with a title, show content snippet as preview
+    if (entry.source_type === 'reflection' && entry.source_data?.reflection_title && entry.source_data?.content) {
       return entry.source_data.content.substring(0, 60) + (entry.source_data.content.length > 60 ? '...' : '');
     }
 

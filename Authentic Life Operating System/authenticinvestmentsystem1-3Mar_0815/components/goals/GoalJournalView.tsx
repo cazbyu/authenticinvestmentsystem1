@@ -244,7 +244,7 @@ export function GoalJournalView({
       if (reflectionIds.length > 0) {
         let reflectionsQuery = supabase
           .from('0008-ap-reflections')
-          .select('id, content, created_at, daily_rose, daily_thorn')
+          .select('id, content, created_at, daily_rose, daily_thorn, reflection_title')
           .in('id', reflectionIds)
           .eq('user_id', user.id);
 
@@ -299,7 +299,7 @@ export function GoalJournalView({
             journalEntries.push({
               id: ref.id,
               date: ref.created_at,
-              title: ref.content.substring(0, 80) + (ref.content.length > 80 ? '...' : ''),
+              title: ref.reflection_title || (ref.content.substring(0, 80) + (ref.content.length > 80 ? '...' : '')),
               type: 'reflection',
               points,
               roles,

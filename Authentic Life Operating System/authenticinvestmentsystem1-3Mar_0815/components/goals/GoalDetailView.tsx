@@ -843,7 +843,7 @@ useEffect(() => {
             journalEntries.push({
               id: ref.id,
               created_at: ref.created_at,
-              note_text: ref.content?.substring(0, 100) + (ref.content?.length > 100 ? '...' : ''),
+              note_text: ref.reflection_title || (ref.content?.substring(0, 100) + (ref.content?.length > 100 ? '...' : '')),
               entry_type: 'reflection',
               source_data: ref,
             });

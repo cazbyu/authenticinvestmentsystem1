@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import MonthlyCardsView from '../reflections/MonthlyCardsView';
 import MonthlyIndexView from '../reflections/MonthlyIndexView';
 import DailyViewModal from '../reflections/DailyViewModal';
+import { ReflectionDetailsModal } from '../reflections/ReflectionDetailsModal';
+import { getSupabaseClient } from '@/lib/supabase';
+import { ReflectionWithRelations, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 
 type ViewState = 'monthlyCards' | 'monthlyIndex' | 'dailyView';
 
@@ -12,6 +15,10 @@ export default function JournalHistoryView() {
   const [currentView, setCurrentView] = useState<ViewState>('monthlyCards');
   const [selectedMonth, setSelectedMonth] = useState<{ year: number; month: number; monthYear: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // Detail modal state
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
+  const [isReflectionDetailVisible, setIsReflectionDetailVisible] = useState(false);
 
   const handleMonthPress = (year: number, month: number, monthYear: string) => {
     setSelectedMonth({ year, month, monthYear });
@@ -34,7 +41,98 @@ export default function JournalHistoryView() {
     setCurrentView('monthlyIndex');
   };
 
-  const handleNotePress = (item: any) => {
+  const handleNotePress = async (item: any) => {
+    const itemType = item.type;
+
+    if (itemType === 'reflection' || itemType === 'rose' || itemType === 'thorn') {
+      // Fetch full reflection data and open ReflectionDetailsModal
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: reflectionData, error } = await supabase
+          .from('0008-ap-reflections')
+          .select('*')
+          .eq('id', item.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (error || !reflectionData) {
+          console.error('[JournalHistory] Error fetching reflection:', error);
+          return;
+        }
+
+        // Fetch related data (roles, domains, attachments)
+        const [rolesRes, domainsRes, keyRelsRes, notesRes, attachmentsMap] = await Promise.all([
+          supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id, role_id, role:0008-ap-roles(id,label,color)')
+            .eq('parent_id', item.id)
+            .eq('parent_type', 'reflection'),
+          supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id, domain_id, domain:0008-ap-domains(id,name,color)')
+            .eq('parent_id', item.id)
+            .eq('parent_type', 'reflection'),
+          supabase
+            .from('0008-ap-universal-key-relationships-join')
+            .select('parent_id, key_relationship_id, key_relationship:0008-ap-key-relationships(id,name)')
+            .eq('parent_id', item.id)
+            .eq('parent_type', 'reflection'),
+          supabase
+            .from('0008-ap-universal-notes-join')
+            .select('parent_id, note:0008-ap-notes(id,content,created_at)')
+            .eq('parent_id', item.id)
+            .eq('parent_type', 'reflection'),
+          fetchAttachmentsForReflections([item.id]),
+        ]);
+
+        const roles = (rolesRes.data ?? []).map((r: any) => r.role).filter(Boolean);
+        const domains = (domainsRes.data ?? []).map((d: any) => d.domain).filter(Boolean);
+        const keyRelationships = (keyRelsRes.data ?? []).map((k: any) => k.key_relationship).filter(Boolean);
+        const notes = (notesRes.data ?? []).map((n: any) => n.note).filter(Boolean);
+        const attachments = attachmentsMap.get(item.id) ?? [];
+
+        const fullReflection: ReflectionWithRelations = {
+          ...reflectionData,
+          roles,
+          domains,
+          keyRelationships,
+          notes,
+          attachments,
+        };
+
+        setSelectedReflection(fullReflection);
+        setIsReflectionDetailVisible(true);
+      } catch (err) {
+        console.error('[JournalHistory] Error opening reflection detail:', err);
+      }
+    }
+    // Future: handle task, event, depositIdea, withdrawal types
+  };
+
+  const handleReflectionDetailClose = () => {
+    setIsReflectionDetailVisible(false);
+    setSelectedReflection(null);
+  };
+
+  const handleReflectionDelete = async (reflection: ReflectionWithRelations) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .update({ archived: true })
+        .eq('id', reflection.id);
+
+      if (error) throw error;
+
+      setIsReflectionDetailVisible(false);
+      setSelectedReflection(null);
+    } catch (err) {
+      console.error('[JournalHistory] Error deleting reflection:', err);
+      Alert.alert('Error', 'Failed to delete reflection');
+    }
   };
 
   return (
@@ -61,6 +159,13 @@ export default function JournalHistoryView() {
           onNotePress={handleNotePress}
         />
       )}
+
+      <ReflectionDetailsModal
+        visible={isReflectionDetailVisible}
+        reflection={selectedReflection}
+        onClose={handleReflectionDetailClose}
+        onDelete={handleReflectionDelete}
+      />
     </View>
   );
 }

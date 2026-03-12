@@ -7,7 +7,6 @@ import {
   MessageCircle,
   Settings,
   LogOut,
-  BookOpen,
   BookText,
   Bell,
   Lightbulb,
@@ -23,7 +22,6 @@ import { getAppVersionDisplay } from '@/lib/appVersion';
 const menuItems = [
   { id: 'northstar', title: 'North Star', icon: Star, route: '/(sidebar)/north-star' },
   { id: 'calendar', title: 'Calendar View', icon: Calendar, route: '/calendar' },
-  { id: 'reflections', title: 'Reflections', icon: BookOpen, route: '/reflections' },
   { id: 'journal', title: 'Journal', icon: BookText, route: '/journal' },
   { id: 'followup', title: 'Follow Up', icon: Bell, route: '/followup' },
   { id: 'coach', title: 'Coach Chat', icon: MessageCircle, route: '/coach' },
