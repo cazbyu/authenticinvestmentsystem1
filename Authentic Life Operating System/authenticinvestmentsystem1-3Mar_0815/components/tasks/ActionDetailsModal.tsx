@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, TextInput, Platform } from 'react-native';
-import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip } from 'lucide-react-native';
+import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip, Target } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -22,6 +22,7 @@ interface ActionDetailsModalProps {
   onEdit?: (task: Task) => void;
   onRefreshAssociatedItems?: () => void;
   onItemPress?: (item: AssociatedItem) => void;
+  goalTitle?: string;
 }
 
 interface Note {
@@ -37,7 +38,8 @@ export function ActionDetailsModal({
   onDelete,
   onEdit,
   onRefreshAssociatedItems,
-  onItemPress
+  onItemPress,
+  goalTitle
 }: ActionDetailsModalProps) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [taskNotes, setTaskNotes] = useState<Note[]>([]);
@@ -420,12 +422,17 @@ export function ActionDetailsModal({
             {/* Hero Section */}
             <View style={styles.heroSection}>
               <View style={styles.titleRow}>
-                {task.type === 'event' ? (
+                {goalTitle ? (
+                  <Target size={24} color="#d97706" style={styles.titleIcon} />
+                ) : task.type === 'event' ? (
                   <Calendar size={24} color="#3b82f6" style={styles.titleIcon} />
                 ) : (
                   <CheckSquare size={24} color="#3b82f6" style={styles.titleIcon} />
                 )}
-                <Text style={styles.title}>{task.title}</Text>
+                <Text style={styles.title}>
+                  {task.title}
+                  {goalTitle ? <Text style={{ color: '#d97706', fontWeight: '400', fontSize: 18 }}> ({goalTitle})</Text> : null}
+                </Text>
               </View>
 
               {/* Alignment Chips - Roles and Domains */}

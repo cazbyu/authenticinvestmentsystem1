@@ -25,6 +25,7 @@ export default function JournalHistoryView() {
   // Task/Event detail modal state
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [isTaskDetailVisible, setIsTaskDetailVisible] = useState(false);
+  const [selectedTaskGoalTitle, setSelectedTaskGoalTitle] = useState<string | undefined>(undefined);
 
   // Deposit Idea detail modal state
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
@@ -136,6 +137,7 @@ export default function JournalHistoryView() {
         }
 
         setSelectedTask(taskData);
+        setSelectedTaskGoalTitle(item.goalTitle || undefined);
         setIsTaskDetailVisible(true);
       } catch (err) {
         console.error('[JournalHistory] Error opening task detail:', err);
@@ -191,6 +193,7 @@ export default function JournalHistoryView() {
   const handleTaskDetailClose = () => {
     setIsTaskDetailVisible(false);
     setSelectedTask(null);
+    setSelectedTaskGoalTitle(undefined);
   };
 
   const handleTaskDelete = async (task: any) => {
@@ -277,6 +280,7 @@ export default function JournalHistoryView() {
         task={selectedTask}
         onClose={handleTaskDetailClose}
         onDelete={handleTaskDelete}
+        goalTitle={selectedTaskGoalTitle}
       />
 
       <DepositIdeaDetailModal

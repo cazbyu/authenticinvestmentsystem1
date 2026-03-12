@@ -1092,7 +1092,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   activeOpacity={0.7}
                 >
                   <Target size={24} color={colors.primary} />
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>Leading Indicators Review</Text>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Goal Review</Text>
                   {expandedSections.leadingIndicators ? (
                     <ChevronUp size={20} color={colors.textSecondary} />
                   ) : (
