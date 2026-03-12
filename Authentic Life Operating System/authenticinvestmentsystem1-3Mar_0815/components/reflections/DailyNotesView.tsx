@@ -65,6 +65,7 @@ interface TimelineItem {
   priorityColor?: string;
   roles?: Array<{ id: string; label: string; color?: string }>;
   domains?: Array<{ id: string; name: string; color?: string }>;
+  goalTitle?: string;
 }
 
 interface DailyHistoryItemRow {
@@ -80,6 +81,7 @@ interface DailyHistoryItemRow {
   is_all_day: boolean;
   parent_id: string | null;
   parent_type: string | null;
+  goal_title: string | null;
 }
 
 interface DailyNotesViewProps {
@@ -408,6 +410,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
         },
         isActive: item.status !== 'completed' && item.status !== 'archived',
         priorityColor: getPriorityColor(item.priority),
+        goalTitle: item.goal_title || undefined,
       };
     });
 
@@ -470,6 +473,15 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
   const getItemTypeIcon = (type: TimelineItemType, item?: TimelineItem) => {
     const iconSize = 24;
     const imageSize = 20;
+
+    // If item has a goal (leading indicator), show Target icon
+    if (item?.goalTitle) {
+      return (
+        <View style={[styles.iconCircle, { backgroundColor: '#fef3c7' }]}>
+          <Target size={16} color="#d97706" />
+        </View>
+      );
+    }
 
     switch (type) {
       case 'rose':
@@ -848,7 +860,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                       {
                         backgroundColor: item.isActive ? '#f3f4f6' : colors.background,
                         borderColor: item.isActive && item.priorityColor ? item.priorityColor : colors.border,
-                        borderLeftColor: item.isActive && item.priorityColor ? item.priorityColor : getItemTypeBadgeColor(item.type),
+                        borderLeftColor: item.goalTitle ? '#d97706' : (item.isActive && item.priorityColor ? item.priorityColor : getItemTypeBadgeColor(item.type)),
                         borderLeftWidth: 3,
                         borderWidth: item.isActive ? 2 : 1,
                       },
@@ -858,7 +870,12 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
                   >
                     <View style={styles.noteHeader}>
                       <View style={styles.noteTitleContainer}>
-                        <Text style={[styles.noteTitle, { color: colors.text }]}>{displayTitle}</Text>
+                        <Text style={[styles.noteTitle, { color: colors.text }]}>
+                          {displayTitle}
+                          {item.goalTitle ? (
+                            <Text style={{ color: '#d97706', fontWeight: '400', fontSize: 13 }}> ({item.goalTitle})</Text>
+                          ) : null}
+                        </Text>
                         <Text style={[styles.noteTimestamp, { color: colors.textSecondary }]}>{timestamp}</Text>
                       </View>
                       {getItemTypeIcon(item.type, item)}
