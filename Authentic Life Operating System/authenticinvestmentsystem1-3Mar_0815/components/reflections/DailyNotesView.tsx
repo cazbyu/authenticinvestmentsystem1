@@ -349,7 +349,7 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
     });
 
     const historyItems: DailyHistoryItemRow[] = (historyData || []) as DailyHistoryItemRow[];
-    const noteBackedItems = historyItems.filter((item) => item.type !== 'reflection');
+    const noteBackedItems = historyItems.filter((item) => item.type !== 'reflection' && item.type !== 'rose' && item.type !== 'thorn');
 
     // Fetch notes for all note-backed items
     const parentIds = noteBackedItems.map(item => item.id);
@@ -427,27 +427,6 @@ export default function DailyNotesView({ selectedDate, onReflectionPress, onNote
       })),
     });
 
-console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
-  totalCount: combined.length,
-  items: combined.map(item => ({
-    id: item.id,
-    type: item.type,
-    title: item.title,
-    hasContent: !!item.content,
-    contentLength: item.content?.length || 0,
-    contentPreview: item.content?.substring(0, 50),
-    hasAttachments: !!(item.attachments && item.attachments.length > 0),
-    attachmentsCount: item.attachments?.length || 0,
-    hasNoteAttachments: !!(item.noteAttachments && item.noteAttachments.length > 0),
-    noteAttachmentsCount: item.noteAttachments?.length || 0,
-    passesFilter: !!(
-      item.content || 
-      (item.attachments && item.attachments.length > 0) || 
-      (item.noteAttachments && item.noteAttachments.length > 0)
-    ),
-  })),
-});
-    
     setTimelineItems(combined);
   };
 
@@ -492,13 +471,19 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
     const iconSize = 24;
     const imageSize = 20;
 
-    // Check if it's a reflection with rose/thorn metadata
-    if (type === 'reflection' && item) {
-      // Note: We'd need to check the reflection data for rose/thorn flags
-      // For now, using reflection image as default
-    }
-
     switch (type) {
+      case 'rose':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#fce7f3' }]}>
+            <Image source={roseImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
+      case 'thorn':
+        return (
+          <View style={[styles.iconCircle, { backgroundColor: '#f3f4f6' }]}>
+            <Image source={thornImage} style={{ width: imageSize, height: imageSize }} resizeMode="contain" />
+          </View>
+        );
       case 'task':
         return (
           <View style={[styles.iconCircle, { backgroundColor: '#dbeafe' }]}>
@@ -747,18 +732,9 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
         {timelineItems.length > 0 || showNoteInput ? (
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <View style={styles.notesHeader}>
-              {(() => {
-  const visibleItems = timelineItems.filter(item => 
-    item.content || 
-    (item.attachments && item.attachments.length > 0) || 
-    (item.noteAttachments && item.noteAttachments.length > 0)
-  );
-  return (
-    <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
-      Reflections & Daily Items {visibleItems.length > 0 && `(${visibleItems.length})`}
-    </Text>
-  );
-})()}
+              <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>
+                Reflections & Daily Items {timelineItems.length > 0 && `(${timelineItems.length})`}
+              </Text>
               <View style={styles.notesActions}>
                 <TouchableOpacity
                   onPress={handleAddNote}
@@ -848,13 +824,7 @@ console.log('[DailyNotes] Timeline items FILTER DEBUG:', {
                 )}
 
                 <View style={styles.notesList}>
-                  {timelineItems
-  .filter(item => 
-    item.content || 
-    (item.attachments && item.attachments.length > 0) || 
-    (item.noteAttachments && item.noteAttachments.length > 0)
-  )
-  .map((item) => {
+                  {timelineItems.map((item) => {
                 const reflectionAttachments = item.attachments || [];
                 const noteAttachments = item.noteAttachments || [];
                 const allAttachments = [...reflectionAttachments, ...noteAttachments];

@@ -5,6 +5,8 @@ import MonthlyCardsView from '../reflections/MonthlyCardsView';
 import MonthlyIndexView from '../reflections/MonthlyIndexView';
 import DailyViewModal from '../reflections/DailyViewModal';
 import { ReflectionDetailsModal } from '../reflections/ReflectionDetailsModal';
+import { ActionDetailsModal } from '../tasks/ActionDetailsModal';
+import { DepositIdeaDetailModal } from '../depositIdeas/DepositIdeaDetailModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ReflectionWithRelations, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 
@@ -16,9 +18,17 @@ export default function JournalHistoryView() {
   const [selectedMonth, setSelectedMonth] = useState<{ year: number; month: number; monthYear: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Detail modal state
+  // Reflection detail modal state
   const [selectedReflection, setSelectedReflection] = useState<ReflectionWithRelations | null>(null);
   const [isReflectionDetailVisible, setIsReflectionDetailVisible] = useState(false);
+
+  // Task/Event detail modal state
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [isTaskDetailVisible, setIsTaskDetailVisible] = useState(false);
+
+  // Deposit Idea detail modal state
+  const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
+  const [isDepositIdeaDetailVisible, setIsDepositIdeaDetailVisible] = useState(false);
 
   const handleMonthPress = (year: number, month: number, monthYear: string) => {
     setSelectedMonth({ year, month, monthYear });
@@ -108,8 +118,51 @@ export default function JournalHistoryView() {
       } catch (err) {
         console.error('[JournalHistory] Error opening reflection detail:', err);
       }
+    } else if (itemType === 'task' || itemType === 'event') {
+      // Fetch full task/event data and open ActionDetailsModal
+      try {
+        const supabase = getSupabaseClient();
+        const taskId = item.parentItem?.id || item.id;
+
+        const { data: taskData, error } = await supabase
+          .from('0008-ap-tasks')
+          .select('*')
+          .eq('id', taskId)
+          .single();
+
+        if (error || !taskData) {
+          console.error('[JournalHistory] Error fetching task:', error);
+          return;
+        }
+
+        setSelectedTask(taskData);
+        setIsTaskDetailVisible(true);
+      } catch (err) {
+        console.error('[JournalHistory] Error opening task detail:', err);
+      }
+    } else if (itemType === 'depositIdea') {
+      // Fetch full deposit idea data and open DepositIdeaDetailModal
+      try {
+        const supabase = getSupabaseClient();
+        const ideaId = item.parentItem?.id || item.id;
+
+        const { data: ideaData, error } = await supabase
+          .from('0008-ap-deposit-ideas')
+          .select('*')
+          .eq('id', ideaId)
+          .single();
+
+        if (error || !ideaData) {
+          console.error('[JournalHistory] Error fetching deposit idea:', error);
+          return;
+        }
+
+        setSelectedDepositIdea(ideaData);
+        setIsDepositIdeaDetailVisible(true);
+      } catch (err) {
+        console.error('[JournalHistory] Error opening deposit idea detail:', err);
+      }
     }
-    // Future: handle task, event, depositIdea, withdrawal types
   };
 
   const handleReflectionDetailClose = () => {
@@ -133,6 +186,58 @@ export default function JournalHistoryView() {
       console.error('[JournalHistory] Error deleting reflection:', err);
       Alert.alert('Error', 'Failed to delete reflection');
     }
+  };
+
+  const handleTaskDetailClose = () => {
+    setIsTaskDetailVisible(false);
+    setSelectedTask(null);
+  };
+
+  const handleTaskDelete = async (task: any) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tasks')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', task.id);
+
+      if (error) throw error;
+
+      setIsTaskDetailVisible(false);
+      setSelectedTask(null);
+    } catch (err) {
+      console.error('[JournalHistory] Error deleting task:', err);
+      Alert.alert('Error', 'Failed to delete task');
+    }
+  };
+
+  const handleDepositIdeaDetailClose = () => {
+    setIsDepositIdeaDetailVisible(false);
+    setSelectedDepositIdea(null);
+  };
+
+  const handleDepositIdeaDelete = async (idea: any) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .update({ archived: true })
+        .eq('id', idea.id);
+
+      if (error) throw error;
+
+      setIsDepositIdeaDetailVisible(false);
+      setSelectedDepositIdea(null);
+    } catch (err) {
+      console.error('[JournalHistory] Error archiving deposit idea:', err);
+      Alert.alert('Error', 'Failed to archive deposit idea');
+    }
+  };
+
+  const handleDepositIdeaActivate = (idea: any) => {
+    // Close modal - activation would typically open a form
+    setIsDepositIdeaDetailVisible(false);
+    setSelectedDepositIdea(null);
   };
 
   return (
@@ -165,6 +270,21 @@ export default function JournalHistoryView() {
         reflection={selectedReflection}
         onClose={handleReflectionDetailClose}
         onDelete={handleReflectionDelete}
+      />
+
+      <ActionDetailsModal
+        visible={isTaskDetailVisible}
+        task={selectedTask}
+        onClose={handleTaskDetailClose}
+        onDelete={handleTaskDelete}
+      />
+
+      <DepositIdeaDetailModal
+        visible={isDepositIdeaDetailVisible}
+        depositIdea={selectedDepositIdea}
+        onClose={handleDepositIdeaDetailClose}
+        onDelete={handleDepositIdeaDelete}
+        onActivate={handleDepositIdeaActivate}
       />
     </View>
   );
