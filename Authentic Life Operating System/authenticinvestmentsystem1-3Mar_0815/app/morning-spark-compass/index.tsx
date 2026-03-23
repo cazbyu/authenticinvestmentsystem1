@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   TextInput,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,6 +24,9 @@ import EnergyCheckStep from '@/components/morning-spark-v2/EnergyCheckStep';
 
 // Compass direction header
 import { CompassDirectionHeader } from '@/components/compass/CompassDirectionHeader';
+
+// TaskEventForm for pre-filled capture routing
+import TaskEventForm from '@/components/tasks/TaskEventForm';
 
 // Service layers
 import {
@@ -50,9 +54,12 @@ import {
   getWellnessGaps,
   getMissionTouch,
   saveMorningSparkSession,
-  CaptureAnalysis,
+  ParsedCaptureItem,
+  CaptureAnalysisResult,
+  TaskEventFormPrefill,
   analyzeCapture,
-  routeCapture,
+  buildFormPrefill,
+  getUserDomains,
 } from '@/lib/morningSparkCompassService';
 
 const STEPS = [
@@ -109,11 +116,15 @@ export default function MorningSparkCompassScreen() {
   const [roleFocus, setRoleFocus] = useState<RoleFocusData[]>([]);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(false);
+  // Capture flow state
   const [showCaptureInput, setShowCaptureInput] = useState(false);
   const [captureText, setCaptureText] = useState('');
-  const [captureAnalysisResult, setCaptureAnalysisResult] = useState<CaptureAnalysis | null>(null);
   const [captureAnalyzing, setCaptureAnalyzing] = useState(false);
-  const [captureRouted, setCaptureRouted] = useState(false);
+  const [parsedItems, setParsedItems] = useState<ParsedCaptureItem[]>([]);
+  const [currentItemIndex, setCurrentItemIndex] = useState(0);
+  const [showTaskEventForm, setShowTaskEventForm] = useState(false);
+  const [formPrefill, setFormPrefill] = useState<TaskEventFormPrefill | null>(null);
+  const [capturedCount, setCapturedCount] = useState(0);
 
   // Step 6: Wellness Pulse
   const [wellnessGaps, setWellnessGaps] = useState<WellnessGapData[]>([]);
@@ -944,8 +955,8 @@ export default function MorningSparkCompassScreen() {
                   </View>
                 ))}
 
-                {/* Capture prompt */}
-                {!showCaptureInput && !captureAnalysisResult && !captureRouted && (
+                {/* Initial capture prompt — before any analysis */}
+                {!showCaptureInput && parsedItems.length === 0 && (
                   <View style={{ marginTop: 24 }}>
                     <Text style={[styles.captureQuestion, { color: colors.text }]}>
                       Is there anything else you want to add or capture?
@@ -971,14 +982,14 @@ export default function MorningSparkCompassScreen() {
                 )}
 
                 {/* Capture text input */}
-                {showCaptureInput && !captureAnalysisResult && (
+                {showCaptureInput && parsedItems.length === 0 && (
                   <View style={{ marginTop: 16 }}>
                     <TextInput
                       style={[
                         styles.captureInput,
                         { color: colors.text, borderColor: '#9370DB', backgroundColor: colors.surface },
                       ]}
-                      placeholder="What's on your mind?"
+                      placeholder="What's on your mind? You can mention multiple things..."
                       placeholderTextColor={colors.textSecondary}
                       value={captureText}
                       onChangeText={setCaptureText}
@@ -995,7 +1006,9 @@ export default function MorningSparkCompassScreen() {
                         setCaptureAnalyzing(true);
                         try {
                           const result = await analyzeCapture(userId, captureText.trim(), roleFocus);
-                          setCaptureAnalysisResult(result);
+                          setParsedItems(result.items);
+                          setCurrentItemIndex(0);
+                          setShowCaptureInput(false);
                         } catch (err) {
                           console.error('Analysis failed:', err);
                           Alert.alert('Error', 'Could not analyze. Please try again.');
@@ -1013,83 +1026,130 @@ export default function MorningSparkCompassScreen() {
                   </View>
                 )}
 
-                {/* Analysis result — confirm or adjust */}
-                {captureAnalysisResult && !captureRouted && (
-                  <View style={[styles.analysisCard, { backgroundColor: colors.surface, borderColor: '#9370DB' }]}>
-                    <Text style={[styles.analysisLabel, { color: colors.textSecondary }]}>
-                      Development Director suggests:
-                    </Text>
-                    <Text style={[styles.analysisTitle, { color: colors.text }]}>
-                      {captureAnalysisResult.title}
-                    </Text>
-                    <View style={styles.analysisMeta}>
-                      <View style={[styles.analysisTag, { backgroundColor: '#9370DB' }]}>
-                        <Text style={styles.analysisTagText}>
-                          {captureAnalysisResult.suggested_type === 'depositIdea' ? 'Deposit Idea' : captureAnalysisResult.suggested_type}
-                        </Text>
-                      </View>
-                      {captureAnalysisResult.suggested_role_name && (
-                        <View style={[styles.analysisTag, { backgroundColor: '#4169E1' }]}>
-                          <Text style={styles.analysisTagText}>{captureAnalysisResult.suggested_role_name}</Text>
-                        </View>
-                      )}
-                      {captureAnalysisResult.suggested_domain_name && (
-                        <View style={[styles.analysisTag, { backgroundColor: '#39b54a' }]}>
-                          <Text style={styles.analysisTagText}>{captureAnalysisResult.suggested_domain_name}</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={[styles.analysisReasoning, { color: colors.textSecondary }]}>
-                      {captureAnalysisResult.reasoning}
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
-                      <TouchableOpacity
-                        style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 1 }]}
-                        onPress={async () => {
-                          try {
-                            await routeCapture(userId, captureAnalysisResult!);
-                            setCaptureRouted(true);
-                            if (Platform.OS !== 'web') {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            }
-                          } catch (err) {
-                            console.error('Route failed:', err);
-                            Alert.alert('Error', 'Could not save. Please try again.');
-                          }
-                        }}
-                      >
-                        <Text style={styles.captureOptionButtonText}>Looks Right</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, flex: 1 }]}
-                        onPress={() => {
-                          setCaptureAnalysisResult(null);
-                          setShowCaptureInput(true);
-                        }}
-                      >
-                        <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Try Again</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
+                {/* Walk through parsed items one at a time */}
+                {parsedItems.length > 0 && currentItemIndex < parsedItems.length && (() => {
+                  const item = parsedItems[currentItemIndex];
+                  const typeLabel = item.suggested_type === 'depositIdea' ? 'Deposit Idea' : item.suggested_type;
 
-                {/* Routed success — option to add more or continue */}
-                {captureRouted && (
+                  const handleConfirmItem = (finalItem: ParsedCaptureItem) => {
+                    const prefill = buildFormPrefill(finalItem);
+                    setFormPrefill(prefill);
+                    setShowTaskEventForm(true);
+                  };
+
+                  const handleChooseAlternative = () => {
+                    if (item.alternative_type) {
+                      const updated = { ...item, suggested_type: item.alternative_type, needs_clarification: false };
+                      const newItems = [...parsedItems];
+                      newItems[currentItemIndex] = updated;
+                      setParsedItems(newItems);
+                      handleConfirmItem(updated);
+                    }
+                  };
+
+                  return (
+                    <View style={[styles.analysisCard, { backgroundColor: colors.surface, borderColor: '#9370DB' }]}>
+                      <Text style={[styles.analysisLabel, { color: colors.textSecondary }]}>
+                        Item {currentItemIndex + 1} of {parsedItems.length}
+                      </Text>
+
+                      {/* Clarification question from DD */}
+                      {item.needs_clarification && item.clarification_question ? (
+                        <>
+                          <Text style={[styles.clarificationQuestion, { color: colors.text }]}>
+                            {item.clarification_question}
+                          </Text>
+                          <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
+                            <TouchableOpacity
+                              style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 1 }]}
+                              onPress={() => {
+                                const updated = { ...item, needs_clarification: false };
+                                const newItems = [...parsedItems];
+                                newItems[currentItemIndex] = updated;
+                                setParsedItems(newItems);
+                                handleConfirmItem(updated);
+                              }}
+                            >
+                              <Text style={styles.captureOptionButtonText}>
+                                Yes, it's a {typeLabel}
+                              </Text>
+                            </TouchableOpacity>
+                            {item.alternative_type && (
+                              <TouchableOpacity
+                                style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, flex: 1 }]}
+                                onPress={handleChooseAlternative}
+                              >
+                                <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>
+                                  It's a {item.alternative_type === 'depositIdea' ? 'Deposit Idea' : item.alternative_type}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </>
+                      ) : (
+                        /* No clarification needed — show suggestion and confirm */
+                        <>
+                          <Text style={[styles.analysisTitle, { color: colors.text }]}>
+                            {item.title}
+                          </Text>
+                          <View style={styles.analysisMeta}>
+                            <View style={[styles.analysisTag, { backgroundColor: '#9370DB' }]}>
+                              <Text style={styles.analysisTagText}>{typeLabel}</Text>
+                            </View>
+                            {item.suggested_role_name && (
+                              <View style={[styles.analysisTag, { backgroundColor: '#4169E1' }]}>
+                                <Text style={styles.analysisTagText}>{item.suggested_role_name}</Text>
+                              </View>
+                            )}
+                            {item.suggested_domain_name && (
+                              <View style={[styles.analysisTag, { backgroundColor: '#39b54a' }]}>
+                                <Text style={styles.analysisTagText}>{item.suggested_domain_name}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.analysisReasoning, { color: colors.textSecondary }]}>
+                            {item.reasoning}
+                          </Text>
+                          <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                            <TouchableOpacity
+                              style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 1 }]}
+                              onPress={() => handleConfirmItem(item)}
+                            >
+                              <Text style={styles.captureOptionButtonText}>Looks Right</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, flex: 1 }]}
+                              onPress={() => {
+                                // Skip this item
+                                setCurrentItemIndex(currentItemIndex + 1);
+                              }}
+                            >
+                              <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Skip</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  );
+                })()}
+
+                {/* All items processed — summary and continue */}
+                {parsedItems.length > 0 && currentItemIndex >= parsedItems.length && (
                   <View style={{ marginTop: 16, alignItems: 'center' }}>
                     <Text style={[styles.successText, { color: '#39b54a' }]}>
-                      Captured and filed!
+                      {capturedCount} {capturedCount === 1 ? 'item' : 'items'} captured!
                     </Text>
                     <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
                       <TouchableOpacity
                         style={[styles.captureOptionButton, { backgroundColor: '#9370DB' }]}
                         onPress={() => {
                           setCaptureText('');
-                          setCaptureAnalysisResult(null);
-                          setCaptureRouted(false);
+                          setParsedItems([]);
+                          setCurrentItemIndex(0);
                           setShowCaptureInput(true);
                         }}
                       >
-                        <Text style={styles.captureOptionButtonText}>Add Another</Text>
+                        <Text style={styles.captureOptionButtonText}>Add More</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
@@ -1103,6 +1163,37 @@ export default function MorningSparkCompassScreen() {
                     </View>
                   </View>
                 )}
+
+                {/* TaskEventForm Modal — pre-filled from DD analysis */}
+                <Modal visible={showTaskEventForm} animationType="slide" presentationStyle="fullScreen">
+                  <TaskEventForm
+                    mode="create"
+                    preSelectedType={formPrefill?.type}
+                    initialData={formPrefill ? {
+                      title: formPrefill.title,
+                      type: formPrefill.type,
+                      selectedRoleIds: formPrefill.selectedRoleIds,
+                      selectedDomainIds: formPrefill.selectedDomainIds,
+                      is_deposit_idea: formPrefill.is_deposit_idea,
+                    } : undefined}
+                    onClose={() => {
+                      setShowTaskEventForm(false);
+                      setFormPrefill(null);
+                      // Move to next item
+                      setCurrentItemIndex(currentItemIndex + 1);
+                    }}
+                    onSubmitSuccess={() => {
+                      setShowTaskEventForm(false);
+                      setFormPrefill(null);
+                      setCapturedCount((c) => c + 1);
+                      if (Platform.OS !== 'web') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }
+                      // Move to next item
+                      setCurrentItemIndex(currentItemIndex + 1);
+                    }}
+                  />
+                </Modal>
               </>
             )}
           </ScrollView>
@@ -1681,6 +1772,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic' as const,
     lineHeight: 20,
+  },
+  clarificationQuestion: {
+    fontSize: 16,
+    lineHeight: 24,
+    marginVertical: 12,
+    fontWeight: '500',
   },
 
   // Wellness

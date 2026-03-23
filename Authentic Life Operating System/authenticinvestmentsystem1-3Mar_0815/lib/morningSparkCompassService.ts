@@ -462,36 +462,72 @@ export async function saveMorningSparkSession(
 
 // ============ CAPTURE ANALYSIS (Development Director / Coach) ============
 
-export interface CaptureAnalysis {
-  suggested_type: 'task' | 'event' | 'reflection' | 'rose' | 'thorn' | 'depositIdea';
+export interface ParsedCaptureItem {
+  /** Clean title for the item */
   title: string;
+  /** DD's best guess at item type */
+  suggested_type: 'task' | 'event' | 'reflection' | 'rose' | 'thorn' | 'depositIdea';
+  /** If true, DD is uncertain and wants to ask the user a clarifying question */
+  needs_clarification: boolean;
+  /** The clarifying question to ask the user (e.g. "Are you committing to this or is it an idea?") */
+  clarification_question: string | null;
+  /** Alternative type if user answers the clarification differently */
+  alternative_type: 'task' | 'event' | 'reflection' | 'rose' | 'thorn' | 'depositIdea' | null;
+  /** Role suggestions */
   suggested_role_id: string | null;
   suggested_role_name: string | null;
+  /** Domain/wellness zone suggestions */
   suggested_domain_id: string | null;
   suggested_domain_name: string | null;
+  /** Brief reasoning */
   reasoning: string;
 }
 
+export interface CaptureAnalysisResult {
+  items: ParsedCaptureItem[];
+}
+
+/** Data needed to pre-fill TaskEventForm */
+export interface TaskEventFormPrefill {
+  title: string;
+  type: 'task' | 'event' | 'depositIdea' | 'reflection';
+  selectedRoleIds: string[];
+  selectedDomainIds: string[];
+  is_deposit_idea?: boolean;
+}
+
 /**
- * Analyze user free text and suggest what type of item it is,
- * plus which role and wellness zone it belongs to.
+ * Fetch wellness domains for the user (cached per call for reuse).
+ */
+export async function getUserDomains(userId: string): Promise<Array<{ id: string; label: string }>> {
+  const supabase = getSupabaseClient();
+  const { data } = await supabase
+    .from('0008-ap-domains')
+    .select('id, label')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+  return data || [];
+}
+
+/**
+ * Analyze user free text — splits into multiple items, each with type suggestion,
+ * role/domain mapping, and optional clarification questions.
  */
 export async function analyzeCapture(
   userId: string,
   text: string,
   roles: RoleFocusData[],
-): Promise<CaptureAnalysis> {
+  domains?: Array<{ id: string; label: string }>,
+): Promise<CaptureAnalysisResult> {
   const supabase = getSupabaseClient();
 
-  // Get wellness domains for context
-  const { data: domains } = await supabase
-    .from('0008-ap-domains')
-    .select('id, label')
-    .eq('user_id', userId)
-    .eq('is_active', true);
+  // Get domains if not provided
+  if (!domains) {
+    domains = await getUserDomains(userId);
+  }
 
   const roleContext = roles.map((r) => `${r.role_name} (id: ${r.role_id})`).join(', ');
-  const domainContext = (domains || []).map((d: { id: string; label: string }) => `${d.label} (id: ${d.id})`).join(', ');
+  const domainContext = domains.map((d) => `${d.label} (id: ${d.id})`).join(', ');
 
   try {
     const { data, error } = await supabase.functions.invoke('alignment-coach', {
@@ -502,20 +538,36 @@ export async function analyzeCapture(
         messages: [
           {
             role: 'system',
-            content: `You are the Development Director. Analyze this user input and return a JSON object with these fields:
+            content: `You are the Development Director — a thoughtful coach helping someone organize their thoughts into action.
+
+Your job: Parse the user's free-text input and break it into SEPARATE items. The user may mention multiple things in one sentence or paragraph. Split them intelligently.
+
+For each item, return:
+- title: a clean, concise action title (rewrite vague language into clear titles)
 - suggested_type: one of "task", "event", "reflection", "rose", "thorn", "depositIdea"
-  (task = actionable to-do, event = calendar item with time/date, reflection = general thought, rose = something positive/grateful, thorn = a challenge/frustration, depositIdea = idea to explore later)
-- title: a clean, concise title for the item
+  - task = a concrete, actionable commitment ("Do X by Y")
+  - event = something with a specific time/date ("Meet with X at noon")
+  - reflection = a thought or realization worth capturing
+  - rose = something positive, grateful, or celebratory
+  - thorn = a challenge, frustration, or difficulty
+  - depositIdea = a "maybe someday" idea, not a firm commitment
+- needs_clarification: boolean — set TRUE when the language is ambiguous
+  Examples of ambiguity: "I want to..." (commitment or wish?), "I should..." (task or idea?), "Maybe I could..." (idea or task?)
+- clarification_question: if needs_clarification is true, write a brief, conversational question to ask. Examples:
+  "Are you committing to take your wife to lunch today, or is that an idea you're parking for later?"
+  "Is the thank-you email something you'll do today, or more of a reminder for when you get to it?"
+- alternative_type: if needs_clarification is true, what would the type be if the user answers differently (e.g. "depositIdea" if the suggested_type is "task")
 - suggested_role_id: the role ID it most relates to, or null
-- suggested_role_name: the role name it most relates to, or null
-- suggested_domain_id: the wellness domain ID it most relates to, or null
-- suggested_domain_name: the wellness domain name it most relates to, or null
-- reasoning: a brief one-sentence explanation of why you categorized it this way
+- suggested_role_name: the role name, or null
+- suggested_domain_id: the wellness domain ID, or null
+- suggested_domain_name: the wellness domain name, or null
+- reasoning: one brief sentence explaining your categorization
 
 Available roles: ${roleContext}
 Available wellness domains: ${domainContext}
 
-Return ONLY valid JSON, no markdown.`,
+Return a JSON object with a single "items" array. Return ONLY valid JSON, no markdown fences.
+Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "...", ...}]}`,
           },
           { role: 'user', content: text },
         ],
@@ -524,127 +576,97 @@ Return ONLY valid JSON, no markdown.`,
 
     if (error) throw error;
 
-    // Parse the coach response — it may be in data.message or data directly
-    const responseText = typeof data === 'string' ? data : data?.message || JSON.stringify(data);
+    // Parse the response
+    const responseText = typeof data === 'string' ? data : data?.text || data?.message || JSON.stringify(data);
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        suggested_type: parsed.suggested_type || 'task',
-        title: parsed.title || text.trim(),
-        suggested_role_id: parsed.suggested_role_id || null,
-        suggested_role_name: parsed.suggested_role_name || null,
-        suggested_domain_id: parsed.suggested_domain_id || null,
-        suggested_domain_name: parsed.suggested_domain_name || null,
-        reasoning: parsed.reasoning || '',
-      };
+      const items: ParsedCaptureItem[] = (parsed.items || [parsed]).map((item: any) => ({
+        title: item.title || text.trim(),
+        suggested_type: item.suggested_type || 'task',
+        needs_clarification: item.needs_clarification || false,
+        clarification_question: item.clarification_question || null,
+        alternative_type: item.alternative_type || null,
+        suggested_role_id: item.suggested_role_id || null,
+        suggested_role_name: item.suggested_role_name || null,
+        suggested_domain_id: item.suggested_domain_id || null,
+        suggested_domain_name: item.suggested_domain_name || null,
+        reasoning: item.reasoning || '',
+      }));
+      return { items };
     }
   } catch (err) {
-    console.error('Capture analysis failed, using defaults:', err);
+    console.error('Capture analysis failed, using fallback:', err);
   }
 
-  // Fallback: simple heuristics
+  // Fallback: treat as single item with heuristic typing
   const lower = text.toLowerCase();
-  let type: CaptureAnalysis['suggested_type'] = 'task';
-  if (lower.includes('grateful') || lower.includes('thankful') || lower.includes('loved')) type = 'rose';
-  else if (lower.includes('frustrated') || lower.includes('struggle') || lower.includes('hard')) type = 'thorn';
-  else if (lower.includes('idea') || lower.includes('maybe') || lower.includes('could')) type = 'depositIdea';
-  else if (lower.includes('meeting') || lower.includes('call') || lower.includes('appointment')) type = 'event';
-  else if (lower.includes('think') || lower.includes('feel') || lower.includes('realize')) type = 'reflection';
+  let type: ParsedCaptureItem['suggested_type'] = 'task';
+  let needsClarification = false;
+  let clarificationQ: string | null = null;
+  let altType: ParsedCaptureItem['suggested_type'] | null = null;
+
+  if (lower.includes('i want') || lower.includes('i should') || lower.includes('maybe')) {
+    needsClarification = true;
+    clarificationQ = 'Are you committing to do this, or is it more of an idea to explore later?';
+    altType = 'depositIdea';
+  } else if (lower.includes('grateful') || lower.includes('thankful')) {
+    type = 'rose';
+  } else if (lower.includes('frustrated') || lower.includes('struggle')) {
+    type = 'thorn';
+  } else if (lower.includes('idea') || lower.includes('could')) {
+    type = 'depositIdea';
+  } else if (lower.includes('meeting') || lower.includes('call') || lower.includes('at noon') || lower.includes('appointment')) {
+    type = 'event';
+  }
 
   return {
-    suggested_type: type,
-    title: text.trim(),
-    suggested_role_id: null,
-    suggested_role_name: null,
-    suggested_domain_id: null,
-    suggested_domain_name: null,
-    reasoning: 'Auto-categorized based on keywords',
+    items: [{
+      title: text.trim(),
+      suggested_type: type,
+      needs_clarification: needsClarification,
+      clarification_question: clarificationQ,
+      alternative_type: altType,
+      suggested_role_id: null,
+      suggested_role_name: null,
+      suggested_domain_id: null,
+      suggested_domain_name: null,
+      reasoning: 'Auto-categorized (coach unavailable)',
+    }],
   };
 }
 
 /**
- * Route an analyzed capture to the appropriate table with role/domain joins.
+ * Build a pre-fill object for TaskEventForm from a finalized capture item.
+ * Maps rose/thorn to reflection type for the form.
  */
-export async function routeCapture(
-  userId: string,
-  analysis: CaptureAnalysis,
-): Promise<{ id: string; type: string }> {
-  const supabase = getSupabaseClient();
-  let insertedId: string;
-  let parentType: string;
-
-  switch (analysis.suggested_type) {
+export function buildFormPrefill(item: ParsedCaptureItem): TaskEventFormPrefill {
+  // Map item types to form types
+  let formType: TaskEventFormPrefill['type'];
+  switch (item.suggested_type) {
     case 'task':
-    case 'event': {
-      const { data, error } = await supabase
-        .from('0008-ap-tasks')
-        .insert({
-          title: analysis.title,
-          user_id: userId,
-          status: 'pending',
-          type: analysis.suggested_type,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
-      insertedId = data.id;
-      parentType = 'task';
+      formType = 'task';
       break;
-    }
+    case 'event':
+      formType = 'event';
+      break;
+    case 'depositIdea':
+      formType = 'depositIdea';
+      break;
     case 'rose':
     case 'thorn':
-    case 'reflection': {
-      const { data, error } = await supabase
-        .from('0008-ap-reflections')
-        .insert({
-          user_id: userId,
-          content: analysis.title,
-          reflection_type: 'daily',
-          date: toLocalISOString(new Date()).split('T')[0],
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
-      insertedId = data.id;
-      parentType = 'reflection';
+    case 'reflection':
+      formType = 'reflection';
       break;
-    }
-    case 'depositIdea': {
-      const { data, error } = await supabase
-        .from('0008-ap-deposit-ideas')
-        .insert({
-          title: analysis.title,
-          user_id: userId,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
-      insertedId = data.id;
-      parentType = 'depositIdea';
-      break;
-    }
     default:
-      throw new Error(`Unknown type: ${analysis.suggested_type}`);
+      formType = 'task';
   }
 
-  // Add role join if suggested
-  if (analysis.suggested_role_id) {
-    await supabase.from('0008-ap-universal-roles-join').insert({
-      parent_id: insertedId,
-      parent_type: parentType,
-      role_id: analysis.suggested_role_id,
-    });
-  }
-
-  // Add domain join if suggested
-  if (analysis.suggested_domain_id) {
-    await supabase.from('0008-ap-universal-domains-join').insert({
-      parent_id: insertedId,
-      parent_type: parentType,
-      domain_id: analysis.suggested_domain_id,
-    });
-  }
-
-  return { id: insertedId, type: analysis.suggested_type };
+  return {
+    title: item.title,
+    type: formType,
+    selectedRoleIds: item.suggested_role_id ? [item.suggested_role_id] : [],
+    selectedDomainIds: item.suggested_domain_id ? [item.suggested_domain_id] : [],
+    is_deposit_idea: item.suggested_type === 'depositIdea',
+  };
 }
