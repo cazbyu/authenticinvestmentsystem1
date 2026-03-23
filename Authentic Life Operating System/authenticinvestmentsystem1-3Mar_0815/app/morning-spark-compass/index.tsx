@@ -9,13 +9,12 @@ import {
   Platform,
   ScrollView,
   TextInput,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ChevronLeft, ChevronRight, X, Compass } from 'lucide-react-native';
-import Svg, { Circle, Path, Polygon } from 'react-native-svg';
+import { LifeCompass } from '@/components/compass/LifeCompass';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 
@@ -53,8 +52,6 @@ import {
   saveMorningSparkSession,
 } from '@/lib/morningSparkCompassService';
 
-const GOLD = '#D4A843';
-
 const STEPS = [
   { key: 'opening', label: 'Opening', icon: '\uD83E\uDDED', color: GOLD },
   { key: 'south_fuel', label: 'Fuel Check', icon: '\u26A1', color: '#F57F17' },
@@ -77,9 +74,7 @@ export default function MorningSparkCompassScreen() {
   const [currentStep, setCurrentStep] = useState(0);
   const [startedAt] = useState<string>(new Date().toISOString());
 
-  // Step 0: Opening animation
-  const compassRotation = useRef(new Animated.Value(0)).current;
-  const openingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Step 0: Opening (LifeCompass handles its own ceremony animation)
 
   // Step 1: Brain Dump Handoff
   const [brainDumpData, setBrainDumpData] = useState<UnprocessedBrainDump | null>(null);
@@ -126,7 +121,6 @@ export default function MorningSparkCompassScreen() {
   useEffect(() => {
     loadInitialData();
     return () => {
-      if (openingTimerRef.current) clearTimeout(openingTimerRef.current);
       if (missionTimerRef.current) clearTimeout(missionTimerRef.current);
     };
   }, []);
@@ -152,24 +146,7 @@ export default function MorningSparkCompassScreen() {
     }
   }
 
-  // ---- Opening animation (step 0) ----
-
-  useEffect(() => {
-    if (currentStep === 0) {
-      Animated.timing(compassRotation, {
-        toValue: 180,
-        duration: 1500,
-        useNativeDriver: true,
-      }).start();
-
-      openingTimerRef.current = setTimeout(() => {
-        goToNextStep();
-      }, 2000);
-    }
-    return () => {
-      if (openingTimerRef.current) clearTimeout(openingTimerRef.current);
-    };
-  }, [currentStep]);
+  // Opening animation is handled by LifeCompass ceremony (onCeremonyComplete → goToNextStep)
 
   // ---- Mission auto-advance (step 7) ----
 
@@ -491,61 +468,17 @@ export default function MorningSparkCompassScreen() {
 
   const renderStepContent = () => {
     switch (currentStep) {
-      // ======== STEP 0: Opening ========
-      case 0: {
-        const spin = compassRotation.interpolate({
-          inputRange: [0, 180],
-          outputRange: ['0deg', '180deg'],
-        });
+      // ======== STEP 0: Opening — LifeCompass ceremony (spindles to South) ========
+      case 0:
         return (
           <View style={styles.centeredContent}>
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <Svg viewBox="0 0 288 288" width={220} height={220}>
-                <Circle cx="144" cy="144" r="113.76" fill="none" stroke={GOLD} strokeWidth="2" opacity={0.4} />
-                <Circle cx="144" cy="144" r="112" fill="none" stroke="rgba(212,168,67,0.15)" strokeWidth="1" />
-                <Circle cx="144" cy="144" r="86.4" fill="none" stroke={GOLD} strokeWidth="1.5" opacity={0.3} />
-                {[0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165].map((deg) => {
-                  const rad1 = (deg * Math.PI) / 180;
-                  const rad2 = ((deg + 180) * Math.PI) / 180;
-                  return (
-                    <Path
-                      key={deg}
-                      d={`M${144 + 102 * Math.sin(rad1)},${144 - 102 * Math.cos(rad1)} L${144 + 102 * Math.sin(rad2)},${144 - 102 * Math.cos(rad2)}`}
-                      stroke="rgba(212,168,67,0.12)"
-                      strokeWidth="1"
-                    />
-                  );
-                })}
-                <Circle cx="144" cy="144" r="102" fill={colors.background} />
-                <Polygon points="172.3,115.7 144,0 115.7,115.7 0,144 115.7,172.3 144,288 172.3,172.3 288,144" fill={GOLD} opacity={0.9} />
-                <Polygon points="144,144 144,279.56 170.64,170.64" fill="rgba(26,26,46,0.3)" />
-                <Polygon points="144,144 144,279.56 117.36,170.64" fill={GOLD} opacity={0.7} />
-                <Polygon points="144,144 279.56,144 170.64,117.36" fill="rgba(26,26,46,0.3)" />
-                <Polygon points="144,144 279.56,144 170.64,170.64" fill={GOLD} opacity={0.7} />
-                <Polygon points="144,144 144,8.44 117.36,117.36" fill="rgba(26,26,46,0.3)" />
-                <Polygon points="144,144 144,8.44 170.64,117.36" fill={GOLD} opacity={0.7} />
-                <Polygon points="144,144 8.44,144 117.36,170.64" fill="rgba(26,26,46,0.3)" />
-                <Polygon points="144,144 8.44,144 117.36,117.36" fill={GOLD} opacity={0.7} />
-                <Polygon points="144,112.87 64.8,64.8 112.87,144 64.8,223.2 144,175.13 223.2,223.2 175.13,144 223.2,64.8" fill={GOLD} opacity={0.6} />
-                <Polygon points="144,144 211.78,211.78 170.64,144" fill="rgba(26,26,46,0.4)" />
-                <Polygon points="144,144 211.78,211.78 144,170.64" fill={GOLD} opacity={0.5} />
-                <Polygon points="144,144 211.78,76.22 144,117.36" fill="rgba(26,26,46,0.4)" />
-                <Polygon points="144,144 211.78,76.22 170.64,144" fill={GOLD} opacity={0.5} />
-                <Polygon points="144,144 69.44,69.44 114.7,144" fill="rgba(26,26,46,0.4)" />
-                <Polygon points="144,144 69.44,69.44 144,114.7" fill={GOLD} opacity={0.5} />
-                <Polygon points="144,144 76.22,211.78 144,170.64" fill="rgba(26,26,46,0.4)" />
-                <Polygon points="144,144 76.22,211.78 117.36,144" fill={GOLD} opacity={0.5} />
-                <Circle cx="144" cy="144" r="24.48" fill={colors.background} />
-                <Circle cx="144" cy="144" r="20.16" fill={GOLD} opacity={0.8} />
-                <Circle cx="144" cy="144" r="16.8" fill={colors.background} />
-                <Circle cx="144" cy="144" r="10.35" fill={GOLD} opacity={0.6} />
-                <Polygon points="121.73,144.02 143.91,48.12 166.27,143.98 144.09,239.88" fill={GOLD} />
-                <Circle cx="144" cy="144" r="3.6" fill={colors.background} />
-              </Svg>
-            </Animated.View>
+            <LifeCompass
+              size={260}
+              contextMode="morning_spark"
+              onCeremonyComplete={goToNextStep}
+            />
           </View>
         );
-      }
 
       // ======== STEP 1: Fuel Check ========
       case 1:
