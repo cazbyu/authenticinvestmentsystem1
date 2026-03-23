@@ -348,8 +348,7 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
       .from('0008-ap-goals-12wk')
       .select('id, title, user_global_timeline_id')
       .eq('user_id', userId)
-      .neq('status', 'completed')
-      .is('deleted_at', null),
+      .neq('status', 'completed'),
     supabase
       .from('0008-ap-goals-custom')
       .select('id, title, custom_timeline_id')
