@@ -44,6 +44,7 @@ export interface RoleFocusData {
   role_name: string;
   role_mission: string | null;
   slot_code: string;
+  pending_task_count: number;
 }
 
 export interface WellnessGapData {
@@ -301,6 +302,26 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
 
   if (rolesError || !roles) return [];
 
+  // Get pending task counts per role via universal-roles-join
+  const taskCountMap: Record<string, number> = {};
+  for (const roleId of roleIds) {
+    const { count } = await supabase
+      .from('0008-ap-universal-roles-join')
+      .select('parent_id', { count: 'exact', head: true })
+      .eq('role_id', roleId)
+      .eq('parent_type', 'task')
+      .in('parent_id',
+        (await supabase
+          .from('0008-ap-tasks')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', 'pending')
+          .is('deleted_at', null)
+        ).data?.map((t: { id: string }) => t.id) || []
+      );
+    taskCountMap[roleId] = count || 0;
+  }
+
   return mappings.map((m) => {
     const role = roles.find((r) => r.id === m.mapped_entity_id);
     return {
@@ -308,6 +329,7 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
       role_name: role?.label || m.mapped_entity_label || 'Unknown Role',
       role_mission: role?.role_mission || null,
       slot_code: m.slot_code,
+      pending_task_count: taskCountMap[m.mapped_entity_id] || 0,
     };
   });
 }
@@ -436,4 +458,193 @@ export async function saveMorningSparkSession(
 
   if (error) throw error;
   return inserted.id;
+}
+
+// ============ CAPTURE ANALYSIS (Development Director / Coach) ============
+
+export interface CaptureAnalysis {
+  suggested_type: 'task' | 'event' | 'reflection' | 'rose' | 'thorn' | 'depositIdea';
+  title: string;
+  suggested_role_id: string | null;
+  suggested_role_name: string | null;
+  suggested_domain_id: string | null;
+  suggested_domain_name: string | null;
+  reasoning: string;
+}
+
+/**
+ * Analyze user free text and suggest what type of item it is,
+ * plus which role and wellness zone it belongs to.
+ */
+export async function analyzeCapture(
+  userId: string,
+  text: string,
+  roles: RoleFocusData[],
+): Promise<CaptureAnalysis> {
+  const supabase = getSupabaseClient();
+
+  // Get wellness domains for context
+  const { data: domains } = await supabase
+    .from('0008-ap-domains')
+    .select('id, label')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  const roleContext = roles.map((r) => `${r.role_name} (id: ${r.role_id})`).join(', ');
+  const domainContext = (domains || []).map((d: { id: string; label: string }) => `${d.label} (id: ${d.id})`).join(', ');
+
+  try {
+    const { data, error } = await supabase.functions.invoke('alignment-coach', {
+      body: {
+        mode: 'morning',
+        trigger: 'capture_analysis',
+        user_state: { roles: roleContext, domains: domainContext },
+        messages: [
+          {
+            role: 'system',
+            content: `You are the Development Director. Analyze this user input and return a JSON object with these fields:
+- suggested_type: one of "task", "event", "reflection", "rose", "thorn", "depositIdea"
+  (task = actionable to-do, event = calendar item with time/date, reflection = general thought, rose = something positive/grateful, thorn = a challenge/frustration, depositIdea = idea to explore later)
+- title: a clean, concise title for the item
+- suggested_role_id: the role ID it most relates to, or null
+- suggested_role_name: the role name it most relates to, or null
+- suggested_domain_id: the wellness domain ID it most relates to, or null
+- suggested_domain_name: the wellness domain name it most relates to, or null
+- reasoning: a brief one-sentence explanation of why you categorized it this way
+
+Available roles: ${roleContext}
+Available wellness domains: ${domainContext}
+
+Return ONLY valid JSON, no markdown.`,
+          },
+          { role: 'user', content: text },
+        ],
+      },
+    });
+
+    if (error) throw error;
+
+    // Parse the coach response — it may be in data.message or data directly
+    const responseText = typeof data === 'string' ? data : data?.message || JSON.stringify(data);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        suggested_type: parsed.suggested_type || 'task',
+        title: parsed.title || text.trim(),
+        suggested_role_id: parsed.suggested_role_id || null,
+        suggested_role_name: parsed.suggested_role_name || null,
+        suggested_domain_id: parsed.suggested_domain_id || null,
+        suggested_domain_name: parsed.suggested_domain_name || null,
+        reasoning: parsed.reasoning || '',
+      };
+    }
+  } catch (err) {
+    console.error('Capture analysis failed, using defaults:', err);
+  }
+
+  // Fallback: simple heuristics
+  const lower = text.toLowerCase();
+  let type: CaptureAnalysis['suggested_type'] = 'task';
+  if (lower.includes('grateful') || lower.includes('thankful') || lower.includes('loved')) type = 'rose';
+  else if (lower.includes('frustrated') || lower.includes('struggle') || lower.includes('hard')) type = 'thorn';
+  else if (lower.includes('idea') || lower.includes('maybe') || lower.includes('could')) type = 'depositIdea';
+  else if (lower.includes('meeting') || lower.includes('call') || lower.includes('appointment')) type = 'event';
+  else if (lower.includes('think') || lower.includes('feel') || lower.includes('realize')) type = 'reflection';
+
+  return {
+    suggested_type: type,
+    title: text.trim(),
+    suggested_role_id: null,
+    suggested_role_name: null,
+    suggested_domain_id: null,
+    suggested_domain_name: null,
+    reasoning: 'Auto-categorized based on keywords',
+  };
+}
+
+/**
+ * Route an analyzed capture to the appropriate table with role/domain joins.
+ */
+export async function routeCapture(
+  userId: string,
+  analysis: CaptureAnalysis,
+): Promise<{ id: string; type: string }> {
+  const supabase = getSupabaseClient();
+  let insertedId: string;
+  let parentType: string;
+
+  switch (analysis.suggested_type) {
+    case 'task':
+    case 'event': {
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .insert({
+          title: analysis.title,
+          user_id: userId,
+          status: 'pending',
+          type: analysis.suggested_type,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'task';
+      break;
+    }
+    case 'rose':
+    case 'thorn':
+    case 'reflection': {
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: userId,
+          content: analysis.title,
+          reflection_type: 'daily',
+          date: toLocalISOString(new Date()).split('T')[0],
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'reflection';
+      break;
+    }
+    case 'depositIdea': {
+      const { data, error } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .insert({
+          title: analysis.title,
+          user_id: userId,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'depositIdea';
+      break;
+    }
+    default:
+      throw new Error(`Unknown type: ${analysis.suggested_type}`);
+  }
+
+  // Add role join if suggested
+  if (analysis.suggested_role_id) {
+    await supabase.from('0008-ap-universal-roles-join').insert({
+      parent_id: insertedId,
+      parent_type: parentType,
+      role_id: analysis.suggested_role_id,
+    });
+  }
+
+  // Add domain join if suggested
+  if (analysis.suggested_domain_id) {
+    await supabase.from('0008-ap-universal-domains-join').insert({
+      parent_id: insertedId,
+      parent_type: parentType,
+      domain_id: analysis.suggested_domain_id,
+    });
+  }
+
+  return { id: insertedId, type: analysis.suggested_type };
 }

@@ -50,10 +50,13 @@ import {
   getWellnessGaps,
   getMissionTouch,
   saveMorningSparkSession,
+  CaptureAnalysis,
+  analyzeCapture,
+  routeCapture,
 } from '@/lib/morningSparkCompassService';
 
 const STEPS = [
-  { key: 'opening', label: 'Opening', icon: '\uD83E\uDDED', color: GOLD },
+  { key: 'opening', label: 'Opening', icon: '\uD83E\uDDED', color: '#D4A843' },
   { key: 'south_fuel', label: 'Fuel Check', icon: '\u26A1', color: '#F57F17' },
   { key: 'south_handoff', label: 'Brain Dump Handoff', icon: '\uD83D\uDCCB', color: '#4169E1' },
   { key: 'south_commit', label: "Today's Commitments", icon: '\u2705', color: '#4169E1' },
@@ -61,7 +64,7 @@ const STEPS = [
   { key: 'west', label: 'Role Focus', icon: '\uD83D\uDC65', color: '#9370DB' },
   { key: 'east', label: 'Wellness Pulse', icon: '\uD83C\uDF3F', color: '#39b54a' },
   { key: 'north', label: 'Mission Touch', icon: '\u2B50', color: '#ed1c24' },
-  { key: 'sendoff', label: 'Send-off', icon: '\uD83D\uDE80', color: GOLD },
+  { key: 'sendoff', label: 'Send-off', icon: '\uD83D\uDE80', color: '#D4A843' },
 ];
 
 export default function MorningSparkCompassScreen() {
@@ -106,6 +109,11 @@ export default function MorningSparkCompassScreen() {
   const [roleFocus, setRoleFocus] = useState<RoleFocusData[]>([]);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState(false);
+  const [showCaptureInput, setShowCaptureInput] = useState(false);
+  const [captureText, setCaptureText] = useState('');
+  const [captureAnalysisResult, setCaptureAnalysisResult] = useState<CaptureAnalysis | null>(null);
+  const [captureAnalyzing, setCaptureAnalyzing] = useState(false);
+  const [captureRouted, setCaptureRouted] = useState(false);
 
   // Step 6: Wellness Pulse
   const [wellnessGaps, setWellnessGaps] = useState<WellnessGapData[]>([]);
@@ -906,49 +914,195 @@ export default function MorningSparkCompassScreen() {
               </View>
             ) : (
               <>
-                {roleFocus.map((role) => {
-                  const isSelected = selectedRole === role.role_name;
-                  return (
-                    <TouchableOpacity
-                      key={role.role_id}
-                      style={[
-                        styles.roleCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: isSelected ? '#9370DB' : colors.border,
-                          borderWidth: isSelected ? 2 : 1,
-                        },
-                      ]}
-                      onPress={() => setSelectedRole(role.role_name)}
-                    >
+                <Text style={[styles.roleIntroText, { color: colors.text }]}>
+                  These are the roles you plan to invest in today.
+                </Text>
+
+                {roleFocus.map((role) => (
+                  <View
+                    key={role.role_id}
+                    style={[
+                      styles.roleCard,
+                      { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Text style={[styles.roleName, { color: colors.text }]}>
                         {role.role_name}
                       </Text>
-                      {role.role_mission && (
-                        <Text
-                          style={[
-                            styles.roleMission,
-                            { color: colors.textSecondary, fontStyle: 'italic' },
-                          ]}
-                        >
-                          {role.role_mission}
-                        </Text>
+                      <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
+                        ({role.pending_task_count} {role.pending_task_count === 1 ? 'task' : 'tasks'})
+                      </Text>
+                    </View>
+                    {role.role_mission && (
+                      <Text
+                        style={[styles.roleMission, { color: colors.textSecondary, fontStyle: 'italic' }]}
+                      >
+                        {role.role_mission}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+
+                {/* Capture prompt */}
+                {!showCaptureInput && !captureAnalysisResult && !captureRouted && (
+                  <View style={{ marginTop: 24 }}>
+                    <Text style={[styles.captureQuestion, { color: colors.text }]}>
+                      Is there anything else you want to add or capture?
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                      <TouchableOpacity
+                        style={[styles.captureOptionButton, { backgroundColor: '#9370DB' }]}
+                        onPress={() => setShowCaptureInput(true)}
+                      >
+                        <Text style={styles.captureOptionButtonText}>Yes</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                        onPress={() => {
+                          setSelectedRole(roleFocus[0]?.role_name || null);
+                          goToNextStep();
+                        }}
+                      >
+                        <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Not Right Now</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Capture text input */}
+                {showCaptureInput && !captureAnalysisResult && (
+                  <View style={{ marginTop: 16 }}>
+                    <TextInput
+                      style={[
+                        styles.captureInput,
+                        { color: colors.text, borderColor: '#9370DB', backgroundColor: colors.surface },
+                      ]}
+                      placeholder="What's on your mind?"
+                      placeholderTextColor={colors.textSecondary}
+                      value={captureText}
+                      onChangeText={setCaptureText}
+                      multiline
+                      autoFocus
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmButton,
+                        { backgroundColor: captureText.trim() ? '#9370DB' : colors.border, marginTop: 12 },
+                      ]}
+                      disabled={!captureText.trim() || captureAnalyzing}
+                      onPress={async () => {
+                        setCaptureAnalyzing(true);
+                        try {
+                          const result = await analyzeCapture(userId, captureText.trim(), roleFocus);
+                          setCaptureAnalysisResult(result);
+                        } catch (err) {
+                          console.error('Analysis failed:', err);
+                          Alert.alert('Error', 'Could not analyze. Please try again.');
+                        } finally {
+                          setCaptureAnalyzing(false);
+                        }
+                      }}
+                    >
+                      {captureAnalyzing ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <Text style={styles.confirmButtonText}>Analyze</Text>
                       )}
                     </TouchableOpacity>
-                  );
-                })}
-                <TouchableOpacity
-                  style={[
-                    styles.confirmButton,
-                    {
-                      backgroundColor: selectedRole ? '#9370DB' : colors.border,
-                    },
-                  ]}
-                  disabled={!selectedRole}
-                  onPress={goToNextStep}
-                >
-                  <Text style={styles.confirmButtonText}>Confirm</Text>
-                </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Analysis result — confirm or adjust */}
+                {captureAnalysisResult && !captureRouted && (
+                  <View style={[styles.analysisCard, { backgroundColor: colors.surface, borderColor: '#9370DB' }]}>
+                    <Text style={[styles.analysisLabel, { color: colors.textSecondary }]}>
+                      Development Director suggests:
+                    </Text>
+                    <Text style={[styles.analysisTitle, { color: colors.text }]}>
+                      {captureAnalysisResult.title}
+                    </Text>
+                    <View style={styles.analysisMeta}>
+                      <View style={[styles.analysisTag, { backgroundColor: '#9370DB' }]}>
+                        <Text style={styles.analysisTagText}>
+                          {captureAnalysisResult.suggested_type === 'depositIdea' ? 'Deposit Idea' : captureAnalysisResult.suggested_type}
+                        </Text>
+                      </View>
+                      {captureAnalysisResult.suggested_role_name && (
+                        <View style={[styles.analysisTag, { backgroundColor: '#4169E1' }]}>
+                          <Text style={styles.analysisTagText}>{captureAnalysisResult.suggested_role_name}</Text>
+                        </View>
+                      )}
+                      {captureAnalysisResult.suggested_domain_name && (
+                        <View style={[styles.analysisTag, { backgroundColor: '#39b54a' }]}>
+                          <Text style={styles.analysisTagText}>{captureAnalysisResult.suggested_domain_name}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.analysisReasoning, { color: colors.textSecondary }]}>
+                      {captureAnalysisResult.reasoning}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                      <TouchableOpacity
+                        style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 1 }]}
+                        onPress={async () => {
+                          try {
+                            await routeCapture(userId, captureAnalysisResult!);
+                            setCaptureRouted(true);
+                            if (Platform.OS !== 'web') {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            }
+                          } catch (err) {
+                            console.error('Route failed:', err);
+                            Alert.alert('Error', 'Could not save. Please try again.');
+                          }
+                        }}
+                      >
+                        <Text style={styles.captureOptionButtonText}>Looks Right</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, flex: 1 }]}
+                        onPress={() => {
+                          setCaptureAnalysisResult(null);
+                          setShowCaptureInput(true);
+                        }}
+                      >
+                        <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Try Again</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Routed success — option to add more or continue */}
+                {captureRouted && (
+                  <View style={{ marginTop: 16, alignItems: 'center' }}>
+                    <Text style={[styles.successText, { color: '#39b54a' }]}>
+                      Captured and filed!
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                      <TouchableOpacity
+                        style={[styles.captureOptionButton, { backgroundColor: '#9370DB' }]}
+                        onPress={() => {
+                          setCaptureText('');
+                          setCaptureAnalysisResult(null);
+                          setCaptureRouted(false);
+                          setShowCaptureInput(true);
+                        }}
+                      >
+                        <Text style={styles.captureOptionButtonText}>Add Another</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                        onPress={() => {
+                          setSelectedRole(roleFocus[0]?.role_name || null);
+                          goToNextStep();
+                        }}
+                      >
+                        <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Continue</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </>
             )}
           </ScrollView>
@@ -1447,9 +1601,86 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
+  roleTaskCount: {
+    fontSize: 15,
+  },
   roleMission: {
     fontSize: 14,
     marginTop: 4,
+  },
+  roleIntroText: {
+    fontSize: 16,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  captureQuestion: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginHorizontal: 16,
+  },
+  captureOptionButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    minWidth: 120,
+  },
+  captureOptionButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  captureInput: {
+    marginHorizontal: 16,
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    minHeight: 80,
+    textAlignVertical: 'top' as const,
+  },
+  analysisCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+  },
+  analysisLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  analysisTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  analysisMeta: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: 8,
+    marginBottom: 10,
+  },
+  analysisTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  analysisTagText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'capitalize' as const,
+  },
+  analysisReasoning: {
+    fontSize: 14,
+    fontStyle: 'italic' as const,
+    lineHeight: 20,
   },
 
   // Wellness
