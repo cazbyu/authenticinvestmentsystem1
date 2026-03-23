@@ -6,11 +6,6 @@ export { SixCheckStep } from './SixCheckStep';
 export { AlignmentCheckStep } from './AlignmentCheckStep';
 export { TacticalDeploymentStep } from './TacticalDeploymentStep';
 
-// Compass Model Additions
-export { WeeklyReportCard } from './WeeklyReportCard';
-export { GoalsCompassReviewStep } from './GoalsCompassReviewStep';
-export { BigRocksStep } from './BigRocksStep';
-
 // Alignment Escort Components
 export { AlignmentEscortCard } from './AlignmentEscortCard';
 export { WeekPlanBadge } from './WeekPlanBadge';
