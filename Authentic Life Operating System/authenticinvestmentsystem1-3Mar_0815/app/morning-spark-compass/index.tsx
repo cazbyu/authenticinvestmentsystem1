@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ChevronLeft, ChevronRight, X, Compass } from 'lucide-react-native';
+import Svg, { Circle, Path, Polygon } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
 
@@ -52,16 +53,18 @@ import {
   saveMorningSparkSession,
 } from '@/lib/morningSparkCompassService';
 
+const GOLD = '#D4A843';
+
 const STEPS = [
-  { key: 'opening', label: 'Opening', icon: '\uD83E\uDDED', color: '#D4A843' },
-  { key: 'south_handoff', label: 'Brain Dump Handoff', icon: '\uD83D\uDCCB', color: '#4169E1' },
+  { key: 'opening', label: 'Opening', icon: '\uD83E\uDDED', color: GOLD },
   { key: 'south_fuel', label: 'Fuel Check', icon: '\u26A1', color: '#F57F17' },
+  { key: 'south_handoff', label: 'Brain Dump Handoff', icon: '\uD83D\uDCCB', color: '#4169E1' },
   { key: 'south_commit', label: "Today's Commitments", icon: '\u2705', color: '#4169E1' },
   { key: 'south_goal', label: 'Goal Pulse', icon: '\uD83C\uDFAF', color: '#4169E1' },
   { key: 'west', label: 'Role Focus', icon: '\uD83D\uDC65', color: '#9370DB' },
   { key: 'east', label: 'Wellness Pulse', icon: '\uD83C\uDF3F', color: '#39b54a' },
   { key: 'north', label: 'Mission Touch', icon: '\u2B50', color: '#ed1c24' },
-  { key: 'sendoff', label: 'Send-off', icon: '\uD83D\uDE80', color: '#D4A843' },
+  { key: 'sendoff', label: 'Send-off', icon: '\uD83D\uDE80', color: GOLD },
 ];
 
 export default function MorningSparkCompassScreen() {
@@ -264,7 +267,7 @@ export default function MorningSparkCompassScreen() {
 
     try {
       // Process current step before advancing
-      if (currentStep === 2) {
+      if (currentStep === 1) {
         // Save fuel level
         if (!fuelLevel) {
           Alert.alert(
@@ -293,13 +296,29 @@ export default function MorningSparkCompassScreen() {
     const nextStep = currentStep + 1;
 
     // Load data for next step
-    if (nextStep === 1) {
-      // Brain Dump Handoff
+    if (nextStep === 2) {
+      // Brain Dump Handoff — skip entirely if no data
       setBrainDumpLoading(true);
       getUnprocessedBrainDump(userId)
         .then((data) => {
           setBrainDumpData(data);
           setBrainDumpLoading(false);
+          if (!data || data.items.length === 0) {
+            // No brain dump — auto-skip to commitments
+            setCurrentStep(3);
+            setCommitLoading(true);
+            Promise.all([
+              getTodaysTasksForCommitment(userId),
+              getWeeklyOneThing(userId),
+            ])
+              .then(([taskData, oneThing]) => {
+                setTasks(taskData);
+                setWeeklyOneThing(oneThing);
+                setCommitLoading(false);
+              })
+              .catch(() => setCommitLoading(false));
+            return;
+          }
         })
         .catch(() => setBrainDumpLoading(false));
     }
@@ -481,15 +500,68 @@ export default function MorningSparkCompassScreen() {
         return (
           <View style={styles.centeredContent}>
             <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <Compass size={80} color="#D4A843" />
+              <Svg viewBox="0 0 288 288" width={220} height={220}>
+                <Circle cx="144" cy="144" r="113.76" fill="none" stroke={GOLD} strokeWidth="2" opacity={0.4} />
+                <Circle cx="144" cy="144" r="112" fill="none" stroke="rgba(212,168,67,0.15)" strokeWidth="1" />
+                <Circle cx="144" cy="144" r="86.4" fill="none" stroke={GOLD} strokeWidth="1.5" opacity={0.3} />
+                {[0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165].map((deg) => {
+                  const rad1 = (deg * Math.PI) / 180;
+                  const rad2 = ((deg + 180) * Math.PI) / 180;
+                  return (
+                    <Path
+                      key={deg}
+                      d={`M${144 + 102 * Math.sin(rad1)},${144 - 102 * Math.cos(rad1)} L${144 + 102 * Math.sin(rad2)},${144 - 102 * Math.cos(rad2)}`}
+                      stroke="rgba(212,168,67,0.12)"
+                      strokeWidth="1"
+                    />
+                  );
+                })}
+                <Circle cx="144" cy="144" r="102" fill={colors.background} />
+                <Polygon points="172.3,115.7 144,0 115.7,115.7 0,144 115.7,172.3 144,288 172.3,172.3 288,144" fill={GOLD} opacity={0.9} />
+                <Polygon points="144,144 144,279.56 170.64,170.64" fill="rgba(26,26,46,0.3)" />
+                <Polygon points="144,144 144,279.56 117.36,170.64" fill={GOLD} opacity={0.7} />
+                <Polygon points="144,144 279.56,144 170.64,117.36" fill="rgba(26,26,46,0.3)" />
+                <Polygon points="144,144 279.56,144 170.64,170.64" fill={GOLD} opacity={0.7} />
+                <Polygon points="144,144 144,8.44 117.36,117.36" fill="rgba(26,26,46,0.3)" />
+                <Polygon points="144,144 144,8.44 170.64,117.36" fill={GOLD} opacity={0.7} />
+                <Polygon points="144,144 8.44,144 117.36,170.64" fill="rgba(26,26,46,0.3)" />
+                <Polygon points="144,144 8.44,144 117.36,117.36" fill={GOLD} opacity={0.7} />
+                <Polygon points="144,112.87 64.8,64.8 112.87,144 64.8,223.2 144,175.13 223.2,223.2 175.13,144 223.2,64.8" fill={GOLD} opacity={0.6} />
+                <Polygon points="144,144 211.78,211.78 170.64,144" fill="rgba(26,26,46,0.4)" />
+                <Polygon points="144,144 211.78,211.78 144,170.64" fill={GOLD} opacity={0.5} />
+                <Polygon points="144,144 211.78,76.22 144,117.36" fill="rgba(26,26,46,0.4)" />
+                <Polygon points="144,144 211.78,76.22 170.64,144" fill={GOLD} opacity={0.5} />
+                <Polygon points="144,144 69.44,69.44 114.7,144" fill="rgba(26,26,46,0.4)" />
+                <Polygon points="144,144 69.44,69.44 144,114.7" fill={GOLD} opacity={0.5} />
+                <Polygon points="144,144 76.22,211.78 144,170.64" fill="rgba(26,26,46,0.4)" />
+                <Polygon points="144,144 76.22,211.78 117.36,144" fill={GOLD} opacity={0.5} />
+                <Circle cx="144" cy="144" r="24.48" fill={colors.background} />
+                <Circle cx="144" cy="144" r="20.16" fill={GOLD} opacity={0.8} />
+                <Circle cx="144" cy="144" r="16.8" fill={colors.background} />
+                <Circle cx="144" cy="144" r="10.35" fill={GOLD} opacity={0.6} />
+                <Polygon points="121.73,144.02 143.91,48.12 166.27,143.98 144.09,239.88" fill={GOLD} />
+                <Circle cx="144" cy="144" r="3.6" fill={colors.background} />
+              </Svg>
             </Animated.View>
-            <Text style={[styles.openingTitle, { color: colors.text }]}>Morning Spark</Text>
           </View>
         );
       }
 
-      // ======== STEP 1: Brain Dump Handoff ========
+      // ======== STEP 1: Fuel Check ========
       case 1:
+        return (
+          <EnergyCheckStep
+            fuelLevel={fuelLevel}
+            fuelWhy={fuelWhy}
+            fuel3Why={fuel3Why}
+            onFuelLevelChange={setFuelLevel}
+            onFuelWhyChange={setFuelWhy}
+            onFuel3WhyChange={setFuel3Why}
+          />
+        );
+
+      // ======== STEP 2: Brain Dump Handoff (auto-skipped if empty) ========
+      case 2:
         if (brainDumpLoading) {
           return (
             <View style={styles.loadingContainer}>
@@ -509,25 +581,13 @@ export default function MorningSparkCompassScreen() {
               powerQuestion={'"What am I doing to get there?"'}
             />
 
-            {!brainDumpData || brainDumpData.items.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No brain dump items to process
-                </Text>
-                <TouchableOpacity
-                  style={[styles.continueButton, { backgroundColor: STEPS[1].color }]}
-                  onPress={goToNextStep}
-                >
-                  <Text style={styles.continueButtonText}>Continue</Text>
-                </TouchableOpacity>
-              </View>
-            ) : allBrainDumpProcessed ? (
+            {allBrainDumpProcessed ? (
               <View style={styles.emptyState}>
                 <Text style={[styles.successText, { color: colors.success }]}>
                   All items processed!
                 </Text>
                 <TouchableOpacity
-                  style={[styles.continueButton, { backgroundColor: STEPS[1].color }]}
+                  style={[styles.continueButton, { backgroundColor: STEPS[2].color }]}
                   onPress={goToNextStep}
                 >
                   <Text style={styles.continueButtonText}>Continue</Text>
@@ -601,19 +661,6 @@ export default function MorningSparkCompassScreen() {
               })
             )}
           </ScrollView>
-        );
-
-      // ======== STEP 2: Fuel Check ========
-      case 2:
-        return (
-          <EnergyCheckStep
-            fuelLevel={fuelLevel}
-            fuelWhy={fuelWhy}
-            fuel3Why={fuel3Why}
-            onFuelLevelChange={setFuelLevel}
-            onFuelWhyChange={setFuelWhy}
-            onFuel3WhyChange={setFuel3Why}
-          />
         );
 
       // ======== STEP 3: Today's Commitments ========
