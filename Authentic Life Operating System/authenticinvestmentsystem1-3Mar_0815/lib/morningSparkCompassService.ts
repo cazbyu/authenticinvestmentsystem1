@@ -39,11 +39,34 @@ export interface CommitmentTask {
   keyRelationships: CommitmentTaskRelation[];
 }
 
+export interface GoalActionForToday {
+  task_id: string;
+  title: string;
+  recurrence_rule: string | null;
+  target_days: number;
+  weekly_actual: number;
+  completed_dates: string[];
+  roles: Array<{ id: string; label: string }>;
+  domains: Array<{ id: string; name: string }>;
+  is_scheduled_today: boolean;
+  is_complete_for_week: boolean;
+}
+
+export interface GoalPulseItem {
+  goal_id: string;
+  goal_title: string;
+  goal_type: '12week' | 'custom';
+  total_execution_percent: number;   // Overall effort score across entire timeline
+  week_execution_percent: number;    // Effort score this week so far
+  actions_for_today: GoalActionForToday[];
+}
+
+/** Legacy single-goal interface (kept for backward compat) */
 export interface GoalPulseData {
   id: string;
   title: string;
   end_date: string | null;
-  execution_rate: number; // 0-100
+  execution_rate: number;
   weeks_remaining: number | null;
 }
 
@@ -298,60 +321,175 @@ export async function commitTodaysTasks(taskIds: string[]): Promise<void> {
 
 // ============ GOAL PULSE ============
 
+/** Parse RRULE BYDAY into JS day-of-week numbers (0=Sun, 1=Mon, ..., 6=Sat) */
+function getScheduledDays(rrule: string | null): number[] {
+  if (!rrule) return [0, 1, 2, 3, 4, 5, 6]; // No rule = all days
+  const dayMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+  const upper = rrule.toUpperCase();
+  if (upper.includes('FREQ=DAILY')) return [0, 1, 2, 3, 4, 5, 6];
+  const match = upper.match(/BYDAY=([^;]+)/);
+  if (!match) return [0, 1, 2, 3, 4, 5, 6];
+  return match[1].split(',').map((d) => dayMap[d.trim()]).filter((n) => n !== undefined);
+}
+
 /**
- * Get the most recent active 12-week goal with execution rate.
+ * Get ALL active goals (12-week and custom) with their actions for today.
+ * Shows which actions are scheduled for today and still need to be done.
  */
-export async function getGoalPulse(userId: string): Promise<GoalPulseData | null> {
+export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> {
   const supabase = getSupabaseClient();
+  const today = new Date();
+  const todayDow = today.getDay(); // 0=Sun ... 6=Sat
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-  const { data: goal, error } = await supabase
-    .from('0008-ap-goals-12wk')
-    .select('id, title, end_date')
-    .eq('user_id', userId)
-    .neq('status', 'completed')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // 1. Fetch all active goals (both types) in parallel
+  const [twResult, customResult] = await Promise.all([
+    supabase
+      .from('0008-ap-goals-12wk')
+      .select('id, title, user_global_timeline_id')
+      .eq('user_id', userId)
+      .neq('status', 'completed')
+      .is('deleted_at', null),
+    supabase
+      .from('0008-ap-goals-custom')
+      .select('id, title, custom_timeline_id')
+      .eq('user_id', userId)
+      .neq('status', 'completed')
+      .eq('archived', false),
+  ]);
 
-  if (error || !goal) return null;
+  const goals: Array<{
+    id: string;
+    title: string;
+    goal_type: '12week' | 'custom';
+    timeline_id: string | null;
+  }> = [];
 
-  // Calculate execution rate over last 7 days
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const sevenDaysAgoStr = toLocalISOString(sevenDaysAgo);
-
-  const { count: completedCount } = await supabase
-    .from('0008-ap-tasks')
-    .select('id', { count: 'exact', head: true })
-    .eq('goal_12wk_id', goal.id)
-    .eq('status', 'completed')
-    .gte('completed_at', sevenDaysAgoStr);
-
-  const { count: totalCount } = await supabase
-    .from('0008-ap-tasks')
-    .select('id', { count: 'exact', head: true })
-    .eq('goal_12wk_id', goal.id)
-    .gte('created_at', sevenDaysAgoStr);
-
-  const total = totalCount || 0;
-  const completed = completedCount || 0;
-  const executionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-  // Calculate weeks remaining
-  let weeksRemaining: number | null = null;
-  if (goal.end_date) {
-    const endDate = new Date(goal.end_date);
-    const now = new Date();
-    const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-    weeksRemaining = Math.ceil(daysRemaining / 7);
+  for (const g of twResult.data || []) {
+    goals.push({ id: g.id, title: g.title, goal_type: '12week', timeline_id: g.user_global_timeline_id });
+  }
+  for (const g of customResult.data || []) {
+    goals.push({ id: g.id, title: g.title, goal_type: 'custom', timeline_id: g.custom_timeline_id });
   }
 
+  if (goals.length === 0) return [];
+
+  // 2. For each goal, find the current week from its timeline and get actions
+  const results: GoalPulseItem[] = [];
+
+  for (const goal of goals) {
+    if (!goal.timeline_id) continue;
+
+    // Find the current week for this timeline
+    const timelineSource = goal.goal_type === '12week' ? 'global' : 'custom';
+    const { data: weekData } = await supabase
+      .from('v_unified_timeline_weeks')
+      .select('week_number, week_start, week_end')
+      .eq('timeline_id', goal.timeline_id)
+      .eq('source', timelineSource)
+      .lte('week_start', todayStr)
+      .gte('week_end', todayStr)
+      .limit(1)
+      .maybeSingle();
+
+    if (!weekData) continue; // Today is outside this timeline's range
+
+    const weekNum = weekData.week_number;
+
+    // 3. Fetch this week's actions for this goal via the view
+    const timelineCol = goal.goal_type === '12week' ? 'user_global_timeline_id' : 'user_custom_timeline_id';
+    const { data: actions } = await supabase
+      .from('v_goal_detail_week_actions')
+      .select('task_id, title, recurrence_rule, target_days, weekly_actual, completed_dates, roles, domains')
+      .eq('goal_id', goal.id)
+      .eq('week_number', weekNum)
+      .eq(timelineCol, goal.timeline_id)
+      .eq('user_id', userId)
+      .is('deleted_at', null);
+
+    if (!actions || actions.length === 0) continue;
+
+    // 4. Filter to today's actions and those not yet complete
+    const todayActions: GoalActionForToday[] = [];
+    let weekTotalTarget = 0;
+    let weekTotalActual = 0;
+
+    for (const a of actions) {
+      const scheduledDays = getScheduledDays(a.recurrence_rule);
+      const isScheduledToday = scheduledDays.includes(todayDow);
+      const targetDays = a.target_days || scheduledDays.length;
+      const weeklyActual = a.weekly_actual || 0;
+      const isCompleteForWeek = weeklyActual >= targetDays;
+      const completedDates: string[] = a.completed_dates || [];
+      const completedToday = completedDates.includes(todayStr);
+
+      weekTotalTarget += targetDays;
+      weekTotalActual += weeklyActual;
+
+      // Show action if: scheduled today AND not completed today,
+      // OR not yet complete for the week (needs catch-up)
+      if ((isScheduledToday && !completedToday) || (!isCompleteForWeek && !completedToday)) {
+        todayActions.push({
+          task_id: a.task_id,
+          title: a.title,
+          recurrence_rule: a.recurrence_rule,
+          target_days: targetDays,
+          weekly_actual: weeklyActual,
+          completed_dates: completedDates,
+          roles: (a.roles || []).map((r: any) => ({ id: r.id, label: r.label || r.name || '' })),
+          domains: (a.domains || []).map((d: any) => ({ id: d.id, name: d.label || d.name || '' })),
+          is_scheduled_today: isScheduledToday,
+          is_complete_for_week: isCompleteForWeek,
+        });
+      }
+    }
+
+    // Calculate execution percentages
+    const weekExec = weekTotalTarget > 0 ? Math.round((weekTotalActual / weekTotalTarget) * 100) : 0;
+
+    // Total execution: fetch all weeks' data for this goal (count completed vs target)
+    const { data: allWeeksData } = await supabase
+      .from('v_goal_detail_week_actions')
+      .select('target_days, weekly_actual')
+      .eq('goal_id', goal.id)
+      .eq(timelineCol, goal.timeline_id)
+      .eq('user_id', userId)
+      .is('deleted_at', null);
+
+    let totalTarget = 0;
+    let totalActual = 0;
+    for (const w of allWeeksData || []) {
+      totalTarget += w.target_days || 0;
+      totalActual += w.weekly_actual || 0;
+    }
+    const totalExec = totalTarget > 0 ? Math.round((totalActual / totalTarget) * 100) : 0;
+
+    if (todayActions.length > 0) {
+      results.push({
+        goal_id: goal.id,
+        goal_title: goal.title,
+        goal_type: goal.goal_type,
+        total_execution_percent: totalExec,
+        week_execution_percent: weekExec,
+        actions_for_today: todayActions,
+      });
+    }
+  }
+
+  return results;
+}
+
+/** Legacy single-goal function (kept for backward compat) */
+export async function getGoalPulse(userId: string): Promise<GoalPulseData | null> {
+  const items = await getAllGoalPulse(userId);
+  if (items.length === 0) return null;
+  const first = items[0];
   return {
-    id: goal.id,
-    title: goal.title,
-    end_date: goal.end_date,
-    execution_rate: executionRate,
-    weeks_remaining: weeksRemaining,
+    id: first.goal_id,
+    title: first.goal_title,
+    end_date: null,
+    execution_rate: first.week_execution_percent,
+    weeks_remaining: null,
   };
 }
 

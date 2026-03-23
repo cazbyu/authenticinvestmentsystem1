@@ -40,6 +40,9 @@ import {
   UnprocessedBrainDump,
   CommitmentTask,
   GoalPulseData,
+  GoalPulseItem,
+  GoalActionForToday,
+  getAllGoalPulse,
   RoleFocusData,
   WellnessGapData,
   MissionTouchData,
@@ -111,6 +114,7 @@ export default function MorningSparkCompassScreen() {
   const [goalPulse, setGoalPulse] = useState<GoalPulseData | null>(null);
   const [goalPulseLoading, setGoalPulseLoading] = useState(false);
   const [goalTrackSelection, setGoalTrackSelection] = useState<string | null>(null);
+  const [allGoalPulse, setAllGoalPulse] = useState<GoalPulseItem[]>([]);
 
   // Step 5: Role Focus
   const [roleFocus, setRoleFocus] = useState<RoleFocusData[]>([]);
@@ -335,11 +339,21 @@ export default function MorningSparkCompassScreen() {
     }
 
     if (nextStep === 4) {
-      // Goal Pulse
+      // Goal Pulse — fetch all goals with today's actions
       setGoalPulseLoading(true);
-      getGoalPulse(userId)
+      getAllGoalPulse(userId)
         .then((data) => {
-          setGoalPulse(data);
+          setAllGoalPulse(data);
+          // Keep legacy goalPulse for backward compat
+          if (data.length > 0) {
+            setGoalPulse({
+              id: data[0].goal_id,
+              title: data[0].goal_title,
+              end_date: null,
+              execution_rate: data[0].week_execution_percent,
+              weeks_remaining: null,
+            });
+          }
           setGoalPulseLoading(false);
         })
         .catch(() => setGoalPulseLoading(false));
@@ -836,7 +850,7 @@ export default function MorningSparkCompassScreen() {
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                Loading goal data...
+                Loading goals...
               </Text>
             </View>
           );
@@ -850,10 +864,10 @@ export default function MorningSparkCompassScreen() {
               powerQuestion={'"Where do I want to go?"'}
             />
 
-            {!goalPulse ? (
+            {allGoalPulse.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No active 12-week goal
+                  No goals with actions for today
                 </Text>
                 <TouchableOpacity
                   style={[styles.continueButton, { backgroundColor: STEPS[4].color }]}
@@ -863,81 +877,94 @@ export default function MorningSparkCompassScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.goalContainer}>
-                <Text style={[styles.goalTitle, { color: colors.text }]}>{goalPulse.title}</Text>
-
-                <View style={styles.goalStats}>
-                  <View style={styles.goalStatItem}>
-                    <Text style={[styles.goalStatValue, { color: '#4169E1' }]}>
-                      {goalPulse.execution_rate}%
-                    </Text>
-                    <Text style={[styles.goalStatLabel, { color: colors.textSecondary }]}>
-                      Execution Rate
-                    </Text>
-                  </View>
-                  {goalPulse.weeks_remaining !== null && (
-                    <View style={styles.goalStatItem}>
-                      <Text style={[styles.goalStatValue, { color: '#4169E1' }]}>
-                        {goalPulse.weeks_remaining}
-                      </Text>
-                      <Text style={[styles.goalStatLabel, { color: colors.textSecondary }]}>
-                        Weeks Left
-                      </Text>
+              <>
+                {allGoalPulse.map((goalItem) => (
+                  <View key={goalItem.goal_id} style={{ marginBottom: 20 }}>
+                    {/* Goal header with execution scores */}
+                    <View style={[styles.goalPulseHeader, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <Text style={[styles.goalTitle, { color: colors.text }]}>{goalItem.goal_title}</Text>
+                      <View style={styles.goalStats}>
+                        <View style={styles.goalStatItem}>
+                          <Text style={[styles.goalStatValue, { color: '#4169E1' }]}>
+                            {goalItem.total_execution_percent}%
+                          </Text>
+                          <Text style={[styles.goalStatLabel, { color: colors.textSecondary }]}>
+                            Total Effort
+                          </Text>
+                        </View>
+                        <View style={styles.goalStatItem}>
+                          <Text style={[styles.goalStatValue, { color: goalItem.week_execution_percent >= 50 ? '#39b54a' : '#eab308' }]}>
+                            {goalItem.week_execution_percent}%
+                          </Text>
+                          <Text style={[styles.goalStatLabel, { color: colors.textSecondary }]}>
+                            This Week
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  )}
-                </View>
 
-                <View style={styles.trackButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.trackButton,
-                      {
-                        backgroundColor:
-                          goalTrackSelection === 'on_track' ? '#39b54a' : colors.surface,
-                        borderColor:
-                          goalTrackSelection === 'on_track' ? '#39b54a' : colors.border,
-                      },
-                    ]}
-                    onPress={() => setGoalTrackSelection('on_track')}
-                  >
-                    <Text
-                      style={[
-                        styles.trackButtonText,
-                        {
-                          color:
-                            goalTrackSelection === 'on_track' ? '#FFF' : colors.text,
-                        },
-                      ]}
-                    >
-                      On track
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.trackButton,
-                      {
-                        backgroundColor:
-                          goalTrackSelection === 'needs_attention' ? '#E53935' : colors.surface,
-                        borderColor:
-                          goalTrackSelection === 'needs_attention' ? '#E53935' : colors.border,
-                      },
-                    ]}
-                    onPress={() => setGoalTrackSelection('needs_attention')}
-                  >
-                    <Text
-                      style={[
-                        styles.trackButtonText,
-                        {
-                          color:
-                            goalTrackSelection === 'needs_attention' ? '#FFF' : colors.text,
-                        },
-                      ]}
-                    >
-                      Needs attention
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+                    {/* Action cards — look like task cards from commitments */}
+                    {goalItem.actions_for_today.map((action) => (
+                      <View
+                        key={action.task_id}
+                        style={[
+                          styles.taskCard,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                            borderWidth: 1,
+                            borderLeftWidth: 4,
+                            borderLeftColor: action.is_scheduled_today ? '#4169E1' : '#9ca3af',
+                          },
+                        ]}
+                      >
+                        <View style={styles.taskTextContainer}>
+                          <Text style={[styles.taskTitle, { color: colors.text }]}>{action.title}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                            <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
+                              {action.weekly_actual}/{action.target_days} this week
+                            </Text>
+                            {action.is_scheduled_today && (
+                              <Text style={{ fontSize: 11, color: '#4169E1', fontWeight: '600' }}>
+                                • Today
+                              </Text>
+                            )}
+                          </View>
+                          {/* Relationship badges */}
+                          <View style={styles.relationBadgeRow}>
+                            {/* Goal pill */}
+                            <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                              <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>
+                                {goalItem.goal_title}
+                              </Text>
+                            </View>
+                            {action.roles.slice(0, 2).map((r) => (
+                              <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                              </View>
+                            ))}
+                            {action.roles.length > 2 && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{action.roles.length - 2}</Text>
+                              </View>
+                            )}
+                            {action.domains.slice(0, 2).map((d) => (
+                              <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.name}</Text>
+                              </View>
+                            ))}
+                            {action.domains.length > 2 && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{action.domains.length - 2}</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </>
             )}
           </ScrollView>
         );
@@ -1709,6 +1736,13 @@ const styles = StyleSheet.create({
   },
 
   // Goal Pulse
+  goalPulseHeader: {
+    marginHorizontal: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
   goalContainer: {
     paddingHorizontal: 16,
     paddingTop: 8,
