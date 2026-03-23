@@ -213,7 +213,7 @@ export async function getTodaysTasksForCommitment(userId: string): Promise<Commi
       ? supabase.from('0008-ap-roles').select('id, label').in('id', roleIds)
       : { data: [] },
     domainIds.length > 0
-      ? supabase.from('0008-ap-domains').select('id, label').in('id', domainIds)
+      ? supabase.from('0008-ap-domains').select('id, name').in('id', domainIds)
       : { data: [] },
     krIds.length > 0
       ? supabase.from('0008-ap-key-relationships').select('id, name').in('id', krIds)
@@ -221,7 +221,7 @@ export async function getTodaysTasksForCommitment(userId: string): Promise<Commi
   ]);
 
   const roleLabelMap = new Map((rolesLabels.data || []).map((r: any) => [r.id, r.label]));
-  const domainLabelMap = new Map((domainsLabels.data || []).map((d: any) => [d.id, d.label]));
+  const domainLabelMap = new Map((domainsLabels.data || []).map((d: any) => [d.id, d.name]));
   const krLabelMap = new Map((krLabels.data || []).map((k: any) => [k.id, k.name]));
 
   // Build lookup maps: taskId → relations[]
@@ -581,10 +581,8 @@ export async function getUserDomains(userId: string): Promise<Array<{ id: string
   const supabase = getSupabaseClient();
   const { data } = await supabase
     .from('0008-ap-domains')
-    .select('id, label')
-    .eq('user_id', userId)
-    .eq('is_active', true);
-  return data || [];
+    .select('id, name');
+  return (data || []).map((d: any) => ({ id: d.id, label: d.name }));
 }
 
 /**
