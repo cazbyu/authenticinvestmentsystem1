@@ -228,10 +228,13 @@ twelveWeekGoals.forEach((goal: any) => {
           const end = new Date(goal.timeline.end_date);
           const today = new Date();
           const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-          const elapsedDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+          const elapsedDays = Math.max(0, Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+          const totalWeeks = Math.ceil(totalDays / 7);
+          // +1 because week 1 starts on day 0
+          const currentWeek = Math.min(Math.ceil((elapsedDays + 1) / 7), totalWeeks);
           weekInfo = {
-            total: Math.ceil(totalDays / 7),
-            current: Math.min(Math.floor(elapsedDays / 7) + 1, Math.ceil(totalDays / 7)),
+            total: totalWeeks,
+            current: Math.max(1, currentWeek),
           };
         }
 

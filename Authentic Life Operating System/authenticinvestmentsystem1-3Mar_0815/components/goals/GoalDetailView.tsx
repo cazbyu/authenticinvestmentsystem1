@@ -135,7 +135,7 @@ export function GoalDetailView({
   const [timeRange, setTimeRange] = useState<TimeRange>('12W');
 
   // Week navigation state
-  const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(goal.current_week || 1);
+  const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(goal.current_week ?? 1);
 
  // Calculate weekly completion percentage from weekFilteredActions
 const weeklyCompletionPercent = useMemo(() => {
@@ -149,17 +149,17 @@ const weeklyCompletionPercent = useMemo(() => {
 }, [weekFilteredActions]); 
 
   // Update displayedWeekNumber when goal changes or cycleWeeks loads
+  // Always prefer cycleWeeks date-range matching over goal.current_week
+  // because cycleWeeks has the actual week boundaries from the timeline.
 useEffect(() => {
-  // If current_week is provided, use it
-  if (currentGoal.current_week) {
-    setDisplayedWeekNumber(currentGoal.current_week);
-    return;
-  }
-
-  // Otherwise calculate from cycleWeeks
+  // If cycleWeeks are loaded, find the week that contains today
   if (cycleWeeks.length > 0) {
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Use local date string to avoid timezone issues
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
 
     const currentWeekData = cycleWeeks.find(
       week => week.start_date && week.end_date &&
@@ -172,15 +172,22 @@ useEffect(() => {
       // Fallback: if today is past the end, use last week; if before start, use first week
       const lastWeek = cycleWeeks[cycleWeeks.length - 1];
       const firstWeek = cycleWeeks[0];
-      
-      if (todayStr > lastWeek.end_date) {
+
+      if (lastWeek.end_date && todayStr > lastWeek.end_date) {
         setDisplayedWeekNumber(lastWeek.week_number);
-      } else if (todayStr < firstWeek.start_date) {
+      } else if (firstWeek.start_date && todayStr < firstWeek.start_date) {
         setDisplayedWeekNumber(firstWeek.week_number);
       } else {
-        setDisplayedWeekNumber(1);
+        // Today falls in a gap between weeks — use the nearest week
+        setDisplayedWeekNumber(currentGoal.current_week || 1);
       }
     }
+    return;
+  }
+
+  // cycleWeeks not loaded yet — use goal.current_week as temporary fallback
+  if (currentGoal.current_week) {
+    setDisplayedWeekNumber(currentGoal.current_week);
   }
 }, [currentGoal.current_week, cycleWeeks]);
 
