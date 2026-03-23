@@ -20,6 +20,11 @@ export interface UnprocessedBrainDump {
   items: BrainDumpHandoffItem[];
 }
 
+export interface CommitmentTaskRelation {
+  id: string;
+  label: string;
+}
+
 export interface CommitmentTask {
   id: string;
   title: string;
@@ -29,6 +34,9 @@ export interface CommitmentTask {
   one_thing: boolean;
   status: string;
   type: string;
+  roles: CommitmentTaskRelation[];
+  domains: CommitmentTaskRelation[];
+  keyRelationships: CommitmentTaskRelation[];
 }
 
 export interface GoalPulseData {
@@ -150,7 +158,8 @@ export async function markBrainDumpProcessed(sessionId: string): Promise<void> {
 // ============ TODAY'S COMMITMENTS ============
 
 /**
- * Get pending tasks for today's commitment selection.
+ * Get pending tasks for today's commitment selection,
+ * including roles, domains, and key relationships.
  */
 export async function getTodaysTasksForCommitment(userId: string): Promise<CommitmentTask[]> {
   const supabase = getSupabaseClient();
@@ -163,14 +172,80 @@ export async function getTodaysTasksForCommitment(userId: string): Promise<Commi
     .is('deleted_at', null)
     .order('is_urgent', { ascending: false })
     .order('due_date', { ascending: true, nullsFirst: false })
-    .limit(10);
+    .limit(20);
 
   if (error) {
     console.error('Error fetching tasks for commitment:', error);
     return [];
   }
 
-  return (data || []).map((t) => ({
+  if (!data || data.length === 0) return [];
+
+  const taskIds = data.map((t) => t.id);
+
+  // Fetch roles, domains, and key relationships in parallel
+  const [rolesResult, domainsResult, krResult] = await Promise.all([
+    supabase
+      .from('0008-ap-universal-roles-join')
+      .select('parent_id, role_id')
+      .in('parent_id', taskIds)
+      .eq('parent_type', 'task'),
+    supabase
+      .from('0008-ap-universal-domains-join')
+      .select('parent_id, domain_id')
+      .in('parent_id', taskIds)
+      .eq('parent_type', 'task'),
+    supabase
+      .from('0008-ap-universal-key-relationships-join')
+      .select('parent_id, key_relationship_id')
+      .in('parent_id', taskIds)
+      .eq('parent_type', 'task'),
+  ]);
+
+  // Collect unique IDs to look up labels
+  const roleIds = [...new Set((rolesResult.data || []).map((r: any) => r.role_id))];
+  const domainIds = [...new Set((domainsResult.data || []).map((d: any) => d.domain_id))];
+  const krIds = [...new Set((krResult.data || []).map((k: any) => k.key_relationship_id))];
+
+  // Fetch labels in parallel
+  const [rolesLabels, domainsLabels, krLabels] = await Promise.all([
+    roleIds.length > 0
+      ? supabase.from('0008-ap-roles').select('id, label').in('id', roleIds)
+      : { data: [] },
+    domainIds.length > 0
+      ? supabase.from('0008-ap-domains').select('id, label').in('id', domainIds)
+      : { data: [] },
+    krIds.length > 0
+      ? supabase.from('0008-ap-key-relationships').select('id, name').in('id', krIds)
+      : { data: [] },
+  ]);
+
+  const roleLabelMap = new Map((rolesLabels.data || []).map((r: any) => [r.id, r.label]));
+  const domainLabelMap = new Map((domainsLabels.data || []).map((d: any) => [d.id, d.label]));
+  const krLabelMap = new Map((krLabels.data || []).map((k: any) => [k.id, k.name]));
+
+  // Build lookup maps: taskId → relations[]
+  const taskRoles = new Map<string, CommitmentTaskRelation[]>();
+  const taskDomains = new Map<string, CommitmentTaskRelation[]>();
+  const taskKrs = new Map<string, CommitmentTaskRelation[]>();
+
+  for (const r of rolesResult.data || []) {
+    const arr = taskRoles.get(r.parent_id) || [];
+    arr.push({ id: r.role_id, label: roleLabelMap.get(r.role_id) || '' });
+    taskRoles.set(r.parent_id, arr);
+  }
+  for (const d of domainsResult.data || []) {
+    const arr = taskDomains.get(d.parent_id) || [];
+    arr.push({ id: d.domain_id, label: domainLabelMap.get(d.domain_id) || '' });
+    taskDomains.set(d.parent_id, arr);
+  }
+  for (const k of krResult.data || []) {
+    const arr = taskKrs.get(k.parent_id) || [];
+    arr.push({ id: k.key_relationship_id, label: krLabelMap.get(k.key_relationship_id) || '' });
+    taskKrs.set(k.parent_id, arr);
+  }
+
+  return data.map((t) => ({
     id: t.id,
     title: t.title,
     due_date: t.due_date,
@@ -179,6 +254,9 @@ export async function getTodaysTasksForCommitment(userId: string): Promise<Commi
     one_thing: t.one_thing || false,
     status: t.status,
     type: t.type,
+    roles: taskRoles.get(t.id) || [],
+    domains: taskDomains.get(t.id) || [],
+    keyRelationships: taskKrs.get(t.id) || [],
   }));
 }
 

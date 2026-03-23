@@ -721,6 +721,22 @@ export default function MorningSparkCompassScreen() {
                 )}
                 {tasks.map((task) => {
                   const isSelected = selectedTaskIds.has(task.id);
+                  // Urgent/Important matrix colors (matches TaskCard.tsx)
+                  const matrixColor =
+                    task.is_urgent && task.is_important ? '#ef4444' :   // red
+                    !task.is_urgent && task.is_important ? '#22c55e' :  // green
+                    task.is_urgent && !task.is_important ? '#eab308' :  // yellow
+                    '#9ca3af';                                          // gray
+
+                  // Collect all relationship badges (max 2 each, show + for overflow)
+                  const roleBadges = task.roles.slice(0, 2);
+                  const roleOverflow = task.roles.length > 2 ? task.roles.length - 2 : 0;
+                  const domainBadges = task.domains.slice(0, 2);
+                  const domainOverflow = task.domains.length > 2 ? task.domains.length - 2 : 0;
+                  const krBadges = task.keyRelationships.slice(0, 2);
+                  const krOverflow = task.keyRelationships.length > 2 ? task.keyRelationships.length - 2 : 0;
+                  const hasRelations = task.roles.length > 0 || task.domains.length > 0 || task.keyRelationships.length > 0;
+
                   return (
                     <TouchableOpacity
                       key={task.id}
@@ -728,8 +744,10 @@ export default function MorningSparkCompassScreen() {
                         styles.taskCard,
                         {
                           backgroundColor: colors.surface,
-                          borderColor: isSelected ? '#4169E1' : colors.border,
+                          borderColor: isSelected ? '#4169E1' : matrixColor,
                           borderWidth: isSelected ? 2 : 1,
+                          borderLeftWidth: 4,
+                          borderLeftColor: matrixColor,
                         },
                       ]}
                       onPress={() => handleToggleTask(task.id)}
@@ -749,6 +767,40 @@ export default function MorningSparkCompassScreen() {
                           <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
                             Due: {task.due_date}
                           </Text>
+                        )}
+                        {hasRelations && (
+                          <View style={styles.relationBadgeRow}>
+                            {roleBadges.map((r) => (
+                              <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                              </View>
+                            ))}
+                            {roleOverflow > 0 && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{roleOverflow}</Text>
+                              </View>
+                            )}
+                            {domainBadges.map((d) => (
+                              <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.label}</Text>
+                              </View>
+                            ))}
+                            {domainOverflow > 0 && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{domainOverflow}</Text>
+                              </View>
+                            )}
+                            {krBadges.map((k) => (
+                              <View key={k.id} style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>{k.label}</Text>
+                              </View>
+                            ))}
+                            {krOverflow > 0 && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]}>+{krOverflow}</Text>
+                              </View>
+                            )}
+                          </View>
                         )}
                       </View>
                     </TouchableOpacity>
@@ -1625,6 +1677,23 @@ const styles = StyleSheet.create({
   taskDueDate: {
     fontSize: 12,
     marginTop: 2,
+  },
+  relationBadgeRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: 4,
+    marginTop: 4,
+  },
+  relationBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    maxWidth: 100,
+  },
+  relationBadgeText: {
+    fontSize: 10,
+    fontWeight: '500' as const,
   },
   confirmButton: {
     marginHorizontal: 16,
