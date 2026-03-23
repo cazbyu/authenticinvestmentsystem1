@@ -40,6 +40,12 @@ import { AlignmentCheckStep } from '@/components/weekly-alignment/AlignmentCheck
 import { TacticalDeploymentStep } from '@/components/weekly-alignment/TacticalDeploymentStep';
 import { WeekPlanBadge } from '@/components/weekly-alignment/WeekPlanBadge';
 import { TourGuideBubble } from '@/components/weekly-alignment/TourGuideBubble';
+// Compass Model Additions
+import { WeeklyReportCard } from '@/components/weekly-alignment/WeeklyReportCard';
+import { GoalsCompassReviewStep } from '@/components/weekly-alignment/GoalsCompassReviewStep';
+import { BigRocksStep } from '@/components/weekly-alignment/BigRocksStep';
+import { updateDirectionTimestamp, saveWeeklyAlignmentAdditions } from '@/lib/weeklyAlignmentCompassService';
+import type { WeeklyReportData } from '@/lib/weeklyAlignmentCompassService';
 import { CaptureOverlay } from '@/components/chat-bubble/CaptureOverlay';
 import { CompassRitualController } from '@/components/compass/CompassRitualController';
 import { useAlignmentCoach } from '@/hooks/useAlignmentCoach';
@@ -80,9 +86,12 @@ interface WeeklyAlignmentData {
 }
 
 const STEPS = [
-  { key: 'star', label: 'Touch Your Star', icon: '⭐', color: '#ed1c24' },
-  { key: 'roles', label: 'Wing Check: Roles', icon: '👥', color: '#9370DB' },
-  { key: 'wellness', label: 'Wing Check: Wellness', icon: '🌿', color: '#39b54a' },
+  { key: 'report', label: 'Weekly Report', icon: '📊', color: '#D4A843' },
+  { key: 'star', label: 'North — Mission & Vision', icon: '⭐', color: '#ed1c24' },
+  { key: 'goals_review', label: 'North — Goals', icon: '🎯', color: '#ed1c24' },
+  { key: 'roles', label: 'West — Roles', icon: '👥', color: '#9370DB' },
+  { key: 'wellness', label: 'East — Wellness', icon: '🌿', color: '#39b54a' },
+  { key: 'big_rocks', label: 'South — This Week', icon: '🪨', color: '#4169E1' },
   { key: 'goals', label: 'Six Check: Goals', icon: '🎯', color: '#4169E1' },
   { key: 'alignment', label: 'Alignment Check', icon: '🪞', color: '#FF6B35' },
   { key: 'tactical', label: 'Tactical Deployment', icon: '🧭', color: '#FFD700' },
@@ -295,8 +304,17 @@ export default function WeeklyAlignmentScreen() {
   function goToNextStep() {
     if (currentStep >= STEPS.length - 1) return;
 
-    if (currentStep === 0) {
+    if (currentStep === 1) {
       recordNorthStarVisit('weekly_alignment_step');
+    }
+
+    // Write compass direction timestamps
+    const nextStep = currentStep + 1;
+    if (weekStartDate && weekEndDate) {
+      if (nextStep === 1) updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'north_started');
+      if (nextStep === 3) updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'west_started');
+      if (nextStep === 4) updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'east_started');
+      if (nextStep === 5) updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'south_started');
     }
 
     const transitionKey = `${currentStep}_to_${currentStep + 1}`;
@@ -387,7 +405,7 @@ export default function WeeklyAlignmentScreen() {
 
   function goToStep(stepIndex: number) {
     if (stepIndex >= 0 && stepIndex < STEPS.length && stepIndex !== currentStep) {
-      if (currentStep === 0 && stepIndex > 0) {
+      if (currentStep === 1 && stepIndex > 1) {
         recordNorthStarVisit('weekly_alignment_step');
       }
       setCurrentStep(stepIndex);
@@ -744,11 +762,31 @@ export default function WeeklyAlignmentScreen() {
 
       {/* Step Content */}
       <View style={styles.stepContent}>
+        {/* Step 0: Weekly Report (new compass step) */}
         {currentStep === 0 && (
+          <WeeklyReportCard
+            userId={userId}
+            colors={colors}
+            onContinue={goToNextStep}
+            onReportLoaded={(data) => {
+              if (weekStartDate) {
+                saveWeeklyAlignmentAdditions(userId, weekStartDate, { weekly_report_data: data });
+              }
+            }}
+          />
+        )}
+
+        {/* Step 1: North — Mission & Vision (was step 0) */}
+        {currentStep === 1 && (
           <TouchYourStarStep
             userId={userId}
             colors={colors}
-            onNext={goToNextStep}
+            onNext={() => {
+              if (weekStartDate && weekEndDate) {
+                updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'north_ended');
+              }
+              goToNextStep();
+            }}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
             guidedModeEnabled={guidedModeEnabled}
@@ -761,11 +799,30 @@ export default function WeeklyAlignmentScreen() {
           />
         )}
 
-        {currentStep === 1 && (
-          <WingCheckRolesStep
+        {/* Step 2: North — Goals Review (new compass step) */}
+        {currentStep === 2 && (
+          <GoalsCompassReviewStep
             userId={userId}
             colors={colors}
             onNext={goToNextStep}
+            onBack={goToPreviousStep}
+            onDataCapture={(data) => handleStepDataCapture(data)}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
+          />
+        )}
+
+        {/* Step 3: West — Roles (was step 1) */}
+        {currentStep === 3 && (
+          <WingCheckRolesStep
+            userId={userId}
+            colors={colors}
+            onNext={() => {
+              if (weekStartDate && weekEndDate) {
+                updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'west_ended');
+              }
+              goToNextStep();
+            }}
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
@@ -781,11 +838,17 @@ export default function WeeklyAlignmentScreen() {
           />
         )}
 
-        {currentStep === 2 && (
+        {/* Step 4: East — Wellness (was step 2) */}
+        {currentStep === 4 && (
           <WingCheckWellnessStep
             userId={userId}
             colors={colors}
-            onNext={goToNextStep}
+            onNext={() => {
+              if (weekStartDate && weekEndDate) {
+                updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'east_ended');
+              }
+              goToNextStep();
+            }}
             onBack={goToPreviousStep}
             onDataCapture={(data) => handleStepDataCapture(data)}
             onRegisterBackHandler={(handler) => setStepBackHandler(() => handler)}
@@ -799,7 +862,35 @@ export default function WeeklyAlignmentScreen() {
           />
         )}
 
-        {currentStep === 3 && (
+        {/* Step 5: South — Big Rocks + One Thing (new compass step) */}
+        {currentStep === 5 && (
+          <BigRocksStep
+            userId={userId}
+            colors={colors}
+            onNext={() => {
+              if (weekStartDate && weekEndDate) {
+                updateDirectionTimestamp(userId, weekStartDate, weekEndDate, 'south_started');
+              }
+              goToNextStep();
+            }}
+            onBack={goToPreviousStep}
+            onDataCapture={(data) => {
+              handleStepDataCapture(data);
+              if (weekStartDate) {
+                saveWeeklyAlignmentAdditions(userId, weekStartDate, {
+                  big_rocks: data.big_rocks,
+                  one_thing: data.one_thing,
+                });
+              }
+            }}
+            weeklyAlignmentId={weeklyAlignmentId}
+            weekStartDate={weekStartDate}
+            weekEndDate={weekEndDate}
+          />
+        )}
+
+        {/* Step 6: Six Check Goals (was step 3) */}
+        {currentStep === 6 && (
           <SixCheckStep
             userId={userId}
             colors={colors}
@@ -817,7 +908,8 @@ export default function WeeklyAlignmentScreen() {
           />
         )}
 
-        {currentStep === 4 && (
+        {/* Step 7: Alignment Check (was step 4) */}
+        {currentStep === 7 && (
           <AlignmentCheckStep
             userId={userId}
             colors={colors}
@@ -837,7 +929,8 @@ export default function WeeklyAlignmentScreen() {
           />
         )}
 
-        {currentStep === 5 && (
+        {/* Step 8: Tactical Deployment (was step 5) */}
+        {currentStep === 8 && (
           <TacticalDeploymentStep
             userId={userId}
             colors={colors}
