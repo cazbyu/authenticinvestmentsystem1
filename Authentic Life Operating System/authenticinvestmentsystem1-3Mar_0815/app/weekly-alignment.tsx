@@ -337,7 +337,6 @@ export default function WeeklyAlignmentScreen() {
       hasValues: !!alignmentData.valuesAcknowledged,
     };
 
-    const nextStep = currentStep + 1;
     pendingStepRef.current = nextStep;
     setStepTransitionMessage(transitionConfig.getMessage(transitionData));
     setStepTransitionActive(true);
