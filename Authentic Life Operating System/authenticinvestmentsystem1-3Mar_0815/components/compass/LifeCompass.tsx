@@ -155,7 +155,7 @@ export function LifeCompass({
   const silverCeremonyRotation = useSharedValue(0);
 
   const [compassState, setCompassState] = useState<CompassState>({
-    mode: contextMode === 'morning_spark' ? 'spark' : contextMode === 'weekly_alignment' ? 'ceremony' : 'exploration',
+    mode: (contextMode === 'morning_spark' || contextMode === 'weekly_alignment') ? 'ceremony' : 'exploration',
     bigSpindleAngle: 0,
     smallSpindleAngle: 0,
     activeZone: 'mission',
@@ -222,22 +222,52 @@ export function LifeCompass({
     };
   }, [rotation, goldCeremonyRotation, silverCeremonyRotation]);
 
-  // ========== WEEKLY ALIGNMENT CEREMONY ==========
+  // ========== CEREMONY ANIMATIONS ==========
   useEffect(() => {
-    if (contextMode === 'weekly_alignment' && compassState.mode === 'ceremony') {
-      playCeremony();
+    if (compassState.mode === 'ceremony') {
+      if (contextMode === 'morning_spark') {
+        playMorningSparkCeremony();
+      } else if (contextMode === 'weekly_alignment') {
+        playCeremony();
+      }
     }
   }, [contextMode, compassState.mode]);
 
+  const playMorningSparkCeremony = useCallback(() => {
+    // Morning Spark: spin both spindles to South (180°)
+    // Phase 1: Free spin (1.5 seconds)
+    goldCeremonyRotation.value = withTiming(540, {
+      duration: 1500,
+      easing: Easing.linear,
+    });
+
+    silverCeremonyRotation.value = withTiming(-720, {
+      duration: 1500,
+      easing: Easing.linear,
+    }, () => {
+      // Phase 2: Decelerate to South/180° (0.8 seconds)
+      goldCeremonyRotation.value = withTiming(540, {
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+      }, () => {
+        runOnJS(handleCeremonyComplete)();
+      });
+
+      silverCeremonyRotation.value = withTiming(-720, {
+        duration: 900,
+        easing: Easing.out(Easing.cubic),
+      });
+    });
+  }, [goldCeremonyRotation, silverCeremonyRotation]);
+
   const playCeremony = useCallback(() => {
+    // Weekly Alignment: spin both spindles freely then settle to North
     // Phase 1: Free spin (2 seconds)
-    // Gold spindle: 2 full rotations clockwise (720°)
-    // Silver spindle: 3 rotations counter-clockwise (-1080°)
     goldCeremonyRotation.value = withTiming(720, {
       duration: 2000,
       easing: Easing.linear,
     });
-    
+
     silverCeremonyRotation.value = withTiming(-1080, {
       duration: 2000,
       easing: Easing.linear,
@@ -247,10 +277,9 @@ export function LifeCompass({
         duration: 1000,
         easing: Easing.out(Easing.cubic),
       }, () => {
-        // Ceremony complete - set state and call callback
         runOnJS(handleCeremonyComplete)();
       });
-      
+
       silverCeremonyRotation.value = withTiming(-1080, {
         duration: 1200,
         easing: Easing.out(Easing.cubic),
