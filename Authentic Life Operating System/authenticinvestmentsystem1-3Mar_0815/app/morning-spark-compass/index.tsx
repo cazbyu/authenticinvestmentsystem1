@@ -96,6 +96,8 @@ export default function MorningSparkCompassScreen() {
   const [weeklyOneThing, setWeeklyOneThing] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [commitLoading, setCommitLoading] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAddTitle, setQuickAddTitle] = useState('');
 
   // Step 4: Goal Pulse
   const [goalPulse, setGoalPulse] = useState<GoalPulseData | null>(null);
@@ -218,7 +220,7 @@ export default function MorningSparkCompassScreen() {
         const next = new Set(prev);
         if (next.has(taskId)) {
           next.delete(taskId);
-        } else if (next.size < 3) {
+        } else {
           next.add(taskId);
         }
         return next;
@@ -229,6 +231,31 @@ export default function MorningSparkCompassScreen() {
     },
     [],
   );
+
+  const handleQuickAddTask = useCallback(async () => {
+    const title = quickAddTitle.trim();
+    if (!title || !userId) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .insert({ title, user_id: userId, status: 'pending', type: 'task' })
+        .select('id, title, due_date')
+        .single();
+      if (error) throw error;
+      if (data) {
+        setTasks((prev) => [{ ...data, due_date: data.due_date ?? null }, ...prev]);
+        setSelectedTaskIds((prev) => new Set(prev).add(data.id));
+      }
+      setQuickAddTitle('');
+      setShowQuickAdd(false);
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } catch (err) {
+      console.error('Quick add task failed:', err);
+    }
+  }, [quickAddTitle, userId]);
 
   // ---- Step navigation ----
 
@@ -636,9 +663,63 @@ export default function MorningSparkCompassScreen() {
               </View>
             ) : (
               <>
-                <Text style={[styles.selectionHint, { color: colors.textSecondary }]}>
-                  Select 1-3 tasks to commit to today ({selectedTaskIds.size}/3)
-                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={[styles.selectionHint, { color: colors.textSecondary, marginBottom: 0 }]}>
+                    Select tasks to commit to today{selectedTaskIds.size > 0 ? ` (${selectedTaskIds.size} selected)` : ''}
+                  </Text>
+                  <TouchableOpacity
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: '#4169E1',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                    onPress={() => setShowQuickAdd(!showQuickAdd)}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 22, fontWeight: '600', lineHeight: 24 }}>+</Text>
+                  </TouchableOpacity>
+                </View>
+                {showQuickAdd && (
+                  <View style={{ flexDirection: 'row', marginBottom: 12, gap: 8 }}>
+                    <TextInput
+                      style={[
+                        styles.taskCard,
+                        {
+                          flex: 1,
+                          backgroundColor: colors.surface,
+                          borderColor: '#4169E1',
+                          borderWidth: 2,
+                          paddingHorizontal: 14,
+                          paddingVertical: 12,
+                          color: colors.text,
+                          fontSize: 16,
+                          marginBottom: 0,
+                        },
+                      ]}
+                      placeholder="Add a new task..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={quickAddTitle}
+                      onChangeText={setQuickAddTitle}
+                      onSubmitEditing={handleQuickAddTask}
+                      autoFocus
+                      returnKeyType="done"
+                    />
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: quickAddTitle.trim() ? '#4169E1' : colors.border,
+                        borderRadius: 10,
+                        paddingHorizontal: 16,
+                        justifyContent: 'center',
+                      }}
+                      disabled={!quickAddTitle.trim()}
+                      onPress={handleQuickAddTask}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>Add</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
                 {tasks.map((task) => {
                   const isSelected = selectedTaskIds.has(task.id);
                   return (
