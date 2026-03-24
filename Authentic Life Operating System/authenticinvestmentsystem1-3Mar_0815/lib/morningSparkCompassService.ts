@@ -809,9 +809,12 @@ export interface ParsedCaptureItem {
   /** Role suggestions */
   suggested_role_id: string | null;
   suggested_role_name: string | null;
-  /** Domain/wellness zone suggestions */
-  suggested_domain_id: string | null;
-  suggested_domain_name: string | null;
+  /** Domain/wellness zone suggestions (can be multiple) */
+  suggested_domain_ids: string[];
+  suggested_domain_names: string[];
+  /** Key relationship suggestions */
+  suggested_key_relationship_ids: string[];
+  suggested_key_relationship_names: string[];
   /** Brief reasoning */
   reasoning: string;
 }
@@ -826,6 +829,7 @@ export interface TaskEventFormPrefill {
   type: 'task' | 'event' | 'depositIdea' | 'reflection';
   selectedRoleIds: string[];
   selectedDomainIds: string[];
+  selectedKeyRelationshipIds: string[];
   is_deposit_idea?: boolean;
 }
 
@@ -842,7 +846,7 @@ export async function getUserDomains(userId: string): Promise<Array<{ id: string
 
 /**
  * Analyze user free text — splits into multiple items, each with type suggestion,
- * role/domain mapping, and optional clarification questions.
+ * role/domain/key-relationship mapping, and optional clarification questions.
  */
 export async function analyzeCapture(
   userId: string,
@@ -857,48 +861,80 @@ export async function analyzeCapture(
     domains = await getUserDomains(userId);
   }
 
+  // Get key relationships for name matching
+  const { data: keyRels } = await supabase
+    .from('0008-ap-key-relationships')
+    .select('id, name')
+    .eq('user_id', userId);
+
   const roleContext = roles.map((r) => `${r.role_name} (id: ${r.role_id})`).join(', ');
   const domainContext = domains.map((d) => `${d.label} (id: ${d.id})`).join(', ');
+  const krContext = (keyRels || []).map((k: { id: string; name: string }) => `${k.name} (id: ${k.id})`).join(', ');
 
   try {
     const { data, error } = await supabase.functions.invoke('alignment-coach', {
       body: {
         mode: 'morning',
         trigger: 'capture_analysis',
-        user_state: { roles: roleContext, domains: domainContext },
+        user_state: { roles: roleContext, domains: domainContext, key_relationships: krContext },
         messages: [
           {
             role: 'system',
             content: `You are the Development Director — a thoughtful coach helping someone organize their thoughts into action.
 
-Your job: Parse the user's free-text input and break it into SEPARATE items. The user may mention multiple things in one sentence or paragraph. Split them intelligently.
+TITLE FORMATTING RULES (CRITICAL):
+1. ALWAYS start the title with a VERB (Go, Take, Write, Call, Study, Meet, Review, etc.)
+2. STRIP all "I want to", "I need to", "I should", "I'm going to", "I will" prefixes
+3. Keep it concise — 3-7 words ideal
+4. Examples:
+   "I should go to the zoo with Ben" → "Go to the zoo with Ben"
+   "I need to go on a walk today" → "Go on a walk"
+   "I want to take my wife to lunch at noon" → "Take wife to lunch"
+   "I will take John out for ice cream today at 4:00 pm" → "Take John for ice cream"
+   "Maybe I could write a thank you email to my son" → "Write thank-you email to son"
 
-For each item, return:
-- title: a clean, concise action title (rewrite vague language into clear titles)
-- suggested_type: one of "task", "event", "reflection", "rose", "thorn", "depositIdea"
-  - task = a concrete, actionable commitment ("Do X by Y")
-  - event = something with a specific time/date ("Meet with X at noon")
-  - reflection = a thought or realization worth capturing
-  - rose = something positive, grateful, or celebratory
-  - thorn = a challenge, frustration, or difficulty
-  - depositIdea = a "maybe someday" idea, not a firm commitment
-- needs_clarification: boolean — set TRUE when the language is ambiguous
-  Examples of ambiguity: "I want to..." (commitment or wish?), "I should..." (task or idea?), "Maybe I could..." (idea or task?)
-- clarification_question: if needs_clarification is true, write a brief, conversational question to ask. Examples:
-  "Are you committing to take your wife to lunch today, or is that an idea you're parking for later?"
-  "Is the thank-you email something you'll do today, or more of a reminder for when you get to it?"
-- alternative_type: if needs_clarification is true, what would the type be if the user answers differently (e.g. "depositIdea" if the suggested_type is "task")
-- suggested_role_id: the role ID it most relates to, or null
+ITEM TYPE RULES:
+- task = a concrete, actionable commitment ("Do X by Y")
+- event = something with a specific time/date mentioned ("at 4pm", "at noon", "tomorrow at 3")
+- reflection = a thought or realization worth capturing
+- rose = something positive, grateful, or celebratory
+- thorn = a challenge, frustration, or difficulty
+- depositIdea = a "maybe someday" idea, not a firm commitment
+
+AMBIGUITY DETECTION:
+Set needs_clarification=true when language is soft:
+- "I want to..." / "I should..." / "Maybe I could..." / "It would be nice to..."
+- Ask a brief conversational question like: "Are you committing to go to the zoo, or is that an idea you're parking for later?"
+
+PERSON MATCHING:
+When names of people are mentioned, check the key relationships list below. If a name matches (first name match is sufficient), include their ID in suggested_key_relationship_ids.
+
+WELLNESS ZONE MATCHING:
+An item can belong to MULTIPLE wellness zones. For example:
+- "Go to the zoo with Ben" → Recreational + Social
+- "Go on a walk" → Physical
+- "Study for exam" → Intellectual
+Include ALL relevant zone IDs in suggested_domain_ids (array).
+
+For each item return:
+- title: clean verb-first title (see rules above)
+- suggested_type: one of the types above
+- needs_clarification: boolean
+- clarification_question: string or null
+- alternative_type: string or null (what it would be if user answers differently)
+- suggested_role_id: the most relevant role ID, or null
 - suggested_role_name: the role name, or null
-- suggested_domain_id: the wellness domain ID, or null
-- suggested_domain_name: the wellness domain name, or null
-- reasoning: one brief sentence explaining your categorization
+- suggested_domain_ids: array of matching wellness domain IDs (can be multiple)
+- suggested_domain_names: array of matching domain names
+- suggested_key_relationship_ids: array of matching key relationship IDs
+- suggested_key_relationship_names: array of matching names
+- reasoning: one brief sentence
 
 Available roles: ${roleContext}
 Available wellness domains: ${domainContext}
+Available key relationships: ${krContext}
 
-Return a JSON object with a single "items" array. Return ONLY valid JSON, no markdown fences.
-Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "...", ...}]}`,
+Return a JSON object with a single "items" array. Return ONLY valid JSON, no markdown fences.`,
           },
           { role: 'user', content: text },
         ],
@@ -920,8 +956,10 @@ Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "
         alternative_type: item.alternative_type || null,
         suggested_role_id: item.suggested_role_id || null,
         suggested_role_name: item.suggested_role_name || null,
-        suggested_domain_id: item.suggested_domain_id || null,
-        suggested_domain_name: item.suggested_domain_name || null,
+        suggested_domain_ids: item.suggested_domain_ids || (item.suggested_domain_id ? [item.suggested_domain_id] : []),
+        suggested_domain_names: item.suggested_domain_names || (item.suggested_domain_name ? [item.suggested_domain_name] : []),
+        suggested_key_relationship_ids: item.suggested_key_relationship_ids || [],
+        suggested_key_relationship_names: item.suggested_key_relationship_names || [],
         reasoning: item.reasoning || '',
       }));
       return { items };
@@ -930,7 +968,13 @@ Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "
     console.error('Capture analysis failed, using fallback:', err);
   }
 
-  // Fallback: treat as single item with heuristic typing
+  // Fallback: simple heuristic with verb-first title cleanup
+  let cleanTitle = text.trim()
+    .replace(/^(I\s+)?(want\s+to|need\s+to|should|will|am\s+going\s+to|have\s+to|'m\s+going\s+to)\s+/i, '')
+    .replace(/^(i\s+)/i, '');
+  // Capitalize first letter
+  cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
+
   const lower = text.toLowerCase();
   let type: ParsedCaptureItem['suggested_type'] = 'task';
   let needsClarification = false;
@@ -947,21 +991,23 @@ Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "
     type = 'thorn';
   } else if (lower.includes('idea') || lower.includes('could')) {
     type = 'depositIdea';
-  } else if (lower.includes('meeting') || lower.includes('call') || lower.includes('at noon') || lower.includes('appointment')) {
+  } else if (/\b(at\s+\d|meeting|call|appointment|noon|pm|am)\b/i.test(text)) {
     type = 'event';
   }
 
   return {
     items: [{
-      title: text.trim(),
+      title: cleanTitle,
       suggested_type: type,
       needs_clarification: needsClarification,
       clarification_question: clarificationQ,
       alternative_type: altType,
       suggested_role_id: null,
       suggested_role_name: null,
-      suggested_domain_id: null,
-      suggested_domain_name: null,
+      suggested_domain_ids: [],
+      suggested_domain_names: [],
+      suggested_key_relationship_ids: [],
+      suggested_key_relationship_names: [],
       reasoning: 'Auto-categorized (coach unavailable)',
     }],
   };
@@ -997,7 +1043,8 @@ export function buildFormPrefill(item: ParsedCaptureItem): TaskEventFormPrefill 
     title: item.title,
     type: formType,
     selectedRoleIds: item.suggested_role_id ? [item.suggested_role_id] : [],
-    selectedDomainIds: item.suggested_domain_id ? [item.suggested_domain_id] : [],
+    selectedDomainIds: item.suggested_domain_ids || [],
+    selectedKeyRelationshipIds: item.suggested_key_relationship_ids || [],
     is_deposit_idea: item.suggested_type === 'depositIdea',
   };
 }

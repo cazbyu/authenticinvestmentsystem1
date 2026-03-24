@@ -1268,11 +1268,16 @@ export default function MorningSparkCompassScreen() {
                                 <Text style={styles.analysisTagText}>{item.suggested_role_name}</Text>
                               </View>
                             )}
-                            {item.suggested_domain_name && (
-                              <View style={[styles.analysisTag, { backgroundColor: '#39b54a' }]}>
-                                <Text style={styles.analysisTagText}>{item.suggested_domain_name}</Text>
+                            {(item.suggested_domain_names || []).map((name: string, i: number) => (
+                              <View key={`d-${i}`} style={[styles.analysisTag, { backgroundColor: '#39b54a' }]}>
+                                <Text style={styles.analysisTagText}>{name}</Text>
                               </View>
-                            )}
+                            ))}
+                            {(item.suggested_key_relationship_names || []).map((name: string, i: number) => (
+                              <View key={`kr-${i}`} style={[styles.analysisTag, { backgroundColor: '#60a5fa' }]}>
+                                <Text style={styles.analysisTagText}>{name}</Text>
+                              </View>
+                            ))}
                           </View>
                           <Text style={[styles.analysisReasoning, { color: colors.textSecondary }]}>
                             {item.reasoning}
@@ -1341,6 +1346,7 @@ export default function MorningSparkCompassScreen() {
                       type: formPrefill.type,
                       selectedRoleIds: formPrefill.selectedRoleIds,
                       selectedDomainIds: formPrefill.selectedDomainIds,
+                      selectedKeyRelationshipIds: formPrefill.selectedKeyRelationshipIds,
                       is_deposit_idea: formPrefill.is_deposit_idea,
                     } : undefined}
                     onClose={() => {
