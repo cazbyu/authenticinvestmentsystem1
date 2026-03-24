@@ -320,19 +320,20 @@ export async function commitTodaysTasks(userId: string, taskIds: string[]): Prom
   const supabase = getSupabaseClient();
   const todayStr = toLocalISOString(new Date()).split('T')[0];
 
-  // 1. Clear ALL existing committed_date for this user (pending tasks only)
+  // 1. Clear ALL existing committed_date and one_thing for this user (pending tasks only)
   await supabase
     .from('0008-ap-tasks')
-    .update({ committed_date: null })
+    .update({ committed_date: null, one_thing: false })
     .eq('user_id', userId)
-    .not('committed_date', 'is', null)
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .or('committed_date.not.is.null,one_thing.eq.true');
 
-  // 2. Set committed_date = today only for the selected tasks
+  // 2. Set committed_date = today AND one_thing = true for the selected tasks
+  // (dual-write for transition: widget uses committed_date, old cached code uses one_thing)
   if (taskIds.length > 0) {
     await supabase
       .from('0008-ap-tasks')
-      .update({ committed_date: todayStr })
+      .update({ committed_date: todayStr, one_thing: true })
       .in('id', taskIds);
   }
 }
@@ -1282,6 +1283,6 @@ export async function removeFromTodayCommitments(taskId: string): Promise<void> 
   const supabase = getSupabaseClient();
   await supabase
     .from('0008-ap-tasks')
-    .update({ committed_date: null })
+    .update({ committed_date: null, one_thing: false })
     .eq('id', taskId);
 }

@@ -56,7 +56,7 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
       .select('id, title, type, is_urgent, is_important, status, due_date, start_time, end_time, is_all_day')
       .eq('user_id', userId)
       .is('deleted_at', null)
-      .or(`committed_date.eq.${todayStr},and(type.eq.event,due_date.eq.${todayStr})`)
+      .or(`committed_date.eq.${todayStr},and(type.eq.event,due_date.eq.${todayStr},status.eq.pending)`)
       .order('type', { ascending: false }) // events first
       .order('is_urgent', { ascending: false })
       .order('start_time', { ascending: true });
