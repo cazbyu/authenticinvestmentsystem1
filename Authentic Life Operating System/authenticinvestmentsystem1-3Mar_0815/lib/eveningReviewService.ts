@@ -50,7 +50,7 @@ export interface EveningReviewSessionData {
 // ============ TASK RECONCILIATION ============
 
 /**
- * Get today's committed tasks (one_thing = true).
+ * Get today's committed tasks from ritual-committed-tasks join table.
  * These are the tasks the user committed to during Morning Spark.
  */
 export async function getTodaysCommittedTasks(
@@ -59,17 +59,30 @@ export async function getTodaysCommittedTasks(
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
 
+  // 1. Get committed task IDs from join table
+  const { data: committedRows, error: commitError } = await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .select('task_id')
+    .eq('user_id', userId)
+    .eq('committed_date', today);
+
+  if (commitError) {
+    console.error('[EveningReview] Error fetching committed task IDs:', commitError);
+    return [];
+  }
+
+  const taskIds = (committedRows || []).map((r: { task_id: string }) => r.task_id);
+  if (taskIds.length === 0) return [];
+
+  // 2. Fetch task details
   const { data, error } = await supabase
     .from('0008-ap-tasks')
     .select('id, title, status')
-    .eq('user_id', userId)
-    .eq('one_thing', true)
-    .is('deleted_at', null)
-    .gte('updated_at', `${today}T00:00:00`)
-    .lt('updated_at', `${today}T23:59:59.999`);
+    .in('id', taskIds)
+    .is('deleted_at', null);
 
   if (error) {
-    console.error('[EveningReview] Error fetching committed tasks:', error);
+    console.error('[EveningReview] Error fetching task details:', error);
     return [];
   }
 

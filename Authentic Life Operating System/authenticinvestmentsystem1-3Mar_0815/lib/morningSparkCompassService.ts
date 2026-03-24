@@ -1238,10 +1238,11 @@ export async function getFinalReviewData(
     });
   }
 
-  // 4. Collect all task IDs for relation lookups
+  // 4. Collect all task IDs for relation lookups (including goal actions)
   const allTaskIds = [
     ...(events || []).map((e: any) => e.id),
     ...(committedTasks || []).map((t: any) => t.id),
+    ...goalActions.map((ga) => ga.id),
   ];
 
   // Fetch relations for events and committed tasks
@@ -1313,6 +1314,13 @@ export async function getFinalReviewData(
     keyRelationships: taskKrsMap.get(t.id) || [],
     source: 'task' as const,
   }));
+
+  // Fill goal action relations from the maps (populated after goal actions were built)
+  for (const ga of goalActions) {
+    ga.roles = taskRolesMap.get(ga.id) || [];
+    ga.domains = taskDomainsMap.get(ga.id) || [];
+    ga.keyRelationships = taskKrsMap.get(ga.id) || [];
+  }
 
   // Merge goal actions and sort all by priority
   const allTasks = [...finalTasks, ...goalActions];
