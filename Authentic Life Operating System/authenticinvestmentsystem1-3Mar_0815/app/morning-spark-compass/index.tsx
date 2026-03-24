@@ -362,7 +362,7 @@ export default function MorningSparkCompassScreen() {
     if (nextStep === 5) {
       // Role Focus
       setRoleLoading(true);
-      getRoleFocus(userId, Array.from(selectedTaskIds))
+      getRoleFocus(userId, [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)])
         .then((data) => {
           setRoleFocus(data);
           setRoleLoading(false);
@@ -373,7 +373,7 @@ export default function MorningSparkCompassScreen() {
     if (nextStep === 6) {
       // Wellness Pulse
       setWellnessLoading(true);
-      getWellnessGaps(userId, Array.from(selectedTaskIds))
+      getWellnessGaps(userId, [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)])
         .then((data) => {
           setWellnessGaps(data);
           setWellnessLoading(false);
