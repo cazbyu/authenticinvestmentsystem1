@@ -50,16 +50,44 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
     const supabase = getSupabaseClient();
     const todayStr = toLocalISOString(new Date()).split('T')[0];
 
-    // Get tasks committed for today (committed_date = today) + today's events
-    const { data: tasks } = await supabase
+    // 1. Get committed task IDs from join table
+    const { data: committedRows } = await supabase
+      .from('0008-ap-ritual-committed-tasks')
+      .select('task_id, status')
+      .eq('user_id', userId)
+      .eq('committed_date', todayStr);
+
+    const committedTaskIds = (committedRows || []).map((r: any) => r.task_id);
+
+    // 2. Get today's events
+    const { data: todayEvents } = await supabase
       .from('0008-ap-tasks')
       .select('id, title, type, is_urgent, is_important, status, due_date, start_time, end_time, is_all_day')
       .eq('user_id', userId)
+      .eq('type', 'event')
+      .eq('due_date', todayStr)
+      .eq('status', 'pending')
       .is('deleted_at', null)
-      .or(`committed_date.eq.${todayStr},and(type.eq.event,due_date.eq.${todayStr},status.eq.pending)`)
-      .order('type', { ascending: false }) // events first
-      .order('is_urgent', { ascending: false })
       .order('start_time', { ascending: true });
+
+    // 3. Get committed tasks by ID
+    let committedTasks: any[] = [];
+    if (committedTaskIds.length > 0) {
+      const { data } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, title, type, is_urgent, is_important, status, due_date, start_time, end_time, is_all_day')
+        .in('id', committedTaskIds)
+        .is('deleted_at', null)
+        .order('is_urgent', { ascending: false });
+      committedTasks = data || [];
+    }
+
+    // Combine: events first, then committed tasks (deduplicated)
+    const eventIds = new Set((todayEvents || []).map((e: any) => e.id));
+    const tasks = [
+      ...(todayEvents || []),
+      ...committedTasks.filter((t: any) => !eventIds.has(t.id)),
+    ];
 
     if (!tasks || tasks.length === 0) {
       setItems([]);

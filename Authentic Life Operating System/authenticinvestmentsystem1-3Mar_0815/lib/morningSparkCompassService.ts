@@ -312,31 +312,88 @@ export async function getWeeklyOneThing(userId: string): Promise<string | null> 
 }
 
 /**
- * Commit selected tasks as today's commitments using committed_date.
- * Clears any existing committed_date for the user, then sets today's date
- * only for the selected task IDs. one_thing is reserved for Weekly Alignment.
+ * Commit selected tasks as today's commitments.
+ * Writes to 0008-ap-ritual-committed-tasks join table.
+ * Creates or reuses today's morning spark ritual session.
  */
-export async function commitTodaysTasks(userIdOrTaskIds: string | string[], taskIdsArg?: string[]): Promise<void> {
+export async function commitTodaysTasks(
+  userId: string,
+  taskIds: string[],
+  sessionId?: string,
+  source: string = 'morning_spark',
+): Promise<string> {
   const supabase = getSupabaseClient();
   const todayStr = toLocalISOString(new Date()).split('T')[0];
 
-  // Support both old signature (taskIds) and new signature (userId, taskIds)
-  let taskIds: string[];
-  if (Array.isArray(userIdOrTaskIds)) {
-    // Old call pattern: commitTodaysTasks(taskIds)
-    taskIds = userIdOrTaskIds;
-  } else {
-    // New call pattern: commitTodaysTasks(userId, taskIds)
-    taskIds = taskIdsArg || [];
+  if (taskIds.length === 0) return sessionId || '';
+
+  // Get or create today's ritual session
+  let sId = sessionId;
+  if (!sId) {
+    const { data: existing } = await supabase
+      .from('0008-ap-ritual-sessions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('ritual_type', 'morning_spark')
+      .eq('session_date', todayStr)
+      .maybeSingle();
+
+    if (existing) {
+      sId = existing.id;
+    } else {
+      const { data: inserted, error } = await supabase
+        .from('0008-ap-ritual-sessions')
+        .insert({
+          user_id: userId,
+          ritual_type: 'morning_spark',
+          session_date: todayStr,
+          status: 'in_progress',
+          started_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      sId = inserted.id;
+    }
   }
 
-  if (taskIds.length === 0) return;
-
-  // Set committed_date = today AND one_thing = true for the selected tasks
+  // Clear any existing commitments for this session (re-entry)
   await supabase
-    .from('0008-ap-tasks')
-    .update({ committed_date: todayStr, one_thing: true })
-    .in('id', taskIds);
+    .from('0008-ap-ritual-committed-tasks')
+    .delete()
+    .eq('session_id', sId);
+
+  // Insert new commitments
+  const rows = taskIds.map((taskId) => ({
+    session_id: sId,
+    task_id: taskId,
+    user_id: userId,
+    committed_date: todayStr,
+    source,
+    status: 'committed',
+  }));
+
+  await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .insert(rows);
+
+  return sId!;
+}
+
+/**
+ * Get today's committed task IDs from the ritual-committed-tasks table.
+ */
+export async function getTodaysCommittedTaskIds(userId: string): Promise<string[]> {
+  const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
+
+  const { data } = await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .select('task_id')
+    .eq('user_id', userId)
+    .eq('committed_date', todayStr);
+
+  return (data || []).map((r: { task_id: string }) => r.task_id);
 }
 
 // ============ GOAL PULSE ============
@@ -565,20 +622,12 @@ export async function getRoleFocus(userId: string, sessionTaskIds?: string[]): P
 
   if (rolesError || !roles) return [];
 
-  // Use session-committed task IDs if provided, otherwise fall back to committed_date = today
+  // Use session-committed task IDs if provided, otherwise query join table
   let committedTaskIds: string[] = [];
   if (sessionTaskIds && sessionTaskIds.length > 0) {
     committedTaskIds = sessionTaskIds;
   } else {
-    const todayStr = toLocalISOString(new Date()).split('T')[0];
-    const { data: committedTasks } = await supabase
-      .from('0008-ap-tasks')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('committed_date', todayStr)
-      .eq('status', 'pending')
-      .is('deleted_at', null);
-    committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
+    committedTaskIds = await getTodaysCommittedTaskIds(userId);
   }
 
   // Build results with task counts and activity tracking
@@ -662,20 +711,12 @@ export async function getWellnessGaps(userId: string, sessionTaskIds?: string[])
     .select('id, name')
     .in('id', domainIds);
 
-  // Use session-committed task IDs if provided, otherwise fall back to committed_date = today
+  // Use session-committed task IDs if provided, otherwise query join table
   let committedTaskIds: string[] = [];
   if (sessionTaskIds && sessionTaskIds.length > 0) {
     committedTaskIds = sessionTaskIds;
   } else {
-    const todayStr = toLocalISOString(new Date()).split('T')[0];
-    const { data: committedTasks } = await supabase
-      .from('0008-ap-tasks')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('committed_date', todayStr)
-      .eq('status', 'pending')
-      .is('deleted_at', null);
-    committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
+    committedTaskIds = await getTodaysCommittedTaskIds(userId);
   }
 
   const results: WellnessGapData[] = [];
@@ -1280,10 +1321,13 @@ export async function getFinalReviewData(
 /**
  * Remove a task from today's commitments (clear committed_date).
  */
-export async function removeFromTodayCommitments(taskId: string): Promise<void> {
+export async function removeFromTodayCommitments(userId: string, taskId: string): Promise<void> {
   const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
   await supabase
-    .from('0008-ap-tasks')
-    .update({ committed_date: null, one_thing: false })
-    .eq('id', taskId);
+    .from('0008-ap-ritual-committed-tasks')
+    .delete()
+    .eq('user_id', userId)
+    .eq('task_id', taskId)
+    .eq('committed_date', todayStr);
 }

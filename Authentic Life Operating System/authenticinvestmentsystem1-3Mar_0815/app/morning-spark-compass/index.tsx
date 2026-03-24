@@ -1584,7 +1584,7 @@ export default function MorningSparkCompassScreen() {
                         <TouchableOpacity
                           style={{ padding: 8 }}
                           onPress={async () => {
-                            await removeFromTodayCommitments(task.id);
+                            await removeFromTodayCommitments(userId, task.id);
                             setFinalReview((prev) => prev ? {
                               ...prev,
                               committedTasks: prev.committedTasks.filter((t) => t.id !== task.id),

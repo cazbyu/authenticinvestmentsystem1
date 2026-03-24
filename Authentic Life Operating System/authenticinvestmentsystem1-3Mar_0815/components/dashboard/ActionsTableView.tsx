@@ -455,15 +455,13 @@ export function ActionsTableView({
       todayStart.setHours(0, 0, 0, 0);
       const todayStartISO = toLocalISOString(todayStart);
 
-      // Fetch today's committed task IDs (committed_date = today) for label display + sorting
+      // Fetch today's committed task IDs from ritual-committed-tasks join table
       const { data: committedData } = await supabase
-        .from('0008-ap-tasks')
-        .select('id')
+        .from('0008-ap-ritual-committed-tasks')
+        .select('task_id')
         .eq('user_id', userId)
-        .eq('committed_date', todayStr)
-        .eq('status', 'pending')
-        .is('deleted_at', null);
-      const contractIds = new Set<string>((committedData || []).map((t: { id: string }) => t.id));
+        .eq('committed_date', todayStr);
+      const contractIds = new Set<string>((committedData || []).map((t: any) => t.task_id));
       setCommittedTaskIds(contractIds);
 
       let tasksData: any[] = [];
