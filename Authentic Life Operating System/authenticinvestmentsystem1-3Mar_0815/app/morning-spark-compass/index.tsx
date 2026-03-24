@@ -432,18 +432,18 @@ export default function MorningSparkCompassScreen() {
   // ---- Sendoff: save session and go to dashboard ----
 
   const handleSendoff = useCallback(async () => {
+    // Navigate immediately — don't block on save
+    router.replace('/(tabs)/dashboard');
     try {
       await saveMorningSparkSession(userId, {
         fuel_level: fuelLevel || 2,
         fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
         screen_context: selectedRole || null,
-        started_at: startedAt,
+        started_at: startedAt || new Date().toISOString(),
         completed_at: new Date().toISOString(),
       });
-      router.replace('/(tabs)/dashboard');
     } catch (error) {
       console.error('Error saving morning spark session:', error);
-      Alert.alert('Error', 'Failed to save session. Please try again.');
     }
   }, [userId, fuelLevel, fuelWhy, fuel3Why, selectedRole, startedAt, router]);
 
@@ -1682,31 +1682,48 @@ export default function MorningSparkCompassScreen() {
           <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
             <CompassDirectionHeader
               direction="north"
-              label="Mission"
-              powerQuestion={'"Why am I here?"'}
+              label="North Star"
+              powerQuestion={'"Who am I? Why am I here?"'}
             />
 
-            <View style={styles.missionContainer}>
-              <Text style={[styles.missionText, { color: colors.text }]}>
-                {missionTouch?.mission_statement || 'Your mission is still forming.'}
-              </Text>
-
-              {missionTouch?.one_thing && (
-                <Text style={[styles.missionOneThing, { color: colors.textSecondary }]}>
-                  This week's ONE thing: {missionTouch.one_thing}
+            {missionTouch?.mission_statement ? (
+              <View style={styles.missionContainer}>
+                <Text style={[styles.missionText, { color: colors.text }]}>
+                  {missionTouch.mission_statement}
                 </Text>
-              )}
-
-              {weeklyOneThing && !missionTouch?.one_thing && (
-                <Text style={[styles.missionOneThing, { color: colors.textSecondary }]}>
-                  This week: {weeklyOneThing}
+                {missionTouch?.one_thing && (
+                  <Text style={[styles.missionOneThing, { color: colors.textSecondary }]}>
+                    This week's ONE thing: {missionTouch.one_thing}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <View style={styles.missionContainer}>
+                <Text style={[styles.ddCoachText, { color: colors.text }]}>
+                  I notice you don't yet have a mission statement. Would you like to plant a seed in that area by answering a question?
                 </Text>
-              )}
-            </View>
+                <Text style={[styles.ddCoachQuestion, { color: colors.textSecondary }]}>
+                  "If you could be remembered for one thing, what would it be?"
+                </Text>
+                <Text style={[styles.ddCoachNote, { color: colors.textSecondary }]}>
+                  You can explore this further in your Weekly Alignment under North Star.
+                </Text>
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.sendoffButton, { backgroundColor: '#D4A843', marginHorizontal: 16, marginTop: 24 }]}
-              onPress={handleSendoff}
+              onPress={() => {
+                // Save session with error handling and navigate
+                saveMorningSparkSession(userId, {
+                  fuel_level: fuelLevel || 2,
+                  fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
+                  screen_context: selectedRole || null,
+                  started_at: startedAt || new Date().toISOString(),
+                  completed_at: new Date().toISOString(),
+                }).catch((err) => console.error('Session save error:', err));
+                router.replace('/(tabs)/dashboard');
+              }}
             >
               <Text style={styles.sendoffButtonText}>Go make it count</Text>
             </TouchableOpacity>
@@ -2237,6 +2254,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  ddCoachText: {
+    fontSize: 17,
+    lineHeight: 26,
+    textAlign: 'center',
+  },
+  ddCoachQuestion: {
+    fontSize: 18,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginTop: 16,
+    paddingHorizontal: 8,
+  },
+  ddCoachNote: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 16,
   },
 
   // Final Commitment Review
