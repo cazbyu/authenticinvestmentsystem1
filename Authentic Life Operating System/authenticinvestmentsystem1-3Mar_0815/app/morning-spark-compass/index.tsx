@@ -833,17 +833,11 @@ export default function MorningSparkCompassScreen() {
                     },
                   ]}
                   disabled={selectedTaskIds.size === 0}
-                  onPress={async () => {
-                    try {
-                      console.log('Committing tasks:', userId, Array.from(selectedTaskIds));
-                      const sessionId = await commitTodaysTasks(userId, Array.from(selectedTaskIds));
-                      console.log('Committed successfully, session:', sessionId);
-                      if (Platform.OS !== 'web') {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      }
-                    } catch (err) {
-                      console.error('commitTodaysTasks error:', err);
-                      Alert.alert('Error', 'Failed to commit tasks: ' + (err as Error).message);
+                  onPress={() => {
+                    // Don't write to DB here — selections are held in state
+                    // and written when user hits "I'm Committed" on the Final Review
+                    if (Platform.OS !== 'web') {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     }
                     goToNextStep();
                   }}
@@ -1625,10 +1619,13 @@ export default function MorningSparkCompassScreen() {
                     style={[styles.captureOptionButton, { backgroundColor: '#4169E1', flex: 2 }]}
                     onPress={async () => {
                       try {
-                        // Collect all task IDs from the final review list
+                        // Collect ALL committed task IDs: step 3 selections + goal actions + any final review additions
                         const allTaskIds = [
-                          ...(finalReview?.tasks || []).map((t) => t.id),
+                          ...Array.from(selectedTaskIds),
                           ...Array.from(committedActionIds),
+                          ...(finalReview?.tasks || [])
+                            .filter((t) => !selectedTaskIds.has(t.id) && !committedActionIds.has(t.id))
+                            .map((t) => t.id),
                         ];
                         console.log('I\'m Committed — writing to DB:', userId, allTaskIds);
                         await commitTodaysTasks(userId, allTaskIds);

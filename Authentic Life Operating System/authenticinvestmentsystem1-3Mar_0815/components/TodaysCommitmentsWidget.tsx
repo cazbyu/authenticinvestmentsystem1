@@ -35,6 +35,7 @@ interface CommittedItem {
   completed: boolean;
   roles: Array<{ id: string; label: string }>;
   domains: Array<{ id: string; label: string }>;
+  goal_title: string | null;
 }
 
 interface TodaysCommitmentsWidgetProps {
@@ -99,9 +100,10 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
     const taskIds = tasks.map((t) => t.id);
 
     // Fetch roles and domains
-    const [rolesR, domainsR] = await Promise.all([
+    const [rolesR, domainsR, goalsR] = await Promise.all([
       supabase.from('0008-ap-universal-roles-join').select('parent_id, role_id').in('parent_id', taskIds).eq('parent_type', 'task'),
       supabase.from('0008-ap-universal-domains-join').select('parent_id, domain_id').in('parent_id', taskIds).eq('parent_type', 'task'),
+      supabase.from('0008-ap-universal-goals-join').select('parent_id, twelve_wk_goal_id, custom_goal_id, goal_type').in('parent_id', taskIds).eq('parent_type', 'task'),
     ]);
 
     const roleIds = [...new Set((rolesR.data || []).map((r: any) => r.role_id))];
@@ -114,6 +116,26 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
 
     const roleLabelMap = new Map((rLabels.data || []).map((r: any) => [r.id, r.label]));
     const domainLabelMap = new Map((dLabels.data || []).map((d: any) => [d.id, d.name]));
+
+    // Fetch goal titles
+    const goalJoins = goalsR.data || [];
+    const twGoalIds = [...new Set(goalJoins.filter((g: any) => g.twelve_wk_goal_id).map((g: any) => g.twelve_wk_goal_id))];
+    const customGoalIds = [...new Set(goalJoins.filter((g: any) => g.custom_goal_id).map((g: any) => g.custom_goal_id))];
+    const [twGoalLabels, customGoalLabels] = await Promise.all([
+      twGoalIds.length > 0 ? supabase.from('0008-ap-goals-12wk').select('id, title').in('id', twGoalIds) : { data: [] },
+      customGoalIds.length > 0 ? supabase.from('0008-ap-goals-custom').select('id, title').in('id', customGoalIds) : { data: [] },
+    ]);
+    const goalTitleMap = new Map<string, string>();
+    for (const g of twGoalLabels.data || []) goalTitleMap.set(g.id, g.title);
+    for (const g of customGoalLabels.data || []) goalTitleMap.set(g.id, g.title);
+
+    const taskGoalMap = new Map<string, string>();
+    for (const gj of goalJoins) {
+      const goalId = gj.twelve_wk_goal_id || gj.custom_goal_id;
+      if (goalId && goalTitleMap.has(goalId)) {
+        taskGoalMap.set(gj.parent_id, goalTitleMap.get(goalId)!);
+      }
+    }
 
     const taskRolesMap = new Map<string, Array<{ id: string; label: string }>>();
     const taskDomainsMap = new Map<string, Array<{ id: string; label: string }>>();
@@ -143,6 +165,7 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
       completed: t.status === 'completed',
       roles: taskRolesMap.get(t.id) || [],
       domains: taskDomainsMap.get(t.id) || [],
+      goal_title: taskGoalMap.get(t.id) || null,
     }));
 
     setItems(result);
@@ -274,8 +297,13 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
                 >
                   {task.title}
                 </Text>
-                {(task.roles.length > 0 || task.domains.length > 0) && (
+                {(task.roles.length > 0 || task.domains.length > 0 || task.goal_title) && (
                   <View style={styles.badgeRow}>
+                    {task.goal_title && (
+                      <View style={[styles.badge, { backgroundColor: '#dbeafe' }]}>
+                        <Text style={[styles.badgeText, { color: '#1d4ed8' }]} numberOfLines={1}>{task.goal_title}</Text>
+                      </View>
+                    )}
                     {task.roles.slice(0, 2).map((r) => (
                       <View key={r.id} style={[styles.badge, { backgroundColor: '#fce7f3' }]}>
                         <Text style={[styles.badgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
