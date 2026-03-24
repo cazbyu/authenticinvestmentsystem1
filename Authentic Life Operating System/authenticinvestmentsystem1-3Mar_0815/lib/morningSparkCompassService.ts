@@ -316,26 +316,27 @@ export async function getWeeklyOneThing(userId: string): Promise<string | null> 
  * Clears any existing committed_date for the user, then sets today's date
  * only for the selected task IDs. one_thing is reserved for Weekly Alignment.
  */
-export async function commitTodaysTasks(userId: string, taskIds: string[]): Promise<void> {
+export async function commitTodaysTasks(userIdOrTaskIds: string | string[], taskIdsArg?: string[]): Promise<void> {
   const supabase = getSupabaseClient();
   const todayStr = toLocalISOString(new Date()).split('T')[0];
 
-  // 1. Clear ALL existing committed_date and one_thing for this user (pending tasks only)
+  // Support both old signature (taskIds) and new signature (userId, taskIds)
+  let taskIds: string[];
+  if (Array.isArray(userIdOrTaskIds)) {
+    // Old call pattern: commitTodaysTasks(taskIds)
+    taskIds = userIdOrTaskIds;
+  } else {
+    // New call pattern: commitTodaysTasks(userId, taskIds)
+    taskIds = taskIdsArg || [];
+  }
+
+  if (taskIds.length === 0) return;
+
+  // Set committed_date = today AND one_thing = true for the selected tasks
   await supabase
     .from('0008-ap-tasks')
-    .update({ committed_date: null, one_thing: false })
-    .eq('user_id', userId)
-    .eq('status', 'pending')
-    .or('committed_date.not.is.null,one_thing.eq.true');
-
-  // 2. Set committed_date = today AND one_thing = true for the selected tasks
-  // (dual-write for transition: widget uses committed_date, old cached code uses one_thing)
-  if (taskIds.length > 0) {
-    await supabase
-      .from('0008-ap-tasks')
-      .update({ committed_date: todayStr, one_thing: true })
-      .in('id', taskIds);
-  }
+    .update({ committed_date: todayStr, one_thing: true })
+    .in('id', taskIds);
 }
 
 // ============ GOAL PULSE ============
