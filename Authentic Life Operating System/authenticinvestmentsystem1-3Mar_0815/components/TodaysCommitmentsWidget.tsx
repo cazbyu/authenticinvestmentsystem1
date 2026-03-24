@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -151,6 +152,13 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
   useEffect(() => {
     loadCommitments();
   }, [loadCommitments]);
+
+  // Reload when screen comes into focus (e.g. returning from Morning Spark)
+  useFocusEffect(
+    useCallback(() => {
+      loadCommitments();
+    }, [loadCommitments])
+  );
 
   const toggleComplete = async (item: CommittedItem) => {
     const supabase = getSupabaseClient();
