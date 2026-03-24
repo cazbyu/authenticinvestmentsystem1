@@ -115,6 +115,7 @@ export default function MorningSparkCompassScreen() {
   const [goalPulseLoading, setGoalPulseLoading] = useState(false);
   const [goalTrackSelection, setGoalTrackSelection] = useState<string | null>(null);
   const [allGoalPulse, setAllGoalPulse] = useState<GoalPulseItem[]>([]);
+  const [committedActionIds, setCommittedActionIds] = useState<Set<string>>(new Set());
 
   // Step 5: Role Focus
   const [roleFocus, setRoleFocus] = useState<RoleFocusData[]>([]);
@@ -903,67 +904,129 @@ export default function MorningSparkCompassScreen() {
                       </View>
                     </View>
 
-                    {/* Action cards — look like task cards from commitments */}
-                    {goalItem.actions_for_today.map((action) => (
-                      <View
-                        key={action.task_id}
-                        style={[
-                          styles.taskCard,
-                          {
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                            borderWidth: 1,
-                            borderLeftWidth: 4,
-                            borderLeftColor: action.is_scheduled_today ? '#4169E1' : '#9ca3af',
-                          },
-                        ]}
-                      >
-                        <View style={styles.taskTextContainer}>
-                          <Text style={[styles.taskTitle, { color: colors.text }]}>{action.title}</Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                            <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
-                              {action.weekly_actual}/{action.target_days} this week
-                            </Text>
-                            {action.is_scheduled_today && (
-                              <Text style={{ fontSize: 11, color: '#4169E1', fontWeight: '600' }}>
-                                • Today
-                              </Text>
-                            )}
-                          </View>
-                          {/* Relationship badges */}
-                          <View style={styles.relationBadgeRow}>
-                            {/* Goal pill */}
-                            <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
-                              <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>
-                                {goalItem.goal_title}
-                              </Text>
+                    {/* Action cards with commitment checkboxes */}
+                    {goalItem.actions_for_today.map((action) => {
+                      const isCommitted = committedActionIds.has(action.task_id);
+                      const isDoneToday = action.completed_today;
+                      const opacity = isDoneToday ? 0.5 : 1;
+
+                      return (
+                        <TouchableOpacity
+                          key={action.task_id}
+                          activeOpacity={0.7}
+                          disabled={isDoneToday}
+                          onPress={() => {
+                            setCommittedActionIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(action.task_id)) {
+                                next.delete(action.task_id);
+                              } else {
+                                next.add(action.task_id);
+                              }
+                              return next;
+                            });
+                            if (Platform.OS !== 'web') {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }
+                          }}
+                          style={[
+                            styles.taskCard,
+                            {
+                              opacity,
+                              backgroundColor: colors.surface,
+                              borderColor: isCommitted ? '#4169E1' : colors.border,
+                              borderWidth: isCommitted ? 2 : 1,
+                              borderLeftWidth: 4,
+                              borderLeftColor: isDoneToday ? '#39b54a' : action.is_scheduled_today ? '#4169E1' : '#9ca3af',
+                            },
+                          ]}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {/* Checkbox */}
+                            <View
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: 6,
+                                borderWidth: 2,
+                                borderColor: isDoneToday ? '#39b54a' : isCommitted ? '#4169E1' : colors.border,
+                                backgroundColor: isDoneToday ? '#39b54a' : isCommitted ? '#4169E1' : 'transparent',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginRight: 12,
+                              }}
+                            >
+                              {(isCommitted || isDoneToday) && (
+                                <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>✓</Text>
+                              )}
                             </View>
-                            {action.roles.slice(0, 2).map((r) => (
-                              <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+
+                            <View style={[styles.taskTextContainer, { flex: 1 }]}>
+                              <Text style={[
+                                styles.taskTitle,
+                                { color: isDoneToday ? colors.textSecondary : colors.text },
+                                isDoneToday && { textDecorationLine: 'line-through' },
+                              ]}>
+                                {action.title}
+                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                                <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
+                                  {action.weekly_actual}/{action.target_days} this week
+                                </Text>
+                                {isDoneToday ? (
+                                  <Text style={{ fontSize: 11, color: '#39b54a', fontWeight: '600' }}>
+                                    • Done today
+                                  </Text>
+                                ) : action.is_scheduled_today ? (
+                                  <Text style={{ fontSize: 11, color: '#4169E1', fontWeight: '600' }}>
+                                    • Today
+                                  </Text>
+                                ) : null}
                               </View>
-                            ))}
-                            {action.roles.length > 2 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{action.roles.length - 2}</Text>
+                              {/* Relationship badges */}
+                              <View style={styles.relationBadgeRow}>
+                                <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>
+                                    {goalItem.goal_title}
+                                  </Text>
+                                </View>
+                                {action.roles.slice(0, 2).map((r) => (
+                                  <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                                  </View>
+                                ))}
+                                {action.roles.length > 2 && (
+                                  <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{action.roles.length - 2}</Text>
+                                  </View>
+                                )}
+                                {action.domains.slice(0, 2).map((d) => (
+                                  <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.name}</Text>
+                                  </View>
+                                ))}
+                                {action.domains.length > 2 && (
+                                  <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{action.domains.length - 2}</Text>
+                                  </View>
+                                )}
                               </View>
-                            )}
-                            {action.domains.slice(0, 2).map((d) => (
-                              <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.name}</Text>
-                              </View>
-                            ))}
-                            {action.domains.length > 2 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{action.domains.length - 2}</Text>
-                              </View>
-                            )}
+                            </View>
                           </View>
-                        </View>
-                      </View>
-                    ))}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 ))}
+
+                {/* Commit selected actions summary */}
+                {committedActionIds.size > 0 && (
+                  <View style={{ marginHorizontal: 16, marginTop: 16, marginBottom: 8 }}>
+                    <Text style={[styles.captureQuestion, { color: colors.textSecondary, fontSize: 14 }]}>
+                      {committedActionIds.size} action{committedActionIds.size !== 1 ? 's' : ''} committed for today
+                    </Text>
+                  </View>
+                )}
               </>
             )}
           </ScrollView>

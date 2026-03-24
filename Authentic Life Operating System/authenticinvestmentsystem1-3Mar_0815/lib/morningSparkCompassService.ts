@@ -50,6 +50,7 @@ export interface GoalActionForToday {
   domains: Array<{ id: string; name: string }>;
   is_scheduled_today: boolean;
   is_complete_for_week: boolean;
+  completed_today: boolean;
 }
 
 export interface GoalPulseItem {
@@ -425,9 +426,10 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
       weekTotalTarget += targetDays;
       weekTotalActual += weeklyActual;
 
-      // Show action if: scheduled today AND not completed today,
+      // Show action if: scheduled today (even if completed — shown as done),
       // OR not yet complete for the week (needs catch-up)
-      if ((isScheduledToday && !completedToday) || (!isCompleteForWeek && !completedToday)) {
+      // Hide only if: complete for the week AND not scheduled today
+      if (isScheduledToday || !isCompleteForWeek) {
         todayActions.push({
           task_id: a.task_id,
           title: a.title,
@@ -439,6 +441,7 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
           domains: (a.domains || []).map((d: any) => ({ id: d.id, name: d.label || d.name || '' })),
           is_scheduled_today: isScheduledToday,
           is_complete_for_week: isCompleteForWeek,
+          completed_today: completedToday,
         });
       }
     }
