@@ -15,6 +15,9 @@ export interface ReconciliationTask {
   id: string;
   title: string;
   status: string;
+  roles: Array<{ id: string; label: string }>;
+  domains: Array<{ id: string; label: string }>;
+  goal_title: string | null;
 }
 
 export interface RolePulseRole {
@@ -86,10 +89,63 @@ export async function getTodaysCommittedTasks(
     return [];
   }
 
-  return (data || []).map((row) => ({
+  const taskIds = (data || []).map((r: any) => r.id);
+  if (taskIds.length === 0) return [];
+
+  // 3. Fetch roles, domains, goals for all tasks
+  const [rolesR, domainsR, goalsR] = await Promise.all([
+    supabase.from('0008-ap-universal-roles-join').select('parent_id, role_id').in('parent_id', taskIds).eq('parent_type', 'task'),
+    supabase.from('0008-ap-universal-domains-join').select('parent_id, domain_id').in('parent_id', taskIds).eq('parent_type', 'task'),
+    supabase.from('0008-ap-universal-goals-join').select('parent_id, twelve_wk_goal_id, custom_goal_id').in('parent_id', taskIds).eq('parent_type', 'task'),
+  ]);
+
+  // Label lookups
+  const roleIds = [...new Set((rolesR.data || []).map((r: any) => r.role_id))];
+  const domainIds = [...new Set((domainsR.data || []).map((d: any) => d.domain_id))];
+  const twGoalIds = [...new Set((goalsR.data || []).filter((g: any) => g.twelve_wk_goal_id).map((g: any) => g.twelve_wk_goal_id))];
+  const customGoalIds = [...new Set((goalsR.data || []).filter((g: any) => g.custom_goal_id).map((g: any) => g.custom_goal_id))];
+
+  const [rLabels, dLabels, twGLabels, cGLabels] = await Promise.all([
+    roleIds.length > 0 ? supabase.from('0008-ap-roles').select('id, label').in('id', roleIds) : { data: [] },
+    domainIds.length > 0 ? supabase.from('0008-ap-domains').select('id, name').in('id', domainIds) : { data: [] },
+    twGoalIds.length > 0 ? supabase.from('0008-ap-goals-12wk').select('id, title').in('id', twGoalIds) : { data: [] },
+    customGoalIds.length > 0 ? supabase.from('0008-ap-goals-custom').select('id, title').in('id', customGoalIds) : { data: [] },
+  ]);
+
+  const roleLabelMap = new Map((rLabels.data || []).map((r: any) => [r.id, r.label]));
+  const domainLabelMap = new Map((dLabels.data || []).map((d: any) => [d.id, d.name]));
+  const goalTitleMap = new Map<string, string>();
+  for (const g of twGLabels.data || []) goalTitleMap.set(g.id, g.title);
+  for (const g of cGLabels.data || []) goalTitleMap.set(g.id, g.title);
+
+  const taskRolesMap = new Map<string, Array<{ id: string; label: string }>>();
+  const taskDomainsMap = new Map<string, Array<{ id: string; label: string }>>();
+  const taskGoalMap = new Map<string, string>();
+
+  for (const r of rolesR.data || []) {
+    const arr = taskRolesMap.get(r.parent_id) || [];
+    arr.push({ id: r.role_id, label: roleLabelMap.get(r.role_id) || '' });
+    taskRolesMap.set(r.parent_id, arr);
+  }
+  for (const d of domainsR.data || []) {
+    const arr = taskDomainsMap.get(d.parent_id) || [];
+    arr.push({ id: d.domain_id, label: domainLabelMap.get(d.domain_id) || '' });
+    taskDomainsMap.set(d.parent_id, arr);
+  }
+  for (const gj of goalsR.data || []) {
+    const goalId = gj.twelve_wk_goal_id || gj.custom_goal_id;
+    if (goalId && goalTitleMap.has(goalId)) {
+      taskGoalMap.set(gj.parent_id, goalTitleMap.get(goalId)!);
+    }
+  }
+
+  return (data || []).map((row: any) => ({
     id: row.id,
     title: row.title,
     status: row.status,
+    roles: taskRolesMap.get(row.id) || [],
+    domains: taskDomainsMap.get(row.id) || [],
+    goal_title: taskGoalMap.get(row.id) || null,
   }));
 }
 

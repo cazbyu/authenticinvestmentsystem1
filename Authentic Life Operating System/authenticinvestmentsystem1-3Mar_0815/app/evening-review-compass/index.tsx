@@ -9,7 +9,9 @@ import {
   Platform,
   TextInput,
   ScrollView,
+  Modal,
 } from 'react-native';
+import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -59,10 +61,10 @@ export default function EveningReviewCompassScreen() {
 
   // Step 0: Task Reconciliation
   const [reconciliationTasks, setReconciliationTasks] = useState<ReconciliationTask[]>([]);
-  const [reconciledTasks, setReconciledTasks] = useState<Map<string, 'done' | 'carry_forward' | 'release'>>(new Map());
+  const [reconciledTasks, setReconciledTasks] = useState<Map<string, 'done' | 'alter' | 'release'>>(new Map());
   const [doneCount, setDoneCount] = useState(0);
-  const [carryCount, setCarryCount] = useState(0);
   const [releaseCount, setReleaseCount] = useState(0);
+  const [alterTaskId, setAlterTaskId] = useState<string | null>(null);
 
   // Step 2: Brain Dump
   const [brainDumpText, setBrainDumpText] = useState('');
@@ -110,6 +112,20 @@ export default function EveningReviewCompassScreen() {
       // Pre-load reconciliation tasks
       const tasks = await getTodaysCommittedTasks(user.id);
       setReconciliationTasks(tasks);
+
+      // Pre-fill "Done" for already-completed tasks
+      const prefilled = new Map<string, 'done' | 'alter' | 'release'>();
+      let prefilledDone = 0;
+      for (const t of tasks) {
+        if (t.status === 'completed') {
+          prefilled.set(t.id, 'done');
+          prefilledDone++;
+        }
+      }
+      if (prefilled.size > 0) {
+        setReconciledTasks(prefilled);
+        setDoneCount(prefilledDone);
+      }
     } catch (error) {
       console.error('[EveningReview] Error loading initial data:', error);
     } finally {
@@ -120,8 +136,15 @@ export default function EveningReviewCompassScreen() {
   // ---- Reconciliation handlers ----
 
   const handleReconcile = useCallback(
-    async (taskId: string, action: 'done' | 'carry_forward' | 'release') => {
-      const success = await reconcileTask(taskId, action);
+    async (taskId: string, action: 'done' | 'alter' | 'release') => {
+      // For "alter", open the edit modal instead of reconciling
+      if (action === 'alter') {
+        setAlterTaskId(taskId);
+        return;
+      }
+
+      const reconcileAction = action === 'done' ? 'done' : 'release';
+      const success = await reconcileTask(taskId, reconcileAction);
       if (!success) {
         Alert.alert('Error', 'Failed to update task. Please try again.');
         return;
@@ -134,15 +157,11 @@ export default function EveningReviewCompassScreen() {
       // Check if this task was previously reconciled with a different action
       const previousAction = reconciledTasks.get(taskId);
       if (previousAction) {
-        // Undo previous count
         if (previousAction === 'done') setDoneCount((c) => c - 1);
-        if (previousAction === 'carry_forward') setCarryCount((c) => c - 1);
         if (previousAction === 'release') setReleaseCount((c) => c - 1);
       }
 
-      // Apply new count
       if (action === 'done') setDoneCount((c) => c + 1);
-      if (action === 'carry_forward') setCarryCount((c) => c + 1);
       if (action === 'release') setReleaseCount((c) => c + 1);
 
       setReconciledTasks((prev) => {
@@ -245,7 +264,7 @@ export default function EveningReviewCompassScreen() {
         started_at: startedAt,
         completed_at: new Date().toISOString(),
         role_pulse: rolePulseResponses,
-        carry_forward_count: carryCount,
+        carry_forward_count: 0 /* carryCount removed */,
         release_count: releaseCount,
       });
     } catch (error) {
@@ -263,7 +282,7 @@ export default function EveningReviewCompassScreen() {
     fuel3Why,
     startedAt,
     rolePulseResponses,
-    carryCount,
+    0 /* carryCount removed */,
     releaseCount,
   ]);
 
@@ -387,20 +406,50 @@ export default function EveningReviewCompassScreen() {
                     borderColor: action
                       ? action === 'done'
                         ? '#4CAF50'
-                        : action === 'carry_forward'
-                          ? '#FF9800'
-                          : '#E53935'
+                        : action === 'release'
+                          ? '#E53935'
+                          : colors.border
                       : colors.border,
                     borderWidth: action ? 2 : 1,
                   },
                 ]}
               >
-                <Text
-                  style={[styles.taskTitle, { color: colors.text }]}
-                  numberOfLines={2}
-                >
-                  {task.title}
-                </Text>
+                {/* Title row with pill badges */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Text
+                    style={[styles.taskTitle, { color: colors.text, flex: 1, marginRight: 8 }]}
+                    numberOfLines={2}
+                  >
+                    {task.title}
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, maxWidth: '50%', justifyContent: 'flex-end' }}>
+                    {task.goal_title && (
+                      <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 10, color: '#1d4ed8', fontWeight: '500' }} numberOfLines={1}>{task.goal_title}</Text>
+                      </View>
+                    )}
+                    {task.roles.slice(0, 2).map((r) => (
+                      <View key={r.id} style={{ backgroundColor: '#fce7f3', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 10, color: '#9333ea', fontWeight: '500' }} numberOfLines={1}>{r.label}</Text>
+                      </View>
+                    ))}
+                    {task.roles.length > 2 && (
+                      <View style={{ backgroundColor: '#fce7f3', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 10, color: '#9333ea', fontWeight: '500' }}>+{task.roles.length - 2}</Text>
+                      </View>
+                    )}
+                    {task.domains.slice(0, 2).map((d) => (
+                      <View key={d.id} style={{ backgroundColor: '#fed7aa', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 10, color: '#c2410c', fontWeight: '500' }} numberOfLines={1}>{d.label}</Text>
+                      </View>
+                    ))}
+                    {task.domains.length > 2 && (
+                      <View style={{ backgroundColor: '#fed7aa', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
+                        <Text style={{ fontSize: 10, color: '#c2410c', fontWeight: '500' }}>+{task.domains.length - 2}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
 
                 <View style={styles.actionButtonsRow}>
                   <TouchableOpacity
@@ -427,19 +476,19 @@ export default function EveningReviewCompassScreen() {
                     style={[
                       styles.actionButton,
                       {
-                        backgroundColor: action === 'carry_forward' ? '#FF9800' : colors.background,
-                        borderColor: '#FF9800',
+                        backgroundColor: colors.background,
+                        borderColor: '#4169E1',
                       },
                     ]}
-                    onPress={() => handleReconcile(task.id, 'carry_forward')}
+                    onPress={() => handleReconcile(task.id, 'alter')}
                   >
                     <Text
                       style={[
                         styles.actionButtonText,
-                        { color: action === 'carry_forward' ? '#FFF' : '#FF9800' },
+                        { color: '#4169E1' },
                       ]}
                     >
-                      Carry forward {'\u2192'}
+                      Alter ✎
                     </Text>
                   </TouchableOpacity>
 
@@ -466,6 +515,21 @@ export default function EveningReviewCompassScreen() {
               </View>
             );
           })}
+
+          {/* Alter task modal */}
+          <Modal visible={!!alterTaskId} animationType="slide" presentationStyle="fullScreen">
+            <TaskEventForm
+              mode="edit"
+              initialData={alterTaskId ? { id: alterTaskId } : undefined}
+              onClose={() => setAlterTaskId(null)}
+              onSubmitSuccess={async () => {
+                setAlterTaskId(null);
+                // Reload tasks to reflect changes
+                const updated = await getTodaysCommittedTasks(userId);
+                setReconciliationTasks(updated);
+              }}
+            />
+          </Modal>
         </View>
       )}
     </ScrollView>
@@ -523,7 +587,7 @@ export default function EveningReviewCompassScreen() {
                   Carried forward
                 </Text>
                 <Text style={[styles.scoreBreakdownValue, { color: '#FF9800' }]}>
-                  {carryCount}
+                  {0 /* carryCount removed */}
                 </Text>
               </View>
               <View style={styles.scoreBreakdownRow}>
