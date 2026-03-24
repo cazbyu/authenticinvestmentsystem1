@@ -455,12 +455,12 @@ export function ActionsTableView({
       todayStart.setHours(0, 0, 0, 0);
       const todayStartISO = toLocalISOString(todayStart);
 
-      // Fetch today's committed task IDs (one_thing = true) for label display + sorting
+      // Fetch today's committed task IDs (committed_date = today) for label display + sorting
       const { data: committedData } = await supabase
         .from('0008-ap-tasks')
         .select('id')
         .eq('user_id', userId)
-        .eq('one_thing', true)
+        .eq('committed_date', todayStr)
         .eq('status', 'pending')
         .is('deleted_at', null);
       const contractIds = new Set<string>((committedData || []).map((t: { id: string }) => t.id));

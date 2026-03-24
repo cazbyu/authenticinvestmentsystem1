@@ -312,26 +312,27 @@ export async function getWeeklyOneThing(userId: string): Promise<string | null> 
 }
 
 /**
- * Commit selected tasks as today's commitments (set one_thing = true).
- * First clears ALL existing one_thing flags for the user (pending tasks only),
- * then sets one_thing = true only for the selected task IDs.
+ * Commit selected tasks as today's commitments using committed_date.
+ * Clears any existing committed_date for the user, then sets today's date
+ * only for the selected task IDs. one_thing is reserved for Weekly Alignment.
  */
 export async function commitTodaysTasks(userId: string, taskIds: string[]): Promise<void> {
   const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
 
-  // 1. Clear ALL existing one_thing flags for this user (pending tasks only)
+  // 1. Clear ALL existing committed_date for this user (pending tasks only)
   await supabase
     .from('0008-ap-tasks')
-    .update({ one_thing: false })
+    .update({ committed_date: null })
     .eq('user_id', userId)
-    .eq('one_thing', true)
+    .not('committed_date', 'is', null)
     .eq('status', 'pending');
 
-  // 2. Set one_thing = true only for the selected tasks
+  // 2. Set committed_date = today only for the selected tasks
   if (taskIds.length > 0) {
     await supabase
       .from('0008-ap-tasks')
-      .update({ one_thing: true })
+      .update({ committed_date: todayStr })
       .in('id', taskIds);
   }
 }
@@ -562,16 +563,17 @@ export async function getRoleFocus(userId: string, sessionTaskIds?: string[]): P
 
   if (rolesError || !roles) return [];
 
-  // Use session-committed task IDs if provided, otherwise fall back to one_thing=true
+  // Use session-committed task IDs if provided, otherwise fall back to committed_date = today
   let committedTaskIds: string[] = [];
   if (sessionTaskIds && sessionTaskIds.length > 0) {
     committedTaskIds = sessionTaskIds;
   } else {
+    const todayStr = toLocalISOString(new Date()).split('T')[0];
     const { data: committedTasks } = await supabase
       .from('0008-ap-tasks')
       .select('id')
       .eq('user_id', userId)
-      .eq('one_thing', true)
+      .eq('committed_date', todayStr)
       .eq('status', 'pending')
       .is('deleted_at', null);
     committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
@@ -658,16 +660,17 @@ export async function getWellnessGaps(userId: string, sessionTaskIds?: string[])
     .select('id, name')
     .in('id', domainIds);
 
-  // Use session-committed task IDs if provided, otherwise fall back to one_thing=true
+  // Use session-committed task IDs if provided, otherwise fall back to committed_date = today
   let committedTaskIds: string[] = [];
   if (sessionTaskIds && sessionTaskIds.length > 0) {
     committedTaskIds = sessionTaskIds;
   } else {
+    const todayStr = toLocalISOString(new Date()).split('T')[0];
     const { data: committedTasks } = await supabase
       .from('0008-ap-tasks')
       .select('id')
       .eq('user_id', userId)
-      .eq('one_thing', true)
+      .eq('committed_date', todayStr)
       .eq('status', 'pending')
       .is('deleted_at', null);
     committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
@@ -1273,12 +1276,12 @@ export async function getFinalReviewData(
 }
 
 /**
- * Remove a task from today's commitments (set one_thing = false).
+ * Remove a task from today's commitments (clear committed_date).
  */
 export async function removeFromTodayCommitments(taskId: string): Promise<void> {
   const supabase = getSupabaseClient();
   await supabase
     .from('0008-ap-tasks')
-    .update({ one_thing: false })
+    .update({ committed_date: null })
     .eq('id', taskId);
 }

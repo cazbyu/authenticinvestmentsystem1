@@ -50,13 +50,13 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
     const supabase = getSupabaseClient();
     const todayStr = toLocalISOString(new Date()).split('T')[0];
 
-    // Get tasks committed for today (one_thing = true) + today's events
+    // Get tasks committed for today (committed_date = today) + today's events
     const { data: tasks } = await supabase
       .from('0008-ap-tasks')
       .select('id, title, type, is_urgent, is_important, status, due_date, start_time, end_time, is_all_day')
       .eq('user_id', userId)
       .is('deleted_at', null)
-      .or(`one_thing.eq.true,and(type.eq.event,due_date.eq.${todayStr})`)
+      .or(`committed_date.eq.${todayStr},and(type.eq.event,due_date.eq.${todayStr})`)
       .order('type', { ascending: false }) // events first
       .order('is_urgent', { ascending: false })
       .order('start_time', { ascending: true });
