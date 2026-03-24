@@ -183,21 +183,7 @@ export default function MorningSparkCompassScreen() {
 
   // Opening animation is handled by LifeCompass ceremony (onCeremonyComplete → goToNextStep)
 
-  // ---- Mission auto-advance (step 7) ----
-
-  useEffect(() => {
-    if (currentStep === 7 && !missionLoading) {
-      missionTimerRef.current = setTimeout(() => {
-        setCurrentStep(8);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
-      }, 3000);
-    }
-    return () => {
-      if (missionTimerRef.current) clearTimeout(missionTimerRef.current);
-    };
-  }, [currentStep, missionLoading]);
+  // (Mission auto-advance removed — step 7 is now Final Commitment Review)
 
   // ---- Brain dump item processing ----
 
@@ -1087,7 +1073,7 @@ export default function MorningSparkCompassScreen() {
                   These are the roles you plan to invest in today.
                 </Text>
 
-                {roleFocus.map((role) => (
+                {roleFocus.filter((role) => role.pending_task_count > 0 || role.needs_attention).map((role) => (
                   <View
                     key={role.role_id}
                     style={[
@@ -1113,7 +1099,7 @@ export default function MorningSparkCompassScreen() {
                         )}
                       </View>
                       <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
-                        ({role.pending_task_count} {role.pending_task_count === 1 ? 'task' : 'tasks'})
+                        ({role.pending_task_count} today)
                       </Text>
                     </View>
                     {role.role_mission && (
@@ -1419,7 +1405,7 @@ export default function MorningSparkCompassScreen() {
                   Your wellness zones for today.
                 </Text>
 
-                {wellnessGaps.map((zone) => (
+                {wellnessGaps.filter((zone) => zone.pending_task_count > 0 || zone.needs_attention).map((zone) => (
                   <View
                     key={zone.zone_id}
                     style={[
@@ -1445,7 +1431,7 @@ export default function MorningSparkCompassScreen() {
                         )}
                       </View>
                       <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
-                        ({zone.pending_task_count} {zone.pending_task_count === 1 ? 'task' : 'tasks'})
+                        ({zone.pending_task_count} today)
                       </Text>
                     </View>
                     {zone.needs_attention && zone.days_since_activity !== null && (

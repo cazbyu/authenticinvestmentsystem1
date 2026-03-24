@@ -553,15 +553,16 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
 
   if (rolesError || !roles) return [];
 
-  // Get pending task IDs for this user
-  const { data: pendingTasks } = await supabase
+  // Get today's committed task IDs (one_thing = true)
+  const { data: committedTasks } = await supabase
     .from('0008-ap-tasks')
     .select('id')
     .eq('user_id', userId)
+    .eq('one_thing', true)
     .eq('status', 'pending')
     .is('deleted_at', null);
 
-  const pendingTaskIds = (pendingTasks || []).map((t: { id: string }) => t.id);
+  const committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
 
   // Build results with task counts and activity tracking
   const results: RoleFocusData[] = [];
@@ -571,16 +572,16 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
     const slotNum = parseInt(m.slot_code.replace('R', ''), 10);
     const isPriority = slotNum >= 1 && slotNum <= 4;
 
-    // Count pending tasks for this role
-    let pendingCount = 0;
-    if (pendingTaskIds.length > 0) {
+    // Count today's committed tasks for this role
+    let committedCount = 0;
+    if (committedTaskIds.length > 0) {
       const { count } = await supabase
         .from('0008-ap-universal-roles-join')
         .select('parent_id', { count: 'exact', head: true })
         .eq('role_id', m.mapped_entity_id)
         .eq('parent_type', 'task')
-        .in('parent_id', pendingTaskIds);
-      pendingCount = count || 0;
+        .in('parent_id', committedTaskIds);
+      committedCount = count || 0;
     }
 
     // Check days since last activity (only compute for priority roles)
@@ -600,7 +601,7 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
       role_name: role?.label || m.mapped_entity_label || 'Unknown Role',
       role_mission: role?.role_mission || null,
       slot_code: m.slot_code,
-      pending_task_count: pendingCount,
+      pending_task_count: committedCount,
       is_priority: isPriority,
       days_since_activity: daysSince,
       needs_attention: needsAttention,
@@ -661,16 +662,16 @@ export async function getWellnessGaps(userId: string): Promise<WellnessGapData[]
     const slotNum = parseInt(m.slot_code.replace('WZ', ''), 10);
     const isPriority = slotNum >= 1 && slotNum <= 4;
 
-    // Count pending tasks for this domain
-    let pendingCount = 0;
-    if (pendingTaskIds.length > 0) {
+    // Count today's committed tasks for this domain
+    let committedCount = 0;
+    if (committedTaskIds.length > 0) {
       const { count } = await supabase
         .from('0008-ap-universal-domains-join')
         .select('parent_id', { count: 'exact', head: true })
         .eq('domain_id', m.mapped_entity_id)
         .eq('parent_type', 'task')
-        .in('parent_id', pendingTaskIds);
-      pendingCount = count || 0;
+        .in('parent_id', committedTaskIds);
+      committedCount = count || 0;
     }
 
     // Check days since last activity (only for priority zones)
@@ -688,7 +689,7 @@ export async function getWellnessGaps(userId: string): Promise<WellnessGapData[]
       zone_id: m.mapped_entity_id,
       zone_name: domain?.name || m.mapped_entity_label || 'Unknown Zone',
       slot_code: m.slot_code,
-      pending_task_count: pendingCount,
+      pending_task_count: committedCount,
       is_priority: isPriority,
       days_since_activity: daysSince,
       needs_attention: needsAttention,
