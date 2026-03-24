@@ -711,10 +711,22 @@ export default function Dashboard() {
     await supabase.from('0008-ap-conversation-summaries').delete().eq('user_id', user.id);
     await supabase.from('0008-ap-conversation-messages').delete().eq('user_id', user.id);
     await supabase.from('0008-ap-captures').delete().eq('user_id', user.id);
+
+    // Clear committed tasks (before sessions, since FK cascades)
+    await supabase.from('0008-ap-ritual-committed-tasks').delete().eq('user_id', user.id);
+
+    // Clear ritual sessions
     await supabase.from('0008-ap-ritual-sessions').delete().eq('user_id', user.id);
 
+    // Clear stale task flags from previous approaches
+    await supabase
+      .from('0008-ap-tasks')
+      .update({ one_thing: false, committed_date: null })
+      .eq('user_id', user.id)
+      .eq('one_thing', true);
+
     await checkRitualAvailability();
-    Alert.alert('Dev Reset Complete', 'Spark, North Star (Identity/Mission/Vision/Values), and all responses have been cleared.');
+    Alert.alert('Dev Reset Complete', 'All ritual data, committed tasks, and responses have been cleared.');
   } catch (error) {
     console.error('Error resetting dev data:', error);
     Alert.alert('Error', 'Failed to reset dev data');
