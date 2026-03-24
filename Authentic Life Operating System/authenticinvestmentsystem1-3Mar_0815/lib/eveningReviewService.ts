@@ -89,14 +89,14 @@ export async function getTodaysCommittedTasks(
     return [];
   }
 
-  const taskIds = (data || []).map((r: any) => r.id);
-  if (taskIds.length === 0) return [];
+  const fetchedTaskIds = (data || []).map((r: any) => r.id);
+  if (fetchedTaskIds.length === 0) return [];
 
   // 3. Fetch roles, domains, goals for all tasks
   const [rolesR, domainsR, goalsR] = await Promise.all([
-    supabase.from('0008-ap-universal-roles-join').select('parent_id, role_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-    supabase.from('0008-ap-universal-domains-join').select('parent_id, domain_id').in('parent_id', taskIds).eq('parent_type', 'task'),
-    supabase.from('0008-ap-universal-goals-join').select('parent_id, twelve_wk_goal_id, custom_goal_id').in('parent_id', taskIds).eq('parent_type', 'task'),
+    supabase.from('0008-ap-universal-roles-join').select('parent_id, role_id').in('parent_id', fetchedTaskIds).eq('parent_type', 'task'),
+    supabase.from('0008-ap-universal-domains-join').select('parent_id, domain_id').in('parent_id', fetchedTaskIds).eq('parent_type', 'task'),
+    supabase.from('0008-ap-universal-goals-join').select('parent_id, twelve_wk_goal_id, custom_goal_id').in('parent_id', fetchedTaskIds).eq('parent_type', 'task'),
   ]);
 
   // Label lookups
