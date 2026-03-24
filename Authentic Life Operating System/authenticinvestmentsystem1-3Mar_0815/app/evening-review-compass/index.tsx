@@ -517,19 +517,30 @@ export default function EveningReviewCompassScreen() {
           })}
 
           {/* Alter task modal */}
-          <Modal visible={!!alterTaskId} animationType="slide" presentationStyle="fullScreen">
-            <TaskEventForm
-              mode="edit"
-              initialData={alterTaskId ? { id: alterTaskId } : undefined}
-              onClose={() => setAlterTaskId(null)}
-              onSubmitSuccess={async () => {
-                setAlterTaskId(null);
-                // Reload tasks to reflect changes
-                const updated = await getTodaysCommittedTasks(userId);
-                setReconciliationTasks(updated);
-              }}
-            />
-          </Modal>
+          {alterTaskId && (() => {
+            const alterTask = reconciliationTasks.find((t) => t.id === alterTaskId);
+            return (
+              <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
+                <TaskEventForm
+                  mode="edit"
+                  initialData={alterTask ? {
+                    id: alterTask.id,
+                    title: alterTask.title,
+                    status: alterTask.status,
+                    type: 'task',
+                    roles: alterTask.roles.map((r) => ({ id: r.id, label: r.label })),
+                    domains: alterTask.domains.map((d) => ({ id: d.id, name: d.label })),
+                  } : { id: alterTaskId }}
+                  onClose={() => setAlterTaskId(null)}
+                  onSubmitSuccess={async () => {
+                    setAlterTaskId(null);
+                    const updated = await getTodaysCommittedTasks(userId);
+                    setReconciliationTasks(updated);
+                  }}
+                />
+              </Modal>
+            );
+          })()}
         </View>
       )}
     </ScrollView>
