@@ -1000,3 +1000,215 @@ export function buildFormPrefill(item: ParsedCaptureItem): TaskEventFormPrefill 
     is_deposit_idea: item.suggested_type === 'depositIdea',
   };
 }
+
+// ============ FINAL COMMITMENT REVIEW ============
+
+export interface FinalReviewEvent {
+  id: string;
+  title: string;
+  start_time: string | null;
+  end_time: string | null;
+  is_all_day: boolean;
+  roles: CommitmentTaskRelation[];
+  domains: CommitmentTaskRelation[];
+}
+
+export interface FinalReviewTask {
+  id: string;
+  title: string;
+  is_urgent: boolean;
+  is_important: boolean;
+  type: string;
+  roles: CommitmentTaskRelation[];
+  domains: CommitmentTaskRelation[];
+  keyRelationships: CommitmentTaskRelation[];
+  source: 'task' | 'goal_action';
+  goal_title?: string;
+}
+
+export interface FinalReviewData {
+  events: FinalReviewEvent[];
+  committedTasks: FinalReviewTask[];
+}
+
+/**
+ * Get today's events and committed tasks for the final review screen.
+ * Committed tasks = one_thing=true (from step 3) + any goal actions committed (passed as IDs).
+ */
+export async function getFinalReviewData(
+  userId: string,
+  committedGoalActionIds: string[],
+): Promise<FinalReviewData> {
+  const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
+
+  // 1. Get today's events
+  const { data: events } = await supabase
+    .from('0008-ap-tasks')
+    .select('id, title, start_time, end_time, is_all_day')
+    .eq('user_id', userId)
+    .eq('type', 'event')
+    .eq('status', 'pending')
+    .is('deleted_at', null)
+    .eq('due_date', todayStr)
+    .order('start_time', { ascending: true });
+
+  // 2. Get committed tasks (one_thing = true)
+  const { data: committedTasks } = await supabase
+    .from('0008-ap-tasks')
+    .select('id, title, is_urgent, is_important, type')
+    .eq('user_id', userId)
+    .eq('one_thing', true)
+    .eq('status', 'pending')
+    .is('deleted_at', null);
+
+  // 3. Get committed goal action titles (from step 4 selections)
+  let goalActions: FinalReviewTask[] = [];
+  if (committedGoalActionIds.length > 0) {
+    const { data: actionTasks } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, title, is_urgent, is_important, type')
+      .in('id', committedGoalActionIds);
+
+    // Get goal names for each action
+    const { data: goalJoins } = await supabase
+      .from('0008-ap-universal-goals-join')
+      .select('parent_id, twelve_wk_goal_id, custom_goal_id, goal_type')
+      .in('parent_id', committedGoalActionIds)
+      .eq('parent_type', 'task');
+
+    // Get goal titles
+    const goalIds12 = (goalJoins || []).filter((j: any) => j.twelve_wk_goal_id).map((j: any) => j.twelve_wk_goal_id);
+    const goalIdsCustom = (goalJoins || []).filter((j: any) => j.custom_goal_id).map((j: any) => j.custom_goal_id);
+
+    const [goals12, goalsCustom] = await Promise.all([
+      goalIds12.length > 0
+        ? supabase.from('0008-ap-goals-12wk').select('id, title').in('id', goalIds12)
+        : { data: [] },
+      goalIdsCustom.length > 0
+        ? supabase.from('0008-ap-goals-custom').select('id, title').in('id', goalIdsCustom)
+        : { data: [] },
+    ]);
+
+    const goalTitleMap = new Map<string, string>();
+    for (const g of goals12.data || []) goalTitleMap.set(g.id, g.title);
+    for (const g of goalsCustom.data || []) goalTitleMap.set(g.id, g.title);
+
+    goalActions = (actionTasks || []).map((t: any) => {
+      const join = (goalJoins || []).find((j: any) => j.parent_id === t.id);
+      const goalId = join?.twelve_wk_goal_id || join?.custom_goal_id;
+      return {
+        id: t.id,
+        title: t.title,
+        is_urgent: t.is_urgent || false,
+        is_important: t.is_important || false,
+        type: t.type || 'task',
+        roles: [],
+        domains: [],
+        keyRelationships: [],
+        source: 'goal_action' as const,
+        goal_title: goalId ? goalTitleMap.get(goalId) : undefined,
+      };
+    });
+  }
+
+  // 4. Collect all task IDs for relation lookups
+  const allTaskIds = [
+    ...(events || []).map((e: any) => e.id),
+    ...(committedTasks || []).map((t: any) => t.id),
+  ];
+
+  // Fetch relations for events and committed tasks
+  let roleLabelMap = new Map<string, string>();
+  let domainLabelMap = new Map<string, string>();
+  let krLabelMap = new Map<string, string>();
+  let taskRolesMap = new Map<string, CommitmentTaskRelation[]>();
+  let taskDomainsMap = new Map<string, CommitmentTaskRelation[]>();
+  let taskKrsMap = new Map<string, CommitmentTaskRelation[]>();
+
+  if (allTaskIds.length > 0) {
+    const [rolesR, domainsR, krsR] = await Promise.all([
+      supabase.from('0008-ap-universal-roles-join').select('parent_id, role_id').in('parent_id', allTaskIds).eq('parent_type', 'task'),
+      supabase.from('0008-ap-universal-domains-join').select('parent_id, domain_id').in('parent_id', allTaskIds).eq('parent_type', 'task'),
+      supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship_id').in('parent_id', allTaskIds).eq('parent_type', 'task'),
+    ]);
+
+    const rIds = [...new Set((rolesR.data || []).map((r: any) => r.role_id))];
+    const dIds = [...new Set((domainsR.data || []).map((d: any) => d.domain_id))];
+    const kIds = [...new Set((krsR.data || []).map((k: any) => k.key_relationship_id))];
+
+    const [rLabels, dLabels, kLabels] = await Promise.all([
+      rIds.length > 0 ? supabase.from('0008-ap-roles').select('id, label').in('id', rIds) : { data: [] },
+      dIds.length > 0 ? supabase.from('0008-ap-domains').select('id, name').in('id', dIds) : { data: [] },
+      kIds.length > 0 ? supabase.from('0008-ap-key-relationships').select('id, name').in('id', kIds) : { data: [] },
+    ]);
+
+    roleLabelMap = new Map((rLabels.data || []).map((r: any) => [r.id, r.label]));
+    domainLabelMap = new Map((dLabels.data || []).map((d: any) => [d.id, d.name]));
+    krLabelMap = new Map((kLabels.data || []).map((k: any) => [k.id, k.name]));
+
+    for (const r of rolesR.data || []) {
+      const arr = taskRolesMap.get(r.parent_id) || [];
+      arr.push({ id: r.role_id, label: roleLabelMap.get(r.role_id) || '' });
+      taskRolesMap.set(r.parent_id, arr);
+    }
+    for (const d of domainsR.data || []) {
+      const arr = taskDomainsMap.get(d.parent_id) || [];
+      arr.push({ id: d.domain_id, label: domainLabelMap.get(d.domain_id) || '' });
+      taskDomainsMap.set(d.parent_id, arr);
+    }
+    for (const k of krsR.data || []) {
+      const arr = taskKrsMap.get(k.parent_id) || [];
+      arr.push({ id: k.key_relationship_id, label: krLabelMap.get(k.key_relationship_id) || '' });
+      taskKrsMap.set(k.parent_id, arr);
+    }
+  }
+
+  // Build events
+  const finalEvents: FinalReviewEvent[] = (events || []).map((e: any) => ({
+    id: e.id,
+    title: e.title,
+    start_time: e.start_time,
+    end_time: e.end_time,
+    is_all_day: e.is_all_day || false,
+    roles: taskRolesMap.get(e.id) || [],
+    domains: taskDomainsMap.get(e.id) || [],
+  }));
+
+  // Build committed tasks — sorted: urgent+important first, then urgent, then important, then rest
+  const finalTasks: FinalReviewTask[] = (committedTasks || []).map((t: any) => ({
+    id: t.id,
+    title: t.title,
+    is_urgent: t.is_urgent || false,
+    is_important: t.is_important || false,
+    type: t.type || 'task',
+    roles: taskRolesMap.get(t.id) || [],
+    domains: taskDomainsMap.get(t.id) || [],
+    keyRelationships: taskKrsMap.get(t.id) || [],
+    source: 'task' as const,
+  }));
+
+  // Merge goal actions and sort all by priority
+  const allTasks = [...finalTasks, ...goalActions];
+  allTasks.sort((a, b) => {
+    const aPriority = (a.is_urgent ? 2 : 0) + (a.is_important ? 1 : 0);
+    const bPriority = (b.is_urgent ? 2 : 0) + (b.is_important ? 1 : 0);
+    return bPriority - aPriority;
+  });
+
+  return {
+    events: finalEvents,
+    committedTasks: allTasks,
+  };
+}
+
+/**
+ * Remove a task from today's commitments (set one_thing = false).
+ */
+export async function removeFromTodayCommitments(taskId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  await supabase
+    .from('0008-ap-tasks')
+    .update({ one_thing: false })
+    .eq('id', taskId);
+}
