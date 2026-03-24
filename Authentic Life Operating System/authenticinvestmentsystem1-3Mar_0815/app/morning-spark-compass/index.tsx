@@ -834,9 +834,16 @@ export default function MorningSparkCompassScreen() {
                   ]}
                   disabled={selectedTaskIds.size === 0}
                   onPress={async () => {
-                    await commitTodaysTasks(userId, Array.from(selectedTaskIds));
-                    if (Platform.OS !== 'web') {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    try {
+                      console.log('Committing tasks:', userId, Array.from(selectedTaskIds));
+                      const sessionId = await commitTodaysTasks(userId, Array.from(selectedTaskIds));
+                      console.log('Committed successfully, session:', sessionId);
+                      if (Platform.OS !== 'web') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }
+                    } catch (err) {
+                      console.error('commitTodaysTasks error:', err);
+                      Alert.alert('Error', 'Failed to commit tasks: ' + (err as Error).message);
                     }
                     goToNextStep();
                   }}

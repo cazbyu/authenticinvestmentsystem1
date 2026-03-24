@@ -358,14 +358,15 @@ export async function commitTodaysTasks(
   }
 
   // Clear any existing commitments for this session (re-entry)
-  await supabase
+  const { error: deleteError } = await supabase
     .from('0008-ap-ritual-committed-tasks')
     .delete()
     .eq('session_id', sId);
+  if (deleteError) console.error('Failed to clear old commitments:', deleteError);
 
   // Insert new commitments
   const rows = taskIds.map((taskId) => ({
-    session_id: sId,
+    session_id: sId!,
     task_id: taskId,
     user_id: userId,
     committed_date: todayStr,
@@ -373,10 +374,19 @@ export async function commitTodaysTasks(
     status: 'committed',
   }));
 
-  await supabase
-    .from('0008-ap-ritual-committed-tasks')
-    .insert(rows);
+  console.log('Inserting committed tasks:', JSON.stringify({ sessionId: sId, count: rows.length, taskIds }));
 
+  const { data: insertedRows, error: insertError } = await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .insert(rows)
+    .select('id');
+
+  if (insertError) {
+    console.error('Failed to insert committed tasks:', insertError);
+    throw insertError;
+  }
+
+  console.log('Successfully inserted committed tasks:', insertedRows?.length);
   return sId!;
 }
 
