@@ -77,11 +77,19 @@ export interface RoleFocusData {
   role_mission: string | null;
   slot_code: string;
   pending_task_count: number;
+  is_priority: boolean;          // R1-R4
+  days_since_activity: number | null; // null if active recently
+  needs_attention: boolean;      // priority + 3+ days no activity
 }
 
 export interface WellnessGapData {
   zone_id: string;
   zone_name: string;
+  slot_code: string;
+  pending_task_count: number;
+  is_priority: boolean;          // WZ1-WZ4
+  days_since_activity: number | null;
+  needs_attention: boolean;      // priority + 3+ days no activity
 }
 
 export interface MissionTouchData {
@@ -497,17 +505,42 @@ export async function getGoalPulse(userId: string): Promise<GoalPulseData | null
 
 // ============ ROLE FOCUS ============
 
+/** Helper: calculate days since last activity for an entity in a join table */
+async function getDaysSinceActivity(
+  supabase: any,
+  joinTable: string,
+  entityCol: string,
+  entityId: string,
+  userId: string,
+): Promise<number | null> {
+  const { data } = await supabase
+    .from(joinTable)
+    .select('created_at')
+    .eq(entityCol, entityId)
+    .eq('parent_type', 'task')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data?.created_at) return null; // Never had activity
+  const lastDate = new Date(data.created_at);
+  const now = new Date();
+  return Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 /**
- * Get user's top priority roles (R1, R2 slots).
+ * Get ALL active roles with task counts, priority flags, and 3-day warnings.
+ * Looks at current + previous week for activity.
  */
 export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
   const supabase = getSupabaseClient();
 
+  // Get ALL role slot mappings (R1-R12)
   const { data: mappings, error: mappingError } = await supabase
     .from('0008-ap-user-slot-mappings')
     .select('slot_code, mapped_entity_id, mapped_entity_label')
     .eq('user_id', userId)
-    .in('slot_code', ['R1', 'R2']);
+    .like('slot_code', 'R%');
 
   if (mappingError || !mappings || mappings.length === 0) return [];
 
@@ -520,77 +553,158 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
 
   if (rolesError || !roles) return [];
 
-  // Get pending task counts per role via universal-roles-join
-  const taskCountMap: Record<string, number> = {};
-  for (const roleId of roleIds) {
-    const { count } = await supabase
-      .from('0008-ap-universal-roles-join')
-      .select('parent_id', { count: 'exact', head: true })
-      .eq('role_id', roleId)
-      .eq('parent_type', 'task')
-      .in('parent_id',
-        (await supabase
-          .from('0008-ap-tasks')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('status', 'pending')
-          .is('deleted_at', null)
-        ).data?.map((t: { id: string }) => t.id) || []
-      );
-    taskCountMap[roleId] = count || 0;
-  }
+  // Get pending task IDs for this user
+  const { data: pendingTasks } = await supabase
+    .from('0008-ap-tasks')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .is('deleted_at', null);
 
-  return mappings.map((m) => {
+  const pendingTaskIds = (pendingTasks || []).map((t: { id: string }) => t.id);
+
+  // Build results with task counts and activity tracking
+  const results: RoleFocusData[] = [];
+
+  for (const m of mappings) {
     const role = roles.find((r) => r.id === m.mapped_entity_id);
-    return {
+    const slotNum = parseInt(m.slot_code.replace('R', ''), 10);
+    const isPriority = slotNum >= 1 && slotNum <= 4;
+
+    // Count pending tasks for this role
+    let pendingCount = 0;
+    if (pendingTaskIds.length > 0) {
+      const { count } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id', { count: 'exact', head: true })
+        .eq('role_id', m.mapped_entity_id)
+        .eq('parent_type', 'task')
+        .in('parent_id', pendingTaskIds);
+      pendingCount = count || 0;
+    }
+
+    // Check days since last activity (only compute for priority roles)
+    let daysSince: number | null = null;
+    let needsAttention = false;
+    if (isPriority) {
+      daysSince = await getDaysSinceActivity(
+        supabase, '0008-ap-universal-roles-join', 'role_id', m.mapped_entity_id, userId
+      );
+      needsAttention = daysSince !== null && daysSince >= 3;
+      // Also flag if never had activity
+      if (daysSince === null) needsAttention = true;
+    }
+
+    results.push({
       role_id: m.mapped_entity_id,
       role_name: role?.label || m.mapped_entity_label || 'Unknown Role',
       role_mission: role?.role_mission || null,
       slot_code: m.slot_code,
-      pending_task_count: taskCountMap[m.mapped_entity_id] || 0,
-    };
+      pending_task_count: pendingCount,
+      is_priority: isPriority,
+      days_since_activity: daysSince,
+      needs_attention: needsAttention,
+    });
+  }
+
+  // Sort: priority first (R1-R4), then by slot number
+  results.sort((a, b) => {
+    if (a.is_priority && !b.is_priority) return -1;
+    if (!a.is_priority && b.is_priority) return 1;
+    const aNum = parseInt(a.slot_code.replace('R', ''), 10);
+    const bNum = parseInt(b.slot_code.replace('R', ''), 10);
+    return aNum - bNum;
   });
+
+  return results;
 }
 
 // ============ WELLNESS PULSE ============
 
 /**
- * Find wellness zones that have had no activity in the last 7 days.
+ * Get ALL active wellness zones with task counts, priority flags, and 3-day warnings.
  */
 export async function getWellnessGaps(userId: string): Promise<WellnessGapData[]> {
   const supabase = getSupabaseClient();
 
-  // Get all domain IDs
-  const { data: allDomains, error: domainError } = await supabase
-    .from('0008-ap-domains')
-    .select('id, name');
-
-  if (domainError || !allDomains) return [];
-
-  // Get domain IDs that have had activity in the last 7 days
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const sevenDaysAgoStr = toLocalISOString(sevenDaysAgo);
-
-  const { data: activeJoins, error: joinError } = await supabase
-    .from('0008-ap-universal-domains-join')
-    .select('domain_id')
+  // Get ALL wellness zone slot mappings (WZ1-WZ8)
+  const { data: mappings, error: mappingError } = await supabase
+    .from('0008-ap-user-slot-mappings')
+    .select('slot_code, mapped_entity_id, mapped_entity_label')
     .eq('user_id', userId)
-    .gte('created_at', sevenDaysAgoStr);
+    .like('slot_code', 'WZ%');
 
-  if (joinError) return [];
+  if (mappingError || !mappings || mappings.length === 0) return [];
 
-  const activeDomainIds = new Set((activeJoins || []).map((j) => j.domain_id));
+  const domainIds = mappings.map((m) => m.mapped_entity_id).filter(Boolean);
 
-  // Find domains with no activity
-  const gaps = allDomains
-    .filter((d) => !activeDomainIds.has(d.id))
-    .map((d) => ({
-      zone_id: d.id,
-      zone_name: d.name,
-    }));
+  // Get domain details
+  const { data: domains } = await supabase
+    .from('0008-ap-domains')
+    .select('id, name')
+    .in('id', domainIds);
 
-  return gaps;
+  // Get pending task IDs
+  const { data: pendingTasks } = await supabase
+    .from('0008-ap-tasks')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .is('deleted_at', null);
+
+  const pendingTaskIds = (pendingTasks || []).map((t: { id: string }) => t.id);
+
+  const results: WellnessGapData[] = [];
+
+  for (const m of mappings) {
+    const domain = (domains || []).find((d: { id: string }) => d.id === m.mapped_entity_id);
+    const slotNum = parseInt(m.slot_code.replace('WZ', ''), 10);
+    const isPriority = slotNum >= 1 && slotNum <= 4;
+
+    // Count pending tasks for this domain
+    let pendingCount = 0;
+    if (pendingTaskIds.length > 0) {
+      const { count } = await supabase
+        .from('0008-ap-universal-domains-join')
+        .select('parent_id', { count: 'exact', head: true })
+        .eq('domain_id', m.mapped_entity_id)
+        .eq('parent_type', 'task')
+        .in('parent_id', pendingTaskIds);
+      pendingCount = count || 0;
+    }
+
+    // Check days since last activity (only for priority zones)
+    let daysSince: number | null = null;
+    let needsAttention = false;
+    if (isPriority) {
+      daysSince = await getDaysSinceActivity(
+        supabase, '0008-ap-universal-domains-join', 'domain_id', m.mapped_entity_id, userId
+      );
+      needsAttention = daysSince !== null && daysSince >= 3;
+      if (daysSince === null) needsAttention = true;
+    }
+
+    results.push({
+      zone_id: m.mapped_entity_id,
+      zone_name: domain?.name || m.mapped_entity_label || 'Unknown Zone',
+      slot_code: m.slot_code,
+      pending_task_count: pendingCount,
+      is_priority: isPriority,
+      days_since_activity: daysSince,
+      needs_attention: needsAttention,
+    });
+  }
+
+  // Sort: priority first, then by slot number
+  results.sort((a, b) => {
+    if (a.is_priority && !b.is_priority) return -1;
+    if (!a.is_priority && b.is_priority) return 1;
+    const aNum = parseInt(a.slot_code.replace('WZ', ''), 10);
+    const bNum = parseInt(b.slot_code.replace('WZ', ''), 10);
+    return aNum - bNum;
+  });
+
+  return results;
 }
 
 // ============ MISSION TOUCH ============

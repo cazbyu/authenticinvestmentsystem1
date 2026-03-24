@@ -1076,13 +1076,26 @@ export default function MorningSparkCompassScreen() {
                     key={role.role_id}
                     style={[
                       styles.roleCard,
-                      { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: role.needs_attention ? '#eab308' : colors.border,
+                        borderWidth: role.needs_attention ? 2 : 1,
+                      },
                     ]}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={[styles.roleName, { color: colors.text }]}>
-                        {role.role_name}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[styles.roleName, { color: colors.text }]}>
+                          {role.role_name}
+                        </Text>
+                        {role.is_priority && (
+                          <View style={[styles.relationBadge, { backgroundColor: '#f3e8ff', borderColor: '#d8b4fe' }]}>
+                            <Text style={[styles.relationBadgeText, { color: '#9333ea', fontSize: 10 }]}>
+                              Priority
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
                         ({role.pending_task_count} {role.pending_task_count === 1 ? 'task' : 'tasks'})
                       </Text>
@@ -1092,6 +1105,16 @@ export default function MorningSparkCompassScreen() {
                         style={[styles.roleMission, { color: colors.textSecondary, fontStyle: 'italic' }]}
                       >
                         {role.role_mission}
+                      </Text>
+                    )}
+                    {role.needs_attention && role.days_since_activity !== null && (
+                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                        No activity in {role.days_since_activity} days
+                      </Text>
+                    )}
+                    {role.needs_attention && role.days_since_activity === null && (
+                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                        No activity yet
                       </Text>
                     )}
                   </View>
@@ -1365,23 +1388,64 @@ export default function MorningSparkCompassScreen() {
             {wellnessGaps.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  All wellness zones are active this week!
+                  No wellness zones configured
                 </Text>
+                <TouchableOpacity
+                  style={[styles.continueButton, { backgroundColor: STEPS[6].color }]}
+                  onPress={goToNextStep}
+                >
+                  <Text style={styles.continueButtonText}>Continue</Text>
+                </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.wellnessContainer}>
-                <Text style={[styles.wellnessGapText, { color: colors.text }]}>
-                  {wellnessGaps[0].zone_name} hasn't had attention this week.
+              <>
+                <Text style={[styles.roleIntroText, { color: colors.text }]}>
+                  Your wellness zones for today.
                 </Text>
-              </View>
-            )}
 
-            <TouchableOpacity
-              style={[styles.continueButton, { backgroundColor: STEPS[6].color }]}
-              onPress={goToNextStep}
-            >
-              <Text style={styles.continueButtonText}>Continue</Text>
-            </TouchableOpacity>
+                {wellnessGaps.map((zone) => (
+                  <View
+                    key={zone.zone_id}
+                    style={[
+                      styles.roleCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: zone.needs_attention ? '#eab308' : colors.border,
+                        borderWidth: zone.needs_attention ? 2 : 1,
+                      },
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[styles.roleName, { color: colors.text }]}>
+                          {zone.zone_name}
+                        </Text>
+                        {zone.is_priority && (
+                          <View style={[styles.relationBadge, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
+                            <Text style={[styles.relationBadgeText, { color: '#16a34a', fontSize: 10 }]}>
+                              Priority
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
+                        ({zone.pending_task_count} {zone.pending_task_count === 1 ? 'task' : 'tasks'})
+                      </Text>
+                    </View>
+                    {zone.needs_attention && zone.days_since_activity !== null && (
+                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                        No activity in {zone.days_since_activity} days
+                      </Text>
+                    )}
+                    {zone.needs_attention && zone.days_since_activity === null && (
+                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                        No activity yet
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
           </ScrollView>
         );
 
