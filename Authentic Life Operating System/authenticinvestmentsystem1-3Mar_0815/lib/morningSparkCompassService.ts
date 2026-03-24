@@ -532,7 +532,7 @@ async function getDaysSinceActivity(
  * Get ALL active roles with task counts, priority flags, and 3-day warnings.
  * Looks at current + previous week for activity.
  */
-export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
+export async function getRoleFocus(userId: string, sessionTaskIds?: string[]): Promise<RoleFocusData[]> {
   const supabase = getSupabaseClient();
 
   // Get ALL role slot mappings (R1-R12)
@@ -553,16 +553,20 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
 
   if (rolesError || !roles) return [];
 
-  // Get today's committed task IDs (one_thing = true)
-  const { data: committedTasks } = await supabase
-    .from('0008-ap-tasks')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('one_thing', true)
-    .eq('status', 'pending')
-    .is('deleted_at', null);
-
-  const committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
+  // Use session-committed task IDs if provided, otherwise fall back to one_thing=true
+  let committedTaskIds: string[] = [];
+  if (sessionTaskIds && sessionTaskIds.length > 0) {
+    committedTaskIds = sessionTaskIds;
+  } else {
+    const { data: committedTasks } = await supabase
+      .from('0008-ap-tasks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('one_thing', true)
+      .eq('status', 'pending')
+      .is('deleted_at', null);
+    committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
+  }
 
   // Build results with task counts and activity tracking
   const results: RoleFocusData[] = [];
@@ -625,7 +629,7 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
 /**
  * Get ALL active wellness zones with task counts, priority flags, and 3-day warnings.
  */
-export async function getWellnessGaps(userId: string): Promise<WellnessGapData[]> {
+export async function getWellnessGaps(userId: string, sessionTaskIds?: string[]): Promise<WellnessGapData[]> {
   const supabase = getSupabaseClient();
 
   // Get ALL wellness zone slot mappings (WZ1-WZ8)
@@ -645,15 +649,20 @@ export async function getWellnessGaps(userId: string): Promise<WellnessGapData[]
     .select('id, name')
     .in('id', domainIds);
 
-  // Get pending task IDs
-  const { data: pendingTasks } = await supabase
-    .from('0008-ap-tasks')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'pending')
-    .is('deleted_at', null);
-
-  const pendingTaskIds = (pendingTasks || []).map((t: { id: string }) => t.id);
+  // Use session-committed task IDs if provided, otherwise fall back to one_thing=true
+  let committedTaskIds: string[] = [];
+  if (sessionTaskIds && sessionTaskIds.length > 0) {
+    committedTaskIds = sessionTaskIds;
+  } else {
+    const { data: committedTasks } = await supabase
+      .from('0008-ap-tasks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('one_thing', true)
+      .eq('status', 'pending')
+      .is('deleted_at', null);
+    committedTaskIds = (committedTasks || []).map((t: { id: string }) => t.id);
+  }
 
   const results: WellnessGapData[] = [];
 
@@ -1085,6 +1094,7 @@ export interface FinalReviewData {
  */
 export async function getFinalReviewData(
   userId: string,
+  sessionCommittedTaskIds: string[],
   committedGoalActionIds: string[],
 ): Promise<FinalReviewData> {
   const supabase = getSupabaseClient();
@@ -1101,14 +1111,17 @@ export async function getFinalReviewData(
     .eq('due_date', todayStr)
     .order('start_time', { ascending: true });
 
-  // 2. Get committed tasks (one_thing = true)
-  const { data: committedTasks } = await supabase
-    .from('0008-ap-tasks')
-    .select('id, title, is_urgent, is_important, type')
-    .eq('user_id', userId)
-    .eq('one_thing', true)
-    .eq('status', 'pending')
-    .is('deleted_at', null);
+  // 2. Get committed tasks — ONLY the ones selected in THIS session's step 3
+  let committedTasks: any[] = [];
+  if (sessionCommittedTaskIds.length > 0) {
+    const { data } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, title, is_urgent, is_important, type')
+      .in('id', sessionCommittedTaskIds)
+      .eq('status', 'pending')
+      .is('deleted_at', null);
+    committedTasks = data || [];
+  }
 
   // 3. Get committed goal action titles (from step 4 selections)
   let goalActions: FinalReviewTask[] = [];

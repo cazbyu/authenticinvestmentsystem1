@@ -150,6 +150,8 @@ export default function MorningSparkCompassScreen() {
   const [finalReviewLoading, setFinalReviewLoading] = useState(false);
   const [isCommitted, setIsCommitted] = useState(false);
   const [showFinalAddForm, setShowFinalAddForm] = useState(false);
+  const [showMissionAnswer, setShowMissionAnswer] = useState(false);
+  const [missionAnswerText, setMissionAnswerText] = useState('');
 
   // ---- Initial data load ----
 
@@ -360,7 +362,7 @@ export default function MorningSparkCompassScreen() {
     if (nextStep === 5) {
       // Role Focus
       setRoleLoading(true);
-      getRoleFocus(userId)
+      getRoleFocus(userId, Array.from(selectedTaskIds))
         .then((data) => {
           setRoleFocus(data);
           setRoleLoading(false);
@@ -371,7 +373,7 @@ export default function MorningSparkCompassScreen() {
     if (nextStep === 6) {
       // Wellness Pulse
       setWellnessLoading(true);
-      getWellnessGaps(userId)
+      getWellnessGaps(userId, Array.from(selectedTaskIds))
         .then((data) => {
           setWellnessGaps(data);
           setWellnessLoading(false);
@@ -401,7 +403,7 @@ export default function MorningSparkCompassScreen() {
       setFinalReviewLoading(true);
       const goalActionIds = Array.from(committedActionIds);
       Promise.all([
-        getFinalReviewData(userId, goalActionIds),
+        getFinalReviewData(userId, Array.from(selectedTaskIds), goalActionIds),
         getMissionTouch(userId),
       ])
         .then(([reviewData, missionData]) => {
@@ -1634,7 +1636,7 @@ export default function MorningSparkCompassScreen() {
                       setShowFinalAddForm(false);
                       // Refresh the review data
                       const goalActionIds = Array.from(committedActionIds);
-                      const updated = await getFinalReviewData(userId, goalActionIds);
+                      const updated = await getFinalReviewData(userId, Array.from(selectedTaskIds), goalActionIds);
                       setFinalReview(updated);
                     }}
                   />
@@ -1711,7 +1713,82 @@ export default function MorningSparkCompassScreen() {
                 <Text style={[styles.ddCoachQuestion, { color: colors.textSecondary }]}>
                   "If you could be remembered for one thing, what would it be?"
                 </Text>
-                <Text style={[styles.ddCoachNote, { color: colors.textSecondary }]}>
+
+                {!showMissionAnswer ? (
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                    <TouchableOpacity
+                      style={[styles.captureOptionButton, { backgroundColor: '#E53935' }]}
+                      onPress={() => setShowMissionAnswer(true)}
+                    >
+                      <Text style={styles.captureOptionButtonText}>Answer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                      onPress={() => {
+                        saveMorningSparkSession(userId, {
+                          fuel_level: fuelLevel || 2,
+                          fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
+                          screen_context: selectedRole || null,
+                          started_at: startedAt || new Date().toISOString(),
+                          completed_at: new Date().toISOString(),
+                        }).catch((err) => console.error('Session save error:', err));
+                        router.replace('/(tabs)/dashboard');
+                      }}
+                    >
+                      <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Later — getting to work</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={{ marginTop: 16, width: '100%' }}>
+                    <TextInput
+                      style={[
+                        styles.captureInput,
+                        { color: colors.text, borderColor: '#E53935', backgroundColor: colors.surface, marginHorizontal: 0 },
+                      ]}
+                      placeholder="Your answer..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={missionAnswerText}
+                      onChangeText={setMissionAnswerText}
+                      multiline
+                      autoFocus
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmButton,
+                        { backgroundColor: missionAnswerText.trim() ? '#E53935' : colors.border, marginTop: 12 },
+                      ]}
+                      disabled={!missionAnswerText.trim()}
+                      onPress={async () => {
+                        // Save as a reflection tagged to North Star
+                        try {
+                          const supabase = getSupabaseClient();
+                          await supabase.from('0008-ap-reflections').insert({
+                            user_id: userId,
+                            content: `If I could be remembered for one thing: ${missionAnswerText.trim()}`,
+                            reflection_type: 'daily',
+                            date: new Date().toISOString().split('T')[0],
+                          });
+                          Alert.alert('Seed planted!', 'Your reflection has been saved. You can develop this into a mission statement in your Weekly Alignment.');
+                        } catch (err) {
+                          console.error('Save reflection error:', err);
+                        }
+                        // Complete the morning spark
+                        saveMorningSparkSession(userId, {
+                          fuel_level: fuelLevel || 2,
+                          fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
+                          screen_context: selectedRole || null,
+                          started_at: startedAt || new Date().toISOString(),
+                          completed_at: new Date().toISOString(),
+                        }).catch((err) => console.error('Session save error:', err));
+                        router.replace('/(tabs)/dashboard');
+                      }}
+                    >
+                      <Text style={styles.confirmButtonText}>Save & Go</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <Text style={[styles.ddCoachNote, { color: colors.textSecondary, marginTop: 16 }]}>
                   You can explore this further in your Weekly Alignment under North Star.
                 </Text>
               </View>
