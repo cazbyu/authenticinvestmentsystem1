@@ -1073,7 +1073,7 @@ export default function MorningSparkCompassScreen() {
                   These are the roles you plan to invest in today.
                 </Text>
 
-                {roleFocus.filter((role) => role.pending_task_count > 0 || role.needs_attention).map((role) => (
+                {roleFocus.filter((role) => role.pending_task_count > 0).map((role) => (
                   <View
                     key={role.role_id}
                     style={[
@@ -1405,7 +1405,7 @@ export default function MorningSparkCompassScreen() {
                   Your wellness zones for today.
                 </Text>
 
-                {wellnessGaps.filter((zone) => zone.pending_task_count > 0 || zone.needs_attention).map((zone) => (
+                {wellnessGaps.filter((zone) => zone.pending_task_count > 0).map((zone) => (
                   <View
                     key={zone.zone_id}
                     style={[
