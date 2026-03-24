@@ -115,7 +115,7 @@ export async function getUnprocessedBrainDump(userId: string): Promise<Unprocess
     .from('0008-ap-ritual-sessions')
     .select('id, brain_dump_raw, brain_dump_processed')
     .eq('user_id', userId)
-    .eq('ritual_type', 'evening_review')
+    .eq('ritual_type', 'evening')
     .eq('session_date', yesterdayStr)
     .eq('brain_dump_processed', false)
     .not('brain_dump_raw', 'is', null)
@@ -320,7 +320,7 @@ export async function commitTodaysTasks(
   userId: string,
   taskIds: string[],
   sessionId?: string,
-  source: string = 'morning_spark',
+  source: string = 'morning',
 ): Promise<string> {
   const supabase = getSupabaseClient();
   const todayStr = toLocalISOString(new Date()).split('T')[0];
@@ -334,7 +334,7 @@ export async function commitTodaysTasks(
       .from('0008-ap-ritual-sessions')
       .select('id')
       .eq('user_id', userId)
-      .eq('ritual_type', 'morning_spark')
+      .eq('ritual_type', 'morning')
       .eq('session_date', todayStr)
       .maybeSingle();
 
@@ -345,9 +345,9 @@ export async function commitTodaysTasks(
         .from('0008-ap-ritual-sessions')
         .insert({
           user_id: userId,
-          ritual_type: 'morning_spark',
+          ritual_type: 'morning',
           session_date: todayStr,
-          status: 'in_progress',
+          status: 'active',
           started_at: new Date().toISOString(),
         })
         .select('id')
@@ -818,7 +818,7 @@ export async function saveMorningSparkSession(
     .from('0008-ap-ritual-sessions')
     .select('id')
     .eq('user_id', userId)
-    .eq('ritual_type', 'morning_spark')
+    .eq('ritual_type', 'morning')
     .eq('session_date', today)
     .maybeSingle();
 
@@ -841,7 +841,7 @@ export async function saveMorningSparkSession(
     .from('0008-ap-ritual-sessions')
     .insert({
       user_id: userId,
-      ritual_type: 'morning_spark',
+      ritual_type: 'morning',
       session_date: today,
       fuel_level: data.fuel_level,
       fuel_reason: data.fuel_reason || null,
