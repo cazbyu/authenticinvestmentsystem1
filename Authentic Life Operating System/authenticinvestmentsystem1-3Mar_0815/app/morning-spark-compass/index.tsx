@@ -834,7 +834,7 @@ export default function MorningSparkCompassScreen() {
                   ]}
                   disabled={selectedTaskIds.size === 0}
                   onPress={async () => {
-                    await commitTodaysTasks(Array.from(selectedTaskIds));
+                    await commitTodaysTasks(userId, Array.from(selectedTaskIds));
                     if (Platform.OS !== 'web') {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     }

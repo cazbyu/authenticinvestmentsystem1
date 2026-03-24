@@ -313,18 +313,26 @@ export async function getWeeklyOneThing(userId: string): Promise<string | null> 
 
 /**
  * Commit selected tasks as today's commitments (set one_thing = true).
+ * First clears ALL existing one_thing flags for the user (pending tasks only),
+ * then sets one_thing = true only for the selected task IDs.
  */
-export async function commitTodaysTasks(taskIds: string[]): Promise<void> {
+export async function commitTodaysTasks(userId: string, taskIds: string[]): Promise<void> {
   const supabase = getSupabaseClient();
 
-  // First reset any existing one_thing flags for today
-  // (in case user re-enters the morning spark)
-  // We only reset tasks that are pending — completed ones keep their flag
-  for (const id of taskIds) {
+  // 1. Clear ALL existing one_thing flags for this user (pending tasks only)
+  await supabase
+    .from('0008-ap-tasks')
+    .update({ one_thing: false })
+    .eq('user_id', userId)
+    .eq('one_thing', true)
+    .eq('status', 'pending');
+
+  // 2. Set one_thing = true only for the selected tasks
+  if (taskIds.length > 0) {
     await supabase
       .from('0008-ap-tasks')
       .update({ one_thing: true })
-      .eq('id', id);
+      .in('id', taskIds);
   }
 }
 

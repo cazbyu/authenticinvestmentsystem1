@@ -305,7 +305,7 @@ function ItemRow({
             {item.title}
           </Text>
           {isOnTodaysContract && (
-            <Text style={styles.contractIconInline}>📋</Text>
+            <Text style={styles.committedLabel}>(committed for today)</Text>
           )}
         </View>
 
@@ -455,14 +455,15 @@ export function ActionsTableView({
       todayStart.setHours(0, 0, 0, 0);
       const todayStartISO = toLocalISOString(todayStart);
 
-      // Fetch today's committed task IDs for contract icon display + sorting
-      const { data: sparkData } = await supabase
-        .from('0008-ap-daily-sparks')
-        .select('committed_task_ids')
+      // Fetch today's committed task IDs (one_thing = true) for label display + sorting
+      const { data: committedData } = await supabase
+        .from('0008-ap-tasks')
+        .select('id')
         .eq('user_id', userId)
-        .gte('created_at', todayStr)
-        .maybeSingle();
-      const contractIds = new Set<string>(sparkData?.committed_task_ids || []);
+        .eq('one_thing', true)
+        .eq('status', 'pending')
+        .is('deleted_at', null);
+      const contractIds = new Set<string>((committedData || []).map((t: { id: string }) => t.id));
       setCommittedTaskIds(contractIds);
 
       let tasksData: any[] = [];
@@ -1105,6 +1106,13 @@ const styles = StyleSheet.create({
   },
   contractIconInline: {
     fontSize: 14,
+  },
+  committedLabel: {
+    fontSize: 12,
+    color: '#4169E1',
+    fontWeight: '500',
+    fontStyle: 'italic',
+    marginLeft: 6,
   },
   pointsContainer: {
     minWidth: 50,
