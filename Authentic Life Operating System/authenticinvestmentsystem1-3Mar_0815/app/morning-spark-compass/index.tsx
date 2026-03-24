@@ -1623,10 +1623,24 @@ export default function MorningSparkCompassScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.captureOptionButton, { backgroundColor: '#4169E1', flex: 2 }]}
-                    onPress={() => {
-                      setIsCommitted(true);
-                      if (Platform.OS !== 'web') {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                    onPress={async () => {
+                      try {
+                        // Collect all task IDs from the final review list
+                        const allTaskIds = [
+                          ...(finalReview?.tasks || []).map((t) => t.id),
+                          ...Array.from(committedActionIds),
+                        ];
+                        console.log('I\'m Committed — writing to DB:', userId, allTaskIds);
+                        await commitTodaysTasks(userId, allTaskIds);
+                        console.log('Committed successfully');
+                        setIsCommitted(true);
+                        if (Platform.OS !== 'web') {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                        }
+                        goToNextStep();
+                      } catch (err) {
+                        console.error('Commit error:', err);
+                        Alert.alert('Error', 'Failed to save commitments: ' + (err as Error).message);
                       }
                     }}
                   >
