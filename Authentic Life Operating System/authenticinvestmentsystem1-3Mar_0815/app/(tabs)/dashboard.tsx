@@ -36,6 +36,7 @@ import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { CompassIcon } from '@/components/icons/CustomIcons';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { FlashingArrow } from '@/components/compass/FlashingArrow';
+import TodaysCommitmentsWidget from '@/components/TodaysCommitmentsWidget';
 import { useAttentionState } from '@/hooks/useAttentionState';
 import { ChatBubbleContainer, detectActiveRitual } from '@/components/chat-bubble';
 
@@ -1353,8 +1354,10 @@ const renderDashboardTabs = () => (
 )}
 
   {activeTab === 'home' ? (
-    <CompassView />
-      
+    <>
+      <CompassView />
+      <TodaysCommitmentsWidget userId={userId} onRefresh={refreshScore} />
+    </>
         ) : activeTab === 'reflect' ? (
           <ReflectionTableView
             filter={reflectFilter}

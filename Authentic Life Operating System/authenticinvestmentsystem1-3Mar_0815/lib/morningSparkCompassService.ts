@@ -435,9 +435,10 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
       weekTotalActual += weeklyActual;
 
       // Show action if: scheduled today (even if completed — shown as done),
-      // OR not yet complete for the week (needs catch-up)
-      // Hide only if: complete for the week AND not scheduled today
-      if (isScheduledToday || !isCompleteForWeek) {
+      // OR behind schedule with missed days already past this week
+      // Don't show future-day actions as catch-up (e.g. TU/TH action on Monday)
+      const hasMissedPastDays = !isCompleteForWeek && scheduledDays.some((d) => d < todayDow);
+      if (isScheduledToday || hasMissedPastDays) {
         todayActions.push({
           task_id: a.task_id,
           title: a.title,
