@@ -269,24 +269,15 @@ export default function MorningSparkCompassScreen() {
     try {
       // Process current step before advancing
       if (currentStep === 1) {
-        // Save fuel level
-        if (!fuelLevel) {
-          Alert.alert(
-            'Select your energy level',
-            "Please choose how you're feeling before continuing.",
-          );
-          return;
+        // Save fuel level if selected (optional — user can skip)
+        if (fuelLevel) {
+          try {
+            const newSparkId = await saveFuelLevel(sparkId, userId, fuelLevel, fuelWhy, fuel3Why);
+            setSparkId(newSparkId);
+          } catch (fuelErr) {
+            console.error('Error saving fuel level:', fuelErr);
+          }
         }
-        if (fuelLevel === 1 && !fuelWhy) {
-          Alert.alert('Tell us why', 'Please select a reason for your low energy.');
-          return;
-        }
-        if (fuelLevel === 3 && !fuel3Why) {
-          Alert.alert('Quick check', "What's driving this energy? Tap an option to continue.");
-          return;
-        }
-        const newSparkId = await saveFuelLevel(sparkId, userId, fuelLevel, fuelWhy, fuel3Why);
-        setSparkId(newSparkId);
       }
     } catch (error) {
       console.error('Error processing step:', error);
