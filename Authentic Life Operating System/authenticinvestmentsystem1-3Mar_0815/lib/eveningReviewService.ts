@@ -55,13 +55,11 @@ export async function getAllRolesWithKRs(userId: string): Promise<RoleWithKRs[]>
 /**
  * Get all active domains (wellness zones) for the user.
  */
-export async function getAllDomains(userId: string): Promise<DomainItem[]> {
+export async function getAllDomains(): Promise<DomainItem[]> {
   const supabase = getSupabaseClient();
   const { data } = await supabase
     .from('0008-ap-domains')
-    .select('id, name')
-    .eq('user_id', userId)
-    .eq('is_active', true);
+    .select('id, name');
   return (data || []).map((d: any) => ({ id: d.id, name: d.name }));
 }
 

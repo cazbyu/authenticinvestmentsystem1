@@ -108,7 +108,7 @@ export default function EveningReviewCompassScreen() {
       const [tasks, roles, domains] = await Promise.all([
         getTodaysCommittedTasks(user.id),
         getAllRolesWithKRs(user.id),
-        getAllDomains(user.id),
+        getAllDomains(),
       ]);
       setReconciliationTasks(tasks);
       setAllRoles(roles);
