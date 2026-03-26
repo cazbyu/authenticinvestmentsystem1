@@ -1149,11 +1149,16 @@ export default function MorningSparkCompassScreen() {
                 {/* Wellness Zones section */}
                 {!wellnessLoading && wellnessGaps.filter((z) => z.pending_task_count > 0).length > 0 && (
                   <>
-                    <View style={{ marginTop: 20, marginHorizontal: 16, marginBottom: 8 }}>
-                      <Text style={[styles.roleIntroText, { color: colors.text, fontWeight: '600', marginHorizontal: 0 }]}>
-                        Wellness zones for today
-                      </Text>
+                    <View style={{ marginTop: 24 }}>
+                      <CompassDirectionHeader
+                        direction="east"
+                        label="Wellness Focus"
+                        powerQuestion={'"Who do I want to become?"'}
+                      />
                     </View>
+                    <Text style={[styles.roleIntroText, { color: colors.text }]}>
+                      These are the wellness zones you are investing in today.
+                    </Text>
                     {wellnessGaps.filter((zone) => zone.pending_task_count > 0).map((zone) => (
                       <View
                         key={zone.zone_id}
