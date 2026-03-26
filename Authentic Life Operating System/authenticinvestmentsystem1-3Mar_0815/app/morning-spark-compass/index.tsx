@@ -77,10 +77,9 @@ const STEPS = [
   { key: 'south_handoff', label: 'Brain Dump Handoff', icon: '\uD83D\uDCCB', color: '#4169E1' },
   { key: 'south_commit', label: "Today's Commitments", icon: '\u2705', color: '#4169E1' },
   { key: 'south_goal', label: 'Goal Pulse', icon: '\uD83C\uDFAF', color: '#4169E1' },
-  { key: 'west', label: 'Role Focus', icon: '\uD83D\uDC65', color: '#9370DB' },
-  { key: 'east', label: 'Wellness Pulse', icon: '\uD83C\uDF3F', color: '#39b54a' },
-  { key: 'north', label: 'Mission Touch', icon: '\u2B50', color: '#ed1c24' },
-  { key: 'sendoff', label: 'Send-off', icon: '\uD83D\uDE80', color: '#D4A843' },
+  { key: 'west_east', label: 'Roles & Wellness', icon: '\uD83D\uDC65', color: '#9370DB' },
+  { key: 'final_plan', label: "Today's Plan", icon: '\uD83D\uDE80', color: '#4169E1' },
+  { key: 'north', label: 'North Star', icon: '\u2B50', color: '#ed1c24' },
 ];
 
 export default function MorningSparkCompassScreen() {
@@ -352,46 +351,29 @@ export default function MorningSparkCompassScreen() {
     }
 
     if (nextStep === 5) {
-      // Role Focus
+      // Roles + Wellness (combined step)
+      const taskIdList = [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)];
       setRoleLoading(true);
-      getRoleFocus(userId, [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)])
-        .then((data) => {
-          setRoleFocus(data);
+      setWellnessLoading(true);
+      Promise.all([
+        getRoleFocus(userId, taskIdList),
+        getWellnessGaps(userId, taskIdList),
+      ])
+        .then(([roleData, wzData]) => {
+          setRoleFocus(roleData);
+          setWellnessGaps(wzData);
           setRoleLoading(false);
+          setWellnessLoading(false);
         })
-        .catch(() => setRoleLoading(false));
+        .catch((err) => {
+          console.error('Error loading roles/wellness:', err);
+          setRoleLoading(false);
+          setWellnessLoading(false);
+        });
     }
 
     if (nextStep === 6) {
-      // Wellness Pulse
-      setWellnessLoading(true);
-      getWellnessGaps(userId, [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)])
-        .then((data) => {
-          setWellnessGaps(data);
-          setWellnessLoading(false);
-          // If no gaps, auto-advance
-          if (data.length === 0) {
-            setTimeout(() => {
-              setCurrentStep(7);
-              // Load mission data
-              setMissionLoading(true);
-              getMissionTouch(userId)
-                .then((mData) => {
-                  setMissionTouch(mData);
-                  setMissionLoading(false);
-                })
-                .catch(() => setMissionLoading(false));
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }
-            }, 500);
-          }
-        })
-        .catch(() => setWellnessLoading(false));
-    }
-
-    if (nextStep === 7) {
-      // Final Commitment Review — fetch events + committed tasks + mission
+      // Today's Plan (final review) — fetch events + committed tasks
       setFinalReviewLoading(true);
       const goalActionIds = Array.from(committedActionIds);
       Promise.all([
@@ -1164,6 +1146,49 @@ export default function MorningSparkCompassScreen() {
                   </View>
                 ))}
 
+                {/* Wellness Zones section */}
+                {!wellnessLoading && wellnessGaps.filter((z) => z.pending_task_count > 0).length > 0 && (
+                  <>
+                    <View style={{ marginTop: 20, marginHorizontal: 16, marginBottom: 8 }}>
+                      <Text style={[styles.roleIntroText, { color: colors.text, fontWeight: '600', marginHorizontal: 0 }]}>
+                        Wellness zones for today
+                      </Text>
+                    </View>
+                    {wellnessGaps.filter((zone) => zone.pending_task_count > 0).map((zone) => (
+                      <View
+                        key={zone.zone_id}
+                        style={[
+                          styles.roleCard,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: zone.needs_attention ? '#eab308' : colors.border,
+                            borderWidth: zone.needs_attention ? 2 : 1,
+                          },
+                        ]}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.roleName, { color: colors.text }]}>{zone.zone_name}</Text>
+                            {zone.is_priority && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#16a34a', fontSize: 10 }]}>Priority</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
+                            ({zone.pending_task_count} today)
+                          </Text>
+                        </View>
+                        {zone.needs_attention && zone.days_since_activity !== null && (
+                          <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                            No activity in {zone.days_since_activity} days
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </>
+                )}
+
                 {/* Initial capture prompt — before any analysis */}
                 {!showCaptureInput && parsedItems.length === 0 && (
                   <View style={{ marginTop: 24 }}>
@@ -1431,93 +1456,8 @@ export default function MorningSparkCompassScreen() {
           </ScrollView>
         );
 
-      // ======== STEP 6: Wellness Pulse ========
+      // ======== STEP 6: Today's Plan (Final Review) ========
       case 6:
-        if (wellnessLoading) {
-          return (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                Checking wellness...
-              </Text>
-            </View>
-          );
-        }
-
-        return (
-          <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
-            <CompassDirectionHeader
-              direction="east"
-              label="Wellness"
-              powerQuestion={'"Who do I want to become?"'}
-            />
-
-            {wellnessGaps.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No wellness zones configured
-                </Text>
-                <TouchableOpacity
-                  style={[styles.continueButton, { backgroundColor: STEPS[6].color }]}
-                  onPress={goToNextStep}
-                >
-                  <Text style={styles.continueButtonText}>Continue</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <Text style={[styles.roleIntroText, { color: colors.text }]}>
-                  Your wellness zones for today.
-                </Text>
-
-                {wellnessGaps.filter((zone) => zone.pending_task_count > 0).map((zone) => (
-                  <View
-                    key={zone.zone_id}
-                    style={[
-                      styles.roleCard,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: zone.needs_attention ? '#eab308' : colors.border,
-                        borderWidth: zone.needs_attention ? 2 : 1,
-                      },
-                    ]}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={[styles.roleName, { color: colors.text }]}>
-                          {zone.zone_name}
-                        </Text>
-                        {zone.is_priority && (
-                          <View style={[styles.relationBadge, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
-                            <Text style={[styles.relationBadgeText, { color: '#16a34a', fontSize: 10 }]}>
-                              Priority
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
-                        ({zone.pending_task_count} today)
-                      </Text>
-                    </View>
-                    {zone.needs_attention && zone.days_since_activity !== null && (
-                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
-                        No activity in {zone.days_since_activity} days
-                      </Text>
-                    )}
-                    {zone.needs_attention && zone.days_since_activity === null && (
-                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
-                        No activity yet
-                      </Text>
-                    )}
-                  </View>
-                ))}
-              </>
-            )}
-          </ScrollView>
-        );
-
-      // ======== STEP 7: Final Commitment Review ========
-      case 7:
         if (finalReviewLoading) {
           return (
             <View style={styles.loadingContainer}>
@@ -1741,7 +1681,7 @@ export default function MorningSparkCompassScreen() {
                     style={[styles.captureOptionButton, { backgroundColor: '#E53935' }]}
                     onPress={() => {
                       setIsCommitted(false);
-                      setCurrentStep(8);
+                      setCurrentStep(7);
                     }}
                   >
                     <Text style={styles.captureOptionButtonText}>Review North Star</Text>
@@ -1758,8 +1698,8 @@ export default function MorningSparkCompassScreen() {
           </ScrollView>
         );
 
-      // ======== STEP 8: North Star Review (optional) ========
-      case 8:
+      // ======== STEP 7: North Star ========
+      case 7:
         return (
           <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
             <CompassDirectionHeader
@@ -1932,7 +1872,7 @@ export default function MorningSparkCompassScreen() {
       {/* Step Content */}
       <View style={styles.stepContent}>{renderStepContent()}</View>
 
-      {/* Bottom navigation bar — hidden on opening (auto-advance) and sendoff (has own button) */}
+      {/* Bottom navigation bar — hidden on opening (auto-advance) and last step */}
       {currentStep > 0 && currentStep < STEPS.length - 1 && (
         <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
           <TouchableOpacity
@@ -1946,11 +1886,29 @@ export default function MorningSparkCompassScreen() {
             style={[
               styles.navButton,
               styles.navButtonPrimary,
-              { backgroundColor: currentStepData.color },
+              { backgroundColor: currentStep === 6 ? '#4169E1' : currentStepData.color },
             ]}
-            onPress={goToNextStep}
+            onPress={async () => {
+              if (currentStep === 6) {
+                // Today's Plan — commit and complete
+                try {
+                  const allIds = [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)];
+                  if (allIds.length > 0) {
+                    await commitTodaysTasks(userId, allIds);
+                  }
+                  handleSendoff();
+                } catch (err) {
+                  console.error('Commit failed:', err);
+                  handleSendoff();
+                }
+              } else {
+                goToNextStep();
+              }
+            }}
           >
-            <Text style={[styles.navButtonText, { color: '#FFFFFF' }]}>Next</Text>
+            <Text style={[styles.navButtonText, { color: '#FFFFFF' }]}>
+              {currentStep === 6 ? 'Complete' : 'Next'}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
