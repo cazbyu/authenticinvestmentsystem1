@@ -205,7 +205,7 @@ export default function EveningReviewCompassScreen() {
         started_at: startedAt,
         completed_at: new Date().toISOString(),
         role_pulse: [],
-        carry_forward_count: 0 /* carryCount removed */,
+        carry_forward_count: 0,
         release_count: releaseCount,
       });
     } catch (error) {
@@ -219,7 +219,7 @@ export default function EveningReviewCompassScreen() {
     brainDumpText,
     brainDumpProcessed,
     startedAt,
-    0 /* carryCount removed */,
+    0,
     releaseCount,
   ]);
 
@@ -446,7 +446,7 @@ export default function EveningReviewCompassScreen() {
                   Carried forward
                 </Text>
                 <Text style={[styles.scoreBreakdownValue, { color: '#FF9800' }]}>
-                  {0 /* carryCount removed */}
+                  {0}
                 </Text>
               </View>
               <View style={styles.scoreBreakdownRow}>
