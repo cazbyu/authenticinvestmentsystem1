@@ -323,36 +323,33 @@ export default function EveningReviewCompassScreen() {
 
   // ---- Render step content ----
 
-  const handleToggleDone = useCallback(
-    async (taskId: string) => {
-      const wasDone = reconciledTasks.get(taskId) === 'done';
-      const newAction = wasDone ? undefined : 'done';
+  async function handleToggleDone(taskId: string) {
+    const wasDone = reconciledTasks.get(taskId) === 'done';
+    const newAction = wasDone ? undefined : 'done';
 
-      if (!wasDone) {
-        const success = await reconcileTask(taskId, 'done');
-        if (!success) return;
-        setDoneCount((c) => c + 1);
+    if (!wasDone) {
+      const success = await reconcileTask(taskId, 'done');
+      if (!success) return;
+      setDoneCount((c) => c + 1);
+    } else {
+      // Undo — revert task to pending
+      const supabase = getSupabaseClient();
+      await supabase.from('0008-ap-tasks').update({ status: 'pending', completed_at: null }).eq('id', taskId);
+      setDoneCount((c) => Math.max(0, c - 1));
+    }
+
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    setReconciledTasks((prev) => {
+      const next = new Map(prev);
+      if (newAction) {
+        next.set(taskId, newAction);
       } else {
-        // Undo — revert task to pending
-        const supabase = getSupabaseClient();
-        await supabase.from('0008-ap-tasks').update({ status: 'pending', completed_at: null }).eq('id', taskId);
-        setDoneCount((c) => Math.max(0, c - 1));
+        next.delete(taskId);
       }
-
-      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      setReconciledTasks((prev) => {
-        const next = new Map(prev);
-        if (newAction) {
-          next.set(taskId, newAction);
-        } else {
-          next.delete(taskId);
-        }
-        return next;
-      });
-    },
-    [reconciledTasks],
-  );
+      return next;
+    });
+  }
 
   const renderReconcileStep = () => (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
