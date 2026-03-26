@@ -475,7 +475,10 @@ export default function MorningSparkCompassScreen() {
 
   const renderStepDots = () => (
     <View style={styles.stepDotsContainer}>
-      {STEPS.map((step, index) => (
+      {STEPS.map((step, index) => {
+        // Skip the opening compass animation from dots
+        if (index === 0) return null;
+        return (
         <TouchableOpacity
           key={step.key}
           onPress={() => {
@@ -499,7 +502,8 @@ export default function MorningSparkCompassScreen() {
             ]}
           />
         </TouchableOpacity>
-      ))}
+        );
+      })}
     </View>
   );
 
@@ -522,14 +526,24 @@ export default function MorningSparkCompassScreen() {
       // ======== STEP 1: Fuel Check ========
       case 1:
         return (
-          <EnergyCheckStep
-            fuelLevel={fuelLevel}
-            fuelWhy={fuelWhy}
-            fuel3Why={fuel3Why}
-            onFuelLevelChange={setFuelLevel}
-            onFuelWhyChange={setFuelWhy}
-            onFuel3WhyChange={setFuel3Why}
-          />
+          <View style={{ flex: 1 }}>
+            <EnergyCheckStep
+              fuelLevel={fuelLevel}
+              fuelWhy={fuelWhy}
+              fuel3Why={fuel3Why}
+              onFuelLevelChange={setFuelLevel}
+              onFuelWhyChange={setFuelWhy}
+              onFuel3WhyChange={setFuel3Why}
+            />
+            {!fuelLevel && (
+              <TouchableOpacity
+                style={{ alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 20, marginTop: 8 }}
+                onPress={goToNextStep}
+              >
+                <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Skip</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         );
 
       // ======== STEP 2: Brain Dump Handoff (auto-skipped if empty) ========
@@ -739,93 +753,126 @@ export default function MorningSparkCompassScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
-                {tasks.map((task) => {
-                  const isSelected = selectedTaskIds.has(task.id);
-                  // Urgent/Important matrix colors (matches TaskCard.tsx)
-                  const matrixColor =
-                    task.is_urgent && task.is_important ? '#ef4444' :   // red
-                    !task.is_urgent && task.is_important ? '#22c55e' :  // green
-                    task.is_urgent && !task.is_important ? '#eab308' :  // yellow
-                    '#9ca3af';                                          // gray
+                {(() => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const sevenDaysAgo = new Date();
+                  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
 
-                  // Collect all relationship badges (max 2 each, show + for overflow)
-                  const roleBadges = task.roles.slice(0, 2);
-                  const roleOverflow = task.roles.length > 2 ? task.roles.length - 2 : 0;
-                  const domainBadges = task.domains.slice(0, 2);
-                  const domainOverflow = task.domains.length > 2 ? task.domains.length - 2 : 0;
-                  const krBadges = task.keyRelationships.slice(0, 2);
-                  const krOverflow = task.keyRelationships.length > 2 ? task.keyRelationships.length - 2 : 0;
-                  const hasRelations = task.roles.length > 0 || task.domains.length > 0 || task.keyRelationships.length > 0;
+                  // Filter out past events (only show today's events)
+                  const filtered = tasks.filter((t) => {
+                    if (t.type === 'event' && t.due_date && t.due_date < todayStr) return false;
+                    return true;
+                  });
+
+                  // Group tasks
+                  const todayEvents = filtered.filter((t) => t.type === 'event' && t.due_date === todayStr);
+                  const dueTodayTasks = filtered.filter((t) => t.type !== 'event' && t.due_date === todayStr);
+                  const overdueRecent = filtered.filter((t) => t.type !== 'event' && t.due_date && t.due_date < todayStr && t.due_date >= sevenDaysAgoStr);
+                  const overdueOld = filtered.filter((t) => t.type !== 'event' && t.due_date && t.due_date < sevenDaysAgoStr);
+                  const noDueDate = filtered.filter((t) => t.type !== 'event' && !t.due_date);
+                  // Events in the future
+                  const futureEvents = filtered.filter((t) => t.type === 'event' && t.due_date && t.due_date > todayStr);
+
+                  const renderTaskCard = (task: CommitmentTask) => {
+                    const isSelected = selectedTaskIds.has(task.id);
+                    const matrixColor =
+                      task.is_urgent && task.is_important ? '#ef4444' :
+                      !task.is_urgent && task.is_important ? '#22c55e' :
+                      task.is_urgent && !task.is_important ? '#eab308' :
+                      '#9ca3af';
+                    const roleBadges = task.roles.slice(0, 2);
+                    const domainBadges = task.domains.slice(0, 2);
+                    const krBadges = task.keyRelationships.slice(0, 2);
+                    const hasRelations = task.roles.length > 0 || task.domains.length > 0 || task.keyRelationships.length > 0;
+
+                    return (
+                      <TouchableOpacity
+                        key={task.id}
+                        style={[
+                          styles.taskCard,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: isSelected ? '#4169E1' : matrixColor,
+                            borderWidth: isSelected ? 2 : 1,
+                            borderLeftWidth: 4,
+                            borderLeftColor: matrixColor,
+                          },
+                        ]}
+                        onPress={() => handleToggleTask(task.id)}
+                      >
+                        <View style={[styles.checkbox, isSelected && { backgroundColor: '#4169E1', borderColor: '#4169E1' }, !isSelected && { borderColor: colors.border }]}>
+                          {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                        </View>
+                        <View style={styles.taskTextContainer}>
+                          <Text style={[styles.taskTitle, { color: colors.text }]}>{task.title}</Text>
+                          {task.due_date && (
+                            <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
+                              {task.type === 'event' ? task.due_date : `Due: ${task.due_date}`}
+                            </Text>
+                          )}
+                          {hasRelations && (
+                            <View style={styles.relationBadgeRow}>
+                              {roleBadges.map((r) => (
+                                <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                                </View>
+                              ))}
+                              {task.roles.length > 2 && (
+                                <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{task.roles.length - 2}</Text>
+                                </View>
+                              )}
+                              {domainBadges.map((d) => (
+                                <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.label}</Text>
+                                </View>
+                              ))}
+                              {task.domains.length > 2 && (
+                                <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{task.domains.length - 2}</Text>
+                                </View>
+                              )}
+                              {krBadges.map((k) => (
+                                <View key={k.id} style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>{k.label}</Text>
+                                </View>
+                              ))}
+                              {task.keyRelationships.length > 2 && (
+                                <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]}>+{task.keyRelationships.length - 2}</Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  };
+
+                  const renderSection = (title: string, items: CommitmentTask[], defaultOpen: boolean = true) => {
+                    if (items.length === 0) return null;
+                    return (
+                      <View key={title} style={{ marginBottom: 12 }}>
+                        <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>
+                          {title} ({items.length})
+                        </Text>
+                        {items.map(renderTaskCard)}
+                      </View>
+                    );
+                  };
 
                   return (
-                    <TouchableOpacity
-                      key={task.id}
-                      style={[
-                        styles.taskCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: isSelected ? '#4169E1' : matrixColor,
-                          borderWidth: isSelected ? 2 : 1,
-                          borderLeftWidth: 4,
-                          borderLeftColor: matrixColor,
-                        },
-                      ]}
-                      onPress={() => handleToggleTask(task.id)}
-                    >
-                      <View
-                        style={[
-                          styles.checkbox,
-                          isSelected && { backgroundColor: '#4169E1', borderColor: '#4169E1' },
-                          !isSelected && { borderColor: colors.border },
-                        ]}
-                      >
-                        {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                      </View>
-                      <View style={styles.taskTextContainer}>
-                        <Text style={[styles.taskTitle, { color: colors.text }]}>{task.title}</Text>
-                        {task.due_date && (
-                          <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
-                            Due: {task.due_date}
-                          </Text>
-                        )}
-                        {hasRelations && (
-                          <View style={styles.relationBadgeRow}>
-                            {roleBadges.map((r) => (
-                              <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
-                              </View>
-                            ))}
-                            {roleOverflow > 0 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{roleOverflow}</Text>
-                              </View>
-                            )}
-                            {domainBadges.map((d) => (
-                              <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.label}</Text>
-                              </View>
-                            ))}
-                            {domainOverflow > 0 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{domainOverflow}</Text>
-                              </View>
-                            )}
-                            {krBadges.map((k) => (
-                              <View key={k.id} style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>{k.label}</Text>
-                              </View>
-                            ))}
-                            {krOverflow > 0 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]}>+{krOverflow}</Text>
-                              </View>
-                            )}
-                          </View>
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                    <>
+                      {renderSection("Today's Events", todayEvents)}
+                      {renderSection('Due Today', dueTodayTasks)}
+                      {renderSection('Tasks', noDueDate)}
+                      {renderSection('Overdue (this week)', overdueRecent)}
+                      {renderSection('Overdue (older)', overdueOld)}
+                      {renderSection('Upcoming Events', futureEvents)}
+                    </>
                   );
-                })}
+                })()}
                 <TouchableOpacity
                   style={[
                     styles.confirmButton,
@@ -2122,6 +2169,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+
+  // Task sections
+  sectionHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+    marginBottom: 6,
+    marginTop: 4,
+    paddingHorizontal: 4,
   },
 
   // Task selection
