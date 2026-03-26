@@ -537,10 +537,10 @@ export default function MorningSparkCompassScreen() {
             />
             {!fuelLevel && (
               <TouchableOpacity
-                style={{ alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 20, marginTop: 8 }}
+                style={{ position: 'absolute', bottom: 80, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 24 }}
                 onPress={goToNextStep}
               >
-                <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Skip</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 14, textDecorationLine: 'underline' }}>Skip</Text>
               </TouchableOpacity>
             )}
           </View>
