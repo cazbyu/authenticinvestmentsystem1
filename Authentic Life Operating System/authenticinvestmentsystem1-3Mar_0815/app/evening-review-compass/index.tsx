@@ -9,9 +9,7 @@ import {
   Platform,
   TextInput,
   ScrollView,
-  Modal,
 } from 'react-native';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -26,12 +24,19 @@ import { CompassDirectionHeader } from '@/components/compass/CompassDirectionHea
 // Evening review service
 import {
   ReconciliationTask,
+  RoleWithKRs,
+  DomainItem,
   getTodaysCommittedTasks,
   reconcileTask,
   saveBrainDump,
   routeBrainDumpItem,
   saveEveningReviewSession,
+  getAllRolesWithKRs,
+  getAllDomains,
 } from '@/lib/eveningReviewService';
+
+// Task reconciliation card with dresser drawers
+import TaskReconciliationCard from '@/components/evening-review/TaskReconciliationCard';
 
 const STEPS = [
   { key: 'south_reconcile', label: 'Close the Loop', icon: '\u2705', color: '#4169E1' },
@@ -56,7 +61,6 @@ export default function EveningReviewCompassScreen() {
   const [reconciledTasks, setReconciledTasks] = useState<Map<string, 'done' | 'alter' | 'release'>>(new Map());
   const [doneCount, setDoneCount] = useState(0);
   const [releaseCount, setReleaseCount] = useState(0);
-  const [alterTaskId, setAlterTaskId] = useState<string | null>(null);
 
   // Step 2: Brain Dump
   const [brainDumpText, setBrainDumpText] = useState('');
@@ -69,6 +73,10 @@ export default function EveningReviewCompassScreen() {
   // Step 3: Summary data
   const [summaryRoles, setSummaryRoles] = useState<Array<{ name: string; count: number }>>([]);
   const [summaryDomains, setSummaryDomains] = useState<Array<{ name: string; count: number }>>([]);
+
+  // Shared data for dresser drawers
+  const [allRoles, setAllRoles] = useState<RoleWithKRs[]>([]);
+  const [allDomains, setAllDomains] = useState<DomainItem[]>([]);
 
   // Derived
   const totalTasks = reconciliationTasks.length;
@@ -96,9 +104,15 @@ export default function EveningReviewCompassScreen() {
 
       setUserId(user.id);
 
-      // Pre-load reconciliation tasks
-      const tasks = await getTodaysCommittedTasks(user.id);
+      // Pre-load reconciliation tasks + roles/domains for dresser drawers
+      const [tasks, roles, domains] = await Promise.all([
+        getTodaysCommittedTasks(user.id),
+        getAllRolesWithKRs(user.id),
+        getAllDomains(user.id),
+      ]);
       setReconciliationTasks(tasks);
+      setAllRoles(roles);
+      setAllDomains(domains);
 
       // Pre-fill "Done" for already-completed tasks
       const prefilled = new Map<string, 'done' | 'alter' | 'release'>();
@@ -120,45 +134,7 @@ export default function EveningReviewCompassScreen() {
     }
   }
 
-  // ---- Reconciliation handlers ----
-
-  const handleReconcile = useCallback(
-    async (taskId: string, action: 'done' | 'alter' | 'release') => {
-      // For "alter", open the edit modal instead of reconciling
-      if (action === 'alter') {
-        setAlterTaskId(taskId);
-        return;
-      }
-
-      const reconcileAction = action === 'done' ? 'done' : 'release';
-      const success = await reconcileTask(taskId, reconcileAction);
-      if (!success) {
-        Alert.alert('Error', 'Failed to update task. Please try again.');
-        return;
-      }
-
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-
-      // Check if this task was previously reconciled with a different action
-      const previousAction = reconciledTasks.get(taskId);
-      if (previousAction) {
-        if (previousAction === 'done') setDoneCount((c) => c - 1);
-        if (previousAction === 'release') setReleaseCount((c) => c - 1);
-      }
-
-      if (action === 'done') setDoneCount((c) => c + 1);
-      if (action === 'release') setReleaseCount((c) => c + 1);
-
-      setReconciledTasks((prev) => {
-        const next = new Map(prev);
-        next.set(taskId, action);
-        return next;
-      });
-    },
-    [reconciledTasks],
-  );
+  // ---- Reconciliation handlers defined in renderReconcileStep ----
 
   // ---- Brain Dump handlers ----
 
@@ -347,6 +323,37 @@ export default function EveningReviewCompassScreen() {
 
   // ---- Render step content ----
 
+  const handleToggleDone = useCallback(
+    async (taskId: string) => {
+      const wasDone = reconciledTasks.get(taskId) === 'done';
+      const newAction = wasDone ? undefined : 'done';
+
+      if (!wasDone) {
+        const success = await reconcileTask(taskId, 'done');
+        if (!success) return;
+        setDoneCount((c) => c + 1);
+      } else {
+        // Undo — revert task to pending
+        const supabase = getSupabaseClient();
+        await supabase.from('0008-ap-tasks').update({ status: 'pending', completed_at: null }).eq('id', taskId);
+        setDoneCount((c) => Math.max(0, c - 1));
+      }
+
+      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      setReconciledTasks((prev) => {
+        const next = new Map(prev);
+        if (newAction) {
+          next.set(taskId, newAction);
+        } else {
+          next.delete(taskId);
+        }
+        return next;
+      });
+    },
+    [reconciledTasks],
+  );
+
   const renderReconcileStep = () => (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       <CompassDirectionHeader
@@ -363,157 +370,25 @@ export default function EveningReviewCompassScreen() {
         </View>
       ) : (
         <View style={styles.taskListContainer}>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            {reconciledTasks.size} of {totalTasks} tasks reconciled
+          <Text style={[styles.sectionSubtitle, { color: colors.text, fontSize: 16, marginBottom: 4 }]}>
+            Confirm what you completed today.
+          </Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, marginBottom: 12 }]}>
+            {doneCount} of {totalTasks} done
           </Text>
 
-          {reconciliationTasks.map((task) => {
-            const action = reconciledTasks.get(task.id);
-            return (
-              <View
-                key={task.id}
-                style={[
-                  styles.taskCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: action
-                      ? action === 'done'
-                        ? '#4CAF50'
-                        : action === 'release'
-                          ? '#E53935'
-                          : colors.border
-                      : colors.border,
-                    borderWidth: action ? 2 : 1,
-                  },
-                ]}
-              >
-                {/* Title row with pill badges */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Text
-                    style={[styles.taskTitle, { color: colors.text, flex: 1, marginRight: 8 }]}
-                    numberOfLines={2}
-                  >
-                    {task.title}
-                  </Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, maxWidth: '50%', justifyContent: 'flex-end' }}>
-                    {task.goal_title && (
-                      <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 10, color: '#1d4ed8', fontWeight: '500' }} numberOfLines={1}>{task.goal_title}</Text>
-                      </View>
-                    )}
-                    {task.roles.slice(0, 2).map((r) => (
-                      <View key={r.id} style={{ backgroundColor: '#fce7f3', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 10, color: '#9333ea', fontWeight: '500' }} numberOfLines={1}>{r.label}</Text>
-                      </View>
-                    ))}
-                    {task.roles.length > 2 && (
-                      <View style={{ backgroundColor: '#fce7f3', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 10, color: '#9333ea', fontWeight: '500' }}>+{task.roles.length - 2}</Text>
-                      </View>
-                    )}
-                    {task.domains.slice(0, 2).map((d) => (
-                      <View key={d.id} style={{ backgroundColor: '#fed7aa', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 10, color: '#c2410c', fontWeight: '500' }} numberOfLines={1}>{d.label}</Text>
-                      </View>
-                    ))}
-                    {task.domains.length > 2 && (
-                      <View style={{ backgroundColor: '#fed7aa', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 10, color: '#c2410c', fontWeight: '500' }}>+{task.domains.length - 2}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
+          {reconciliationTasks.map((task) => (
+            <TaskReconciliationCard
+              key={task.id}
+              task={task}
+              userId={userId}
+              isDone={reconciledTasks.get(task.id) === 'done'}
+              onToggleDone={handleToggleDone}
+              allRoles={allRoles}
+              allDomains={allDomains}
+            />
+          ))}
 
-                <View style={styles.actionButtonsRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      {
-                        backgroundColor: action === 'done' ? '#4CAF50' : colors.background,
-                        borderColor: '#4CAF50',
-                      },
-                    ]}
-                    onPress={() => handleReconcile(task.id, 'done')}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: action === 'done' ? '#FFF' : '#4CAF50' },
-                      ]}
-                    >
-                      Done {'\u2713'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: '#4169E1',
-                      },
-                    ]}
-                    onPress={() => handleReconcile(task.id, 'alter')}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: '#4169E1' },
-                      ]}
-                    >
-                      Alter ✎
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      {
-                        backgroundColor: action === 'release' ? '#E53935' : colors.background,
-                        borderColor: '#E53935',
-                      },
-                    ]}
-                    onPress={() => handleReconcile(task.id, 'release')}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: action === 'release' ? '#FFF' : '#E53935' },
-                      ]}
-                    >
-                      Release {'\u00D7'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
-
-          {/* Alter task modal */}
-          {alterTaskId && (() => {
-            const alterTask = reconciliationTasks.find((t) => t.id === alterTaskId);
-            return (
-              <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-                <TaskEventForm
-                  mode="edit"
-                  initialData={alterTask ? {
-                    id: alterTask.id,
-                    title: alterTask.title,
-                    status: alterTask.status,
-                    type: 'task',
-                    roles: alterTask.roles.map((r) => ({ id: r.id, label: r.label })),
-                    domains: alterTask.domains.map((d) => ({ id: d.id, name: d.label })),
-                  } : { id: alterTaskId }}
-                  onClose={() => setAlterTaskId(null)}
-                  onSubmitSuccess={async () => {
-                    setAlterTaskId(null);
-                    const updated = await getTodaysCommittedTasks(userId);
-                    setReconciliationTasks(updated);
-                  }}
-                />
-              </Modal>
-            );
-          })()}
         </View>
       )}
     </ScrollView>

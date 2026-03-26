@@ -9,6 +9,62 @@
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
 
+// ============ SHARED DATA FETCH ============
+
+export interface RoleWithKRs {
+  id: string;
+  label: string;
+  keyRelationships: Array<{ id: string; name: string }>;
+}
+
+export interface DomainItem {
+  id: string;
+  name: string;
+}
+
+/**
+ * Get all active roles for the user with their linked key relationships.
+ */
+export async function getAllRolesWithKRs(userId: string): Promise<RoleWithKRs[]> {
+  const supabase = getSupabaseClient();
+
+  const { data: roles } = await supabase
+    .from('0008-ap-roles')
+    .select('id, label')
+    .eq('user_id', userId);
+
+  if (!roles || roles.length === 0) return [];
+
+  const roleIds = roles.map((r: any) => r.id);
+
+  const { data: krs } = await supabase
+    .from('0008-ap-key-relationships')
+    .select('id, name, role_id')
+    .eq('user_id', userId)
+    .in('role_id', roleIds);
+
+  return roles.map((role: any) => ({
+    id: role.id,
+    label: role.label,
+    keyRelationships: (krs || [])
+      .filter((kr: any) => kr.role_id === role.id)
+      .map((kr: any) => ({ id: kr.id, name: kr.name })),
+  }));
+}
+
+/**
+ * Get all active domains (wellness zones) for the user.
+ */
+export async function getAllDomains(userId: string): Promise<DomainItem[]> {
+  const supabase = getSupabaseClient();
+  const { data } = await supabase
+    .from('0008-ap-domains')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+  return (data || []).map((d: any) => ({ id: d.id, name: d.name }));
+}
+
 // ============ TYPES ============
 
 export interface ReconciliationTask {
