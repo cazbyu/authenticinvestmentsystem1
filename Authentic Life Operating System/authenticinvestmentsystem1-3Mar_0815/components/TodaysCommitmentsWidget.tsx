@@ -49,6 +49,10 @@ export default function TodaysCommitmentsWidget({ userId, onRefresh }: TodaysCom
   const [loading, setLoading] = useState(true);
 
   const loadCommitments = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     const supabase = getSupabaseClient();
     const todayStr = toLocalISOString(new Date()).split('T')[0];
 
