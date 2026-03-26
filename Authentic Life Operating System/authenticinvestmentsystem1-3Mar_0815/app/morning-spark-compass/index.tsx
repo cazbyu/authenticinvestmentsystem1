@@ -204,7 +204,7 @@ export default function MorningSparkCompassScreen() {
         // Check if all items are now processed
         if (brainDumpData) {
           const newProcessedCount = brainDumpItemsProcessed.size + 1;
-          if (newProcessedCount >= brainDumpData.items.length) {
+          if (brainDumpData.items && newProcessedCount >= brainDumpData.items.length) {
             await markBrainDumpProcessed(brainDumpData.sessionId);
           }
         }
@@ -295,7 +295,7 @@ export default function MorningSparkCompassScreen() {
         .then((data) => {
           setBrainDumpData(data);
           setBrainDumpLoading(false);
-          if (!data || data.items.length === 0) {
+          if (!data || !data.items || data.items.length === 0) {
             // No brain dump — auto-skip to commitments
             setCurrentStep(3);
             setCommitLoading(true);
@@ -460,7 +460,7 @@ export default function MorningSparkCompassScreen() {
 
   // ---- Helper: check if all brain dump items are processed ----
   const allBrainDumpProcessed =
-    brainDumpData != null && brainDumpItemsProcessed.size >= brainDumpData.items.length;
+    brainDumpData != null && brainDumpData.items != null && brainDumpItemsProcessed.size >= brainDumpData.items.length;
 
   // ---- Step dots ----
 
@@ -571,7 +571,7 @@ export default function MorningSparkCompassScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              brainDumpData.items.map((item) => {
+              (brainDumpData.items || []).map((item) => {
                 if (brainDumpItemsProcessed.has(item.id)) return null;
                 return (
                   <View
@@ -1215,7 +1215,7 @@ export default function MorningSparkCompassScreen() {
                         setCaptureAnalyzing(true);
                         try {
                           const result = await analyzeCapture(userId, captureText.trim(), roleFocus);
-                          setParsedItems(result.items);
+                          setParsedItems(result?.items || []);
                           setCurrentItemIndex(0);
                           setShowCaptureInput(false);
                         } catch (err) {
