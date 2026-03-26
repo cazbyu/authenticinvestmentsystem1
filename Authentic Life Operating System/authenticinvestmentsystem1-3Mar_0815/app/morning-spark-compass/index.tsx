@@ -67,6 +67,7 @@ import {
   TaskEventFormPrefill,
   analyzeCapture,
   buildFormPrefill,
+  quickSaveCapture,
   getUserDomains,
 } from '@/lib/morningSparkCompassService';
 
@@ -1201,7 +1202,21 @@ export default function MorningSparkCompassScreen() {
                   const item = parsedItems[currentItemIndex];
                   const typeLabel = item.suggested_type === 'depositIdea' ? 'Deposit Idea' : item.suggested_type;
 
-                  const handleConfirmItem = (finalItem: ParsedCaptureItem) => {
+                  const handleConfirmItem = async (finalItem: ParsedCaptureItem) => {
+                    try {
+                      await quickSaveCapture(userId, finalItem);
+                      setCapturedCount((c) => c + 1);
+                      if (Platform.OS !== 'web') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }
+                      setCurrentItemIndex(currentItemIndex + 1);
+                    } catch (err) {
+                      console.error('Quick save failed:', err);
+                      Alert.alert('Error', 'Could not save. Please try again.');
+                    }
+                  };
+
+                  const handleEditItem = (finalItem: ParsedCaptureItem) => {
                     const prefill = buildFormPrefill(finalItem);
                     setFormPrefill(prefill);
                     setShowTaskEventForm(true);
@@ -1285,19 +1300,22 @@ export default function MorningSparkCompassScreen() {
                           <Text style={[styles.analysisReasoning, { color: colors.textSecondary }]}>
                             {item.reasoning}
                           </Text>
-                          <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
                             <TouchableOpacity
-                              style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 1 }]}
+                              style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 2 }]}
                               onPress={() => handleConfirmItem(item)}
                             >
                               <Text style={styles.captureOptionButtonText}>Looks Right</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
+                              style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: '#4169E1', borderWidth: 1, flex: 1 }]}
+                              onPress={() => handleEditItem(item)}
+                            >
+                              <Text style={[styles.captureOptionButtonText, { color: '#4169E1' }]}>Edit</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
                               style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, flex: 1 }]}
-                              onPress={() => {
-                                // Skip this item
-                                setCurrentItemIndex(currentItemIndex + 1);
-                              }}
+                              onPress={() => setCurrentItemIndex(currentItemIndex + 1)}
                             >
                               <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Skip</Text>
                             </TouchableOpacity>

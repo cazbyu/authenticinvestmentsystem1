@@ -512,12 +512,9 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
       weekTotalTarget += targetDays;
       weekTotalActual += weeklyActual;
 
-      // Show action if scheduled today AND not already completed today.
-      // For catch-up: only show if there are MISSED past scheduled days
-      // (i.e., more past scheduled days than completions so far).
-      const pastScheduledDays = scheduledDays.filter((d) => d < todayDow).length;
-      const isBehindSchedule = !isCompleteForWeek && weeklyActual < pastScheduledDays;
-      if ((isScheduledToday && !completedToday) || isBehindSchedule) {
+      // Only show action if it is scheduled for TODAY and not already done today.
+      // Do NOT show catch-up items from other days — each day has its own schedule.
+      if (isScheduledToday && !completedToday) {
         todayActions.push({
           task_id: a.task_id,
           title: a.title,
@@ -1122,6 +1119,120 @@ export function buildFormPrefill(item: ParsedCaptureItem): TaskEventFormPrefill 
     selectedKeyRelationshipIds: item.suggested_key_relationship_ids || [],
     is_deposit_idea: item.suggested_type === 'depositIdea',
   };
+}
+
+/**
+ * Quick-save a captured item directly to the appropriate table.
+ * Called when user taps "Looks Right" — no TaskEventForm needed.
+ * Returns the inserted record ID.
+ */
+export async function quickSaveCapture(
+  userId: string,
+  item: ParsedCaptureItem,
+): Promise<{ id: string; type: string }> {
+  const supabase = getSupabaseClient();
+  let insertedId: string;
+  let parentType: string;
+
+  switch (item.suggested_type) {
+    case 'task':
+    case 'event': {
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .insert({
+          title: item.title,
+          user_id: userId,
+          status: 'pending',
+          type: item.suggested_type,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'task';
+      break;
+    }
+    case 'rose':
+    case 'thorn': {
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: userId,
+          content: item.title,
+          reflection_type: 'daily',
+          date: toLocalISOString(new Date()).split('T')[0],
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'reflection';
+      break;
+    }
+    case 'reflection': {
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: userId,
+          content: item.title,
+          reflection_type: 'daily',
+          date: toLocalISOString(new Date()).split('T')[0],
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'reflection';
+      break;
+    }
+    case 'depositIdea': {
+      const { data, error } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .insert({
+          title: item.title,
+          user_id: userId,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'depositIdea';
+      break;
+    }
+    default:
+      throw new Error(`Unknown type: ${item.suggested_type}`);
+  }
+
+  // Add role join
+  if (item.suggested_role_id) {
+    await supabase.from('0008-ap-universal-roles-join').insert({
+      parent_id: insertedId,
+      parent_type: parentType,
+      role_id: item.suggested_role_id,
+    });
+  }
+
+  // Add domain joins (multiple)
+  if (item.suggested_domain_ids && item.suggested_domain_ids.length > 0) {
+    const domainJoins = item.suggested_domain_ids.map((domainId) => ({
+      parent_id: insertedId,
+      parent_type: parentType,
+      domain_id: domainId,
+    }));
+    await supabase.from('0008-ap-universal-domains-join').insert(domainJoins);
+  }
+
+  // Add key relationship joins (multiple)
+  if (item.suggested_key_relationship_ids && item.suggested_key_relationship_ids.length > 0) {
+    const krJoins = item.suggested_key_relationship_ids.map((krId) => ({
+      parent_id: insertedId,
+      parent_type: parentType,
+      key_relationship_id: krId,
+    }));
+    await supabase.from('0008-ap-universal-key-relationships-join').insert(krJoins);
+  }
+
+  return { id: insertedId, type: item.suggested_type };
 }
 
 // ============ FINAL COMMITMENT REVIEW ============
