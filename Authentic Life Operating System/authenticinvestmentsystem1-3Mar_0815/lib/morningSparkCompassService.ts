@@ -410,7 +410,7 @@ export async function getTodaysCommittedTaskIds(userId: string): Promise<string[
 
 /** Parse RRULE BYDAY into JS day-of-week numbers (0=Sun, 1=Mon, ..., 6=Sat) */
 function getScheduledDays(rrule: string | null): number[] {
-  if (!rrule) return [0, 1, 2, 3, 4, 5, 6]; // No rule = all days
+  if (!rrule || rrule.trim() === '') return [0, 1, 2, 3, 4, 5, 6]; // No rule = all days
   const dayMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
   const upper = rrule.toUpperCase();
   if (upper.includes('FREQ=DAILY')) return [0, 1, 2, 3, 4, 5, 6];
@@ -495,6 +495,33 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
 
     if (!actions || actions.length === 0) continue;
 
+    // 3b. Get the goal's own domains/roles as fallback for actions that have none
+    const goalJoinTable = goal.goal_type === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
+    const { data: goalDomains } = await supabase
+      .from('0008-ap-universal-domains-join')
+      .select('domain_id')
+      .eq('parent_id', goal.id)
+      .eq('parent_type', goal.goal_type === '12week' ? 'goal' : 'custom_goal');
+    const { data: goalRoles } = await supabase
+      .from('0008-ap-universal-roles-join')
+      .select('role_id')
+      .eq('parent_id', goal.id)
+      .eq('parent_type', goal.goal_type === '12week' ? 'goal' : 'custom_goal');
+
+    // Look up labels for goal-level domains/roles
+    const goalDomainIds = (goalDomains || []).map((d: any) => d.domain_id);
+    const goalRoleIds = (goalRoles || []).map((r: any) => r.role_id);
+    let goalDomainLabels: Array<{ id: string; name: string }> = [];
+    let goalRoleLabels: Array<{ id: string; label: string }> = [];
+    if (goalDomainIds.length > 0) {
+      const { data: dl } = await supabase.from('0008-ap-domains').select('id, name').in('id', goalDomainIds);
+      goalDomainLabels = (dl || []).map((d: any) => ({ id: d.id, name: d.name }));
+    }
+    if (goalRoleIds.length > 0) {
+      const { data: rl } = await supabase.from('0008-ap-roles').select('id, label').in('id', goalRoleIds);
+      goalRoleLabels = (rl || []).map((r: any) => ({ id: r.id, label: r.label }));
+    }
+
     // 4. Filter to today's actions and those not yet complete
     const todayActions: GoalActionForToday[] = [];
     let weekTotalTarget = 0;
@@ -522,8 +549,12 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
           target_days: targetDays,
           weekly_actual: weeklyActual,
           completed_dates: completedDates,
-          roles: (a.roles || []).map((r: any) => ({ id: r.id, label: r.label || r.name || '' })),
-          domains: (a.domains || []).map((d: any) => ({ id: d.id, name: d.label || d.name || '' })),
+          roles: (a.roles && a.roles.length > 0)
+            ? a.roles.map((r: any) => ({ id: r.id, label: r.label || r.name || '' }))
+            : goalRoleLabels,
+          domains: (a.domains && a.domains.length > 0)
+            ? a.domains.map((d: any) => ({ id: d.id, name: d.label || d.name || '' }))
+            : goalDomainLabels,
           is_scheduled_today: isScheduledToday,
           is_complete_for_week: isCompleteForWeek,
           completed_today: completedToday,
