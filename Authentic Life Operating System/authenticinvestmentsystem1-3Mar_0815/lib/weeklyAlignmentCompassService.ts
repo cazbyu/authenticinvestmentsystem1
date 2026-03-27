@@ -40,7 +40,7 @@ export async function getWeeklyReport(userId: string): Promise<WeeklyReportData>
     .from('0008-ap-ritual-sessions')
     .select('day_score')
     .eq('user_id', userId)
-    .eq('ritual_type', 'evening_review')
+    .eq('ritual_type', 'evening')
     .gte('session_date', sevenDaysAgoStr)
     .not('day_score', 'is', null);
 
@@ -53,7 +53,7 @@ export async function getWeeklyReport(userId: string): Promise<WeeklyReportData>
     .from('0008-ap-ritual-sessions')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('ritual_type', 'morning_spark')
+    .eq('ritual_type', 'morning')
     .gte('session_date', sevenDaysAgoStr);
 
   // Count evening reviews this week
@@ -61,7 +61,7 @@ export async function getWeeklyReport(userId: string): Promise<WeeklyReportData>
     .from('0008-ap-ritual-sessions')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('ritual_type', 'evening_review')
+    .eq('ritual_type', 'evening')
     .gte('session_date', sevenDaysAgoStr);
 
   // Most active role this week (by role join count)

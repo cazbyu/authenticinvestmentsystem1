@@ -50,6 +50,7 @@ export interface GoalActionForToday {
   domains: Array<{ id: string; name: string }>;
   is_scheduled_today: boolean;
   is_complete_for_week: boolean;
+  completed_today: boolean;
 }
 
 export interface GoalPulseItem {
@@ -76,11 +77,19 @@ export interface RoleFocusData {
   role_mission: string | null;
   slot_code: string;
   pending_task_count: number;
+  is_priority: boolean;          // R1-R4
+  days_since_activity: number | null; // null if active recently
+  needs_attention: boolean;      // priority + 3+ days no activity
 }
 
 export interface WellnessGapData {
   zone_id: string;
   zone_name: string;
+  slot_code: string;
+  pending_task_count: number;
+  is_priority: boolean;          // WZ1-WZ4
+  days_since_activity: number | null;
+  needs_attention: boolean;      // priority + 3+ days no activity
 }
 
 export interface MissionTouchData {
@@ -106,7 +115,7 @@ export async function getUnprocessedBrainDump(userId: string): Promise<Unprocess
     .from('0008-ap-ritual-sessions')
     .select('id, brain_dump_raw, brain_dump_processed')
     .eq('user_id', userId)
-    .eq('ritual_type', 'evening_review')
+    .eq('ritual_type', 'evening')
     .eq('session_date', yesterdayStr)
     .eq('brain_dump_processed', false)
     .not('brain_dump_raw', 'is', null)
@@ -303,27 +312,105 @@ export async function getWeeklyOneThing(userId: string): Promise<string | null> 
 }
 
 /**
- * Commit selected tasks as today's commitments (set one_thing = true).
+ * Commit selected tasks as today's commitments.
+ * Writes to 0008-ap-ritual-committed-tasks join table.
+ * Creates or reuses today's morning spark ritual session.
  */
-export async function commitTodaysTasks(taskIds: string[]): Promise<void> {
+export async function commitTodaysTasks(
+  userId: string,
+  taskIds: string[],
+  sessionId?: string,
+  source: string = 'morning',
+): Promise<string> {
   const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
 
-  // First reset any existing one_thing flags for today
-  // (in case user re-enters the morning spark)
-  // We only reset tasks that are pending — completed ones keep their flag
-  for (const id of taskIds) {
-    await supabase
-      .from('0008-ap-tasks')
-      .update({ one_thing: true })
-      .eq('id', id);
+  if (taskIds.length === 0) return sessionId || '';
+
+  // Get or create today's ritual session
+  let sId = sessionId;
+  if (!sId) {
+    const { data: existing } = await supabase
+      .from('0008-ap-ritual-sessions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('ritual_type', 'morning')
+      .eq('session_date', todayStr)
+      .maybeSingle();
+
+    if (existing) {
+      sId = existing.id;
+    } else {
+      const { data: inserted, error } = await supabase
+        .from('0008-ap-ritual-sessions')
+        .insert({
+          user_id: userId,
+          ritual_type: 'morning',
+          session_date: todayStr,
+          status: 'active',
+          started_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      sId = inserted.id;
+    }
   }
+
+  // Clear any existing commitments for this session (re-entry)
+  const { error: deleteError } = await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .delete()
+    .eq('session_id', sId);
+  if (deleteError) console.error('Failed to clear old commitments:', deleteError);
+
+  // Insert new commitments
+  const rows = taskIds.map((taskId) => ({
+    session_id: sId!,
+    task_id: taskId,
+    user_id: userId,
+    committed_date: todayStr,
+    source,
+    status: 'committed',
+  }));
+
+  console.log('Inserting committed tasks:', JSON.stringify({ sessionId: sId, count: rows.length, taskIds }));
+
+  const { data: insertedRows, error: insertError } = await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .insert(rows)
+    .select('id');
+
+  if (insertError) {
+    console.error('Failed to insert committed tasks:', insertError);
+    throw insertError;
+  }
+
+  console.log('Successfully inserted committed tasks:', insertedRows?.length);
+  return sId!;
+}
+
+/**
+ * Get today's committed task IDs from the ritual-committed-tasks table.
+ */
+export async function getTodaysCommittedTaskIds(userId: string): Promise<string[]> {
+  const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
+
+  const { data } = await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .select('task_id')
+    .eq('user_id', userId)
+    .eq('committed_date', todayStr);
+
+  return (data || []).map((r: { task_id: string }) => r.task_id);
 }
 
 // ============ GOAL PULSE ============
 
 /** Parse RRULE BYDAY into JS day-of-week numbers (0=Sun, 1=Mon, ..., 6=Sat) */
 function getScheduledDays(rrule: string | null): number[] {
-  if (!rrule) return [0, 1, 2, 3, 4, 5, 6]; // No rule = all days
+  if (!rrule || rrule.trim() === '') return [0, 1, 2, 3, 4, 5, 6]; // No rule = all days
   const dayMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
   const upper = rrule.toUpperCase();
   if (upper.includes('FREQ=DAILY')) return [0, 1, 2, 3, 4, 5, 6];
@@ -408,6 +495,33 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
 
     if (!actions || actions.length === 0) continue;
 
+    // 3b. Get the goal's own domains/roles as fallback for actions that have none
+    const goalJoinTable = goal.goal_type === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
+    const { data: goalDomains } = await supabase
+      .from('0008-ap-universal-domains-join')
+      .select('domain_id')
+      .eq('parent_id', goal.id)
+      .eq('parent_type', goal.goal_type === '12week' ? 'goal' : 'custom_goal');
+    const { data: goalRoles } = await supabase
+      .from('0008-ap-universal-roles-join')
+      .select('role_id')
+      .eq('parent_id', goal.id)
+      .eq('parent_type', goal.goal_type === '12week' ? 'goal' : 'custom_goal');
+
+    // Look up labels for goal-level domains/roles
+    const goalDomainIds = (goalDomains || []).map((d: any) => d.domain_id);
+    const goalRoleIds = (goalRoles || []).map((r: any) => r.role_id);
+    let goalDomainLabels: Array<{ id: string; name: string }> = [];
+    let goalRoleLabels: Array<{ id: string; label: string }> = [];
+    if (goalDomainIds.length > 0) {
+      const { data: dl } = await supabase.from('0008-ap-domains').select('id, name').in('id', goalDomainIds);
+      goalDomainLabels = (dl || []).map((d: any) => ({ id: d.id, name: d.name }));
+    }
+    if (goalRoleIds.length > 0) {
+      const { data: rl } = await supabase.from('0008-ap-roles').select('id, label').in('id', goalRoleIds);
+      goalRoleLabels = (rl || []).map((r: any) => ({ id: r.id, label: r.label }));
+    }
+
     // 4. Filter to today's actions and those not yet complete
     const todayActions: GoalActionForToday[] = [];
     let weekTotalTarget = 0;
@@ -425,9 +539,9 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
       weekTotalTarget += targetDays;
       weekTotalActual += weeklyActual;
 
-      // Show action if: scheduled today AND not completed today,
-      // OR not yet complete for the week (needs catch-up)
-      if ((isScheduledToday && !completedToday) || (!isCompleteForWeek && !completedToday)) {
+      // Only show action if it is scheduled for TODAY and not already done today.
+      // Do NOT show catch-up items from other days — each day has its own schedule.
+      if (isScheduledToday && !completedToday) {
         todayActions.push({
           task_id: a.task_id,
           title: a.title,
@@ -435,10 +549,15 @@ export async function getAllGoalPulse(userId: string): Promise<GoalPulseItem[]> 
           target_days: targetDays,
           weekly_actual: weeklyActual,
           completed_dates: completedDates,
-          roles: (a.roles || []).map((r: any) => ({ id: r.id, label: r.label || r.name || '' })),
-          domains: (a.domains || []).map((d: any) => ({ id: d.id, name: d.label || d.name || '' })),
+          roles: (a.roles && a.roles.length > 0)
+            ? a.roles.map((r: any) => ({ id: r.id, label: r.label || r.name || '' }))
+            : goalRoleLabels,
+          domains: (a.domains && a.domains.length > 0)
+            ? a.domains.map((d: any) => ({ id: d.id, name: d.label || d.name || '' }))
+            : goalDomainLabels,
           is_scheduled_today: isScheduledToday,
           is_complete_for_week: isCompleteForWeek,
+          completed_today: completedToday,
         });
       }
     }
@@ -494,17 +613,42 @@ export async function getGoalPulse(userId: string): Promise<GoalPulseData | null
 
 // ============ ROLE FOCUS ============
 
+/** Helper: calculate days since last activity for an entity in a join table */
+async function getDaysSinceActivity(
+  supabase: any,
+  joinTable: string,
+  entityCol: string,
+  entityId: string,
+  userId: string,
+): Promise<number | null> {
+  const { data } = await supabase
+    .from(joinTable)
+    .select('created_at')
+    .eq(entityCol, entityId)
+    .eq('parent_type', 'task')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data?.created_at) return null; // Never had activity
+  const lastDate = new Date(data.created_at);
+  const now = new Date();
+  return Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 /**
- * Get user's top priority roles (R1, R2 slots).
+ * Get ALL active roles with task counts, priority flags, and 3-day warnings.
+ * Looks at current + previous week for activity.
  */
-export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
+export async function getRoleFocus(userId: string, sessionTaskIds?: string[]): Promise<RoleFocusData[]> {
   const supabase = getSupabaseClient();
 
+  // Get ALL role slot mappings (R1-R12)
   const { data: mappings, error: mappingError } = await supabase
     .from('0008-ap-user-slot-mappings')
     .select('slot_code, mapped_entity_id, mapped_entity_label')
     .eq('user_id', userId)
-    .in('slot_code', ['R1', 'R2']);
+    .like('slot_code', 'R%');
 
   if (mappingError || !mappings || mappings.length === 0) return [];
 
@@ -517,77 +661,154 @@ export async function getRoleFocus(userId: string): Promise<RoleFocusData[]> {
 
   if (rolesError || !roles) return [];
 
-  // Get pending task counts per role via universal-roles-join
-  const taskCountMap: Record<string, number> = {};
-  for (const roleId of roleIds) {
-    const { count } = await supabase
-      .from('0008-ap-universal-roles-join')
-      .select('parent_id', { count: 'exact', head: true })
-      .eq('role_id', roleId)
-      .eq('parent_type', 'task')
-      .in('parent_id',
-        (await supabase
-          .from('0008-ap-tasks')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('status', 'pending')
-          .is('deleted_at', null)
-        ).data?.map((t: { id: string }) => t.id) || []
-      );
-    taskCountMap[roleId] = count || 0;
+  // Use session-committed task IDs if provided, otherwise query join table
+  let committedTaskIds: string[] = [];
+  if (sessionTaskIds && sessionTaskIds.length > 0) {
+    committedTaskIds = sessionTaskIds;
+  } else {
+    committedTaskIds = await getTodaysCommittedTaskIds(userId);
   }
 
-  return mappings.map((m) => {
+  // Build results with task counts and activity tracking
+  const results: RoleFocusData[] = [];
+
+  for (const m of mappings) {
     const role = roles.find((r) => r.id === m.mapped_entity_id);
-    return {
+    const slotNum = parseInt(m.slot_code.replace('R', ''), 10);
+    const isPriority = slotNum >= 1 && slotNum <= 4;
+
+    // Count today's committed tasks for this role
+    let committedCount = 0;
+    if (committedTaskIds.length > 0) {
+      const { count } = await supabase
+        .from('0008-ap-universal-roles-join')
+        .select('parent_id', { count: 'exact', head: true })
+        .eq('role_id', m.mapped_entity_id)
+        .eq('parent_type', 'task')
+        .in('parent_id', committedTaskIds);
+      committedCount = count || 0;
+    }
+
+    // Check days since last activity (only compute for priority roles)
+    let daysSince: number | null = null;
+    let needsAttention = false;
+    if (isPriority) {
+      daysSince = await getDaysSinceActivity(
+        supabase, '0008-ap-universal-roles-join', 'role_id', m.mapped_entity_id, userId
+      );
+      needsAttention = daysSince !== null && daysSince >= 3;
+      // Also flag if never had activity
+      if (daysSince === null) needsAttention = true;
+    }
+
+    results.push({
       role_id: m.mapped_entity_id,
       role_name: role?.label || m.mapped_entity_label || 'Unknown Role',
       role_mission: role?.role_mission || null,
       slot_code: m.slot_code,
-      pending_task_count: taskCountMap[m.mapped_entity_id] || 0,
-    };
+      pending_task_count: committedCount,
+      is_priority: isPriority,
+      days_since_activity: daysSince,
+      needs_attention: needsAttention,
+    });
+  }
+
+  // Sort: priority first (R1-R4), then by slot number
+  results.sort((a, b) => {
+    if (a.is_priority && !b.is_priority) return -1;
+    if (!a.is_priority && b.is_priority) return 1;
+    const aNum = parseInt(a.slot_code.replace('R', ''), 10);
+    const bNum = parseInt(b.slot_code.replace('R', ''), 10);
+    return aNum - bNum;
   });
+
+  return results;
 }
 
 // ============ WELLNESS PULSE ============
 
 /**
- * Find wellness zones that have had no activity in the last 7 days.
+ * Get ALL active wellness zones with task counts, priority flags, and 3-day warnings.
  */
-export async function getWellnessGaps(userId: string): Promise<WellnessGapData[]> {
+export async function getWellnessGaps(userId: string, sessionTaskIds?: string[]): Promise<WellnessGapData[]> {
   const supabase = getSupabaseClient();
 
-  // Get all domain IDs
-  const { data: allDomains, error: domainError } = await supabase
-    .from('0008-ap-domains')
-    .select('id, name');
-
-  if (domainError || !allDomains) return [];
-
-  // Get domain IDs that have had activity in the last 7 days
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const sevenDaysAgoStr = toLocalISOString(sevenDaysAgo);
-
-  const { data: activeJoins, error: joinError } = await supabase
-    .from('0008-ap-universal-domains-join')
-    .select('domain_id')
+  // Get ALL wellness zone slot mappings (WZ1-WZ8)
+  const { data: mappings, error: mappingError } = await supabase
+    .from('0008-ap-user-slot-mappings')
+    .select('slot_code, mapped_entity_id, mapped_entity_label')
     .eq('user_id', userId)
-    .gte('created_at', sevenDaysAgoStr);
+    .like('slot_code', 'WZ%');
 
-  if (joinError) return [];
+  if (mappingError || !mappings || mappings.length === 0) return [];
 
-  const activeDomainIds = new Set((activeJoins || []).map((j) => j.domain_id));
+  const domainIds = mappings.map((m) => m.mapped_entity_id).filter(Boolean);
 
-  // Find domains with no activity
-  const gaps = allDomains
-    .filter((d) => !activeDomainIds.has(d.id))
-    .map((d) => ({
-      zone_id: d.id,
-      zone_name: d.name,
-    }));
+  // Get domain details
+  const { data: domains } = await supabase
+    .from('0008-ap-domains')
+    .select('id, name')
+    .in('id', domainIds);
 
-  return gaps;
+  // Use session-committed task IDs if provided, otherwise query join table
+  let committedTaskIds: string[] = [];
+  if (sessionTaskIds && sessionTaskIds.length > 0) {
+    committedTaskIds = sessionTaskIds;
+  } else {
+    committedTaskIds = await getTodaysCommittedTaskIds(userId);
+  }
+
+  const results: WellnessGapData[] = [];
+
+  for (const m of mappings) {
+    const domain = (domains || []).find((d: { id: string }) => d.id === m.mapped_entity_id);
+    const slotNum = parseInt(m.slot_code.replace('WZ', ''), 10);
+    const isPriority = slotNum >= 1 && slotNum <= 4;
+
+    // Count today's committed tasks for this domain
+    let committedCount = 0;
+    if (committedTaskIds.length > 0) {
+      const { count } = await supabase
+        .from('0008-ap-universal-domains-join')
+        .select('parent_id', { count: 'exact', head: true })
+        .eq('domain_id', m.mapped_entity_id)
+        .eq('parent_type', 'task')
+        .in('parent_id', committedTaskIds);
+      committedCount = count || 0;
+    }
+
+    // Check days since last activity (only for priority zones)
+    let daysSince: number | null = null;
+    let needsAttention = false;
+    if (isPriority) {
+      daysSince = await getDaysSinceActivity(
+        supabase, '0008-ap-universal-domains-join', 'domain_id', m.mapped_entity_id, userId
+      );
+      needsAttention = daysSince !== null && daysSince >= 3;
+      if (daysSince === null) needsAttention = true;
+    }
+
+    results.push({
+      zone_id: m.mapped_entity_id,
+      zone_name: domain?.name || m.mapped_entity_label || 'Unknown Zone',
+      slot_code: m.slot_code,
+      pending_task_count: committedCount,
+      is_priority: isPriority,
+      days_since_activity: daysSince,
+      needs_attention: needsAttention,
+    });
+  }
+
+  // Sort: priority first, then by slot number
+  results.sort((a, b) => {
+    if (a.is_priority && !b.is_priority) return -1;
+    if (!a.is_priority && b.is_priority) return 1;
+    const aNum = parseInt(a.slot_code.replace('WZ', ''), 10);
+    const bNum = parseInt(b.slot_code.replace('WZ', ''), 10);
+    return aNum - bNum;
+  });
+
+  return results;
 }
 
 // ============ MISSION TOUCH ============
@@ -636,7 +857,7 @@ export async function saveMorningSparkSession(
     .from('0008-ap-ritual-sessions')
     .select('id')
     .eq('user_id', userId)
-    .eq('ritual_type', 'morning_spark')
+    .eq('ritual_type', 'morning')
     .eq('session_date', today)
     .maybeSingle();
 
@@ -659,7 +880,7 @@ export async function saveMorningSparkSession(
     .from('0008-ap-ritual-sessions')
     .insert({
       user_id: userId,
-      ritual_type: 'morning_spark',
+      ritual_type: 'morning',
       session_date: today,
       fuel_level: data.fuel_level,
       fuel_reason: data.fuel_reason || null,
@@ -691,9 +912,12 @@ export interface ParsedCaptureItem {
   /** Role suggestions */
   suggested_role_id: string | null;
   suggested_role_name: string | null;
-  /** Domain/wellness zone suggestions */
-  suggested_domain_id: string | null;
-  suggested_domain_name: string | null;
+  /** Domain/wellness zone suggestions (can be multiple) */
+  suggested_domain_ids: string[];
+  suggested_domain_names: string[];
+  /** Key relationship suggestions */
+  suggested_key_relationship_ids: string[];
+  suggested_key_relationship_names: string[];
   /** Brief reasoning */
   reasoning: string;
 }
@@ -708,6 +932,7 @@ export interface TaskEventFormPrefill {
   type: 'task' | 'event' | 'depositIdea' | 'reflection';
   selectedRoleIds: string[];
   selectedDomainIds: string[];
+  selectedKeyRelationshipIds: string[];
   is_deposit_idea?: boolean;
 }
 
@@ -724,7 +949,7 @@ export async function getUserDomains(userId: string): Promise<Array<{ id: string
 
 /**
  * Analyze user free text — splits into multiple items, each with type suggestion,
- * role/domain mapping, and optional clarification questions.
+ * role/domain/key-relationship mapping, and optional clarification questions.
  */
 export async function analyzeCapture(
   userId: string,
@@ -739,48 +964,80 @@ export async function analyzeCapture(
     domains = await getUserDomains(userId);
   }
 
+  // Get key relationships for name matching
+  const { data: keyRels } = await supabase
+    .from('0008-ap-key-relationships')
+    .select('id, name')
+    .eq('user_id', userId);
+
   const roleContext = roles.map((r) => `${r.role_name} (id: ${r.role_id})`).join(', ');
   const domainContext = domains.map((d) => `${d.label} (id: ${d.id})`).join(', ');
+  const krContext = (keyRels || []).map((k: { id: string; name: string }) => `${k.name} (id: ${k.id})`).join(', ');
 
   try {
     const { data, error } = await supabase.functions.invoke('alignment-coach', {
       body: {
         mode: 'morning',
         trigger: 'capture_analysis',
-        user_state: { roles: roleContext, domains: domainContext },
+        user_state: { roles: roleContext, domains: domainContext, key_relationships: krContext },
         messages: [
           {
             role: 'system',
             content: `You are the Development Director — a thoughtful coach helping someone organize their thoughts into action.
 
-Your job: Parse the user's free-text input and break it into SEPARATE items. The user may mention multiple things in one sentence or paragraph. Split them intelligently.
+TITLE FORMATTING RULES (CRITICAL):
+1. ALWAYS start the title with a VERB (Go, Take, Write, Call, Study, Meet, Review, etc.)
+2. STRIP all "I want to", "I need to", "I should", "I'm going to", "I will" prefixes
+3. Keep it concise — 3-7 words ideal
+4. Examples:
+   "I should go to the zoo with Ben" → "Go to the zoo with Ben"
+   "I need to go on a walk today" → "Go on a walk"
+   "I want to take my wife to lunch at noon" → "Take wife to lunch"
+   "I will take John out for ice cream today at 4:00 pm" → "Take John for ice cream"
+   "Maybe I could write a thank you email to my son" → "Write thank-you email to son"
 
-For each item, return:
-- title: a clean, concise action title (rewrite vague language into clear titles)
-- suggested_type: one of "task", "event", "reflection", "rose", "thorn", "depositIdea"
-  - task = a concrete, actionable commitment ("Do X by Y")
-  - event = something with a specific time/date ("Meet with X at noon")
-  - reflection = a thought or realization worth capturing
-  - rose = something positive, grateful, or celebratory
-  - thorn = a challenge, frustration, or difficulty
-  - depositIdea = a "maybe someday" idea, not a firm commitment
-- needs_clarification: boolean — set TRUE when the language is ambiguous
-  Examples of ambiguity: "I want to..." (commitment or wish?), "I should..." (task or idea?), "Maybe I could..." (idea or task?)
-- clarification_question: if needs_clarification is true, write a brief, conversational question to ask. Examples:
-  "Are you committing to take your wife to lunch today, or is that an idea you're parking for later?"
-  "Is the thank-you email something you'll do today, or more of a reminder for when you get to it?"
-- alternative_type: if needs_clarification is true, what would the type be if the user answers differently (e.g. "depositIdea" if the suggested_type is "task")
-- suggested_role_id: the role ID it most relates to, or null
+ITEM TYPE RULES:
+- task = a concrete, actionable commitment ("Do X by Y")
+- event = something with a specific time/date mentioned ("at 4pm", "at noon", "tomorrow at 3")
+- reflection = a thought or realization worth capturing
+- rose = something positive, grateful, or celebratory
+- thorn = a challenge, frustration, or difficulty
+- depositIdea = a "maybe someday" idea, not a firm commitment
+
+AMBIGUITY DETECTION:
+Set needs_clarification=true when language is soft:
+- "I want to..." / "I should..." / "Maybe I could..." / "It would be nice to..."
+- Ask a brief conversational question like: "Are you committing to go to the zoo, or is that an idea you're parking for later?"
+
+PERSON MATCHING:
+When names of people are mentioned, check the key relationships list below. If a name matches (first name match is sufficient), include their ID in suggested_key_relationship_ids.
+
+WELLNESS ZONE MATCHING:
+An item can belong to MULTIPLE wellness zones. For example:
+- "Go to the zoo with Ben" → Recreational + Social
+- "Go on a walk" → Physical
+- "Study for exam" → Intellectual
+Include ALL relevant zone IDs in suggested_domain_ids (array).
+
+For each item return:
+- title: clean verb-first title (see rules above)
+- suggested_type: one of the types above
+- needs_clarification: boolean
+- clarification_question: string or null
+- alternative_type: string or null (what it would be if user answers differently)
+- suggested_role_id: the most relevant role ID, or null
 - suggested_role_name: the role name, or null
-- suggested_domain_id: the wellness domain ID, or null
-- suggested_domain_name: the wellness domain name, or null
-- reasoning: one brief sentence explaining your categorization
+- suggested_domain_ids: array of matching wellness domain IDs (can be multiple)
+- suggested_domain_names: array of matching domain names
+- suggested_key_relationship_ids: array of matching key relationship IDs
+- suggested_key_relationship_names: array of matching names
+- reasoning: one brief sentence
 
 Available roles: ${roleContext}
 Available wellness domains: ${domainContext}
+Available key relationships: ${krContext}
 
-Return a JSON object with a single "items" array. Return ONLY valid JSON, no markdown fences.
-Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "...", ...}]}`,
+Return a JSON object with a single "items" array. Return ONLY valid JSON, no markdown fences.`,
           },
           { role: 'user', content: text },
         ],
@@ -802,8 +1059,10 @@ Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "
         alternative_type: item.alternative_type || null,
         suggested_role_id: item.suggested_role_id || null,
         suggested_role_name: item.suggested_role_name || null,
-        suggested_domain_id: item.suggested_domain_id || null,
-        suggested_domain_name: item.suggested_domain_name || null,
+        suggested_domain_ids: item.suggested_domain_ids || (item.suggested_domain_id ? [item.suggested_domain_id] : []),
+        suggested_domain_names: item.suggested_domain_names || (item.suggested_domain_name ? [item.suggested_domain_name] : []),
+        suggested_key_relationship_ids: item.suggested_key_relationship_ids || [],
+        suggested_key_relationship_names: item.suggested_key_relationship_names || [],
         reasoning: item.reasoning || '',
       }));
       return { items };
@@ -812,7 +1071,13 @@ Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "
     console.error('Capture analysis failed, using fallback:', err);
   }
 
-  // Fallback: treat as single item with heuristic typing
+  // Fallback: simple heuristic with verb-first title cleanup
+  let cleanTitle = text.trim()
+    .replace(/^(I\s+)?(want\s+to|need\s+to|should|will|am\s+going\s+to|have\s+to|'m\s+going\s+to)\s+/i, '')
+    .replace(/^(i\s+)/i, '');
+  // Capitalize first letter
+  cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
+
   const lower = text.toLowerCase();
   let type: ParsedCaptureItem['suggested_type'] = 'task';
   let needsClarification = false;
@@ -829,21 +1094,23 @@ Example: {"items": [{"title": "...", "suggested_type": "task", ...}, {"title": "
     type = 'thorn';
   } else if (lower.includes('idea') || lower.includes('could')) {
     type = 'depositIdea';
-  } else if (lower.includes('meeting') || lower.includes('call') || lower.includes('at noon') || lower.includes('appointment')) {
+  } else if (/\b(at\s+\d|meeting|call|appointment|noon|pm|am)\b/i.test(text)) {
     type = 'event';
   }
 
   return {
     items: [{
-      title: text.trim(),
+      title: cleanTitle,
       suggested_type: type,
       needs_clarification: needsClarification,
       clarification_question: clarificationQ,
       alternative_type: altType,
       suggested_role_id: null,
       suggested_role_name: null,
-      suggested_domain_id: null,
-      suggested_domain_name: null,
+      suggested_domain_ids: [],
+      suggested_domain_names: [],
+      suggested_key_relationship_ids: [],
+      suggested_key_relationship_names: [],
       reasoning: 'Auto-categorized (coach unavailable)',
     }],
   };
@@ -879,7 +1146,349 @@ export function buildFormPrefill(item: ParsedCaptureItem): TaskEventFormPrefill 
     title: item.title,
     type: formType,
     selectedRoleIds: item.suggested_role_id ? [item.suggested_role_id] : [],
-    selectedDomainIds: item.suggested_domain_id ? [item.suggested_domain_id] : [],
+    selectedDomainIds: item.suggested_domain_ids || [],
+    selectedKeyRelationshipIds: item.suggested_key_relationship_ids || [],
     is_deposit_idea: item.suggested_type === 'depositIdea',
   };
+}
+
+/**
+ * Quick-save a captured item directly to the appropriate table.
+ * Called when user taps "Looks Right" — no TaskEventForm needed.
+ * Returns the inserted record ID.
+ */
+export async function quickSaveCapture(
+  userId: string,
+  item: ParsedCaptureItem,
+): Promise<{ id: string; type: string }> {
+  const supabase = getSupabaseClient();
+  let insertedId: string;
+  let parentType: string;
+
+  switch (item.suggested_type) {
+    case 'task':
+    case 'event': {
+      const { data, error } = await supabase
+        .from('0008-ap-tasks')
+        .insert({
+          title: item.title,
+          user_id: userId,
+          status: 'pending',
+          type: item.suggested_type,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'task';
+      break;
+    }
+    case 'rose':
+    case 'thorn': {
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: userId,
+          content: item.title,
+          reflection_type: 'daily',
+          date: toLocalISOString(new Date()).split('T')[0],
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'reflection';
+      break;
+    }
+    case 'reflection': {
+      const { data, error } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: userId,
+          content: item.title,
+          reflection_type: 'daily',
+          date: toLocalISOString(new Date()).split('T')[0],
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'reflection';
+      break;
+    }
+    case 'depositIdea': {
+      const { data, error } = await supabase
+        .from('0008-ap-deposit-ideas')
+        .insert({
+          title: item.title,
+          user_id: userId,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      insertedId = data.id;
+      parentType = 'depositIdea';
+      break;
+    }
+    default:
+      throw new Error(`Unknown type: ${item.suggested_type}`);
+  }
+
+  // Add role join
+  if (item.suggested_role_id) {
+    await supabase.from('0008-ap-universal-roles-join').insert({
+      parent_id: insertedId,
+      parent_type: parentType,
+      role_id: item.suggested_role_id,
+    });
+  }
+
+  // Add domain joins (multiple)
+  if (item.suggested_domain_ids && item.suggested_domain_ids.length > 0) {
+    const domainJoins = item.suggested_domain_ids.map((domainId) => ({
+      parent_id: insertedId,
+      parent_type: parentType,
+      domain_id: domainId,
+    }));
+    await supabase.from('0008-ap-universal-domains-join').insert(domainJoins);
+  }
+
+  // Add key relationship joins (multiple)
+  if (item.suggested_key_relationship_ids && item.suggested_key_relationship_ids.length > 0) {
+    const krJoins = item.suggested_key_relationship_ids.map((krId) => ({
+      parent_id: insertedId,
+      parent_type: parentType,
+      key_relationship_id: krId,
+    }));
+    await supabase.from('0008-ap-universal-key-relationships-join').insert(krJoins);
+  }
+
+  return { id: insertedId, type: item.suggested_type };
+}
+
+// ============ FINAL COMMITMENT REVIEW ============
+
+export interface FinalReviewEvent {
+  id: string;
+  title: string;
+  start_time: string | null;
+  end_time: string | null;
+  is_all_day: boolean;
+  roles: CommitmentTaskRelation[];
+  domains: CommitmentTaskRelation[];
+}
+
+export interface FinalReviewTask {
+  id: string;
+  title: string;
+  is_urgent: boolean;
+  is_important: boolean;
+  type: string;
+  roles: CommitmentTaskRelation[];
+  domains: CommitmentTaskRelation[];
+  keyRelationships: CommitmentTaskRelation[];
+  source: 'task' | 'goal_action';
+  goal_title?: string;
+}
+
+export interface FinalReviewData {
+  events: FinalReviewEvent[];
+  committedTasks: FinalReviewTask[];
+}
+
+/**
+ * Get today's events and committed tasks for the final review screen.
+ * Committed tasks = one_thing=true (from step 3) + any goal actions committed (passed as IDs).
+ */
+export async function getFinalReviewData(
+  userId: string,
+  sessionCommittedTaskIds: string[],
+  committedGoalActionIds: string[],
+): Promise<FinalReviewData> {
+  const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
+
+  // 1. Get today's events
+  const { data: events } = await supabase
+    .from('0008-ap-tasks')
+    .select('id, title, start_time, end_time, is_all_day')
+    .eq('user_id', userId)
+    .eq('type', 'event')
+    .eq('status', 'pending')
+    .is('deleted_at', null)
+    .eq('due_date', todayStr)
+    .order('start_time', { ascending: true });
+
+  // 2. Get committed tasks — ONLY the ones selected in THIS session's step 3
+  let committedTasks: any[] = [];
+  if (sessionCommittedTaskIds.length > 0) {
+    const { data } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, title, is_urgent, is_important, type')
+      .in('id', sessionCommittedTaskIds)
+      .eq('status', 'pending')
+      .is('deleted_at', null);
+    committedTasks = data || [];
+  }
+
+  // 3. Get committed goal action titles (from step 4 selections)
+  let goalActions: FinalReviewTask[] = [];
+  if (committedGoalActionIds.length > 0) {
+    const { data: actionTasks } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, title, is_urgent, is_important, type')
+      .in('id', committedGoalActionIds);
+
+    // Get goal names for each action
+    const { data: goalJoins } = await supabase
+      .from('0008-ap-universal-goals-join')
+      .select('parent_id, twelve_wk_goal_id, custom_goal_id, goal_type')
+      .in('parent_id', committedGoalActionIds)
+      .eq('parent_type', 'task');
+
+    // Get goal titles
+    const goalIds12 = (goalJoins || []).filter((j: any) => j.twelve_wk_goal_id).map((j: any) => j.twelve_wk_goal_id);
+    const goalIdsCustom = (goalJoins || []).filter((j: any) => j.custom_goal_id).map((j: any) => j.custom_goal_id);
+
+    const [goals12, goalsCustom] = await Promise.all([
+      goalIds12.length > 0
+        ? supabase.from('0008-ap-goals-12wk').select('id, title').in('id', goalIds12)
+        : { data: [] },
+      goalIdsCustom.length > 0
+        ? supabase.from('0008-ap-goals-custom').select('id, title').in('id', goalIdsCustom)
+        : { data: [] },
+    ]);
+
+    const goalTitleMap = new Map<string, string>();
+    for (const g of goals12.data || []) goalTitleMap.set(g.id, g.title);
+    for (const g of goalsCustom.data || []) goalTitleMap.set(g.id, g.title);
+
+    goalActions = (actionTasks || []).map((t: any) => {
+      const join = (goalJoins || []).find((j: any) => j.parent_id === t.id);
+      const goalId = join?.twelve_wk_goal_id || join?.custom_goal_id;
+      return {
+        id: t.id,
+        title: t.title,
+        is_urgent: t.is_urgent || false,
+        is_important: t.is_important || false,
+        type: t.type || 'task',
+        roles: [],
+        domains: [],
+        keyRelationships: [],
+        source: 'goal_action' as const,
+        goal_title: goalId ? goalTitleMap.get(goalId) : undefined,
+      };
+    });
+  }
+
+  // 4. Collect all task IDs for relation lookups (including goal actions)
+  const allTaskIds = [
+    ...(events || []).map((e: any) => e.id),
+    ...(committedTasks || []).map((t: any) => t.id),
+    ...goalActions.map((ga) => ga.id),
+  ];
+
+  // Fetch relations for events and committed tasks
+  let roleLabelMap = new Map<string, string>();
+  let domainLabelMap = new Map<string, string>();
+  let krLabelMap = new Map<string, string>();
+  let taskRolesMap = new Map<string, CommitmentTaskRelation[]>();
+  let taskDomainsMap = new Map<string, CommitmentTaskRelation[]>();
+  let taskKrsMap = new Map<string, CommitmentTaskRelation[]>();
+
+  if (allTaskIds.length > 0) {
+    const [rolesR, domainsR, krsR] = await Promise.all([
+      supabase.from('0008-ap-universal-roles-join').select('parent_id, role_id').in('parent_id', allTaskIds).eq('parent_type', 'task'),
+      supabase.from('0008-ap-universal-domains-join').select('parent_id, domain_id').in('parent_id', allTaskIds).eq('parent_type', 'task'),
+      supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship_id').in('parent_id', allTaskIds).eq('parent_type', 'task'),
+    ]);
+
+    const rIds = [...new Set((rolesR.data || []).map((r: any) => r.role_id))];
+    const dIds = [...new Set((domainsR.data || []).map((d: any) => d.domain_id))];
+    const kIds = [...new Set((krsR.data || []).map((k: any) => k.key_relationship_id))];
+
+    const [rLabels, dLabels, kLabels] = await Promise.all([
+      rIds.length > 0 ? supabase.from('0008-ap-roles').select('id, label').in('id', rIds) : { data: [] },
+      dIds.length > 0 ? supabase.from('0008-ap-domains').select('id, name').in('id', dIds) : { data: [] },
+      kIds.length > 0 ? supabase.from('0008-ap-key-relationships').select('id, name').in('id', kIds) : { data: [] },
+    ]);
+
+    roleLabelMap = new Map((rLabels.data || []).map((r: any) => [r.id, r.label]));
+    domainLabelMap = new Map((dLabels.data || []).map((d: any) => [d.id, d.name]));
+    krLabelMap = new Map((kLabels.data || []).map((k: any) => [k.id, k.name]));
+
+    for (const r of rolesR.data || []) {
+      const arr = taskRolesMap.get(r.parent_id) || [];
+      arr.push({ id: r.role_id, label: roleLabelMap.get(r.role_id) || '' });
+      taskRolesMap.set(r.parent_id, arr);
+    }
+    for (const d of domainsR.data || []) {
+      const arr = taskDomainsMap.get(d.parent_id) || [];
+      arr.push({ id: d.domain_id, label: domainLabelMap.get(d.domain_id) || '' });
+      taskDomainsMap.set(d.parent_id, arr);
+    }
+    for (const k of krsR.data || []) {
+      const arr = taskKrsMap.get(k.parent_id) || [];
+      arr.push({ id: k.key_relationship_id, label: krLabelMap.get(k.key_relationship_id) || '' });
+      taskKrsMap.set(k.parent_id, arr);
+    }
+  }
+
+  // Build events
+  const finalEvents: FinalReviewEvent[] = (events || []).map((e: any) => ({
+    id: e.id,
+    title: e.title,
+    start_time: e.start_time,
+    end_time: e.end_time,
+    is_all_day: e.is_all_day || false,
+    roles: taskRolesMap.get(e.id) || [],
+    domains: taskDomainsMap.get(e.id) || [],
+  }));
+
+  // Build committed tasks — sorted: urgent+important first, then urgent, then important, then rest
+  const finalTasks: FinalReviewTask[] = (committedTasks || []).map((t: any) => ({
+    id: t.id,
+    title: t.title,
+    is_urgent: t.is_urgent || false,
+    is_important: t.is_important || false,
+    type: t.type || 'task',
+    roles: taskRolesMap.get(t.id) || [],
+    domains: taskDomainsMap.get(t.id) || [],
+    keyRelationships: taskKrsMap.get(t.id) || [],
+    source: 'task' as const,
+  }));
+
+  // Fill goal action relations from the maps (populated after goal actions were built)
+  for (const ga of goalActions) {
+    ga.roles = taskRolesMap.get(ga.id) || [];
+    ga.domains = taskDomainsMap.get(ga.id) || [];
+    ga.keyRelationships = taskKrsMap.get(ga.id) || [];
+  }
+
+  // Merge goal actions and sort all by priority
+  const allTasks = [...finalTasks, ...goalActions];
+  allTasks.sort((a, b) => {
+    const aPriority = (a.is_urgent ? 2 : 0) + (a.is_important ? 1 : 0);
+    const bPriority = (b.is_urgent ? 2 : 0) + (b.is_important ? 1 : 0);
+    return bPriority - aPriority;
+  });
+
+  return {
+    events: finalEvents,
+    committedTasks: allTasks,
+  };
+}
+
+/**
+ * Remove a task from today's commitments (clear committed_date).
+ */
+export async function removeFromTodayCommitments(userId: string, taskId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const todayStr = toLocalISOString(new Date()).split('T')[0];
+  await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .delete()
+    .eq('user_id', userId)
+    .eq('task_id', taskId)
+    .eq('committed_date', todayStr);
 }

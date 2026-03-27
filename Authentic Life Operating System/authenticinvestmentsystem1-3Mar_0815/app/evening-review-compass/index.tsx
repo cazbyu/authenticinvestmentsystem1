@@ -21,29 +21,28 @@ import { toLocalISOString } from '@/lib/dateUtils';
 // Compass header
 import { CompassDirectionHeader } from '@/components/compass/CompassDirectionHeader';
 
-// Reuse EnergyCheckStep from morning spark
-import EnergyCheckStep from '@/components/morning-spark-v2/EnergyCheckStep';
-import type { FuelLevel, FuelWhyReason, Fuel3WhyReason } from '@/lib/morningSparkV2Service';
-
 // Evening review service
 import {
   ReconciliationTask,
-  RolePulseRole,
-  RolePulseResponse,
+  RoleWithKRs,
+  DomainItem,
   getTodaysCommittedTasks,
   reconcileTask,
   saveBrainDump,
   routeBrainDumpItem,
-  getRolePulseData,
   saveEveningReviewSession,
+  getAllRolesWithKRs,
+  getAllDomains,
 } from '@/lib/eveningReviewService';
+
+// Task reconciliation card with dresser drawers
+import TaskReconciliationCard from '@/components/evening-review/TaskReconciliationCard';
 
 const STEPS = [
   { key: 'south_reconcile', label: 'Close the Loop', icon: '\u2705', color: '#4169E1' },
   { key: 'south_score', label: 'Day Score', icon: '\uD83D\uDCCA', color: '#4169E1' },
   { key: 'south_braindump', label: 'Brain Dump', icon: '\uD83E\uDDE0', color: '#4169E1' },
-  { key: 'west_roles', label: 'Roles', icon: '\uD83D\uDC65', color: '#9370DB' },
-  { key: 'east_fuel', label: 'Wellness', icon: '\uD83C\uDF3F', color: '#39b54a' },
+  { key: 'west_summary', label: 'Today\'s Summary', icon: '\uD83D\uDCCB', color: '#9370DB' },
   { key: 'complete', label: 'Complete', icon: '\u2728', color: '#D4A843' },
 ];
 
@@ -59,9 +58,8 @@ export default function EveningReviewCompassScreen() {
 
   // Step 0: Task Reconciliation
   const [reconciliationTasks, setReconciliationTasks] = useState<ReconciliationTask[]>([]);
-  const [reconciledTasks, setReconciledTasks] = useState<Map<string, 'done' | 'carry_forward' | 'release'>>(new Map());
+  const [reconciledTasks, setReconciledTasks] = useState<Map<string, 'done' | 'alter' | 'release'>>(new Map());
   const [doneCount, setDoneCount] = useState(0);
-  const [carryCount, setCarryCount] = useState(0);
   const [releaseCount, setReleaseCount] = useState(0);
 
   // Step 2: Brain Dump
@@ -72,14 +70,13 @@ export default function EveningReviewCompassScreen() {
   const [currentFragmentIndex, setCurrentFragmentIndex] = useState(0);
   const [brainDumpProcessed, setBrainDumpProcessed] = useState(false);
 
-  // Step 3: Role Pulse
-  const [rolePulseRoles, setRolePulseRoles] = useState<RolePulseRole[]>([]);
-  const [rolePulseResponses, setRolePulseResponses] = useState<RolePulseResponse[]>([]);
+  // Step 3: Summary data
+  const [summaryRoles, setSummaryRoles] = useState<Array<{ name: string; count: number }>>([]);
+  const [summaryDomains, setSummaryDomains] = useState<Array<{ name: string; count: number }>>([]);
 
-  // Step 4: Fuel
-  const [fuelLevel, setFuelLevel] = useState<FuelLevel | null>(null);
-  const [fuelWhy, setFuelWhy] = useState<FuelWhyReason | null>(null);
-  const [fuel3Why, setFuel3Why] = useState<Fuel3WhyReason | null>(null);
+  // Shared data for dresser drawers
+  const [allRoles, setAllRoles] = useState<RoleWithKRs[]>([]);
+  const [allDomains, setAllDomains] = useState<DomainItem[]>([]);
 
   // Derived
   const totalTasks = reconciliationTasks.length;
@@ -107,9 +104,29 @@ export default function EveningReviewCompassScreen() {
 
       setUserId(user.id);
 
-      // Pre-load reconciliation tasks
-      const tasks = await getTodaysCommittedTasks(user.id);
+      // Pre-load reconciliation tasks + roles/domains for dresser drawers
+      const [tasks, roles, domains] = await Promise.all([
+        getTodaysCommittedTasks(user.id),
+        getAllRolesWithKRs(user.id),
+        getAllDomains(),
+      ]);
       setReconciliationTasks(tasks);
+      setAllRoles(roles);
+      setAllDomains(domains);
+
+      // Pre-fill "Done" for already-completed tasks
+      const prefilled = new Map<string, 'done' | 'alter' | 'release'>();
+      let prefilledDone = 0;
+      for (const t of tasks) {
+        if (t.status === 'completed') {
+          prefilled.set(t.id, 'done');
+          prefilledDone++;
+        }
+      }
+      if (prefilled.size > 0) {
+        setReconciledTasks(prefilled);
+        setDoneCount(prefilledDone);
+      }
     } catch (error) {
       console.error('[EveningReview] Error loading initial data:', error);
     } finally {
@@ -117,42 +134,7 @@ export default function EveningReviewCompassScreen() {
     }
   }
 
-  // ---- Reconciliation handlers ----
-
-  const handleReconcile = useCallback(
-    async (taskId: string, action: 'done' | 'carry_forward' | 'release') => {
-      const success = await reconcileTask(taskId, action);
-      if (!success) {
-        Alert.alert('Error', 'Failed to update task. Please try again.');
-        return;
-      }
-
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-
-      // Check if this task was previously reconciled with a different action
-      const previousAction = reconciledTasks.get(taskId);
-      if (previousAction) {
-        // Undo previous count
-        if (previousAction === 'done') setDoneCount((c) => c - 1);
-        if (previousAction === 'carry_forward') setCarryCount((c) => c - 1);
-        if (previousAction === 'release') setReleaseCount((c) => c - 1);
-      }
-
-      // Apply new count
-      if (action === 'done') setDoneCount((c) => c + 1);
-      if (action === 'carry_forward') setCarryCount((c) => c + 1);
-      if (action === 'release') setReleaseCount((c) => c + 1);
-
-      setReconciledTasks((prev) => {
-        const next = new Map(prev);
-        next.set(taskId, action);
-        return next;
-      });
-    },
-    [reconciledTasks],
-  );
+  // ---- Reconciliation handlers defined in renderReconcileStep ----
 
   // ---- Brain Dump handlers ----
 
@@ -207,28 +189,6 @@ export default function EveningReviewCompassScreen() {
 
   // ---- Role Pulse handlers ----
 
-  const handleRolePulseResponse = useCallback(
-    (roleId: string, roleName: string, tasksCompleted: number, response: 'felt_it' | 'neutral' | 'missed_it') => {
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-
-      setRolePulseResponses((prev) => {
-        const filtered = prev.filter((r) => r.role_id !== roleId);
-        return [
-          ...filtered,
-          {
-            role_id: roleId,
-            role_name: roleName,
-            tasks_completed: tasksCompleted,
-            response,
-          },
-        ];
-      });
-    },
-    [],
-  );
-
   // ---- Complete handler ----
 
   const handleComplete = useCallback(async () => {
@@ -239,13 +199,13 @@ export default function EveningReviewCompassScreen() {
         tasks_completed: doneCount,
         brain_dump_raw: brainDumpText.trim() || null,
         brain_dump_processed: brainDumpProcessed,
-        fuel_level: fuelLevel,
-        fuel_why: fuelWhy,
-        fuel_3_why: fuel3Why,
+        fuel_level: null,
+        fuel_why: null,
+        fuel_3_why: null,
         started_at: startedAt,
         completed_at: new Date().toISOString(),
-        role_pulse: rolePulseResponses,
-        carry_forward_count: carryCount,
+        role_pulse: [],
+        carry_forward_count: 0,
         release_count: releaseCount,
       });
     } catch (error) {
@@ -258,12 +218,8 @@ export default function EveningReviewCompassScreen() {
     doneCount,
     brainDumpText,
     brainDumpProcessed,
-    fuelLevel,
-    fuelWhy,
-    fuel3Why,
     startedAt,
-    rolePulseResponses,
-    carryCount,
+    0,
     releaseCount,
   ]);
 
@@ -276,10 +232,22 @@ export default function EveningReviewCompassScreen() {
 
     // Load data for next step
     if (nextStep === 3) {
-      // Load role pulse data
-      getRolePulseData(userId)
-        .then((roles) => setRolePulseRoles(roles))
-        .catch((err) => console.error('[EveningReview] Error loading roles:', err));
+      // Build summary from reconciliation tasks
+      const roleCountMap = new Map<string, number>();
+      const domainCountMap = new Map<string, number>();
+      for (const task of reconciliationTasks) {
+        const action = reconciledTasks.get(task.id);
+        if (action === 'done') {
+          for (const r of task.roles) {
+            roleCountMap.set(r.label, (roleCountMap.get(r.label) || 0) + 1);
+          }
+          for (const d of task.domains) {
+            domainCountMap.set(d.label, (domainCountMap.get(d.label) || 0) + 1);
+          }
+        }
+      }
+      setSummaryRoles(Array.from(roleCountMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
+      setSummaryDomains(Array.from(domainCountMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
     }
 
     if (nextStep === 5) {
@@ -355,6 +323,34 @@ export default function EveningReviewCompassScreen() {
 
   // ---- Render step content ----
 
+  async function handleToggleDone(taskId: string) {
+    const wasDone = reconciledTasks.get(taskId) === 'done';
+    const newAction = wasDone ? undefined : 'done';
+
+    if (!wasDone) {
+      const success = await reconcileTask(taskId, 'done');
+      if (!success) return;
+      setDoneCount((c) => c + 1);
+    } else {
+      // Undo — revert task to pending
+      const supabase = getSupabaseClient();
+      await supabase.from('0008-ap-tasks').update({ status: 'pending', completed_at: null }).eq('id', taskId);
+      setDoneCount((c) => Math.max(0, c - 1));
+    }
+
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    setReconciledTasks((prev) => {
+      const next = new Map(prev);
+      if (newAction) {
+        next.set(taskId, newAction);
+      } else {
+        next.delete(taskId);
+      }
+      return next;
+    });
+  }
+
   const renderReconcileStep = () => (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       <CompassDirectionHeader
@@ -371,101 +367,25 @@ export default function EveningReviewCompassScreen() {
         </View>
       ) : (
         <View style={styles.taskListContainer}>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            {reconciledTasks.size} of {totalTasks} tasks reconciled
+          <Text style={[styles.sectionSubtitle, { color: colors.text, fontSize: 16, marginBottom: 4 }]}>
+            Confirm what you completed today.
+          </Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary, marginBottom: 12 }]}>
+            {doneCount} of {totalTasks} done
           </Text>
 
-          {reconciliationTasks.map((task) => {
-            const action = reconciledTasks.get(task.id);
-            return (
-              <View
-                key={task.id}
-                style={[
-                  styles.taskCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: action
-                      ? action === 'done'
-                        ? '#4CAF50'
-                        : action === 'carry_forward'
-                          ? '#FF9800'
-                          : '#E53935'
-                      : colors.border,
-                    borderWidth: action ? 2 : 1,
-                  },
-                ]}
-              >
-                <Text
-                  style={[styles.taskTitle, { color: colors.text }]}
-                  numberOfLines={2}
-                >
-                  {task.title}
-                </Text>
+          {reconciliationTasks.map((task) => (
+            <TaskReconciliationCard
+              key={task.id}
+              task={task}
+              userId={userId}
+              isDone={reconciledTasks.get(task.id) === 'done'}
+              onToggleDone={handleToggleDone}
+              allRoles={allRoles}
+              allDomains={allDomains}
+            />
+          ))}
 
-                <View style={styles.actionButtonsRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      {
-                        backgroundColor: action === 'done' ? '#4CAF50' : colors.background,
-                        borderColor: '#4CAF50',
-                      },
-                    ]}
-                    onPress={() => handleReconcile(task.id, 'done')}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: action === 'done' ? '#FFF' : '#4CAF50' },
-                      ]}
-                    >
-                      Done {'\u2713'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      {
-                        backgroundColor: action === 'carry_forward' ? '#FF9800' : colors.background,
-                        borderColor: '#FF9800',
-                      },
-                    ]}
-                    onPress={() => handleReconcile(task.id, 'carry_forward')}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: action === 'carry_forward' ? '#FFF' : '#FF9800' },
-                      ]}
-                    >
-                      Carry forward {'\u2192'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      {
-                        backgroundColor: action === 'release' ? '#E53935' : colors.background,
-                        borderColor: '#E53935',
-                      },
-                    ]}
-                    onPress={() => handleReconcile(task.id, 'release')}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        { color: action === 'release' ? '#FFF' : '#E53935' },
-                      ]}
-                    >
-                      Release {'\u00D7'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
         </View>
       )}
     </ScrollView>
@@ -523,7 +443,7 @@ export default function EveningReviewCompassScreen() {
                   Carried forward
                 </Text>
                 <Text style={[styles.scoreBreakdownValue, { color: '#FF9800' }]}>
-                  {carryCount}
+                  {0}
                 </Text>
               </View>
               <View style={styles.scoreBreakdownRow}>
@@ -557,6 +477,10 @@ export default function EveningReviewCompassScreen() {
         <View style={styles.brainDumpContainer}>
           <Text style={[styles.brainDumpQuestion, { color: colors.text }]}>
             Is there anything your tomorrow needs to know? Anything on your mind you want to capture?
+          </Text>
+
+          <Text style={[styles.brainDumpSubPrompt, { color: colors.textSecondary }]}>
+            Were there any Roses 🌹 (wins, gratitude) or Thorns 🌵 (challenges, frustrations) from today?
           </Text>
 
           <TextInput
@@ -689,143 +613,60 @@ export default function EveningReviewCompassScreen() {
     </ScrollView>
   );
 
-  const renderRolePulseStep = () => (
+  const renderSummaryStep = () => (
     <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       <CompassDirectionHeader
         direction="west"
-        label="Roles"
-        powerQuestion={'"Who do I want to become?"'}
+        label="Today's Summary"
+        powerQuestion={'"Who did I show up as today?"'}
       />
 
-      {rolePulseRoles.length === 0 ? (
+      <Text style={[styles.sectionSubtitle, { color: colors.text, marginHorizontal: 16, marginBottom: 12, fontSize: 16 }]}>
+        Here's where you invested today.
+      </Text>
+
+      {/* Roles summary */}
+      {summaryRoles.length > 0 && (
+        <View style={{ marginHorizontal: 16, marginBottom: 20 }}>
+          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>ROLES</Text>
+          {summaryRoles.map((r) => (
+            <View key={r.name} style={[styles.summaryRow, { borderColor: colors.border }]}>
+              <View style={{ backgroundColor: '#fce7f3', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                <Text style={{ fontSize: 13, color: '#9333ea', fontWeight: '600' }}>{r.name}</Text>
+              </View>
+              <Text style={[styles.summaryCount, { color: colors.text }]}>
+                {r.count} {r.count === 1 ? 'task' : 'tasks'} completed
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Wellness zones summary */}
+      {summaryDomains.length > 0 && (
+        <View style={{ marginHorizontal: 16, marginBottom: 20 }}>
+          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>WELLNESS ZONES</Text>
+          {summaryDomains.map((d) => (
+            <View key={d.name} style={[styles.summaryRow, { borderColor: colors.border }]}>
+              <View style={{ backgroundColor: '#fed7aa', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                <Text style={{ fontSize: 13, color: '#c2410c', fontWeight: '600' }}>{d.name}</Text>
+              </View>
+              <Text style={[styles.summaryCount, { color: colors.text }]}>
+                {d.count} {d.count === 1 ? 'task' : 'tasks'} completed
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {summaryRoles.length === 0 && summaryDomains.length === 0 && (
         <View style={styles.emptyStateContainer}>
           <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-            No roles configured yet. Set up your top roles in Settings to see them here.
+            No tasks were marked as done today.
           </Text>
-        </View>
-      ) : (
-        <View style={styles.roleListContainer}>
-          {rolePulseRoles.map((role) => {
-            const existing = rolePulseResponses.find((r) => r.role_id === role.role_id);
-            const selectedResponse = existing?.response;
-
-            return (
-              <View
-                key={role.role_id}
-                style={[
-                  styles.roleCard,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                ]}
-              >
-                <View style={styles.roleCardHeader}>
-                  <Text style={[styles.roleSlotBadge, { color: '#9370DB' }]}>
-                    {role.slot_code}
-                  </Text>
-                  <Text style={[styles.roleName, { color: colors.text }]}>{role.role_name}</Text>
-                  <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
-                    {role.tasks_completed_today} task{role.tasks_completed_today !== 1 ? 's' : ''} today
-                  </Text>
-                </View>
-
-                <View style={styles.pulseButtonsRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.pulseButton,
-                      {
-                        backgroundColor: selectedResponse === 'felt_it' ? '#4CAF50' : colors.background,
-                        borderColor: '#4CAF50',
-                      },
-                    ]}
-                    onPress={() =>
-                      handleRolePulseResponse(
-                        role.role_id,
-                        role.role_name,
-                        role.tasks_completed_today,
-                        'felt_it',
-                      )
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.pulseButtonText,
-                        { color: selectedResponse === 'felt_it' ? '#FFF' : '#4CAF50' },
-                      ]}
-                    >
-                      Felt it
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.pulseButton,
-                      {
-                        backgroundColor: selectedResponse === 'neutral' ? '#FF9800' : colors.background,
-                        borderColor: '#FF9800',
-                      },
-                    ]}
-                    onPress={() =>
-                      handleRolePulseResponse(
-                        role.role_id,
-                        role.role_name,
-                        role.tasks_completed_today,
-                        'neutral',
-                      )
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.pulseButtonText,
-                        { color: selectedResponse === 'neutral' ? '#FFF' : '#FF9800' },
-                      ]}
-                    >
-                      Neutral
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.pulseButton,
-                      {
-                        backgroundColor: selectedResponse === 'missed_it' ? '#E53935' : colors.background,
-                        borderColor: '#E53935',
-                      },
-                    ]}
-                    onPress={() =>
-                      handleRolePulseResponse(
-                        role.role_id,
-                        role.role_name,
-                        role.tasks_completed_today,
-                        'missed_it',
-                      )
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.pulseButtonText,
-                        { color: selectedResponse === 'missed_it' ? '#FFF' : '#E53935' },
-                      ]}
-                    >
-                      Missed it
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
         </View>
       )}
     </ScrollView>
-  );
-
-  const renderFuelStep = () => (
-    <EnergyCheckStep
-      fuelLevel={fuelLevel}
-      fuelWhy={fuelWhy}
-      fuel3Why={fuel3Why}
-      onFuelLevelChange={setFuelLevel}
-      onFuelWhyChange={setFuelWhy}
-      onFuel3WhyChange={setFuel3Why}
-    />
   );
 
   const renderCompleteStep = () => {
@@ -921,9 +762,8 @@ export default function EveningReviewCompassScreen() {
         {currentStep === 0 && renderReconcileStep()}
         {currentStep === 1 && renderScoreStep()}
         {currentStep === 2 && renderBrainDumpStep()}
-        {currentStep === 3 && renderRolePulseStep()}
-        {currentStep === 4 && renderFuelStep()}
-        {currentStep === 5 && renderCompleteStep()}
+        {currentStep === 3 && renderSummaryStep()}
+        {currentStep === 4 && renderCompleteStep()}
       </View>
 
       {/* Bottom navigation bar for steps 0-4 (step 5 Complete has its own Done button) */}
@@ -1148,6 +988,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 22,
   },
+  brainDumpSubPrompt: {
+    fontSize: 14,
+    fontStyle: 'italic' as const,
+    lineHeight: 20,
+    marginTop: -8,
+  },
   brainDumpInput: {
     minHeight: 160,
     borderRadius: 12,
@@ -1235,7 +1081,25 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // Role Pulse
+  // Summary
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  summaryCount: {
+    fontSize: 14,
+  },
+
+  // Role Pulse (legacy)
   roleListContainer: {
     paddingHorizontal: 16,
     gap: 12,

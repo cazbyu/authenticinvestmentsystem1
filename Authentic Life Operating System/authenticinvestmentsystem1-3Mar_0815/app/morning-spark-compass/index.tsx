@@ -57,11 +57,17 @@ import {
   getWellnessGaps,
   getMissionTouch,
   saveMorningSparkSession,
+  FinalReviewData,
+  FinalReviewEvent,
+  FinalReviewTask,
+  getFinalReviewData,
+  removeFromTodayCommitments,
   ParsedCaptureItem,
   CaptureAnalysisResult,
   TaskEventFormPrefill,
   analyzeCapture,
   buildFormPrefill,
+  quickSaveCapture,
   getUserDomains,
 } from '@/lib/morningSparkCompassService';
 
@@ -71,10 +77,9 @@ const STEPS = [
   { key: 'south_handoff', label: 'Brain Dump Handoff', icon: '\uD83D\uDCCB', color: '#4169E1' },
   { key: 'south_commit', label: "Today's Commitments", icon: '\u2705', color: '#4169E1' },
   { key: 'south_goal', label: 'Goal Pulse', icon: '\uD83C\uDFAF', color: '#4169E1' },
-  { key: 'west', label: 'Role Focus', icon: '\uD83D\uDC65', color: '#9370DB' },
-  { key: 'east', label: 'Wellness Pulse', icon: '\uD83C\uDF3F', color: '#39b54a' },
-  { key: 'north', label: 'Mission Touch', icon: '\u2B50', color: '#ed1c24' },
-  { key: 'sendoff', label: 'Send-off', icon: '\uD83D\uDE80', color: '#D4A843' },
+  { key: 'west_east', label: 'Roles & Wellness', icon: '\uD83D\uDC65', color: '#9370DB' },
+  { key: 'final_plan', label: "Today's Plan", icon: '\uD83D\uDE80', color: '#4169E1' },
+  { key: 'north', label: 'North Star', icon: '\u2B50', color: '#ed1c24' },
 ];
 
 export default function MorningSparkCompassScreen() {
@@ -115,6 +120,7 @@ export default function MorningSparkCompassScreen() {
   const [goalPulseLoading, setGoalPulseLoading] = useState(false);
   const [goalTrackSelection, setGoalTrackSelection] = useState<string | null>(null);
   const [allGoalPulse, setAllGoalPulse] = useState<GoalPulseItem[]>([]);
+  const [committedActionIds, setCommittedActionIds] = useState<Set<string>>(new Set());
 
   // Step 5: Role Focus
   const [roleFocus, setRoleFocus] = useState<RoleFocusData[]>([]);
@@ -138,6 +144,14 @@ export default function MorningSparkCompassScreen() {
   const [missionTouch, setMissionTouch] = useState<MissionTouchData | null>(null);
   const [missionLoading, setMissionLoading] = useState(false);
   const missionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Step 7: Final Commitment Review
+  const [finalReview, setFinalReview] = useState<FinalReviewData | null>(null);
+  const [finalReviewLoading, setFinalReviewLoading] = useState(false);
+  const [isCommitted, setIsCommitted] = useState(false);
+  const [showFinalAddForm, setShowFinalAddForm] = useState(false);
+  const [showMissionAnswer, setShowMissionAnswer] = useState(false);
+  const [missionAnswerText, setMissionAnswerText] = useState('');
 
   // ---- Initial data load ----
 
@@ -171,21 +185,7 @@ export default function MorningSparkCompassScreen() {
 
   // Opening animation is handled by LifeCompass ceremony (onCeremonyComplete → goToNextStep)
 
-  // ---- Mission auto-advance (step 7) ----
-
-  useEffect(() => {
-    if (currentStep === 7 && !missionLoading) {
-      missionTimerRef.current = setTimeout(() => {
-        setCurrentStep(8);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
-      }, 3000);
-    }
-    return () => {
-      if (missionTimerRef.current) clearTimeout(missionTimerRef.current);
-    };
-  }, [currentStep, missionLoading]);
+  // (Mission auto-advance removed — step 7 is now Final Commitment Review)
 
   // ---- Brain dump item processing ----
 
@@ -203,7 +203,7 @@ export default function MorningSparkCompassScreen() {
         // Check if all items are now processed
         if (brainDumpData) {
           const newProcessedCount = brainDumpItemsProcessed.size + 1;
-          if (newProcessedCount >= brainDumpData.items.length) {
+          if (brainDumpData.items && newProcessedCount >= brainDumpData.items.length) {
             await markBrainDumpProcessed(brainDumpData.sessionId);
           }
         }
@@ -268,24 +268,15 @@ export default function MorningSparkCompassScreen() {
     try {
       // Process current step before advancing
       if (currentStep === 1) {
-        // Save fuel level
-        if (!fuelLevel) {
-          Alert.alert(
-            'Select your energy level',
-            "Please choose how you're feeling before continuing.",
-          );
-          return;
+        // Save fuel level if selected (optional — user can skip)
+        if (fuelLevel) {
+          try {
+            const newSparkId = await saveFuelLevel(sparkId, userId, fuelLevel, fuelWhy, fuel3Why);
+            setSparkId(newSparkId);
+          } catch (fuelErr) {
+            console.error('Error saving fuel level:', fuelErr);
+          }
         }
-        if (fuelLevel === 1 && !fuelWhy) {
-          Alert.alert('Tell us why', 'Please select a reason for your low energy.');
-          return;
-        }
-        if (fuelLevel === 3 && !fuel3Why) {
-          Alert.alert('Quick check', "What's driving this energy? Tap an option to continue.");
-          return;
-        }
-        const newSparkId = await saveFuelLevel(sparkId, userId, fuelLevel, fuelWhy, fuel3Why);
-        setSparkId(newSparkId);
       }
     } catch (error) {
       console.error('Error processing step:', error);
@@ -303,7 +294,7 @@ export default function MorningSparkCompassScreen() {
         .then((data) => {
           setBrainDumpData(data);
           setBrainDumpLoading(false);
-          if (!data || data.items.length === 0) {
+          if (!data || !data.items || data.items.length === 0) {
             // No brain dump — auto-skip to commitments
             setCurrentStep(3);
             setCommitLoading(true);
@@ -360,53 +351,41 @@ export default function MorningSparkCompassScreen() {
     }
 
     if (nextStep === 5) {
-      // Role Focus
+      // Roles + Wellness (combined step)
+      const taskIdList = [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)];
       setRoleLoading(true);
-      getRoleFocus(userId)
-        .then((data) => {
-          setRoleFocus(data);
+      setWellnessLoading(true);
+      Promise.all([
+        getRoleFocus(userId, taskIdList),
+        getWellnessGaps(userId, taskIdList),
+      ])
+        .then(([roleData, wzData]) => {
+          setRoleFocus(roleData);
+          setWellnessGaps(wzData);
           setRoleLoading(false);
+          setWellnessLoading(false);
         })
-        .catch(() => setRoleLoading(false));
+        .catch((err) => {
+          console.error('Error loading roles/wellness:', err);
+          setRoleLoading(false);
+          setWellnessLoading(false);
+        });
     }
 
     if (nextStep === 6) {
-      // Wellness Pulse
-      setWellnessLoading(true);
-      getWellnessGaps(userId)
-        .then((data) => {
-          setWellnessGaps(data);
-          setWellnessLoading(false);
-          // If no gaps, auto-advance
-          if (data.length === 0) {
-            setTimeout(() => {
-              setCurrentStep(7);
-              // Load mission data
-              setMissionLoading(true);
-              getMissionTouch(userId)
-                .then((mData) => {
-                  setMissionTouch(mData);
-                  setMissionLoading(false);
-                })
-                .catch(() => setMissionLoading(false));
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }
-            }, 500);
-          }
+      // Today's Plan (final review) — fetch events + committed tasks
+      setFinalReviewLoading(true);
+      const goalActionIds = Array.from(committedActionIds);
+      Promise.all([
+        getFinalReviewData(userId, Array.from(selectedTaskIds), goalActionIds),
+        getMissionTouch(userId),
+      ])
+        .then(([reviewData, missionData]) => {
+          setFinalReview(reviewData);
+          setMissionTouch(missionData);
+          setFinalReviewLoading(false);
         })
-        .catch(() => setWellnessLoading(false));
-    }
-
-    if (nextStep === 7) {
-      // Mission Touch
-      setMissionLoading(true);
-      getMissionTouch(userId)
-        .then((data) => {
-          setMissionTouch(data);
-          setMissionLoading(false);
-        })
-        .catch(() => setMissionLoading(false));
+        .catch(() => setFinalReviewLoading(false));
     }
 
     setCurrentStep(nextStep);
@@ -429,18 +408,18 @@ export default function MorningSparkCompassScreen() {
   // ---- Sendoff: save session and go to dashboard ----
 
   const handleSendoff = useCallback(async () => {
+    // Navigate immediately — don't block on save
+    router.replace('/(tabs)/dashboard');
     try {
       await saveMorningSparkSession(userId, {
         fuel_level: fuelLevel || 2,
         fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
         screen_context: selectedRole || null,
-        started_at: startedAt,
+        started_at: startedAt || new Date().toISOString(),
         completed_at: new Date().toISOString(),
       });
-      router.replace('/(tabs)/dashboard');
     } catch (error) {
       console.error('Error saving morning spark session:', error);
-      Alert.alert('Error', 'Failed to save session. Please try again.');
     }
   }, [userId, fuelLevel, fuelWhy, fuel3Why, selectedRole, startedAt, router]);
 
@@ -463,13 +442,16 @@ export default function MorningSparkCompassScreen() {
 
   // ---- Helper: check if all brain dump items are processed ----
   const allBrainDumpProcessed =
-    brainDumpData != null && brainDumpItemsProcessed.size >= brainDumpData.items.length;
+    brainDumpData != null && brainDumpData.items != null && brainDumpItemsProcessed.size >= brainDumpData.items.length;
 
   // ---- Step dots ----
 
   const renderStepDots = () => (
     <View style={styles.stepDotsContainer}>
-      {STEPS.map((step, index) => (
+      {STEPS.map((step, index) => {
+        // Skip the opening compass animation from dots
+        if (index === 0) return null;
+        return (
         <TouchableOpacity
           key={step.key}
           onPress={() => {
@@ -493,7 +475,8 @@ export default function MorningSparkCompassScreen() {
             ]}
           />
         </TouchableOpacity>
-      ))}
+        );
+      })}
     </View>
   );
 
@@ -516,14 +499,24 @@ export default function MorningSparkCompassScreen() {
       // ======== STEP 1: Fuel Check ========
       case 1:
         return (
-          <EnergyCheckStep
-            fuelLevel={fuelLevel}
-            fuelWhy={fuelWhy}
-            fuel3Why={fuel3Why}
-            onFuelLevelChange={setFuelLevel}
-            onFuelWhyChange={setFuelWhy}
-            onFuel3WhyChange={setFuel3Why}
-          />
+          <View style={{ flex: 1 }}>
+            <EnergyCheckStep
+              fuelLevel={fuelLevel}
+              fuelWhy={fuelWhy}
+              fuel3Why={fuel3Why}
+              onFuelLevelChange={setFuelLevel}
+              onFuelWhyChange={setFuelWhy}
+              onFuel3WhyChange={setFuel3Why}
+            />
+            {!fuelLevel && (
+              <TouchableOpacity
+                style={{ position: 'absolute', bottom: 80, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 24 }}
+                onPress={goToNextStep}
+              >
+                <Text style={{ color: colors.textSecondary, fontSize: 14, textDecorationLine: 'underline' }}>Skip</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         );
 
       // ======== STEP 2: Brain Dump Handoff (auto-skipped if empty) ========
@@ -560,7 +553,7 @@ export default function MorningSparkCompassScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              brainDumpData.items.map((item) => {
+              (brainDumpData.items || []).map((item) => {
                 if (brainDumpItemsProcessed.has(item.id)) return null;
                 return (
                   <View
@@ -733,93 +726,126 @@ export default function MorningSparkCompassScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
-                {tasks.map((task) => {
-                  const isSelected = selectedTaskIds.has(task.id);
-                  // Urgent/Important matrix colors (matches TaskCard.tsx)
-                  const matrixColor =
-                    task.is_urgent && task.is_important ? '#ef4444' :   // red
-                    !task.is_urgent && task.is_important ? '#22c55e' :  // green
-                    task.is_urgent && !task.is_important ? '#eab308' :  // yellow
-                    '#9ca3af';                                          // gray
+                {(() => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const sevenDaysAgo = new Date();
+                  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
 
-                  // Collect all relationship badges (max 2 each, show + for overflow)
-                  const roleBadges = task.roles.slice(0, 2);
-                  const roleOverflow = task.roles.length > 2 ? task.roles.length - 2 : 0;
-                  const domainBadges = task.domains.slice(0, 2);
-                  const domainOverflow = task.domains.length > 2 ? task.domains.length - 2 : 0;
-                  const krBadges = task.keyRelationships.slice(0, 2);
-                  const krOverflow = task.keyRelationships.length > 2 ? task.keyRelationships.length - 2 : 0;
-                  const hasRelations = task.roles.length > 0 || task.domains.length > 0 || task.keyRelationships.length > 0;
+                  // Filter out past events (only show today's events)
+                  const filtered = tasks.filter((t) => {
+                    if (t.type === 'event' && t.due_date && t.due_date < todayStr) return false;
+                    return true;
+                  });
+
+                  // Group tasks
+                  const todayEvents = filtered.filter((t) => t.type === 'event' && t.due_date === todayStr);
+                  const dueTodayTasks = filtered.filter((t) => t.type !== 'event' && t.due_date === todayStr);
+                  const overdueRecent = filtered.filter((t) => t.type !== 'event' && t.due_date && t.due_date < todayStr && t.due_date >= sevenDaysAgoStr);
+                  const overdueOld = filtered.filter((t) => t.type !== 'event' && t.due_date && t.due_date < sevenDaysAgoStr);
+                  const noDueDate = filtered.filter((t) => t.type !== 'event' && !t.due_date);
+                  // Events in the future
+                  const futureEvents = filtered.filter((t) => t.type === 'event' && t.due_date && t.due_date > todayStr);
+
+                  const renderTaskCard = (task: CommitmentTask) => {
+                    const isSelected = selectedTaskIds.has(task.id);
+                    const matrixColor =
+                      task.is_urgent && task.is_important ? '#ef4444' :
+                      !task.is_urgent && task.is_important ? '#22c55e' :
+                      task.is_urgent && !task.is_important ? '#eab308' :
+                      '#9ca3af';
+                    const roleBadges = task.roles.slice(0, 2);
+                    const domainBadges = task.domains.slice(0, 2);
+                    const krBadges = task.keyRelationships.slice(0, 2);
+                    const hasRelations = task.roles.length > 0 || task.domains.length > 0 || task.keyRelationships.length > 0;
+
+                    return (
+                      <TouchableOpacity
+                        key={task.id}
+                        style={[
+                          styles.taskCard,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: isSelected ? '#4169E1' : matrixColor,
+                            borderWidth: isSelected ? 2 : 1,
+                            borderLeftWidth: 4,
+                            borderLeftColor: matrixColor,
+                          },
+                        ]}
+                        onPress={() => handleToggleTask(task.id)}
+                      >
+                        <View style={[styles.checkbox, isSelected && { backgroundColor: '#4169E1', borderColor: '#4169E1' }, !isSelected && { borderColor: colors.border }]}>
+                          {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                        </View>
+                        <View style={styles.taskTextContainer}>
+                          <Text style={[styles.taskTitle, { color: colors.text }]}>{task.title}</Text>
+                          {task.due_date && (
+                            <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
+                              {task.type === 'event' ? task.due_date : `Due: ${task.due_date}`}
+                            </Text>
+                          )}
+                          {hasRelations && (
+                            <View style={styles.relationBadgeRow}>
+                              {roleBadges.map((r) => (
+                                <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                                </View>
+                              ))}
+                              {task.roles.length > 2 && (
+                                <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{task.roles.length - 2}</Text>
+                                </View>
+                              )}
+                              {domainBadges.map((d) => (
+                                <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.label}</Text>
+                                </View>
+                              ))}
+                              {task.domains.length > 2 && (
+                                <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{task.domains.length - 2}</Text>
+                                </View>
+                              )}
+                              {krBadges.map((k) => (
+                                <View key={k.id} style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>{k.label}</Text>
+                                </View>
+                              ))}
+                              {task.keyRelationships.length > 2 && (
+                                <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]}>+{task.keyRelationships.length - 2}</Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  };
+
+                  const renderSection = (title: string, items: CommitmentTask[], defaultOpen: boolean = true) => {
+                    if (items.length === 0) return null;
+                    return (
+                      <View key={title} style={{ marginBottom: 12 }}>
+                        <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>
+                          {title} ({items.length})
+                        </Text>
+                        {items.map(renderTaskCard)}
+                      </View>
+                    );
+                  };
 
                   return (
-                    <TouchableOpacity
-                      key={task.id}
-                      style={[
-                        styles.taskCard,
-                        {
-                          backgroundColor: colors.surface,
-                          borderColor: isSelected ? '#4169E1' : matrixColor,
-                          borderWidth: isSelected ? 2 : 1,
-                          borderLeftWidth: 4,
-                          borderLeftColor: matrixColor,
-                        },
-                      ]}
-                      onPress={() => handleToggleTask(task.id)}
-                    >
-                      <View
-                        style={[
-                          styles.checkbox,
-                          isSelected && { backgroundColor: '#4169E1', borderColor: '#4169E1' },
-                          !isSelected && { borderColor: colors.border },
-                        ]}
-                      >
-                        {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                      </View>
-                      <View style={styles.taskTextContainer}>
-                        <Text style={[styles.taskTitle, { color: colors.text }]}>{task.title}</Text>
-                        {task.due_date && (
-                          <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
-                            Due: {task.due_date}
-                          </Text>
-                        )}
-                        {hasRelations && (
-                          <View style={styles.relationBadgeRow}>
-                            {roleBadges.map((r) => (
-                              <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
-                              </View>
-                            ))}
-                            {roleOverflow > 0 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{roleOverflow}</Text>
-                              </View>
-                            )}
-                            {domainBadges.map((d) => (
-                              <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.label}</Text>
-                              </View>
-                            ))}
-                            {domainOverflow > 0 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{domainOverflow}</Text>
-                              </View>
-                            )}
-                            {krBadges.map((k) => (
-                              <View key={k.id} style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>{k.label}</Text>
-                              </View>
-                            ))}
-                            {krOverflow > 0 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]}>+{krOverflow}</Text>
-                              </View>
-                            )}
-                          </View>
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                    <>
+                      {renderSection("Today's Events", todayEvents)}
+                      {renderSection('Due Today', dueTodayTasks)}
+                      {renderSection('Tasks', noDueDate)}
+                      {renderSection('Overdue (this week)', overdueRecent)}
+                      {renderSection('Overdue (older)', overdueOld)}
+                      {renderSection('Upcoming Events', futureEvents)}
+                    </>
                   );
-                })}
+                })()}
                 <TouchableOpacity
                   style={[
                     styles.confirmButton,
@@ -828,8 +854,9 @@ export default function MorningSparkCompassScreen() {
                     },
                   ]}
                   disabled={selectedTaskIds.size === 0}
-                  onPress={async () => {
-                    await commitTodaysTasks(Array.from(selectedTaskIds));
+                  onPress={() => {
+                    // Don't write to DB here — selections are held in state
+                    // and written when user hits "I'm Committed" on the Final Review
                     if (Platform.OS !== 'web') {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     }
@@ -903,67 +930,129 @@ export default function MorningSparkCompassScreen() {
                       </View>
                     </View>
 
-                    {/* Action cards — look like task cards from commitments */}
-                    {goalItem.actions_for_today.map((action) => (
-                      <View
-                        key={action.task_id}
-                        style={[
-                          styles.taskCard,
-                          {
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                            borderWidth: 1,
-                            borderLeftWidth: 4,
-                            borderLeftColor: action.is_scheduled_today ? '#4169E1' : '#9ca3af',
-                          },
-                        ]}
-                      >
-                        <View style={styles.taskTextContainer}>
-                          <Text style={[styles.taskTitle, { color: colors.text }]}>{action.title}</Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                            <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
-                              {action.weekly_actual}/{action.target_days} this week
-                            </Text>
-                            {action.is_scheduled_today && (
-                              <Text style={{ fontSize: 11, color: '#4169E1', fontWeight: '600' }}>
-                                • Today
-                              </Text>
-                            )}
-                          </View>
-                          {/* Relationship badges */}
-                          <View style={styles.relationBadgeRow}>
-                            {/* Goal pill */}
-                            <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
-                              <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>
-                                {goalItem.goal_title}
-                              </Text>
+                    {/* Action cards with commitment checkboxes */}
+                    {goalItem.actions_for_today.map((action) => {
+                      const isCommitted = committedActionIds.has(action.task_id);
+                      const isDoneToday = action.completed_today;
+                      const opacity = isDoneToday ? 0.5 : 1;
+
+                      return (
+                        <TouchableOpacity
+                          key={action.task_id}
+                          activeOpacity={0.7}
+                          disabled={isDoneToday}
+                          onPress={() => {
+                            setCommittedActionIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(action.task_id)) {
+                                next.delete(action.task_id);
+                              } else {
+                                next.add(action.task_id);
+                              }
+                              return next;
+                            });
+                            if (Platform.OS !== 'web') {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }
+                          }}
+                          style={[
+                            styles.taskCard,
+                            {
+                              opacity,
+                              backgroundColor: colors.surface,
+                              borderColor: isCommitted ? '#4169E1' : colors.border,
+                              borderWidth: isCommitted ? 2 : 1,
+                              borderLeftWidth: 4,
+                              borderLeftColor: isDoneToday ? '#39b54a' : action.is_scheduled_today ? '#4169E1' : '#9ca3af',
+                            },
+                          ]}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {/* Checkbox */}
+                            <View
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: 6,
+                                borderWidth: 2,
+                                borderColor: isDoneToday ? '#39b54a' : isCommitted ? '#4169E1' : colors.border,
+                                backgroundColor: isDoneToday ? '#39b54a' : isCommitted ? '#4169E1' : 'transparent',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginRight: 12,
+                              }}
+                            >
+                              {(isCommitted || isDoneToday) && (
+                                <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>✓</Text>
+                              )}
                             </View>
-                            {action.roles.slice(0, 2).map((r) => (
-                              <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+
+                            <View style={[styles.taskTextContainer, { flex: 1 }]}>
+                              <Text style={[
+                                styles.taskTitle,
+                                { color: isDoneToday ? colors.textSecondary : colors.text },
+                                isDoneToday && { textDecorationLine: 'line-through' },
+                              ]}>
+                                {action.title}
+                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                                <Text style={[styles.taskDueDate, { color: colors.textSecondary }]}>
+                                  {action.weekly_actual}/{action.target_days} this week
+                                </Text>
+                                {isDoneToday ? (
+                                  <Text style={{ fontSize: 11, color: '#39b54a', fontWeight: '600' }}>
+                                    • Done today
+                                  </Text>
+                                ) : action.is_scheduled_today ? (
+                                  <Text style={{ fontSize: 11, color: '#4169E1', fontWeight: '600' }}>
+                                    • Today
+                                  </Text>
+                                ) : null}
                               </View>
-                            ))}
-                            {action.roles.length > 2 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{action.roles.length - 2}</Text>
+                              {/* Relationship badges */}
+                              <View style={styles.relationBadgeRow}>
+                                <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>
+                                    {goalItem.goal_title}
+                                  </Text>
+                                </View>
+                                {action.roles.slice(0, 2).map((r) => (
+                                  <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                                  </View>
+                                ))}
+                                {action.roles.length > 2 && (
+                                  <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{action.roles.length - 2}</Text>
+                                  </View>
+                                )}
+                                {action.domains.slice(0, 2).map((d) => (
+                                  <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.name}</Text>
+                                  </View>
+                                ))}
+                                {action.domains.length > 2 && (
+                                  <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                    <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{action.domains.length - 2}</Text>
+                                  </View>
+                                )}
                               </View>
-                            )}
-                            {action.domains.slice(0, 2).map((d) => (
-                              <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.name}</Text>
-                              </View>
-                            ))}
-                            {action.domains.length > 2 && (
-                              <View style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
-                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]}>+{action.domains.length - 2}</Text>
-                              </View>
-                            )}
+                            </View>
                           </View>
-                        </View>
-                      </View>
-                    ))}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 ))}
+
+                {/* Commit selected actions summary */}
+                {committedActionIds.size > 0 && (
+                  <View style={{ marginHorizontal: 16, marginTop: 16, marginBottom: 8 }}>
+                    <Text style={[styles.captureQuestion, { color: colors.textSecondary, fontSize: 14 }]}>
+                      {committedActionIds.size} action{committedActionIds.size !== 1 ? 's' : ''} committed for today
+                    </Text>
+                  </View>
+                )}
               </>
             )}
           </ScrollView>
@@ -1008,20 +1097,33 @@ export default function MorningSparkCompassScreen() {
                   These are the roles you plan to invest in today.
                 </Text>
 
-                {roleFocus.map((role) => (
+                {roleFocus.filter((role) => role.pending_task_count > 0).map((role) => (
                   <View
                     key={role.role_id}
                     style={[
                       styles.roleCard,
-                      { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 },
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: role.needs_attention ? '#eab308' : colors.border,
+                        borderWidth: role.needs_attention ? 2 : 1,
+                      },
                     ]}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={[styles.roleName, { color: colors.text }]}>
-                        {role.role_name}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[styles.roleName, { color: colors.text }]}>
+                          {role.role_name}
+                        </Text>
+                        {role.is_priority && (
+                          <View style={[styles.relationBadge, { backgroundColor: '#f3e8ff', borderColor: '#d8b4fe' }]}>
+                            <Text style={[styles.relationBadgeText, { color: '#9333ea', fontSize: 10 }]}>
+                              Priority
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
-                        ({role.pending_task_count} {role.pending_task_count === 1 ? 'task' : 'tasks'})
+                        ({role.pending_task_count} today)
                       </Text>
                     </View>
                     {role.role_mission && (
@@ -1031,8 +1133,66 @@ export default function MorningSparkCompassScreen() {
                         {role.role_mission}
                       </Text>
                     )}
+                    {role.needs_attention && role.days_since_activity !== null && (
+                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                        No activity in {role.days_since_activity} days
+                      </Text>
+                    )}
+                    {role.needs_attention && role.days_since_activity === null && (
+                      <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                        No activity yet
+                      </Text>
+                    )}
                   </View>
                 ))}
+
+                {/* Wellness Zones section */}
+                {!wellnessLoading && wellnessGaps.filter((z) => z.pending_task_count > 0).length > 0 && (
+                  <>
+                    <View style={{ marginTop: 24 }}>
+                      <CompassDirectionHeader
+                        direction="east"
+                        label="Wellness Focus"
+                        powerQuestion={'"Who do I want to become?"'}
+                      />
+                    </View>
+                    <Text style={[styles.roleIntroText, { color: colors.text }]}>
+                      These are the wellness zones you are investing in today.
+                    </Text>
+                    {wellnessGaps.filter((zone) => zone.pending_task_count > 0).map((zone) => (
+                      <View
+                        key={zone.zone_id}
+                        style={[
+                          styles.roleCard,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: zone.needs_attention ? '#eab308' : colors.border,
+                            borderWidth: zone.needs_attention ? 2 : 1,
+                          },
+                        ]}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.roleName, { color: colors.text }]}>{zone.zone_name}</Text>
+                            {zone.is_priority && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#16a34a', fontSize: 10 }]}>Priority</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.roleTaskCount, { color: colors.textSecondary }]}>
+                            ({zone.pending_task_count} today)
+                          </Text>
+                        </View>
+                        {zone.needs_attention && zone.days_since_activity !== null && (
+                          <Text style={{ fontSize: 13, color: '#eab308', marginTop: 4 }}>
+                            No activity in {zone.days_since_activity} days
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </>
+                )}
 
                 {/* Initial capture prompt — before any analysis */}
                 {!showCaptureInput && parsedItems.length === 0 && (
@@ -1085,7 +1245,7 @@ export default function MorningSparkCompassScreen() {
                         setCaptureAnalyzing(true);
                         try {
                           const result = await analyzeCapture(userId, captureText.trim(), roleFocus);
-                          setParsedItems(result.items);
+                          setParsedItems(result?.items || []);
                           setCurrentItemIndex(0);
                           setShowCaptureInput(false);
                         } catch (err) {
@@ -1110,7 +1270,21 @@ export default function MorningSparkCompassScreen() {
                   const item = parsedItems[currentItemIndex];
                   const typeLabel = item.suggested_type === 'depositIdea' ? 'Deposit Idea' : item.suggested_type;
 
-                  const handleConfirmItem = (finalItem: ParsedCaptureItem) => {
+                  const handleConfirmItem = async (finalItem: ParsedCaptureItem) => {
+                    try {
+                      await quickSaveCapture(userId, finalItem);
+                      setCapturedCount((c) => c + 1);
+                      if (Platform.OS !== 'web') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }
+                      setCurrentItemIndex(currentItemIndex + 1);
+                    } catch (err) {
+                      console.error('Quick save failed:', err);
+                      Alert.alert('Error', 'Could not save. Please try again.');
+                    }
+                  };
+
+                  const handleEditItem = (finalItem: ParsedCaptureItem) => {
                     const prefill = buildFormPrefill(finalItem);
                     setFormPrefill(prefill);
                     setShowTaskEventForm(true);
@@ -1180,28 +1354,36 @@ export default function MorningSparkCompassScreen() {
                                 <Text style={styles.analysisTagText}>{item.suggested_role_name}</Text>
                               </View>
                             )}
-                            {item.suggested_domain_name && (
-                              <View style={[styles.analysisTag, { backgroundColor: '#39b54a' }]}>
-                                <Text style={styles.analysisTagText}>{item.suggested_domain_name}</Text>
+                            {(item.suggested_domain_names || []).map((name: string, i: number) => (
+                              <View key={`d-${i}`} style={[styles.analysisTag, { backgroundColor: '#39b54a' }]}>
+                                <Text style={styles.analysisTagText}>{name}</Text>
                               </View>
-                            )}
+                            ))}
+                            {(item.suggested_key_relationship_names || []).map((name: string, i: number) => (
+                              <View key={`kr-${i}`} style={[styles.analysisTag, { backgroundColor: '#60a5fa' }]}>
+                                <Text style={styles.analysisTagText}>{name}</Text>
+                              </View>
+                            ))}
                           </View>
                           <Text style={[styles.analysisReasoning, { color: colors.textSecondary }]}>
                             {item.reasoning}
                           </Text>
-                          <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
                             <TouchableOpacity
-                              style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 1 }]}
+                              style={[styles.captureOptionButton, { backgroundColor: '#9370DB', flex: 2 }]}
                               onPress={() => handleConfirmItem(item)}
                             >
                               <Text style={styles.captureOptionButtonText}>Looks Right</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
+                              style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: '#4169E1', borderWidth: 1, flex: 1 }]}
+                              onPress={() => handleEditItem(item)}
+                            >
+                              <Text style={[styles.captureOptionButtonText, { color: '#4169E1' }]}>Edit</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
                               style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, flex: 1 }]}
-                              onPress={() => {
-                                // Skip this item
-                                setCurrentItemIndex(currentItemIndex + 1);
-                              }}
+                              onPress={() => setCurrentItemIndex(currentItemIndex + 1)}
                             >
                               <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Skip</Text>
                             </TouchableOpacity>
@@ -1253,6 +1435,7 @@ export default function MorningSparkCompassScreen() {
                       type: formPrefill.type,
                       selectedRoleIds: formPrefill.selectedRoleIds,
                       selectedDomainIds: formPrefill.selectedDomainIds,
+                      selectedKeyRelationshipIds: formPrefill.selectedKeyRelationshipIds,
                       is_deposit_idea: formPrefill.is_deposit_idea,
                     } : undefined}
                     onClose={() => {
@@ -1278,14 +1461,14 @@ export default function MorningSparkCompassScreen() {
           </ScrollView>
         );
 
-      // ======== STEP 6: Wellness Pulse ========
+      // ======== STEP 6: Today's Plan (Final Review) ========
       case 6:
-        if (wellnessLoading) {
+        if (finalReviewLoading) {
           return (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                Checking wellness...
+                Building your day...
               </Text>
             </View>
           );
@@ -1294,99 +1477,359 @@ export default function MorningSparkCompassScreen() {
         return (
           <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
             <CompassDirectionHeader
-              direction="east"
-              label="Wellness"
-              powerQuestion={'"Who do I want to become?"'}
+              direction="south"
+              label="Today's Plan"
+              powerQuestion={'"What am I doing to get there?"'}
             />
 
-            {wellnessGaps.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  All wellness zones are active this week!
+            {!isCommitted ? (
+              <>
+                {/* Events section */}
+                {(!finalReview?.events || finalReview.events.length === 0) ? (
+                  <Text style={[styles.noEventsText, { color: colors.textSecondary }]}>
+                    No scheduled events today
+                  </Text>
+                ) : (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>EVENTS</Text>
+                    {finalReview.events.map((evt) => (
+                      <View
+                        key={evt.id}
+                        style={[styles.taskCard, {
+                          backgroundColor: colors.surface,
+                          borderColor: '#4169E1',
+                          borderWidth: 1,
+                          borderLeftWidth: 4,
+                          borderLeftColor: '#4169E1',
+                        }]}
+                      >
+                        <View style={styles.taskTextContainer}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={[styles.taskTitle, { color: colors.text }]}>{evt.title}</Text>
+                            <Text style={{ fontSize: 13, color: '#4169E1', fontWeight: '600' }}>
+                              {evt.is_all_day ? 'All day' : evt.start_time ? `${evt.start_time}${evt.end_time ? ` - ${evt.end_time}` : ''}` : ''}
+                            </Text>
+                          </View>
+                          {(evt.roles.length > 0 || evt.domains.length > 0) && (
+                            <View style={styles.relationBadgeRow}>
+                              {evt.roles.slice(0, 2).map((r) => (
+                                <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                                </View>
+                              ))}
+                              {evt.domains.slice(0, 2).map((d) => (
+                                <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                  <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.label}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Committed tasks section */}
+                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>COMMITTED TASKS</Text>
+                {(!finalReview?.committedTasks || finalReview.committedTasks.length === 0) ? (
+                  <Text style={[styles.emptyText, { color: colors.textSecondary, marginHorizontal: 16 }]}>
+                    No tasks committed yet
+                  </Text>
+                ) : (
+                  finalReview.committedTasks.map((task) => {
+                    // Urgent/important border colors
+                    const borderLeftColor = task.is_urgent && task.is_important ? '#E53935'
+                      : task.is_urgent ? '#FF9800'
+                      : task.is_important ? '#eab308'
+                      : colors.border;
+
+                    return (
+                      <View
+                        key={task.id}
+                        style={[styles.taskCard, {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                          borderWidth: 1,
+                          borderLeftWidth: 4,
+                          borderLeftColor,
+                        }]}
+                      >
+                        <View style={styles.taskTextContainer}>
+                          <Text style={[styles.taskTitle, { color: colors.text }]}>{task.title}</Text>
+                          <View style={styles.relationBadgeRow}>
+                            {task.source === 'goal_action' && task.goal_title && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#dbeafe', borderColor: '#93c5fd' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#1d4ed8' }]} numberOfLines={1}>
+                                  {task.goal_title}
+                                </Text>
+                              </View>
+                            )}
+                            {task.roles.slice(0, 2).map((r) => (
+                              <View key={r.id} style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]} numberOfLines={1}>{r.label}</Text>
+                              </View>
+                            ))}
+                            {task.roles.length > 2 && (
+                              <View style={[styles.relationBadge, { backgroundColor: '#fce7f3', borderColor: '#f3e8ff' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#9333ea' }]}>+{task.roles.length - 2}</Text>
+                              </View>
+                            )}
+                            {task.domains.slice(0, 2).map((d) => (
+                              <View key={d.id} style={[styles.relationBadge, { backgroundColor: '#fed7aa', borderColor: '#fdba74' }]}>
+                                <Text style={[styles.relationBadgeText, { color: '#c2410c' }]} numberOfLines={1}>{d.label}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                        {/* Remove button */}
+                        <TouchableOpacity
+                          style={{ padding: 8 }}
+                          onPress={async () => {
+                            await removeFromTodayCommitments(userId, task.id);
+                            setFinalReview((prev) => prev ? {
+                              ...prev,
+                              committedTasks: prev.committedTasks.filter((t) => t.id !== task.id),
+                            } : prev);
+                            if (Platform.OS !== 'web') {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }
+                          }}
+                        >
+                          <X size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })
+                )}
+
+                {/* Action text */}
+                <Text style={[styles.commitPrompt, { color: colors.text }]}>
+                  These are the actions you are committing to accomplish today — would you like to add any or remove anything?
                 </Text>
-              </View>
+
+                {/* Add / I'm Committed buttons */}
+                <View style={{ flexDirection: 'row', gap: 12, marginHorizontal: 16, marginTop: 16 }}>
+                  <TouchableOpacity
+                    style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, flex: 1 }]}
+                    onPress={() => setShowFinalAddForm(true)}
+                  >
+                    <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>+ Add</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.captureOptionButton, { backgroundColor: '#4169E1', flex: 2 }]}
+                    onPress={async () => {
+                      try {
+                        // Collect ALL committed task IDs: step 3 selections + goal actions + any final review additions
+                        const allTaskIds = [
+                          ...Array.from(selectedTaskIds),
+                          ...Array.from(committedActionIds),
+                          ...(finalReview?.tasks || [])
+                            .filter((t) => !selectedTaskIds.has(t.id) && !committedActionIds.has(t.id))
+                            .map((t) => t.id),
+                        ];
+                        console.log('I\'m Committed — writing to DB:', userId, allTaskIds);
+                        await commitTodaysTasks(userId, allTaskIds);
+                        console.log('Committed successfully');
+                        setIsCommitted(true);
+                        if (Platform.OS !== 'web') {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                        }
+                        goToNextStep();
+                      } catch (err) {
+                        console.error('Commit error:', err);
+                        Alert.alert('Error', 'Failed to save commitments: ' + (err as Error).message);
+                      }
+                    }}
+                  >
+                    <Text style={styles.captureOptionButtonText}>I'm Committed</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Add Task Form Modal */}
+                <Modal visible={showFinalAddForm} animationType="slide" presentationStyle="fullScreen">
+                  <TaskEventForm
+                    mode="create"
+                    onClose={() => setShowFinalAddForm(false)}
+                    onSubmitSuccess={async () => {
+                      setShowFinalAddForm(false);
+                      // Refresh the review data
+                      const goalActionIds = Array.from(committedActionIds);
+                      const updated = await getFinalReviewData(userId, Array.from(selectedTaskIds), goalActionIds);
+                      setFinalReview(updated);
+                    }}
+                  />
+                </Modal>
+              </>
             ) : (
-              <View style={styles.wellnessContainer}>
-                <Text style={[styles.wellnessGapText, { color: colors.text }]}>
-                  {wellnessGaps[0].zone_name} hasn't had attention this week.
+              /* Post-commitment: North Star option */
+              <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                <Text style={[styles.commitConfirmText, { color: colors.text }]}>
+                  You're locked in.
                 </Text>
+                <Text style={[styles.commitConfirmSub, { color: colors.textSecondary }]}>
+                  {(finalReview?.committedTasks.length || 0) + (finalReview?.events.length || 0)} items on today's plan
+                </Text>
+
+                {missionTouch?.one_thing && (
+                  <Text style={[styles.missionOneThing, { color: colors.textSecondary, marginTop: 16 }]}>
+                    This week's ONE thing: {missionTouch.one_thing}
+                  </Text>
+                )}
+
+                <Text style={[styles.northStarQuestion, { color: colors.text }]}>
+                  Would you like to spend a moment with your North Star, or get to work?
+                </Text>
+
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                  <TouchableOpacity
+                    style={[styles.captureOptionButton, { backgroundColor: '#E53935' }]}
+                    onPress={() => {
+                      setIsCommitted(false);
+                      setCurrentStep(7);
+                    }}
+                  >
+                    <Text style={styles.captureOptionButtonText}>Review North Star</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.captureOptionButton, { backgroundColor: '#D4A843' }]}
+                    onPress={handleSendoff}
+                  >
+                    <Text style={styles.captureOptionButtonText}>Let's Go</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
-
-            <TouchableOpacity
-              style={[styles.continueButton, { backgroundColor: STEPS[6].color }]}
-              onPress={goToNextStep}
-            >
-              <Text style={styles.continueButtonText}>Continue</Text>
-            </TouchableOpacity>
           </ScrollView>
         );
 
-      // ======== STEP 7: Mission Touch ========
+      // ======== STEP 7: North Star ========
       case 7:
-        if (missionLoading) {
-          return (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                Loading mission...
-              </Text>
-            </View>
-          );
-        }
-
         return (
           <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
             <CompassDirectionHeader
               direction="north"
-              label="Mission"
-              powerQuestion={'"Why am I here?"'}
+              label="North Star"
+              powerQuestion={'"Who am I? Why am I here?"'}
             />
 
-            <View style={styles.missionContainer}>
-              <Text style={[styles.missionText, { color: colors.text }]}>
-                {missionTouch?.mission_statement || 'Your mission is still forming.'}
-              </Text>
-
-              {missionTouch?.one_thing && (
-                <Text style={[styles.missionOneThing, { color: colors.textSecondary }]}>
-                  This week's ONE thing: {missionTouch.one_thing}
+            {missionTouch?.mission_statement ? (
+              <View style={styles.missionContainer}>
+                <Text style={[styles.missionText, { color: colors.text }]}>
+                  {missionTouch.mission_statement}
                 </Text>
-              )}
-            </View>
+                {missionTouch?.one_thing && (
+                  <Text style={[styles.missionOneThing, { color: colors.textSecondary }]}>
+                    This week's ONE thing: {missionTouch.one_thing}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <View style={styles.missionContainer}>
+                <Text style={[styles.ddCoachText, { color: colors.text }]}>
+                  I notice you don't yet have a mission statement. Would you like to plant a seed in that area by answering a question?
+                </Text>
+                <Text style={[styles.ddCoachQuestion, { color: colors.textSecondary }]}>
+                  "If you could be remembered for one thing, what would it be?"
+                </Text>
+
+                {!showMissionAnswer ? (
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                    <TouchableOpacity
+                      style={[styles.captureOptionButton, { backgroundColor: '#E53935' }]}
+                      onPress={() => setShowMissionAnswer(true)}
+                    >
+                      <Text style={styles.captureOptionButtonText}>Answer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.captureOptionButton, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                      onPress={() => {
+                        saveMorningSparkSession(userId, {
+                          fuel_level: fuelLevel || 2,
+                          fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
+                          screen_context: selectedRole || null,
+                          started_at: startedAt || new Date().toISOString(),
+                          completed_at: new Date().toISOString(),
+                        }).catch((err) => console.error('Session save error:', err));
+                        router.replace('/(tabs)/dashboard');
+                      }}
+                    >
+                      <Text style={[styles.captureOptionButtonText, { color: colors.text }]}>Later — getting to work</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={{ marginTop: 16, width: '100%' }}>
+                    <TextInput
+                      style={[
+                        styles.captureInput,
+                        { color: colors.text, borderColor: '#E53935', backgroundColor: colors.surface, marginHorizontal: 0 },
+                      ]}
+                      placeholder="Your answer..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={missionAnswerText}
+                      onChangeText={setMissionAnswerText}
+                      multiline
+                      autoFocus
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.confirmButton,
+                        { backgroundColor: missionAnswerText.trim() ? '#E53935' : colors.border, marginTop: 12 },
+                      ]}
+                      disabled={!missionAnswerText.trim()}
+                      onPress={async () => {
+                        // Save as a reflection tagged to North Star
+                        try {
+                          const supabase = getSupabaseClient();
+                          await supabase.from('0008-ap-reflections').insert({
+                            user_id: userId,
+                            content: `If I could be remembered for one thing: ${missionAnswerText.trim()}`,
+                            reflection_type: 'daily',
+                            date: new Date().toISOString().split('T')[0],
+                          });
+                          Alert.alert('Seed planted!', 'Your reflection has been saved. You can develop this into a mission statement in your Weekly Alignment.');
+                        } catch (err) {
+                          console.error('Save reflection error:', err);
+                        }
+                        // Complete the morning spark
+                        saveMorningSparkSession(userId, {
+                          fuel_level: fuelLevel || 2,
+                          fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
+                          screen_context: selectedRole || null,
+                          started_at: startedAt || new Date().toISOString(),
+                          completed_at: new Date().toISOString(),
+                        }).catch((err) => console.error('Session save error:', err));
+                        router.replace('/(tabs)/dashboard');
+                      }}
+                    >
+                      <Text style={styles.confirmButtonText}>Save & Go</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <Text style={[styles.ddCoachNote, { color: colors.textSecondary, marginTop: 16 }]}>
+                  You can explore this further in your Weekly Alignment under North Star.
+                </Text>
+              </View>
+            )}
 
             <TouchableOpacity
-              style={[styles.continueButton, { backgroundColor: STEPS[7].color }]}
+              style={[styles.sendoffButton, { backgroundColor: '#D4A843', marginHorizontal: 16, marginTop: 24 }]}
               onPress={() => {
-                if (missionTimerRef.current) clearTimeout(missionTimerRef.current);
-                setCurrentStep(8);
-                if (Platform.OS !== 'web') {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                }
+                // Save session with error handling and navigate
+                saveMorningSparkSession(userId, {
+                  fuel_level: fuelLevel || 2,
+                  fuel_reason: fuelLevel === 1 ? fuelWhy : fuelLevel === 3 ? fuel3Why : null,
+                  screen_context: selectedRole || null,
+                  started_at: startedAt || new Date().toISOString(),
+                  completed_at: new Date().toISOString(),
+                }).catch((err) => console.error('Session save error:', err));
+                router.replace('/(tabs)/dashboard');
               }}
             >
-              <Text style={styles.continueButtonText}>Continue</Text>
+              <Text style={styles.sendoffButtonText}>Go make it count</Text>
             </TouchableOpacity>
           </ScrollView>
-        );
-
-      // ======== STEP 8: Send-off ========
-      case 8:
-        return (
-          <View style={styles.centeredContent}>
-            {weeklyOneThing && (
-              <Text style={[styles.sendoffOneThing, { color: colors.textSecondary }]}>
-                This week: {weeklyOneThing}
-              </Text>
-            )}
-            <Text style={[styles.sendoffText, { color: colors.text }]}>Go make it count.</Text>
-            <TouchableOpacity
-              style={[styles.sendoffButton, { backgroundColor: '#D4A843' }]}
-              onPress={handleSendoff}
-            >
-              <Text style={styles.sendoffButtonText}>Let's go</Text>
-            </TouchableOpacity>
-          </View>
         );
 
       default:
@@ -1434,7 +1877,7 @@ export default function MorningSparkCompassScreen() {
       {/* Step Content */}
       <View style={styles.stepContent}>{renderStepContent()}</View>
 
-      {/* Bottom navigation bar — hidden on opening (auto-advance) and sendoff (has own button) */}
+      {/* Bottom navigation bar — hidden on opening (auto-advance) and last step */}
       {currentStep > 0 && currentStep < STEPS.length - 1 && (
         <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
           <TouchableOpacity
@@ -1448,11 +1891,29 @@ export default function MorningSparkCompassScreen() {
             style={[
               styles.navButton,
               styles.navButtonPrimary,
-              { backgroundColor: currentStepData.color },
+              { backgroundColor: currentStep === 6 ? '#4169E1' : currentStepData.color },
             ]}
-            onPress={goToNextStep}
+            onPress={async () => {
+              if (currentStep === 6) {
+                // Today's Plan — commit and complete
+                try {
+                  const allIds = [...Array.from(selectedTaskIds), ...Array.from(committedActionIds)];
+                  if (allIds.length > 0) {
+                    await commitTodaysTasks(userId, allIds);
+                  }
+                  handleSendoff();
+                } catch (err) {
+                  console.error('Commit failed:', err);
+                  handleSendoff();
+                }
+              } else {
+                goToNextStep();
+              }
+            }}
           >
-            <Text style={[styles.navButtonText, { color: '#FFFFFF' }]}>Next</Text>
+            <Text style={[styles.navButtonText, { color: '#FFFFFF' }]}>
+              {currentStep === 6 ? 'Complete' : 'Next'}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1662,6 +2123,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+
+  // Task sections
+  sectionHeader: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+    marginBottom: 6,
+    marginTop: 4,
+    paddingHorizontal: 4,
   },
 
   // Task selection
@@ -1913,6 +2385,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  ddCoachText: {
+    fontSize: 17,
+    lineHeight: 26,
+    textAlign: 'center',
+  },
+  ddCoachQuestion: {
+    fontSize: 18,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginTop: 16,
+    paddingHorizontal: 8,
+  },
+  ddCoachNote: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+
+  // Final Commitment Review
+  noEventsText: {
+    fontSize: 15,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  commitPrompt: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginHorizontal: 16,
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  commitConfirmText: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  commitConfirmSub: {
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  northStarQuestion: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 28,
+    lineHeight: 24,
+    paddingHorizontal: 20,
   },
 
   // Send-off

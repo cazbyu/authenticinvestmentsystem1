@@ -9,12 +9,69 @@
 import { getSupabaseClient } from '@/lib/supabase';
 import { toLocalISOString } from '@/lib/dateUtils';
 
+// ============ SHARED DATA FETCH ============
+
+export interface RoleWithKRs {
+  id: string;
+  label: string;
+  keyRelationships: Array<{ id: string; name: string }>;
+}
+
+export interface DomainItem {
+  id: string;
+  name: string;
+}
+
+/**
+ * Get all active roles for the user with their linked key relationships.
+ */
+export async function getAllRolesWithKRs(userId: string): Promise<RoleWithKRs[]> {
+  const supabase = getSupabaseClient();
+
+  const { data: roles } = await supabase
+    .from('0008-ap-roles')
+    .select('id, label')
+    .eq('user_id', userId);
+
+  if (!roles || roles.length === 0) return [];
+
+  const roleIds = roles.map((r: any) => r.id);
+
+  const { data: krs } = await supabase
+    .from('0008-ap-key-relationships')
+    .select('id, name, role_id')
+    .eq('user_id', userId)
+    .in('role_id', roleIds);
+
+  return roles.map((role: any) => ({
+    id: role.id,
+    label: role.label,
+    keyRelationships: (krs || [])
+      .filter((kr: any) => kr.role_id === role.id)
+      .map((kr: any) => ({ id: kr.id, name: kr.name })),
+  }));
+}
+
+/**
+ * Get all active domains (wellness zones) for the user.
+ */
+export async function getAllDomains(): Promise<DomainItem[]> {
+  const supabase = getSupabaseClient();
+  const { data } = await supabase
+    .from('0008-ap-domains')
+    .select('id, name');
+  return (data || []).map((d: any) => ({ id: d.id, name: d.name }));
+}
+
 // ============ TYPES ============
 
 export interface ReconciliationTask {
   id: string;
   title: string;
   status: string;
+  roles: Array<{ id: string; label: string }>;
+  domains: Array<{ id: string; label: string }>;
+  goal_title: string | null;
 }
 
 export interface RolePulseRole {
@@ -50,7 +107,7 @@ export interface EveningReviewSessionData {
 // ============ TASK RECONCILIATION ============
 
 /**
- * Get today's committed tasks (one_thing = true).
+ * Get today's committed tasks from ritual-committed-tasks join table.
  * These are the tasks the user committed to during Morning Spark.
  */
 export async function getTodaysCommittedTasks(
@@ -59,24 +116,90 @@ export async function getTodaysCommittedTasks(
   const supabase = getSupabaseClient();
   const today = toLocalISOString(new Date()).split('T')[0];
 
-  const { data, error } = await supabase
-    .from('0008-ap-tasks')
-    .select('id, title, status')
+  // 1. Get committed task IDs from join table
+  const { data: committedRows, error: commitError } = await supabase
+    .from('0008-ap-ritual-committed-tasks')
+    .select('task_id')
     .eq('user_id', userId)
-    .eq('one_thing', true)
-    .is('deleted_at', null)
-    .gte('updated_at', `${today}T00:00:00`)
-    .lt('updated_at', `${today}T23:59:59.999`);
+    .eq('committed_date', today);
 
-  if (error) {
-    console.error('[EveningReview] Error fetching committed tasks:', error);
+  if (commitError) {
+    console.error('[EveningReview] Error fetching committed task IDs:', commitError);
     return [];
   }
 
-  return (data || []).map((row) => ({
+  const taskIds = (committedRows || []).map((r: { task_id: string }) => r.task_id);
+  if (taskIds.length === 0) return [];
+
+  // 2. Fetch task details
+  const { data, error } = await supabase
+    .from('0008-ap-tasks')
+    .select('id, title, status')
+    .in('id', taskIds)
+    .is('deleted_at', null);
+
+  if (error) {
+    console.error('[EveningReview] Error fetching task details:', error);
+    return [];
+  }
+
+  const fetchedTaskIds = (data || []).map((r: any) => r.id);
+  if (fetchedTaskIds.length === 0) return [];
+
+  // 3. Fetch roles, domains, goals for all tasks
+  const [rolesR, domainsR, goalsR] = await Promise.all([
+    supabase.from('0008-ap-universal-roles-join').select('parent_id, role_id').in('parent_id', fetchedTaskIds).eq('parent_type', 'task'),
+    supabase.from('0008-ap-universal-domains-join').select('parent_id, domain_id').in('parent_id', fetchedTaskIds).eq('parent_type', 'task'),
+    supabase.from('0008-ap-universal-goals-join').select('parent_id, twelve_wk_goal_id, custom_goal_id').in('parent_id', fetchedTaskIds).eq('parent_type', 'task'),
+  ]);
+
+  // Label lookups
+  const roleIds = [...new Set((rolesR.data || []).map((r: any) => r.role_id))];
+  const domainIds = [...new Set((domainsR.data || []).map((d: any) => d.domain_id))];
+  const twGoalIds = [...new Set((goalsR.data || []).filter((g: any) => g.twelve_wk_goal_id).map((g: any) => g.twelve_wk_goal_id))];
+  const customGoalIds = [...new Set((goalsR.data || []).filter((g: any) => g.custom_goal_id).map((g: any) => g.custom_goal_id))];
+
+  const [rLabels, dLabels, twGLabels, cGLabels] = await Promise.all([
+    roleIds.length > 0 ? supabase.from('0008-ap-roles').select('id, label').in('id', roleIds) : { data: [] },
+    domainIds.length > 0 ? supabase.from('0008-ap-domains').select('id, name').in('id', domainIds) : { data: [] },
+    twGoalIds.length > 0 ? supabase.from('0008-ap-goals-12wk').select('id, title').in('id', twGoalIds) : { data: [] },
+    customGoalIds.length > 0 ? supabase.from('0008-ap-goals-custom').select('id, title').in('id', customGoalIds) : { data: [] },
+  ]);
+
+  const roleLabelMap = new Map((rLabels.data || []).map((r: any) => [r.id, r.label]));
+  const domainLabelMap = new Map((dLabels.data || []).map((d: any) => [d.id, d.name]));
+  const goalTitleMap = new Map<string, string>();
+  for (const g of twGLabels.data || []) goalTitleMap.set(g.id, g.title);
+  for (const g of cGLabels.data || []) goalTitleMap.set(g.id, g.title);
+
+  const taskRolesMap = new Map<string, Array<{ id: string; label: string }>>();
+  const taskDomainsMap = new Map<string, Array<{ id: string; label: string }>>();
+  const taskGoalMap = new Map<string, string>();
+
+  for (const r of rolesR.data || []) {
+    const arr = taskRolesMap.get(r.parent_id) || [];
+    arr.push({ id: r.role_id, label: roleLabelMap.get(r.role_id) || '' });
+    taskRolesMap.set(r.parent_id, arr);
+  }
+  for (const d of domainsR.data || []) {
+    const arr = taskDomainsMap.get(d.parent_id) || [];
+    arr.push({ id: d.domain_id, label: domainLabelMap.get(d.domain_id) || '' });
+    taskDomainsMap.set(d.parent_id, arr);
+  }
+  for (const gj of goalsR.data || []) {
+    const goalId = gj.twelve_wk_goal_id || gj.custom_goal_id;
+    if (goalId && goalTitleMap.has(goalId)) {
+      taskGoalMap.set(gj.parent_id, goalTitleMap.get(goalId)!);
+    }
+  }
+
+  return (data || []).map((row: any) => ({
     id: row.id,
     title: row.title,
     status: row.status,
+    roles: taskRolesMap.get(row.id) || [],
+    domains: taskDomainsMap.get(row.id) || [],
+    goal_title: taskGoalMap.get(row.id) || null,
   }));
 }
 

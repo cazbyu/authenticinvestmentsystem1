@@ -496,6 +496,91 @@ export function EditGoalModal({
         console.log('[EditGoalModal] Added key relationships:', keyRelsToAdd.length);
       }
 
+      // 4b. Propagate roles/domains/KRs to all linked tasks
+      // Find all tasks linked to this goal
+      const goalIdCol = parentType === 'twelve_wk_goal' ? 'twelve_wk_goal_id' : 'custom_goal_id';
+      const { data: linkedTasks } = await supabase
+        .from('0008-ap-universal-goals-join')
+        .select('parent_id')
+        .eq(goalIdCol, goal.id)
+        .eq('parent_type', 'task');
+
+      const linkedTaskIds = (linkedTasks || []).map((t: any) => t.parent_id);
+
+      if (linkedTaskIds.length > 0) {
+        // For each NEW role added to the goal, add to linked tasks (skip if already exists)
+        if (rolesToAdd.length > 0) {
+          // Get existing task-role combos to avoid duplicates
+          const { data: existingTaskRoles } = await supabase
+            .from('0008-ap-universal-roles-join')
+            .select('parent_id, role_id')
+            .in('parent_id', linkedTaskIds)
+            .eq('parent_type', 'task')
+            .in('role_id', rolesToAdd);
+          const existingRoleSet = new Set((existingTaskRoles || []).map((r: any) => `${r.parent_id}:${r.role_id}`));
+
+          const roleInserts: any[] = [];
+          for (const roleId of rolesToAdd) {
+            for (const taskId of linkedTaskIds) {
+              if (!existingRoleSet.has(`${taskId}:${roleId}`)) {
+                roleInserts.push({ parent_id: taskId, parent_type: 'task', role_id: roleId, user_id: user.id });
+              }
+            }
+          }
+          if (roleInserts.length > 0) {
+            await supabase.from('0008-ap-universal-roles-join').insert(roleInserts);
+          }
+        }
+
+        // For each NEW domain added to the goal, add to linked tasks
+        if (domainsToAdd.length > 0) {
+          const { data: existingTaskDomains } = await supabase
+            .from('0008-ap-universal-domains-join')
+            .select('parent_id, domain_id')
+            .in('parent_id', linkedTaskIds)
+            .eq('parent_type', 'task')
+            .in('domain_id', domainsToAdd);
+          const existingDomainSet = new Set((existingTaskDomains || []).map((d: any) => `${d.parent_id}:${d.domain_id}`));
+
+          const domainInserts: any[] = [];
+          for (const domainId of domainsToAdd) {
+            for (const taskId of linkedTaskIds) {
+              if (!existingDomainSet.has(`${taskId}:${domainId}`)) {
+                domainInserts.push({ parent_id: taskId, parent_type: 'task', domain_id: domainId, user_id: user.id });
+              }
+            }
+          }
+          if (domainInserts.length > 0) {
+            await supabase.from('0008-ap-universal-domains-join').insert(domainInserts);
+          }
+        }
+
+        // For each NEW KR added to the goal, add to linked tasks
+        if (keyRelsToAdd.length > 0) {
+          const { data: existingTaskKRs } = await supabase
+            .from('0008-ap-universal-key-relationships-join')
+            .select('parent_id, key_relationship_id')
+            .in('parent_id', linkedTaskIds)
+            .eq('parent_type', 'task')
+            .in('key_relationship_id', keyRelsToAdd);
+          const existingKRSet = new Set((existingTaskKRs || []).map((k: any) => `${k.parent_id}:${k.key_relationship_id}`));
+
+          const krInserts: any[] = [];
+          for (const krId of keyRelsToAdd) {
+            for (const taskId of linkedTaskIds) {
+              if (!existingKRSet.has(`${taskId}:${krId}`)) {
+                krInserts.push({ parent_id: taskId, parent_type: 'task', key_relationship_id: krId, user_id: user.id });
+              }
+            }
+          }
+          if (krInserts.length > 0) {
+            await supabase.from('0008-ap-universal-key-relationships-join').insert(krInserts);
+          }
+        }
+
+        console.log(`[EditGoalModal] Propagated goal changes to ${linkedTaskIds.length} linked tasks`);
+      }
+
       // 5. Add new note with attachments if provided
       if (newNoteText.trim() || newNoteAttachments.length > 0) {
         // Create the note in 0008-ap-notes

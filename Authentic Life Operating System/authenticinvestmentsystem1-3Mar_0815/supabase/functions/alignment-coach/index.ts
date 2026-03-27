@@ -1552,6 +1552,60 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing required field: user_state");
     }
 
+    // ---- Capture Analysis: special mode for Development Director ----
+    if (trigger === "capture_analysis" && messages && messages.length >= 2) {
+      // Extract system prompt and user message from messages array
+      const sysMsg = messages.find((m: any) => m.role === "system");
+      const userMsgs = messages.filter((m: any) => m.role === "user");
+
+      const captureSystemPrompt = sysMsg?.content || "You are a helpful assistant. Analyze the user input and return JSON.";
+      const captureMessages = userMsgs.map((m: any) => ({ role: "user" as const, content: m.content }));
+
+      const captureResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-haiku-20241022",
+          max_tokens: 1500,
+          system: captureSystemPrompt,
+          messages: captureMessages,
+        }),
+      });
+
+      const captureData = await captureResponse.json();
+
+      if (captureData.error) {
+        throw new Error(captureData.error.message || "Claude API error in capture analysis");
+      }
+
+      const captureText = (captureData.content || [])
+        .filter((block: any) => block.type === "text")
+        .map((block: any) => block.text)
+        .join("\n");
+
+      return new Response(
+        JSON.stringify({
+          text: captureText,
+          tone: "reflect",
+          captures: [],
+          model: "claude-3-5-haiku-20241022",
+          usage: captureData.usage,
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    // ---- Standard coaching flow ----
+
     // Build system prompt
     const systemPrompt = buildSystemPrompt(
       mode,

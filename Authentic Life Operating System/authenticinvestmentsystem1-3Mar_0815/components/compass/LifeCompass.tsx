@@ -235,26 +235,26 @@ export function LifeCompass({
 
   const playMorningSparkCeremony = useCallback(() => {
     // Morning Spark: spin both spindles to South (180°)
-    // Phase 1: Free spin (1.5 seconds)
+    // Phase 1: Free spin (slowed 75% — 6 seconds)
     goldCeremonyRotation.value = withTiming(540, {
-      duration: 1500,
+      duration: 6000,
       easing: Easing.linear,
     });
 
     silverCeremonyRotation.value = withTiming(-720, {
-      duration: 1500,
+      duration: 6000,
       easing: Easing.linear,
     }, () => {
-      // Phase 2: Decelerate to South/180° (0.8 seconds)
+      // Phase 2: Decelerate to South/180° (3.2 seconds)
       goldCeremonyRotation.value = withTiming(540, {
-        duration: 800,
+        duration: 3200,
         easing: Easing.out(Easing.cubic),
       }, () => {
         runOnJS(handleCeremonyComplete)();
       });
 
       silverCeremonyRotation.value = withTiming(-720, {
-        duration: 900,
+        duration: 3600,
         easing: Easing.out(Easing.cubic),
       });
     });
