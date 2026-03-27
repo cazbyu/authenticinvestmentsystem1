@@ -11,7 +11,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
 import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
 import TaskEventForm from '@/components/tasks/TaskEventForm';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { completeTask } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
@@ -206,11 +206,11 @@ export default function TodayScreen() {
         onDelete={async (task) => {
           try {
             const supabase = getSupabaseClient();
-            await supabase.from('0008-ap-tasks').update({ archived: true }).eq('id', task.id);
+            await supabase.from('0008-ap-tasks').update({ deleted_at: toLocalISOString(new Date()) }).eq('id', task.id);
             fetchTodayItems();
             setDetailModalVisible(false);
           } catch (error) {
-            console.error('Error archiving task:', error);
+            console.error('Error deleting task:', error);
           }
         }}
       />

@@ -1,0 +1,3 @@
+-- Migration: frosty_sea (recovered from remote)
+-- Originally applied: 2025-06-10
+-- Empty/no-op migration
