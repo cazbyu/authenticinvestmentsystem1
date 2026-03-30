@@ -115,8 +115,7 @@ export interface UniversalGoalJoin {
   parent_type: string;
   parent_id: string;
   goal_type: 'twelve_wk_goal' | 'custom_goal';
-  twelve_wk_goal_id?: string;
-  custom_goal_id?: string;
+  goal_id: string;
   created_at: string;
 }
 
@@ -480,8 +479,7 @@ export function useGoals(options: UseGoalsOptions = {}) {
   const createTaskWithWeekPlan = async (taskData: {
     title: string;
     description?: string;
-    twelve_wk_goal_id?: string;
-    custom_goal_id?: string;
+    goal_id?: string;
     goal_type?: 'twelve_wk_goal' | 'custom_goal';
     recurrenceRule?: string;
     selectedRoleIds?: string[];
@@ -600,15 +598,13 @@ export function useGoals(options: UseGoalsOptions = {}) {
       if (weekPlanError) throw weekPlanError;
 
       // Link to goal with conditional goal FK
-      if (taskData.twelve_wk_goal_id || taskData.custom_goal_id) {
+      if (taskData.goal_id) {
         const goalJoinPayload: any = {
           parent_id: taskId,
           parent_type: 'task',
           user_id: user.id,
-          // Conditional goal FK and type injection
+          goal_id: taskData.goal_id,
           goal_type: taskData.goal_type || (timeline.source === 'global' ? 'twelve_wk_goal' : 'custom_goal'),
-          twelve_wk_goal_id: taskData.twelve_wk_goal_id || null,
-          custom_goal_id: taskData.custom_goal_id || null,
         };
 
         const { error: goalJoinError } = await supabase
