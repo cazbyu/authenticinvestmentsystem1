@@ -20,4 +20,9 @@ config.resolver.sourceExts = [...resolver.sourceExts, 'svg'];
 config.resolver.assetExts = resolver.assetExts.filter((ext) => ext !== 'svg').concat('css');
 config.resolver.platforms = ['web', 'ios', 'android'];
 
+// Exclude stale worktree directories from Metro's file watcher
+config.resolver.blockList = [
+  /\.claude[\\/]worktrees[\\/].*/,
+];
+
 module.exports = config;
