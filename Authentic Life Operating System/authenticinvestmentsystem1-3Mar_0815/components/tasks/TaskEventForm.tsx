@@ -1534,9 +1534,8 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
   const goalJoins = formData.selectedGoalIds.map(goalId => ({
     parent_id: mainRecordId,
     parent_type: parentType,
+    goal_id: goalId,
     goal_type: selectedGoal?.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
-    twelve_wk_goal_id: selectedGoal?.goal_type === '12week' ? goalId : null,
-    custom_goal_id: selectedGoal?.goal_type === 'custom' ? goalId : null,
     user_id: user.id,
   }));
   joinPromises.push(supabase.from('0008-ap-universal-goals-join').insert(goalJoins));

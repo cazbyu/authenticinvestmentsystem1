@@ -679,7 +679,7 @@ useEffect(() => {
         const { data: goalJoins, error: joinError } = await supabase
           .from('0008-ap-universal-goals-join')
           .select('parent_id')
-          .in('twelve_wk_goal_id', childGoalIds)
+          .in('goal_id', childGoalIds)
           .eq('parent_type', 'deposit_idea');
 
         if (joinError) throw joinError;
@@ -687,14 +687,10 @@ useEffect(() => {
         ideaIds = goalJoins?.map(j => j.parent_id).filter(Boolean) || [];
       } else {
         // Original logic for 12week and custom goals
-        const goalJoinColumn = currentGoal.goal_type === '12week'
-          ? 'twelve_wk_goal_id'
-          : 'custom_goal_id';
-
         const { data: goalJoins, error: joinError } = await supabase
           .from('0008-ap-universal-goals-join')
           .select('parent_id')
-          .eq(goalJoinColumn, currentGoal.id)
+          .eq('goal_id', currentGoal.id)
           .eq('parent_type', 'deposit_idea');
 
         if (joinError) throw joinError;
@@ -786,21 +782,17 @@ useEffect(() => {
           const result = await supabase
             .from('0008-ap-universal-goals-join')
             .select('parent_id, parent_type')
-            .in('twelve_wk_goal_id', childGoalIds);
+            .in('goal_id', childGoalIds);
           goalJoins = result.data;
           joinError = result.error;
         } else {
           goalJoins = [];
         }
       } else {
-        const goalJoinColumn = currentGoal.goal_type === '12week'
-          ? 'twelve_wk_goal_id'
-          : 'custom_goal_id';
-
         const result = await supabase
           .from('0008-ap-universal-goals-join')
           .select('parent_id, parent_type')
-          .eq(goalJoinColumn, currentGoal.id);
+          .eq('goal_id', currentGoal.id);
         goalJoins = result.data;
         joinError = result.error;
       }
@@ -974,16 +966,14 @@ useEffect(() => {
                 return;
               }
 
-              const goalJoinColumn = currentGoal.goal_type === '12week'
-                ? 'twelve_wk_goal_id'
-                : 'custom_goal_id';
-
       const { error: joinError } = await supabase
         .from('0008-ap-universal-goals-join')
         .insert({
-          [goalJoinColumn]: currentGoal.id,
+          goal_id: currentGoal.id,
+          goal_type: currentGoal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
           parent_id: ideaData.id,
           parent_type: 'deposit_idea',
+          user_id: user.id,
         });
 
       if (joinError) throw joinError;
@@ -1090,17 +1080,14 @@ useEffect(() => {
         return;
       }
 
-      const goalJoinColumn = currentGoal.goal_type === '12week'
-        ? 'twelve_wk_goal_id'
-        : 'custom_goal_id';
-
               const { error: joinError } = await supabase
                 .from('0008-ap-universal-goals-join')
                 .insert({
                   parent_id: newTask.id,
                   parent_type: 'task',
-                  [goalJoinColumn]: currentGoal.id,
-                  created_at: toLocalISOString(new Date()),
+                  goal_id: currentGoal.id,
+                  goal_type: currentGoal.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
+                  user_id: user.id,
                 });
 
               if (joinError) throw joinError;

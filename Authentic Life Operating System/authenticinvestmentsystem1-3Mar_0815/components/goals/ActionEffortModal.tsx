@@ -653,8 +653,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       const taskData: any = {
         title: title.trim(),
         description: notes.trim() || undefined,
-        twelve_wk_goal_id: goal?.goal_type === '12week' ? goal.id : undefined,
-        custom_goal_id: goal?.goal_type === 'custom' ? goal.id : undefined,
+        goal_id: goal?.id,
         goal_type: goal?.goal_type === '12week' ? 'twelve_wk_goal' : 'custom_goal',
         recurrenceRule,
         selectedRoleIds,
@@ -686,8 +685,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         goal_id: goal?.id,
         goal_title: goal?.title,
         goal_type: goal?.goal_type,
-        twelve_wk_goal_id: taskData.twelve_wk_goal_id,
-        custom_goal_id: taskData.custom_goal_id
+        goal_id: taskData.goal_id,
       });
 
       if (recurrenceType === 'custom' && !isAnytime) {
