@@ -1,5 +1,6 @@
 // hooks/fetchPlannedActionsForWeek.ts
 import { getSupabaseClient } from '@/lib/supabase';
+import { fetchGoalsForJoinRows } from '@/lib/taskUtils';
 
 // Inline date formatter (YYYY-MM-DD in local time)
 function formatLocalDate(date: Date): string {
@@ -349,15 +350,11 @@ async function fetchLeadingIndicators(
     // Get goal associations for these tasks
     const { data: goalJoins } = await supabase
       .from('0008-ap-universal-goals-join')
-      .select(`
-        parent_id,
-        twelve_wk_goal_id,
-        custom_goal_id,
-        goal_12wk:0008-ap-goals-12wk(id, title),
-        goal_custom:0008-ap-goals-custom(id, title)
-      `)
+      .select('parent_id, goal_id, goal_type')
       .in('parent_id', taskIds)
       .eq('parent_type', 'task');
+
+    const goalsById = await fetchGoalsForJoinRows(supabase, goalJoins || []);
 
     // Count completed occurrences for each task this week (using recurrence-expanded view)
     const { data: completedOccurrences, error: occError } = await supabase
@@ -382,8 +379,9 @@ async function fetchLeadingIndicators(
     // Build action summaries
     const actions: LeadingIndicatorSummary[] = validPlans.map((wp: any) => {
       const goalJoin = goalJoins?.find((gj: any) => gj.parent_id === wp.task_id);
-      const goalId = goalJoin?.twelve_wk_goal_id || goalJoin?.custom_goal_id || '';
-      const goalTitle = goalJoin?.goal_12wk?.title || goalJoin?.goal_custom?.title;
+      const goal = goalJoin ? goalsById.get(goalJoin.goal_id) : undefined;
+      const goalId = goalJoin?.goal_id || '';
+      const goalTitle = goal?.title;
 
       return {
         id: wp.task_id,
@@ -433,67 +431,97 @@ async function fetchBoostActions(
 
     if (timeline.source === 'global') {
       // Query boost actions linked to 12-week goals on this timeline
-      const { data, error } = await supabase
-        .from('0008-ap-tasks')
-        .select(`
-          id,
-          title,
-          due_date,
-          status,
-          goal_join:0008-ap-universal-goals-join!inner(
-            twelve_wk_goal_id,
-            goal:0008-ap-goals-12wk!inner(
-              id,
-              title,
-              user_global_timeline_id
-            )
-          )
-        `)
-        .eq('user_id', userId)
-        .is('recurrence_rule', null)
-        .is('parent_task_id', null)
-        .is('deleted_at', null)
-        .neq('status', 'cancelled')
-        .gte('due_date', week.startDate)
-        .lte('due_date', week.endDate)
-        .eq('goal_join.goal.user_global_timeline_id', timeline.id);
+      // Step 1: Get 12wk goals on this timeline
+      const { data: timelineGoals } = await supabase
+        .from('0008-ap-goals-12wk')
+        .select('id, title')
+        .eq('user_global_timeline_id', timeline.id);
 
-      if (error) {
-        console.error('[fetchBoostActions] Error fetching global boost tasks:', error);
-      } else {
-        boostTasks = data || [];
+      const goalIds = (timelineGoals || []).map((g: any) => g.id);
+      if (goalIds.length > 0) {
+        // Step 2: Get task IDs linked to these goals
+        const { data: joins } = await supabase
+          .from('0008-ap-universal-goals-join')
+          .select('parent_id, goal_id')
+          .in('goal_id', goalIds)
+          .eq('parent_type', 'task')
+          .eq('goal_type', 'twelve_wk_goal');
+
+        const linkedTaskIds = [...new Set((joins || []).map((j: any) => j.parent_id))];
+        if (linkedTaskIds.length > 0) {
+          // Step 3: Fetch the tasks
+          const { data, error } = await supabase
+            .from('0008-ap-tasks')
+            .select('id, title, due_date, status')
+            .in('id', linkedTaskIds)
+            .eq('user_id', userId)
+            .is('recurrence_rule', null)
+            .is('parent_task_id', null)
+            .is('deleted_at', null)
+            .neq('status', 'cancelled')
+            .gte('due_date', week.startDate)
+            .lte('due_date', week.endDate);
+
+          if (error) {
+            console.error('[fetchBoostActions] Error fetching global boost tasks:', error);
+          } else {
+            // Attach goal info to each task
+            const goalLookup = new Map((timelineGoals || []).map((g: any) => [g.id, g]));
+            const joinLookup = new Map((joins || []).map((j: any) => [j.parent_id, j.goal_id]));
+            boostTasks = (data || []).map((t: any) => {
+              const gId = joinLookup.get(t.id);
+              const goal = gId ? goalLookup.get(gId) : undefined;
+              return { ...t, goal_join: { goal } };
+            });
+          }
+        }
       }
     } else {
       // Query boost actions linked to custom goals on this timeline
-      const { data, error } = await supabase
-        .from('0008-ap-tasks')
-        .select(`
-          id,
-          title,
-          due_date,
-          status,
-          goal_join:0008-ap-universal-goals-join!inner(
-            custom_goal_id,
-            goal:0008-ap-goals-custom!inner(
-              id,
-              title,
-              custom_timeline_id
-            )
-          )
-        `)
-        .eq('user_id', userId)
-        .is('recurrence_rule', null)
-        .is('parent_task_id', null)
-        .is('deleted_at', null)
-        .neq('status', 'cancelled')
-        .gte('due_date', week.startDate)
-        .lte('due_date', week.endDate)
-        .eq('goal_join.goal.custom_timeline_id', timeline.id);
+      // Step 1: Get custom goals on this timeline
+      const { data: timelineGoals } = await supabase
+        .from('0008-ap-goals-custom')
+        .select('id, title')
+        .eq('custom_timeline_id', timeline.id);
 
-      if (error) {
-        console.error('[fetchBoostActions] Error fetching custom boost tasks:', error);
-      } else {
-        boostTasks = data || [];
+      const goalIds = (timelineGoals || []).map((g: any) => g.id);
+      if (goalIds.length > 0) {
+        // Step 2: Get task IDs linked to these goals
+        const { data: joins } = await supabase
+          .from('0008-ap-universal-goals-join')
+          .select('parent_id, goal_id')
+          .in('goal_id', goalIds)
+          .eq('parent_type', 'task')
+          .eq('goal_type', 'custom_goal');
+
+        const linkedTaskIds = [...new Set((joins || []).map((j: any) => j.parent_id))];
+        if (linkedTaskIds.length > 0) {
+          // Step 3: Fetch the tasks
+          const { data, error } = await supabase
+            .from('0008-ap-tasks')
+            .select('id, title, due_date, status')
+            .in('id', linkedTaskIds)
+            .eq('user_id', userId)
+            .is('recurrence_rule', null)
+            .is('parent_task_id', null)
+            .is('deleted_at', null)
+            .neq('status', 'cancelled')
+            .gte('due_date', week.startDate)
+            .lte('due_date', week.endDate);
+
+          if (error) {
+            console.error('[fetchBoostActions] Error fetching custom boost tasks:', error);
+          } else {
+            // Attach goal info to each task
+            const goalLookup = new Map((timelineGoals || []).map((g: any) => [g.id, g]));
+            const joinLookup = new Map((joins || []).map((j: any) => [j.parent_id, j.goal_id]));
+            boostTasks = (data || []).map((t: any) => {
+              const gId = joinLookup.get(t.id);
+              const goal = gId ? goalLookup.get(gId) : undefined;
+              return { ...t, goal_join: { goal } };
+            });
+          }
+        }
       }
     }
 

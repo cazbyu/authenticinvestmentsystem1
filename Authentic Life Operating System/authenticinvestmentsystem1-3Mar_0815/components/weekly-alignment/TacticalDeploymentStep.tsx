@@ -247,7 +247,7 @@ export function TacticalDeploymentStep({
             .in('parent_id', allIds),
           supabase
             .from('0008-ap-universal-goals-join')
-            .select('parent_id, twelve_wk_goal_id, custom_goal_id')
+            .select('parent_id, goal_id, goal_type')
             .in('parent_id', allIds),
           supabase
             .from('0008-ap-universal-delegates-join')
@@ -264,10 +264,10 @@ export function TacticalDeploymentStep({
       const roleIds = [...new Set(roleJoins.map((r: any) => r.role_id).filter(Boolean))];
       const domainIds = [...new Set(domainJoins.map((d: any) => d.domain_id).filter(Boolean))];
       const goalIds12 = [
-        ...new Set(goalJoins.map((g: any) => g.twelve_wk_goal_id).filter(Boolean)),
+        ...new Set(goalJoins.filter((g: any) => g.goal_type === 'twelve_wk_goal').map((g: any) => g.goal_id).filter(Boolean)),
       ];
       const goalIdsCustom = [
-        ...new Set(goalJoins.map((g: any) => g.custom_goal_id).filter(Boolean)),
+        ...new Set(goalJoins.filter((g: any) => g.goal_type === 'custom_goal').map((g: any) => g.goal_id).filter(Boolean)),
       ];
       const delegateIdsList = [
         ...new Set(delegateJoins.map((d: any) => d.delegate_id).filter(Boolean)),
@@ -329,8 +329,7 @@ export function TacticalDeploymentStep({
       const goalsByParent = new Map<string, any[]>();
       for (const gj of goalJoins) {
         const list = goalsByParent.get(gj.parent_id) || [];
-        const goal =
-          goalsById.get(gj.twelve_wk_goal_id) || goalsById.get(gj.custom_goal_id);
+        const goal = goalsById.get(gj.goal_id);
         if (goal) list.push(goal);
         goalsByParent.set(gj.parent_id, list);
       }
