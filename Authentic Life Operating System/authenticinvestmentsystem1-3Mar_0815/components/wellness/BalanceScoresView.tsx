@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch, Platform } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChartErrorBoundary } from './ChartErrorBoundary';
-import { calculateTaskPoints } from '@/lib/taskUtils';
+import { calculateTaskPoints, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 
 const BalanceWheelChart = lazy(() => import('./BalanceWheelChart').then(module => ({ default: module.BalanceWheelChart })));
@@ -122,14 +122,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
           .eq('parent_type', 'task'),
         supabase
           .from('0008-ap-universal-goals-join')
-          .select(`
-            parent_id,
-            goal_type,
-            twelve_wk_goal_id,
-            custom_goal_id,
-            tw:0008-ap-goals-12wk(id,title,status),
-            cg:0008-ap-goals-custom(id,title,status)
-          `)
+          .select('parent_id, goal_id, goal_type')
           .in('parent_id', taskIds)
           .eq('parent_type', 'task'),
       ]);
@@ -137,6 +130,7 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
       const taskRoles = rolesRes.data ?? [];
       const taskDomains = domainsRes.data ?? [];
       const taskGoals = goalsRes.data ?? [];
+      const goalsById = await fetchGoalsForJoinRows(supabase, taskGoals);
 
       const allowedTaskIds = new Set(
         taskDomains
@@ -165,20 +159,9 @@ export function BalanceScoresView({ getDomainColor }: BalanceScoresViewProps) {
         const roles = (rolesByTask.get(t.id) ?? []).map((r: any) => r.role).filter(Boolean);
         const domains = (domainsByTask.get(t.id) ?? []).map((d: any) => d.domain).filter(Boolean);
         const goals = (goalsByTask.get(t.id) ?? []).map((g: any) => {
-          if (g.goal_type === 'twelve_wk_goal' && g.tw) {
-            const goal = g.tw;
-            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-              return null;
-            }
-            return { ...goal, goal_type: '12week' };
-          } else if (g.goal_type === 'custom_goal' && g.cg) {
-            const goal = g.cg;
-            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-              return null;
-            }
-            return { ...goal, goal_type: 'custom' };
-          }
-          return null;
+          const goal = goalsById.get(g.goal_id);
+          if (!goal || goal.status === 'archived' || goal.status === 'cancelled') return null;
+          return goal;
         }).filter(Boolean);
 
         const points = calculateTaskPoints(t, roles, domains, goals);

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
 import { SquareCheck, BookOpen, Calendar, FileText } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { calculateTaskPoints } from '@/lib/taskUtils';
+import { calculateTaskPoints, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';
 import { fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
 import { formatLocalDate } from '@/lib/dateUtils';
@@ -232,14 +232,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
             .eq('parent_type', 'task'),
           supabase
             .from('0008-ap-universal-goals-join')
-            .select(`
-              parent_id,
-              goal_type,
-              twelve_wk_goal_id,
-              custom_goal_id,
-              tw:0008-ap-goals-12wk(id,title,status),
-              cg:0008-ap-goals-custom(id,title,status)
-            `)
+            .select('parent_id, goal_id, goal_type')
             .in('parent_id', taskIds)
             .eq('parent_type', 'task'),
         ]);
@@ -249,6 +242,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         const taskKeyRels = keyRelsRes.data ?? [];
         const taskNotes = notesRes.data ?? [];
         const taskGoals = goalsRes.data ?? [];
+        const goalsById = await fetchGoalsForJoinRows(supabase, taskGoals);
 
         let allowedTaskIds = new Set(taskIds);
         if (scope.type !== 'user' && scope.id) {
@@ -289,20 +283,9 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
             .filter(Boolean);
           const notes = (notesByTask.get(t.id) ?? []).map((n: any) => n.note).filter(Boolean);
           const goals = (goalsByTask.get(t.id) ?? []).map((g: any) => {
-            if (g.goal_type === 'twelve_wk_goal' && g.tw) {
-              const goal = g.tw;
-              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                return null;
-              }
-              return { ...goal, goal_type: '12week' };
-            } else if (g.goal_type === 'custom_goal' && g.cg) {
-              const goal = g.cg;
-              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                return null;
-              }
-              return { ...goal, goal_type: 'custom' };
-            }
-            return null;
+            const goal = goalsById.get(g.goal_id);
+            if (!goal || goal.status === 'archived' || goal.status === 'cancelled') return null;
+            return goal;
           }).filter(Boolean);
 
           const source_data = { ...t, roles, domains, keyRelationships, notes, goals };
