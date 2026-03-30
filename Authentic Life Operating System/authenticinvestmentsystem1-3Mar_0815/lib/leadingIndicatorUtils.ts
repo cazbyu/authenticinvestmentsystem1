@@ -160,13 +160,10 @@ export async function fetchLeadingIndicatorsForToday(
     // ------------------------------------------------------------------
     // 2. Get goal joins linking tasks to these goals
     // ------------------------------------------------------------------
-    const twelveWkFilter = `twelve_wk_goal_id.in.(${allGoalIds.join(',')})`;
-    const customFilter = `custom_goal_id.in.(${allGoalIds.join(',')})`;
-
     const { data: goalJoins, error: joinsErr } = await supabase
       .from('0008-ap-universal-goals-join')
-      .select('parent_id, twelve_wk_goal_id, custom_goal_id, goal_type')
-      .or(`${twelveWkFilter},${customFilter}`)
+      .select('parent_id, goal_id, goal_type')
+      .in('goal_id', allGoalIds)
       .eq('parent_type', 'task');
 
     if (joinsErr) {
@@ -304,12 +301,11 @@ export async function fetchLeadingIndicatorsForToday(
       let goalTitle: string;
       let goalType: '12week' | 'custom';
 
-      if (join.goal_type === 'twelve_wk_goal' && join.twelve_wk_goal_id) {
-        goalId = join.twelve_wk_goal_id;
+      goalId = join.goal_id;
+      if (join.goal_type === 'twelve_wk_goal') {
         goalTitle = goalMap12wk.get(goalId) ?? 'Untitled Goal';
         goalType = '12week';
-      } else if (join.custom_goal_id) {
-        goalId = join.custom_goal_id;
+      } else if (join.goal_type === 'custom_goal') {
         goalTitle = goalMapCustom.get(goalId) ?? 'Untitled Goal';
         goalType = 'custom';
       } else {

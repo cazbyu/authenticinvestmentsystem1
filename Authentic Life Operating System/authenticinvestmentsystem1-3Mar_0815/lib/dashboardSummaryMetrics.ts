@@ -1,5 +1,5 @@
 import { getSupabaseClient } from './supabase';
-import { calculateTaskPoints } from './taskUtils';
+import { calculateTaskPoints, fetchGoalsForJoinRows } from './taskUtils';
 
 export type TimePeriod = 'today' | 'week' | 'month' | 'all';
 
@@ -179,7 +179,7 @@ export async function fetchDashboardMetrics(
           .eq('parent_type', 'task'),
         supabase
           .from('0008-ap-universal-goals-join')
-          .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, title, status), cg:0008-ap-goals-custom(id, title, status)')
+          .select('parent_id, goal_id, goal_type')
           .in('parent_id', taskIds)
           .eq('parent_type', 'task')
       ]);
@@ -196,10 +196,11 @@ export async function fetchDashboardMetrics(
         domainsByTask.get(d.parent_id)!.push(d.domain);
       });
 
+      const goalsById = await fetchGoalsForJoinRows(supabase, goalsRes.data || []);
       const goalsByTask = new Map<string, any[]>();
       (goalsRes.data || []).forEach((g: any) => {
         if (!goalsByTask.has(g.parent_id)) goalsByTask.set(g.parent_id, []);
-        const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+        const goal = goalsById.get(g.goal_id);
         if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
           goalsByTask.get(g.parent_id)!.push(goal);
         }
@@ -232,7 +233,7 @@ export async function fetchDashboardMetrics(
           .eq('parent_type', 'task'),
         supabase
           .from('0008-ap-universal-goals-join')
-          .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, title, status), cg:0008-ap-goals-custom(id, title, status)')
+          .select('parent_id, goal_id, goal_type')
           .in('parent_id', eventIds)
           .eq('parent_type', 'task')
       ]);
@@ -249,10 +250,11 @@ export async function fetchDashboardMetrics(
         domainsByEvent.get(d.parent_id)!.push(d.domain);
       });
 
+      const goalsById2 = await fetchGoalsForJoinRows(supabase, goalsRes.data || []);
       const goalsByEvent = new Map<string, any[]>();
       (goalsRes.data || []).forEach((g: any) => {
         if (!goalsByEvent.has(g.parent_id)) goalsByEvent.set(g.parent_id, []);
-        const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+        const goal = goalsById2.get(g.goal_id);
         if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
           goalsByEvent.get(g.parent_id)!.push(goal);
         }

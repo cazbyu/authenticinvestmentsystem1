@@ -92,7 +92,7 @@ export async function calculate12WeekGoalExecution(
     const { data: taskJoins, error: taskJoinsError } = await supabase
       .from('0008-ap-universal-goals-join')
       .select('parent_id')
-      .in('twelve_wk_goal_id', goalIds)
+      .in('goal_id', goalIds)
       .eq('goal_type', 'twelve_wk_goal')
       .eq('parent_type', 'task');
 
