@@ -18,6 +18,7 @@ import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
 import { getVisibleWindow } from '@/lib/recurrenceUtils';
 import { formatLocalDate, toLocalISOString, parseLocalDate, formatTimeForDisplay } from '@/lib/dateUtils';
 import { DraggableFab } from '@/components/DraggableFab';
+import { fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { useExpandedTasksWithAnytime, useExpandedTasksForWeek } from '@/hooks/useRecurrenceCache';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { getHolidaysForMonth, US_HOLIDAYS } from '@/lib/holidays';
@@ -310,7 +311,7 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
       ] = await Promise.all([
         supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label, color)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
         supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
+        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
         supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
         supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
         supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task')
@@ -328,12 +329,14 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
       if (delegatesError) throw delegatesError;
       if (keyRelationshipsError) throw keyRelationshipsError;
 
+      const goalsById = await fetchGoalsForJoinRows(supabase, goalsData || []);
+
       const transformedTasks = allTasksAndEvents
         .map(task => {
           const lookupId = task.source_task_id || task.id;
           const taskRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
           const primaryRole = taskRoles[0];
-          const taskGoals = goalsData?.filter(g => g.parent_id === lookupId).map(g => g.goal).filter(Boolean) || [];
+          const taskGoals = goalsData?.filter(g => g.parent_id === lookupId).map(g => goalsById.get(g.goal_id)).filter(Boolean) || [];
 
           return {
             ...task,

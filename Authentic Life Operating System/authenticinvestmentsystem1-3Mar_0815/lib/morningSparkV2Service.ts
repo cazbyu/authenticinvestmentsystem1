@@ -14,7 +14,7 @@ import {
   saveBrainDumpAsIdea,
   acknowledgeBrainDump,
 } from '@/lib/sparkUtils';
-import { calculateTaskPoints } from '@/lib/taskUtils';
+import { calculateTaskPoints, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { calculateDailyScore, calculateDominantCardinal } from '@/lib/ritualUtils';
 
 // ============ TYPES ============
@@ -796,13 +796,25 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   // Fetch goal joins — include weekly_target from the goal itself
   const { data: goalJoins } = await supabase
     .from('0008-ap-universal-goals-join')
-    .select(`
-      parent_id, goal_type,
-      twelve_wk_goal:0008-ap-goals-12wk(id, title, weekly_target),
-      custom_goal:0008-ap-goals-custom(id, title, weekly_target)
-    `)
+    .select('parent_id, goal_id, goal_type')
     .in('parent_id', lookupIds)
     .eq('parent_type', 'task');
+
+  // Resolve goals by type, including weekly_target for contract groups
+  const gjRows = goalJoins || [];
+  const twelveWkIds = gjRows.filter(j => (j as any).goal_type === 'twelve_wk_goal').map(j => (j as any).goal_id);
+  const customIds = gjRows.filter(j => (j as any).goal_type === 'custom_goal').map(j => (j as any).goal_id);
+  const [twRes, cgRes] = await Promise.all([
+    twelveWkIds.length
+      ? supabase.from('0008-ap-goals-12wk').select('id, title, weekly_target').in('id', twelveWkIds)
+      : { data: [] },
+    customIds.length
+      ? supabase.from('0008-ap-goals-custom').select('id, title, weekly_target').in('id', customIds)
+      : { data: [] },
+  ]);
+  const sparkGoalsById = new Map<string, any>();
+  (twRes.data || []).forEach((g: any) => sparkGoalsById.set(g.id, { ...g, goal_type: 'twelve_wk_goal' }));
+  (cgRes.data || []).forEach((g: any) => sparkGoalsById.set(g.id, { ...g, goal_type: 'custom_goal' }));
 
   // Build lookup maps (keyed by source_task_id / real task id)
   const roleMap = new Map<string, RoleTag[]>();
@@ -837,11 +849,10 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   }
 
   for (const gj of (goalJoins || [])) {
-    const isTwelveWk = (gj as any).goal_type === 'twelve_wk_goal';
-    const goal = isTwelveWk ? (gj as any).twelve_wk_goal : (gj as any).custom_goal;
+    const goal = sparkGoalsById.get((gj as any).goal_id);
     if (goal) {
       const existing = goalMap.get(gj.parent_id) || [];
-      existing.push({ id: goal.id, title: goal.title, goal_type: (gj as any).goal_type });
+      existing.push({ id: goal.id, title: goal.title, goal_type: goal.goal_type });
       goalMap.set(gj.parent_id, existing);
 
       // Store goal metadata (de-dup by goal id)
@@ -849,7 +860,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
         goalMetaMap.set(goal.id, {
           id: goal.id,
           title: goal.title,
-          goalType: (gj as any).goal_type,
+          goalType: goal.goal_type,
           weeklyTarget: goal.weekly_target ?? null,
         });
       }
@@ -1232,9 +1243,11 @@ export async function getContractFollowUp(userId: string, date: string): Promise
 
   const { data: goalJoins } = await supabase
     .from('0008-ap-universal-goals-join')
-    .select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title), custom_goal:0008-ap-goals-custom(id, title)')
+    .select('parent_id, goal_id, goal_type')
     .in('parent_id', taskIds)
     .eq('parent_type', 'task');
+
+  const goalsById2 = await fetchGoalsForJoinRows(supabase, goalJoins || []);
 
   // Build lookup maps
   const roleMap = new Map<string, RoleTag[]>();
@@ -1258,9 +1271,7 @@ export async function getContractFollowUp(userId: string, date: string): Promise
     }
   }
   for (const gj of (goalJoins || [])) {
-    const goal = (gj as any).goal_type === 'twelve_wk_goal'
-      ? (gj as any).twelve_wk_goal
-      : (gj as any).custom_goal;
+    const goal = goalsById2.get((gj as any).goal_id);
     if (goal) {
       const arr = goalMap.get(gj.parent_id) || [];
       arr.push({ id: goal.id, title: goal.title, goal_type: (gj as any).goal_type });

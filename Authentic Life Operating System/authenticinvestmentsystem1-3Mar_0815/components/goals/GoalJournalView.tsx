@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'rea
 import { CheckSquare, Calendar } from 'lucide-react-native';
 import { Image } from 'react-native';
 import { getSupabaseClient } from '@/lib/supabase';
-import { calculateTaskPoints } from '@/lib/taskUtils';
+import { calculateTaskPoints, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface GoalJournalEntry {
@@ -114,13 +114,12 @@ export function GoalJournalView({
       let runningPoints = 0;
 
       const goalTypeForJoin = goalType === '12week' ? 'twelve_wk_goal' : 'custom_goal';
-      const goalIdField = goalType === '12week' ? 'twelve_wk_goal_id' : 'custom_goal_id';
 
       // 1. Get all task IDs linked to this goal
       const { data: taskJoins, error: joinError } = await supabase
         .from('0008-ap-universal-goals-join')
         .select('parent_id, parent_type')
-        .eq(goalIdField, goalId)
+        .eq('goal_id', goalId)
         .eq('goal_type', goalTypeForJoin);
 
       if (joinError) throw joinError;
@@ -174,7 +173,7 @@ export function GoalJournalView({
               .eq('parent_type', 'task'),
             supabase
               .from('0008-ap-universal-goals-join')
-              .select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title, status), custom_goal:0008-ap-goals-custom(id, title, status)')
+              .select('parent_id, goal_id, goal_type')
               .in('parent_id', completedTaskIds)
               .eq('parent_type', 'task'),
           ]);
@@ -194,11 +193,16 @@ export function GoalJournalView({
             domainsByTask.set(d.parent_id, arr);
           });
 
+          const goalsById = await fetchGoalsForJoinRows(supabase, goalsRes.data || []);
+
           const goalsByTask = new Map<string, any[]>();
           (goalsRes.data || []).forEach(g => {
-            const arr = goalsByTask.get(g.parent_id) || [];
-            arr.push(g);
-            goalsByTask.set(g.parent_id, arr);
+            const goal = goalsById.get(g.goal_id);
+            if (goal) {
+              const arr = goalsByTask.get(g.parent_id) || [];
+              arr.push(goal);
+              goalsByTask.set(g.parent_id, arr);
+            }
           });
 
           for (const task of tasksData) {
@@ -209,19 +213,7 @@ export function GoalJournalView({
               .map(d => d.domain)
               .filter(Boolean);
             const goals = (goalsByTask.get(task.id) || [])
-              .map(g => {
-                if (g.goal_type === 'twelve_wk_goal' && g.twelve_wk_goal) {
-                  const goal = g.twelve_wk_goal;
-                  if (!goal || goal.status === 'archived' || goal.status === 'cancelled') return null;
-                  return { ...goal, goal_type: '12week' };
-                } else if (g.goal_type === 'custom_goal' && g.custom_goal) {
-                  const goal = g.custom_goal;
-                  if (!goal || goal.status === 'archived' || goal.status === 'cancelled') return null;
-                  return { ...goal, goal_type: 'custom' };
-                }
-                return null;
-              })
-              .filter(Boolean);
+              .filter(g => g.status !== 'archived' && g.status !== 'cancelled');
 
             const points = calculateTaskPoints(task, roles, domains, goals);
             runningPoints += points;

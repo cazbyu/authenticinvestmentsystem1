@@ -14,7 +14,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { JournalView } from '@/components/journal/JournalView';
-import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil } from '@/lib/taskUtils';
+import { calculateTaskPoints, calculateAuthenticScore as calculateScoreUtil, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { SpeedDialFab } from '@/components/SpeedDialFab';
 import { ActivityConfig, getActivityConfig } from '@/lib/activityConfig';
 import { formatLocalDate, toLocalISOString, getWeekStart } from '@/lib/dateUtils';
@@ -340,7 +340,7 @@ export default function Dashboard() {
           ] = await Promise.all([
             supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_type, twelve_wk_goal:0008-ap-goals-12wk(id, title, status), custom_goal:0008-ap-goals-custom(id, title, status)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
@@ -359,6 +359,8 @@ export default function Dashboard() {
           notesData = notesDataResult || [];
           delegatesData = delegatesDataResult || [];
           keyRelationshipsData = keyRelationshipsDataResult || [];
+
+          const goalsById = await fetchGoalsForJoinRows(supabase, goalsData);
         }
 
         const transformedTasks = allTasks.map(task => {
@@ -368,24 +370,14 @@ export default function Dashboard() {
 
           // Transform polymorphic goals
           const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => {
-            if (g.goal_type === 'twelve_wk_goal' && g.twelve_wk_goal) {
-              const goal = g.twelve_wk_goal;
-              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                return { id: 'deleted', title: 'Goal no longer available', goal_type: 'deleted', status: 'deleted' };
-              }
-              return { ...goal, goal_type: '12week' };
-            } else if (g.goal_type === 'custom_goal' && g.custom_goal) {
-              const goal = g.custom_goal;
-              if (!goal || goal.status === 'archived' || goal.status === 'cancelled') {
-                return { id: 'deleted', title: 'Goal no longer available', goal_type: 'deleted', status: 'deleted' };
-              }
-              return { ...goal, goal_type: 'custom' };
-            } else if (g.goal_type === 'twelve_wk_goal' && !g.twelve_wk_goal) {
-              return { id: 'deleted', title: 'Goal no longer available', goal_type: 'deleted', status: 'deleted' };
-            } else if (g.goal_type === 'custom_goal' && !g.custom_goal) {
+            const goal = goalsById.get(g.goal_id);
+            if (!goal) {
               return { id: 'deleted', title: 'Goal no longer available', goal_type: 'deleted', status: 'deleted' };
             }
-            return null;
+            if (goal.status === 'archived' || goal.status === 'cancelled') {
+              return { id: 'deleted', title: 'Goal no longer available', goal_type: 'deleted', status: 'deleted' };
+            }
+            return goal;
           }).filter(Boolean) || [];
 
           return {

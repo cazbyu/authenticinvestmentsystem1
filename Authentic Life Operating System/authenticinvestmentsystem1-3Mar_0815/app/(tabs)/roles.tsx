@@ -26,7 +26,7 @@ import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoals } from '@/hooks/useGoals';
-import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
+import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -410,7 +410,7 @@ const { headerColor } = useHeaderColor();
           ] = await Promise.all([
             supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
           ]);
@@ -426,13 +426,15 @@ const { headerColor } = useHeaderColor();
           goalsData = goalsDataResult || [];
           notesData = notesDataResult || [];
           delegatesData = delegatesDataResult || [];
+
+          const goalsById = await fetchGoalsForJoinRows(supabase, goalsData);
         }
 
         const transformedTasks = allTasks.map(task => ({
           ...task,
           roles: rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
-          goals: goalsData?.filter(g => g.parent_id === task.id).map(g => g.goal).filter(Boolean) || [],
+          goals: goalsData?.filter(g => g.parent_id === task.id).map(g => goalsById.get(g.goal_id)).filter(Boolean) || [],
           has_notes: notesData?.some(n => n.parent_id === task.id),
           has_delegates: delegatesData?.some(d => d.parent_id === task.id),
           has_attachments: false,
@@ -605,7 +607,7 @@ const { headerColor } = useHeaderColor();
           ] = await Promise.all([
             supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal:0008-ap-goals-12wk(id, title)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
+            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
             supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
@@ -624,13 +626,15 @@ const { headerColor } = useHeaderColor();
           notesData = notesDataResult || [];
           delegatesData = delegatesDataResult || [];
           keyRelationshipsData = keyRelationshipsDataResult || [];
+
+          const goalsById = await fetchGoalsForJoinRows(supabase, goalsData);
         }
 
         const transformedTasks = allKRTasks.map(task => ({
           ...task,
           roles: rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [],
           domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
-          goals: goalsData?.filter(g => g.parent_id === task.id).map(g => g.goal).filter(Boolean) || [],
+          goals: goalsData?.filter(g => g.parent_id === task.id).map(g => goalsById.get(g.goal_id)).filter(Boolean) || [],
           keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === task.id).map(kr => kr.key_relationship).filter(Boolean) || [],
           has_notes: notesData?.some(n => n.parent_id === task.id),
           has_delegates: delegatesData?.some(d => d.parent_id === task.id),
