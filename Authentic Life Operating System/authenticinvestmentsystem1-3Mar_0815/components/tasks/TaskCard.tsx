@@ -29,7 +29,6 @@ export interface Task {
   is_important?: boolean;
   status?: string;
   type?: string;
-  is_twelve_week_goal?: boolean;
   is_all_day?: boolean;
   is_anytime?: boolean;
   completed_at?: string;

@@ -627,7 +627,7 @@ export default function TaskEventForm({
       isAnytime: initialData.is_all_day || false,
       isUrgent: initialData.is_urgent || false,
       isImportant: initialData.is_important || false,
-      isGoal: hasActiveGoals || initialData.is_twelve_week_goal || false,
+      isGoal: hasActiveGoals || false,
       selectedRoleIds: initialData.roles?.map((r: any) => r.id) || initialData.selectedRoleIds || [],
       selectedDomainIds: initialData.domains?.map((d: any) => d.id) || initialData.selectedDomainIds || [],
       selectedKeyRelationshipIds: initialData.keyRelationships?.map((kr: any) => kr.id) || initialData.selectedKeyRelationshipIds || [],

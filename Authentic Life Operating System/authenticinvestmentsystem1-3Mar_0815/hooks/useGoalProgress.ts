@@ -232,7 +232,6 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
     // Filter by timeline
     if (selectedTimeline.source === 'global') {
       query = query
-        .eq('is_twelve_week_goal', true)
         .eq('0008-ap-task-week-plan.user_global_timeline_id', selectedTimeline.id);
     } else {
       query = query

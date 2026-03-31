@@ -181,7 +181,6 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
     else if (!task.is_urgent && task.is_important) points += 3;
     else if (task.is_urgent && !task.is_important) points += 1;
     else points += 0.5;
-    if (task.is_twelve_week_goal) points += 2;
     return Math.round(points * 10) / 10;
   };
 

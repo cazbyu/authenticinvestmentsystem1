@@ -705,7 +705,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
   // occurrence_date = NULL and are missed by queries A/B.
   const { data: startDateEvents, error: errorC } = await supabase
     .from('0008-ap-tasks')
-    .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea')
+    .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing')
     .eq('user_id', userId)
     .eq('start_date', today)
     .is('due_date', null)
@@ -756,20 +756,20 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     (overdueTasks || []).length, 'overdue +',
     (startDateEvents || []).length, 'start-date events)');
 
-  // ── Fetch missing columns (one_thing, is_deposit_idea) from base table ──
+  // ── Fetch missing columns (one_thing) from base table ──
   // The view doesn't include these columns
   const allSourceTaskIds = [...new Set(tasks.map(t => t.source_task_id || t.id))];
-  const oneThingMap = new Map<string, { one_thing: boolean; is_deposit_idea: boolean }>();
+  const oneThingMap = new Map<string, { one_thing: boolean }>();
 
   if (allSourceTaskIds.length > 0) {
     const { data: extraCols } = await supabase
       .from('0008-ap-tasks')
-      .select('id, one_thing, is_deposit_idea')
+      .select('id, one_thing')
       .in('id', allSourceTaskIds);
 
     if (extraCols) {
       for (const row of extraCols) {
-        oneThingMap.set(row.id, { one_thing: row.one_thing || false, is_deposit_idea: row.is_deposit_idea || false });
+        oneThingMap.set(row.id, { one_thing: row.one_thing || false });
       }
     }
   }
@@ -921,7 +921,7 @@ export async function getWeeklyContractForToday(userId: string): Promise<Grouped
     const roles = roleMap.get(lookupId) || [];
     const domains = domainMap.get(lookupId) || [];
     const goals = goalMap.get(lookupId) || [];
-    const extra = oneThingMap.get(lookupId) || { one_thing: false, is_deposit_idea: false };
+    const extra = oneThingMap.get(lookupId) || { one_thing: false };
 
     const item: WeeklyContractItem = {
       id: task.id,
@@ -1216,7 +1216,7 @@ export async function getContractFollowUp(userId: string, date: string): Promise
   // Get all tasks that were due today (include completed but not cancelled/archived)
   const { data: allTasks, error } = await supabase
     .from('0008-ap-tasks')
-    .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing, is_deposit_idea')
+    .select('id, title, type, due_date, start_date, start_time, end_time, is_urgent, is_important, is_all_day, completed_at, one_thing')
     .eq('user_id', userId)
     .is('deleted_at', null)
     .neq('status', 'cancelled')

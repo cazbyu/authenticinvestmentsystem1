@@ -164,7 +164,7 @@ export default function Dashboard() {
 
       const { data: tasksData } = await supabase
         .from('0008-ap-tasks')
-        .select('id, is_urgent, is_important, is_twelve_week_goal')
+        .select('id, is_urgent, is_important')
         .eq('user_id', user.id)
         .eq('status', 'completed')
         .is('deleted_at', null)
