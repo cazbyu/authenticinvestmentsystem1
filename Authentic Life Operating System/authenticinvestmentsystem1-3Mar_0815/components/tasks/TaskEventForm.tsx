@@ -1404,20 +1404,6 @@ export default function TaskEventForm({
         is_all_day: formData.isAnytime,
         is_urgent: formData.isUrgent,
         is_important: formData.isImportant,
-        is_twelve_week_goal: formData.isGoal,
-        is_deposit_idea: initialData?.is_deposit_idea || false,
-
-        // Direct goal FK for easier querying
-goal_12wk_id: formData.selectedGoal?.goal_type === '12week'
-  ? formData.selectedGoal.id
-  : null,
-parent_goal_id: formData.selectedGoal?.goal_type === 'custom'
-  ? formData.selectedGoal.id
-  : null,
-parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
-  ? 'custom_goal'
-  : null,
-
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
         // Parent relationship for follow-through items
