@@ -1406,9 +1406,6 @@ export default function TaskEventForm({
         is_important: formData.isImportant,
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
-        // Parent relationship for follow-through items
-        parent_id: formData.parentId || null,
-        parent_type: formData.parentType || null,
         // Preserve completion status and timestamp when editing
         ...(mode === 'edit' && initialData?.id ? {
           // Explicitly preserve completed status - never change it back to pending
