@@ -615,6 +615,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   };
 
   const handleSave = async () => {
+    console.log('[ActionEffortModal] handleSave called', { title: title.trim(), selectedWeeks, goal: goal?.id, goalType: goal?.goal_type, timeline: timeline?.source });
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter a title for the action.');
       return;
@@ -698,6 +699,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         taskData.type = 'task';
       }
 
+      console.log('[ActionEffortModal] About to call createTaskWithWeekPlan', JSON.stringify(taskData, null, 2));
       await createTaskWithWeekPlan(taskData, timeline);
 
       console.log('[ActionEffortModal] Task saved successfully, closing modal');
