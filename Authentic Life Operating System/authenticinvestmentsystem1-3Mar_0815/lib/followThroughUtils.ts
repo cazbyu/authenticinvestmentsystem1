@@ -13,15 +13,8 @@ export async function fetchAssociatedItems(
   const items: AssociatedItem[] = [];
 
   try {
-    const { data: tasks, error: tasksError } = await supabase
-      .from('0008-ap-tasks')
-      .select('id, title, type, created_at, due_date, start_date, start_time, end_time, status, completed_at, deleted_at')
-      .eq('user_id', userId)
-      .eq('parent_id', parentId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
-
-    if (tasksError) throw tasksError;
+    // parent_id column was dropped from 0008-ap-tasks table — tasks no longer have a direct parent link
+    const tasks: any[] = [];
 
     const { data: reflections, error: reflectionsError } = await supabase
       .from('0008-ap-reflections')
@@ -179,14 +172,8 @@ export async function fetchLinkedItemsCount(
   const supabase = getSupabaseClient();
 
   try {
-    // Count tasks linked to this parent
-    const { count: tasksCount, error: tasksError } = await supabase
-      .from('0008-ap-tasks')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('parent_id', parentId);
-
-    if (tasksError) throw tasksError;
+    // parent_id column was dropped from 0008-ap-tasks — tasks count is 0
+    const tasksCount = 0;
 
     // Count reflections linked to this parent
     const { count: reflectionsCount, error: reflectionsError } = await supabase
@@ -246,14 +233,8 @@ export async function fetchBulkLinkedItemsCounts(
 
     const allParentIds = parentEntries.map(entry => entry.id);
 
-    const [tasksData, reflectionsData, depositIdeasData] = await Promise.all([
-      supabase
-        .from('0008-ap-tasks')
-        .select('parent_id')
-        .eq('user_id', userId)
-        .in('parent_id', allParentIds)
-        .is('deleted_at', null),
-
+    // parent_id column was dropped from 0008-ap-tasks — skip tasks query
+    const [reflectionsData, depositIdeasData] = await Promise.all([
       supabase
         .from('0008-ap-reflections')
         .select('parent_id')
@@ -267,10 +248,6 @@ export async function fetchBulkLinkedItemsCounts(
         .in('parent_id', allParentIds)
     ]);
 
-    if (tasksData.error) {
-      console.error('Error fetching bulk tasks:', tasksData.error);
-    }
-
     if (reflectionsData.error) {
       console.error('Error fetching bulk reflections:', reflectionsData.error);
     }
@@ -278,11 +255,6 @@ export async function fetchBulkLinkedItemsCounts(
     if (depositIdeasData.error) {
       console.error('Error fetching bulk deposit ideas:', depositIdeasData.error);
     }
-
-    const taskCounts = new Map<string, number>();
-    (tasksData.data || []).forEach(task => {
-      taskCounts.set(task.parent_id, (taskCounts.get(task.parent_id) || 0) + 1);
-    });
 
     const reflectionCounts = new Map<string, number>();
     (reflectionsData.data || []).forEach(reflection => {
@@ -295,10 +267,9 @@ export async function fetchBulkLinkedItemsCounts(
     });
 
     allParentIds.forEach(parentId => {
-      const taskCount = taskCounts.get(parentId) || 0;
       const reflectionCount = reflectionCounts.get(parentId) || 0;
       const depositIdeaCount = depositIdeaCounts.get(parentId) || 0;
-      countsMap.set(parentId, taskCount + reflectionCount + depositIdeaCount);
+      countsMap.set(parentId, reflectionCount + depositIdeaCount);
     });
 
     return countsMap;
@@ -322,14 +293,8 @@ export async function fetchBulkLinkedItemsCountsDetailed(
   try {
     const allParentIds = parentEntries.map(entry => entry.id);
 
-    const [tasksData, reflectionsData, depositIdeasData] = await Promise.all([
-      supabase
-        .from('0008-ap-tasks')
-        .select('parent_id')
-        .eq('user_id', userId)
-        .in('parent_id', allParentIds)
-        .is('deleted_at', null),
-
+    // parent_id column was dropped from 0008-ap-tasks — skip tasks query
+    const [reflectionsData, depositIdeasData] = await Promise.all([
       supabase
         .from('0008-ap-reflections')
         .select('parent_id')
@@ -343,10 +308,6 @@ export async function fetchBulkLinkedItemsCountsDetailed(
         .in('parent_id', allParentIds)
     ]);
 
-    if (tasksData.error) {
-      console.error('Error fetching bulk tasks:', tasksData.error);
-    }
-
     if (reflectionsData.error) {
       console.error('Error fetching bulk reflections:', reflectionsData.error);
     }
@@ -354,11 +315,6 @@ export async function fetchBulkLinkedItemsCountsDetailed(
     if (depositIdeasData.error) {
       console.error('Error fetching bulk deposit ideas:', depositIdeasData.error);
     }
-
-    const taskCounts = new Map<string, number>();
-    (tasksData.data || []).forEach(task => {
-      taskCounts.set(task.parent_id, (taskCounts.get(task.parent_id) || 0) + 1);
-    });
 
     const reflectionCounts = new Map<string, number>();
     (reflectionsData.data || []).forEach(reflection => {
@@ -371,14 +327,13 @@ export async function fetchBulkLinkedItemsCountsDetailed(
     });
 
     allParentIds.forEach(parentId => {
-      const tasks = taskCounts.get(parentId) || 0;
       const reflections = reflectionCounts.get(parentId) || 0;
       const depositIdeas = depositIdeaCounts.get(parentId) || 0;
       countsMap.set(parentId, {
-        tasks,
+        tasks: 0,
         reflections,
         depositIdeas,
-        total: tasks + reflections + depositIdeas
+        total: reflections + depositIdeas
       });
     });
 

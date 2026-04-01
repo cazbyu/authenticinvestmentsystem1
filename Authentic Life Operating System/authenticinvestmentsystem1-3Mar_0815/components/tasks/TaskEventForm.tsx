@@ -1465,8 +1465,8 @@ export default function TaskEventForm({
       }
       mainRecordId = mainRecord.id;
 
-      // Handle joins for the new task/event (use its type for role/domain/etc. joins)
-      const parentType = formData.type;
+      // Handle joins for the new task/event — join tables use 'task' parent_type for all task-table records
+      const parentType = 'task';
 
       // Clear existing joins if editing
       if (mode === 'edit' && initialData?.id) {
