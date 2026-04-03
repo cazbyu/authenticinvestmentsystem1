@@ -190,7 +190,7 @@ export default function Dashboard() {
             .eq('parent_type', 'task'),
           supabase
             .from('0008-ap-universal-goals-join')
-            .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+            .select('parent_id, goal_id, goal_type')
             .in('parent_id', taskIds)
             .eq('parent_type', 'task')
         ]);
@@ -205,9 +205,10 @@ export default function Dashboard() {
           domainsCount.set(d.parent_id, (domainsCount.get(d.parent_id) || 0) + 1);
         });
 
+        const goalsById = await fetchGoalsForJoinRows(supabase, goalsRes.data || []);
         const goalsCount = new Map<string, number>();
         (goalsRes.data || []).forEach((g: any) => {
-          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          const goal = goalsById.get(g.goal_id);
           if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
             goalsCount.set(g.parent_id, (goalsCount.get(g.parent_id) || 0) + 1);
           }

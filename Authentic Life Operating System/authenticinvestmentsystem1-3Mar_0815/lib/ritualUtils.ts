@@ -1,5 +1,5 @@
 import { getSupabaseClient } from './supabase';
-import { calculateTaskPoints } from './taskUtils';
+import { calculateTaskPoints, fetchGoalsForJoinRows } from './taskUtils';
 import { getUserPreferences } from './userPreferences';
 import { formatLocalDate } from './dateUtils';
 
@@ -491,7 +491,7 @@ export async function calculateDailyScore(
           .eq('parent_type', 'task'),
         supabase
           .from('0008-ap-universal-goals-join')
-          .select('parent_id, goal_type, tw:0008-ap-goals-12wk(id, status), cg:0008-ap-goals-custom(id, status)')
+          .select('parent_id, goal_id, goal_type')
           .in('parent_id', taskIds)
           .eq('parent_type', 'task'),
       ]);
@@ -508,10 +508,11 @@ export async function calculateDailyScore(
         if (d.domain) domainsMap.get(d.parent_id)!.push(d.domain);
       });
 
+      const goalsById = await fetchGoalsForJoinRows(supabase, goalsResult.data || []);
       const goalsMap = new Map<string, any[]>();
       (goalsResult.data || []).forEach(g => {
         if (!goalsMap.has(g.parent_id)) goalsMap.set(g.parent_id, []);
-        const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+        const goal = goalsById.get(g.goal_id);
         if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
           goalsMap.get(g.parent_id)!.push({ ...goal, goal_type: g.goal_type });
         }
