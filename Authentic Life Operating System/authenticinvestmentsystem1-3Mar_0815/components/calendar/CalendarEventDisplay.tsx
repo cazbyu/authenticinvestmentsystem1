@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Check, X } from 'lucide-react-native';
+import { Check, X, Users, Flag, Heart, FileText, UserPlus } from 'lucide-react-native';
 import { Task } from '@/components/tasks/TaskCard';
 import { formatTimeForDisplay } from '@/lib/dateUtils';
 
@@ -78,6 +78,28 @@ export function CalendarEventDisplay({
     isCommitment && eventState === 'needs_review' && !!onCommitmentComplete && !!onCommitmentDismiss;
   const showCompletedBadge = isCommitment && eventState === 'completed';
 
+  // Enrichment bar: only for commitments that aren't dismissed
+  const showEnrichmentBar = isCommitment && eventState !== 'dismissed';
+
+  // Build icon-button background: calendarBg @ 20% opacity, fallback to #e5e7eb
+  const hexToRgba = (hex: string | undefined, alpha: number): string | undefined => {
+    if (!hex || hex.length < 7) return undefined;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return undefined;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+  const iconBtnBg = hexToRgba(calendarBg, 0.2) ?? '#e5e7eb';
+  const iconColor = titleColor ?? '#111111';
+
+  // Enrichment flags — show a green dot if the task already has data
+  const hasRoles     = Array.isArray((task as any).roles)   && (task as any).roles.length > 0;
+  const hasGoals     = Array.isArray((task as any).goals)   && (task as any).goals.length > 0;
+  const hasWellness  = Array.isArray((task as any).domains) && (task as any).domains.length > 0;
+  const hasNotes     = (task as any).has_notes === true;
+  const hasDelegates = (task as any).has_delegates === true;
+
   return (
     <TouchableOpacity
       style={[
@@ -127,6 +149,57 @@ export function CalendarEventDisplay({
           <Text style={styles.noTimeLabel}>
             No time set
           </Text>
+        )}
+
+        {showEnrichmentBar && (
+          <View style={styles.enrichmentRow}>
+            <TouchableOpacity
+              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
+              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Users size={14} color={iconColor} />
+              {hasRoles && <View style={styles.enrichDot} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
+              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Flag size={14} color={iconColor} />
+              {hasGoals && <View style={styles.enrichDot} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
+              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Heart size={14} color={iconColor} />
+              {hasWellness && <View style={styles.enrichDot} />}
+            </TouchableOpacity>
+
+            <View style={styles.enrichSpacer} />
+
+            <TouchableOpacity
+              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
+              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <FileText size={14} color={iconColor} />
+              {hasNotes && <View style={styles.enrichDot} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
+              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <UserPlus size={14} color={iconColor} />
+              {hasDelegates && <View style={styles.enrichDot} />}
+            </TouchableOpacity>
+          </View>
         )}
 
         {showReviewButtons && (
@@ -247,5 +320,31 @@ const styles = StyleSheet.create({
   },
   reviewBtnDismiss: {
     backgroundColor: '#dc2626',
+  },
+  enrichmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  enrichBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  enrichSpacer: {
+    flex: 1,
+  },
+  enrichDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16a34a',
   },
 });
