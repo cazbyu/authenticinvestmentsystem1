@@ -64,13 +64,61 @@ export default function CalendarScreen() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTimePosition, setCurrentTimePosition] = useState(0);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [currentTimeString, setCurrentTimeString] = useState('');
   const [enabledHolidays, setEnabledHolidays] = useState<string[]>(
     US_HOLIDAYS.filter(h => h.enabled).map(h => h.id)
   );
   const [scrollTrigger, setScrollTrigger] = useState(0);
   // This handles background sync every 10 min + sync on tab focus
-const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
+const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalendarSync(true);
+
+  // Build color map from the user's Google Calendar list
+  const calendarColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (availableCalendars || []).forEach(cal => {
+      if (cal.id && cal.backgroundColor) map[cal.id] = cal.backgroundColor;
+    });
+    return map;
+  }, [availableCalendars]);
+
+  // Pick readable text color for a hex background
+  const getTextColor = (hex: string): string => {
+    if (!hex || hex.length < 7) return '#ffffff';
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#111111' : '#ffffff';
+  };
+
+  // Derive lifecycle state for a commitment/event card
+  type CommitmentState = 'upcoming' | 'in_progress' | 'needs_review' | 'completed' | 'dismissed';
+  const getEventState = (event: any, now: Date): CommitmentState => {
+    if (event?.status === 'missed') return 'dismissed';
+    if (event?.status === 'completed' || event?.status === 'done') return 'completed';
+
+    const dateStr: string | undefined = event?.start_date || event?.occurrence_date;
+    if (!dateStr) return 'upcoming';
+
+    const [y, m, d] = dateStr.split('T')[0].split('-').map(Number);
+
+    const parseDT = (t?: string, fallbackH = 0, fallbackMin = 0, fallbackSec = 0) => {
+      if (!t) return new Date(y, (m || 1) - 1, d || 1, fallbackH, fallbackMin, fallbackSec);
+      const [hh, mm, ss] = t.split(':').map(Number);
+      return new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0, ss || 0);
+    };
+
+    // All-day / anytime / no-time: treat the whole day as the window
+    const isWholeDay = event?.is_all_day || event?.is_anytime || (!event?.start_time && !event?.end_time);
+    const startDT = isWholeDay ? parseDT(undefined, 0, 0, 0) : parseDT(event.start_time, 0, 0, 0);
+    const endDT = isWholeDay ? parseDT(undefined, 23, 59, 59) : parseDT(event.end_time, 23, 59, 59);
+
+    if (now < startDT) return 'upcoming';
+    if (now >= startDT && now < endDT) return 'in_progress';
+    // past end_time
+    return event?.status === 'pending' ? 'needs_review' : 'upcoming';
+  };
 
   // Responsive breakpoints
   const isMobile = screenWidth < 400;
@@ -80,6 +128,7 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
   // Performance optimization: recurring templates cache
   const [recurringTemplates, setRecurringTemplates] = useState<any[]>([]);
   const latestFetchId = useRef(0);
+  const isFetchingRef = useRef(false);
 
   // Modal states
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
@@ -103,6 +152,17 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
     loadRecurringTemplates();
   }, []);
 
+  // Debug: confirm events state is populated
+  useEffect(() => {
+    console.log('Events set to state:', events.length);
+  }, [events]);
+
+  // Debug: confirm tasks state includes commitments
+  useEffect(() => {
+    const commitmentCount = tasks.filter((t: any) => t.isCommitment).length;
+    console.log('Tasks set to state:', tasks.length, '(commitments:', commitmentCount, ')');
+  }, [tasks]);
+
   useEffect(() => {
     // Direct fetch without cache pre-rendering
     fetchTasksAndEvents(currentDate, viewMode);
@@ -110,7 +170,13 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
     if (viewMode === 'weekly') {
       setScrollTrigger(prev => prev + 1);
     }
-  }, [viewMode, currentDate]);
+  }, [viewMode, currentDate, calendarColorMap]);
+
+  // Tick currentTime every 60s so commitment lifecycle state re-evaluates
+  useEffect(() => {
+    const id = setInterval(() => setCurrentTime(new Date()), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     // Set up current time tracking
@@ -228,6 +294,8 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
 
 
   const fetchTasksAndEvents = async (centerDate: Date = currentDate, mode: 'daily' | 'weekly' | 'monthly' = viewMode) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     latestFetchId.current += 1;
     const fetchId = latestFetchId.current;
 
@@ -263,22 +331,96 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
         console.log('[Calendar] Discarding stale fetch request');
         return;
       }
-      const { data: tasksData, error: tasksError } = await supabase
-        .from('v_tasks_with_recurrence_expanded')
-        .select(`
-          id, title, type, status, due_date, start_date, end_date, start_time, end_time,
-          is_urgent, is_important, is_all_day, is_anytime,
-          occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule, completed_at
-        `)
-        .eq('user_id', user.id)
-        .neq('status', 'cancelled')
-        .in('type', ['task', 'event'])
-        .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr}),and(completed_at.gte.${startStr}T00:00:00,completed_at.lte.${endStr}T23:59:59)`);
+
+      // Fetch tasks/events AND Google Calendar commitments in parallel
+      const [
+        { data: tasksData, error: tasksError },
+        { data: commitmentsData, error: commitmentsError }
+      ] = await Promise.all([
+        supabase
+          .from('v_tasks_with_recurrence_expanded')
+          .select(`
+            id, title, type, status, due_date, start_date, end_date, start_time, end_time,
+            is_urgent, is_important, is_all_day, is_anytime,
+            occurrence_date, is_virtual_occurrence, source_task_id, recurrence_rule, completed_at
+          `)
+          .eq('user_id', user.id)
+          .neq('status', 'cancelled')
+          .in('type', ['task', 'event'])
+          .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr}),and(completed_at.gte.${startStr}T00:00:00,completed_at.lte.${endStr}T23:59:59)`),
+        supabase
+          .from('0008-ap-commitments')
+          .select('id, title, date, start_time, end_time, is_all_day, status, external_calendar_id')
+          .eq('user_id', user.id)
+          .gte('date', startStr)
+          .lte('date', endStr),
+      ]);
 
       if (tasksError) throw tasksError;
+      if (commitmentsError) {
+        console.error('[Calendar] Error fetching commitments:', commitmentsError);
+      }
 
-      // Google Calendar events are already in 0008-ap-tasks with type='event'
-      // No separate fetch needed - they come through v_tasks_with_recurrence_expanded
+      console.log('Commitments fetched:', commitmentsData?.length, commitmentsData?.[0]);
+
+      // Build CalendarEvent objects for Google Calendar commitments (for legacy events state).
+      const commitmentEvents: CalendarEvent[] = (commitmentsData || []).map(c => ({
+        id: c.id,
+        title: c.title,
+        date: c.date,
+        time: c.start_time ? formatTime(c.start_time) : undefined,
+        endTime: c.end_time ? formatTime(c.end_time) : undefined,
+        type: 'event' as const,
+        color: '#4285F4',
+        isAllDay: c.is_all_day || (!c.start_time && !c.end_time),
+      }));
+
+      console.log('Commitment events mapped:', commitmentEvents.length, commitmentEvents?.[0]);
+
+      // Shape commitments as task-like records so the calendar grid can render them.
+      // The grid reads from `tasks` state (not `events`) and the expansion hooks route
+      // through the "virtual occurrences" path when is_virtual_occurrence: true.
+      // These records bypass the isGoalActionTask filter and the join-query flow entirely.
+      const commitmentsAsTasks: any[] = (commitmentsData || []).map(c => {
+        const calendarBg = c.external_calendar_id
+          ? (calendarColorMap[c.external_calendar_id] ?? '#4A90D9')
+          : undefined;
+        return {
+          id: c.id,
+          title: c.title,
+          type: 'event',
+          status: (c.status === 'done' || c.status === 'missed' || c.status === 'completed') ? c.status : 'pending',
+          start_date: c.date,
+          end_date: null,
+          start_time: c.start_time,
+          end_time: c.end_time,
+          due_date: null,
+          completed_at: null,
+          is_urgent: false,
+          is_important: false,
+          is_all_day: c.is_all_day,
+          is_anytime: false,
+          occurrence_date: c.date,
+          is_virtual_occurrence: true,
+          source_task_id: c.id,
+          recurrence_rule: null,
+          // Metadata placeholders (commitments have no roles/goals/etc)
+          roles: [],
+          domains: [],
+          goals: [],
+          keyRelationships: [],
+          has_notes: false,
+          has_delegates: false,
+          has_attachments: false,
+          roleColor: '#4285F4',
+          isGoalActionTask: false,
+          isCommitment: true,
+          external_calendar_id: c.external_calendar_id,
+          calendarColor: calendarBg,
+          calendarTextColor: calendarBg ? getTextColor(calendarBg) : undefined,
+        };
+      });
+
       const allTasksAndEvents = tasksData || [];
 
       if (fetchId !== latestFetchId.current) {
@@ -287,8 +429,8 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
       }
 
       if (!allTasksAndEvents || allTasksAndEvents.length === 0) {
-        setTasks([]);
-        setEvents([]);
+        setTasks(commitmentsAsTasks);
+        setEvents(commitmentEvents);
         setLoading(false);
         return;
       }
@@ -357,7 +499,10 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
         return;
       }
 
-      setTasks(transformedTasks);
+      // Merge Google Calendar commitments (shaped as tasks) so the grid renders them.
+      // Wrapped in uniqByIdAndDate as a defensive backstop: even if a duplicate slips
+      // through the sync lock or the fetch stale-guard, it won't render twice.
+      setTasks(uniqByIdAndDate([...transformedTasks, ...commitmentsAsTasks]));
 
       const calendarEvents: CalendarEvent[] = transformedTasks.map(task => ({
         id: task.id,
@@ -370,12 +515,16 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
         isAllDay: task.is_all_day || task.is_anytime || (!task.start_time && !task.end_time),
       }));
 
-      setEvents(calendarEvents);
+      console.log('Final events array:', calendarEvents.length, commitmentEvents.length);
+
+      // Merge Google Calendar commitments into the events array
+      setEvents([...calendarEvents, ...commitmentEvents]);
     } catch (error) {
       console.error('Error fetching tasks and events:', error);
       Alert.alert('Error', (error as Error).message);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
@@ -413,6 +562,38 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
       Alert.alert('Error', (error as Error).message);
     }
   }, [tasks, events, currentDate, viewMode]);
+
+  const handleCommitmentComplete = useCallback(async (id: string) => {
+    // Optimistic update
+    setTasks(prev => prev.map(t => (t.id === id ? ({ ...t, status: 'completed' } as any) : t)));
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-commitments')
+        .update({ status: 'completed', reviewed_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.error('[Calendar] Failed to complete commitment:', err);
+      Alert.alert('Error', (err as Error).message);
+    }
+  }, []);
+
+  const handleCommitmentDismiss = useCallback(async (id: string) => {
+    // Optimistic remove
+    setTasks(prev => prev.filter(t => t.id !== id));
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-commitments')
+        .update({ status: 'missed', reviewed_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.error('[Calendar] Failed to dismiss commitment:', err);
+      Alert.alert('Error', (err as Error).message);
+    }
+  }, []);
 
   const handleTaskPress = useCallback((task: Task) => {
     setSelectedTask(task);
@@ -607,7 +788,11 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
   const dailyExpandedTasks = useExpandedTasksWithAnytime(tasks, selectedDate, true);
 
   const renderDailyView = () => {
-    const filteredDailyTasks = dailyExpandedTasks;
+    const filteredDailyTasks = dailyExpandedTasks
+      .filter((t: any) => !(t.isCommitment && t.status === 'missed'))
+      .map((t: any) =>
+        t.isCommitment ? { ...t, eventState: getEventState(t, currentTime) } : t
+      );
 
     // Filter to only tasks completed on this specific day for the quadrant
     const selectedDateObj = parseLocalDate(selectedDate);
@@ -648,6 +833,8 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
             currentTimeString={currentTimeString}
             onCompleteTask={handleCompleteTask}
             onTaskPress={handleTaskPress}
+            onCommitmentComplete={handleCommitmentComplete}
+            onCommitmentDismiss={handleCommitmentDismiss}
             viewMode="daily"
           />
         </View>
@@ -672,9 +859,16 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
   };
 
   const filteredTasksByDate = useMemo(() => {
-    // Show all tasks regardless of completion status
-    return weeklyTasksByDate;
-  }, [weeklyTasksByDate]);
+    const out: Record<string, Task[]> = {};
+    for (const [date, arr] of Object.entries(weeklyTasksByDate)) {
+      out[date] = (arr as any[])
+        .filter((t: any) => !(t.isCommitment && t.status === 'missed'))
+        .map((t: any) =>
+          t.isCommitment ? { ...t, eventState: getEventState(t, currentTime) } : t
+        );
+    }
+    return out;
+  }, [weeklyTasksByDate, currentTime]);
 
   const allWeekTasks = useMemo(() => {
     return Object.values(filteredTasksByDate).flat();
@@ -776,6 +970,8 @@ const { isConnected, isSyncing, syncNow } = useGoogleCalendarSync(true);
           tasksByDate={filteredTasksByDate}
           onCompleteTask={handleCompleteTask}
           onTaskPress={handleTaskPress}
+          onCommitmentComplete={handleCommitmentComplete}
+          onCommitmentDismiss={handleCommitmentDismiss}
           shouldScrollToNow={scrollTrigger}
           columnWidth={columnWidth}
         />

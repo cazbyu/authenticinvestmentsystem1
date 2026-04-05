@@ -14,6 +14,8 @@ interface WeeklyTimeGridProps {
   tasksByDate: Record<string, Task[]>;
   onCompleteTask: (taskId: string) => void;
   onTaskPress: (task: Task) => void;
+  onCommitmentComplete?: (id: string) => void;
+  onCommitmentDismiss?: (id: string) => void;
   shouldScrollToNow?: number;
   columnWidth?: number;
 }
@@ -91,6 +93,8 @@ const WeeklyTimeGridComponent = ({
   tasksByDate,
   onCompleteTask,
   onTaskPress,
+  onCommitmentComplete,
+  onCommitmentDismiss,
   shouldScrollToNow = 0,
   columnWidth: propColumnWidth,
 }: WeeklyTimeGridProps) => {
@@ -231,6 +235,8 @@ const WeeklyTimeGridComponent = ({
                             key={`${event.id}-${dateStr}-${idx}`}
                             task={event}
                             onPress={onTaskPress}
+                            onCommitmentComplete={onCommitmentComplete}
+                            onCommitmentDismiss={onCommitmentDismiss}
                             style={{
                               position: 'absolute',
                               top,
