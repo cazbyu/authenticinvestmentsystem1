@@ -429,19 +429,29 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
         return;
       }
 
-      if (!allTasksAndEvents || allTasksAndEvents.length === 0) {
+      // Collect IDs for join queries — include both tasks AND commitments
+      const commitmentIds = commitmentsAsTasks.map((c: any) => c.id);
+      const taskSourceIds = allTasksAndEvents.length > 0
+        ? [...new Set(allTasksAndEvents.map(t => t.source_task_id || t.id))]
+        : [];
+      const allJoinIds = [...taskSourceIds, ...commitmentIds];
+
+      if (allJoinIds.length === 0) {
         setTasks(commitmentsAsTasks);
         setEvents(commitmentEvents);
         setLoading(false);
         return;
       }
 
-      const visibleSourceIds = [...new Set(allTasksAndEvents.map(t => t.source_task_id || t.id))];
-
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch before joins');
         return;
       }
+
+      // Fetch enrichment joins for ALL visible items (tasks use parent_type='task', commitments use 'commitment')
+      const parentTypes = taskSourceIds.length > 0 && commitmentIds.length > 0
+        ? ['task', 'commitment']
+        : taskSourceIds.length > 0 ? ['task'] : ['commitment'];
 
       const [
         { data: rolesData, error: rolesError },
@@ -451,12 +461,12 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
         { data: delegatesData, error: delegatesError },
         { data: keyRelationshipsData, error: keyRelationshipsError }
       ] = await Promise.all([
-        supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label, color)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', visibleSourceIds).eq('parent_type', 'task'),
-        supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', visibleSourceIds).eq('parent_type', 'task')
+        supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label, color)').in('parent_id', allJoinIds).in('parent_type', parentTypes),
+        supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', allJoinIds).in('parent_type', parentTypes),
+        supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', allJoinIds).in('parent_type', parentTypes),
+        supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', allJoinIds).in('parent_type', parentTypes),
+        supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', allJoinIds).in('parent_type', parentTypes),
+        supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', allJoinIds).in('parent_type', parentTypes)
       ]);
 
       if (fetchId !== latestFetchId.current) {
@@ -473,27 +483,33 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
 
       const goalsById = await fetchGoalsForJoinRows(supabase, goalsData || []);
 
-      const transformedTasks = allTasksAndEvents
-        .map(task => {
-          const lookupId = task.source_task_id || task.id;
-          const taskRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
-          const primaryRole = taskRoles[0];
-          const taskGoals = goalsData?.filter(g => g.parent_id === lookupId).map(g => goalsById.get(g.goal_id)).filter(Boolean) || [];
+      // Helper: enrich any item (task or commitment) with join data
+      const enrichItem = (item: any) => {
+        const lookupId = item.source_task_id || item.id;
+        const itemRoles = rolesData?.filter(r => r.parent_id === lookupId).map(r => r.role).filter(Boolean) || [];
+        const primaryRole = itemRoles[0];
+        const itemGoals = goalsData?.filter(g => g.parent_id === lookupId).map(g => goalsById.get(g.goal_id)).filter(Boolean) || [];
 
-          return {
-            ...task,
-            roles: taskRoles,
-            domains: domainsData?.filter(d => d.parent_id === lookupId).map(d => d.domain).filter(Boolean) || [],
-            goals: taskGoals,
-            keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === lookupId).map(kr => kr.key_relationship).filter(Boolean) || [],
-            has_notes: notesData?.some(n => n.parent_id === lookupId),
-            has_delegates: delegatesData?.some(d => d.parent_id === lookupId),
-            has_attachments: false,
-            roleColor: task.roleColor || primaryRole?.color || '#0078d4',
-            isGoalActionTask: taskGoals.length > 0,
-          };
-        })
+        return {
+          ...item,
+          roles: itemRoles,
+          domains: domainsData?.filter(d => d.parent_id === lookupId).map(d => d.domain).filter(Boolean) || [],
+          goals: itemGoals,
+          keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === lookupId).map(kr => kr.key_relationship).filter(Boolean) || [],
+          has_notes: notesData?.some(n => n.parent_id === lookupId) || false,
+          has_delegates: delegatesData?.some(d => d.parent_id === lookupId) || false,
+          has_attachments: false,
+          roleColor: item.roleColor || primaryRole?.color || '#0078d4',
+          isGoalActionTask: item.isCommitment ? false : itemGoals.length > 0,
+        };
+      };
+
+      const transformedTasks = allTasksAndEvents
+        .map(enrichItem)
         .filter(task => !task.isGoalActionTask);
+
+      // Enrich commitments with their join data too
+      const enrichedCommitments = commitmentsAsTasks.map(enrichItem);
 
       if (fetchId !== latestFetchId.current) {
         console.log('[Calendar] Discarding stale fetch before setState');
@@ -503,7 +519,7 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
       // Merge Google Calendar commitments (shaped as tasks) so the grid renders them.
       // Wrapped in uniqByIdAndDate as a defensive backstop: even if a duplicate slips
       // through the sync lock or the fetch stale-guard, it won't render twice.
-      setTasks(uniqByIdAndDate([...transformedTasks, ...commitmentsAsTasks]));
+      setTasks(uniqByIdAndDate([...transformedTasks, ...enrichedCommitments]));
 
       const calendarEvents: CalendarEvent[] = transformedTasks.map(task => ({
         id: task.id,
