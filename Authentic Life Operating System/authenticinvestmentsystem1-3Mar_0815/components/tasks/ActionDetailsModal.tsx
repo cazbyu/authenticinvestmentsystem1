@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, TextInput, Platform } from 'react-native';
-import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip, Target } from 'lucide-react-native';
+import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip, Target, Flag, FileText, UserPlus } from 'lucide-react-native';
+import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
+import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -60,6 +62,8 @@ export function ActionDetailsModal({
   const [newNoteText, setNewNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<any[]>([]);
+  const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
+  const [enrichModalVisible, setEnrichModalVisible] = useState(false);
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -472,6 +476,87 @@ export function ActionDetailsModal({
               )}
             </View>
 
+            {/* Commitment Enrichment Row */}
+            {(task as any).isCommitment && (task as any).user_id && (
+              <View style={styles.enrichSection}>
+                <Text style={styles.enrichSectionTitle}>Add Context</Text>
+                <View style={styles.enrichIconRow}>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('priority'); setEnrichModalVisible(true); }}>
+                    <Flag size={28} color={
+                      (task.is_urgent && task.is_important) ? '#ef4444' :
+                      (!task.is_urgent && task.is_important) ? '#10b981' :
+                      (task.is_urgent && !task.is_important) ? '#f59e0b' : '#9ca3af'
+                    } />
+                    <Text style={styles.enrichIconLabel}>Priority</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <RoleIcon size={28} color={
+                        (task as any).roles?.length > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {(task as any).roles?.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{(task as any).roles.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Roles</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <WellnessIcon size={28} color={
+                        (task as any).domains?.length > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {(task as any).domains?.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{(task as any).domains.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Wellness</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <GoalIcon size={28} color={
+                        (task as any).goals?.length > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {(task as any).goals?.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{(task as any).goals.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Goals</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('notes'); setEnrichModalVisible(true); }}>
+                    <FileText size={28} color={
+                      (task as any).has_notes ? '#16a34a' : '#9ca3af'
+                    } />
+                    <Text style={styles.enrichIconLabel}>Notes</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('delegate'); setEnrichModalVisible(true); }}>
+                    <UserPlus size={28} color={
+                      (task as any).has_delegates ? '#16a34a' : '#9ca3af'
+                    } />
+                    <Text style={styles.enrichIconLabel}>Delegate</Text>
+                  </TouchableOpacity>
+
+                </View>
+              </View>
+            )}
+
             {/* Body - Notes */}
             <View style={styles.bodySection}>
               <View style={styles.sectionHeaderRow}>
@@ -697,6 +782,24 @@ export function ActionDetailsModal({
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
+
+      {/* Commitment Enrichment Modal */}
+      {(task as any).isCommitment && enrichModalVisible && (task as any).user_id && (
+        <CommitmentEnrichmentModal
+          visible={enrichModalVisible}
+          commitment={{
+            id: task.id,
+            title: task.title,
+            user_id: (task as any).user_id,
+            is_urgent: task.is_urgent ?? false,
+            is_important: task.is_important ?? false,
+            external_recurrence_id: (task as any).external_recurrence_id ?? null,
+          }}
+          initialTab={enrichTab}
+          onClose={() => setEnrichModalVisible(false)}
+          onEnrichmentChange={() => {}}
+        />
+      )}
 
       {/* Add Note Modal */}
       <Modal visible={addNoteModalVisible} transparent animationType="fade">
@@ -1132,5 +1235,52 @@ const styles = StyleSheet.create({
   },
   removeAttachmentButton: {
     padding: 4,
+  },
+  enrichSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  enrichSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  enrichIconRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+  },
+  enrichIconBtn: {
+    alignItems: 'center',
+    gap: 4,
+    position: 'relative',
+    minWidth: 48,
+  },
+  enrichIconLabel: {
+    fontSize: 10,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  enrichBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  enrichBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
 });
