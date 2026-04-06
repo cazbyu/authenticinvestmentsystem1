@@ -1,8 +1,9 @@
-# Expo Router SPA fallback - serve index.html for all routes
-# This ensures client-side routing works on page refresh
+# Expo Router static output — Netlify redirects
+# Static HTML files are served directly by Netlify (force=false default).
+# This catch-all only fires for routes with no matching static file.
 
 # Serve static assets directly
 /_expo/*  /_expo/:splat  200
 
-# Fallback to index.html for all other routes (SPA)
+# SPA fallback for dynamic/unmatched routes only
 /*    /index.html   200

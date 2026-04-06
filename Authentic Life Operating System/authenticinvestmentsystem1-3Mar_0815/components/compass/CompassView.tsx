@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Modal } from 'react-native';
+import React, { useState, lazy, Suspense } from 'react';
+import { View, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { AspirationalQuote } from './AspirationalQuote';
 import { LifeCompass } from './LifeCompass';
 import { useTheme } from '@/contexts/ThemeContext';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 import JournalForm from '@/components/reflections/JournalForm';
 
 export function CompassView() {
@@ -53,12 +53,14 @@ export function CompassView() {
         presentationStyle="fullScreen"
         onRequestClose={handleTaskEventFormClose}
       >
-        <TaskEventForm
-          mode="create"
-          preSelectedType={taskEventFormType}
-          onSubmitSuccess={handleTaskEventFormSuccess}
-          onClose={handleTaskEventFormClose}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode="create"
+            preSelectedType={taskEventFormType}
+            onSubmitSuccess={handleTaskEventFormSuccess}
+            onClose={handleTaskEventFormClose}
+          />
+        </Suspense>
       </Modal>
 
       <JournalForm

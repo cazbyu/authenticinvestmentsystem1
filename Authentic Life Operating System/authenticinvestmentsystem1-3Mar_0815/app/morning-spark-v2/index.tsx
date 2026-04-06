@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   View,
   Text,
@@ -25,8 +25,8 @@ import ContractReviewStep from '@/components/morning-spark-v2/ContractReviewStep
 import ContractCloseStep from '@/components/morning-spark-v2/ContractCloseStep';
 import { DelegateModal } from '@/components/morning-spark/DelegateModal';
 import { RescheduleModal } from '@/components/morning-spark/RescheduleModal';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
-import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
+const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
 import { Task } from '@/components/tasks/TaskCard';
 import { getActivityConfig } from '@/lib/activityConfig';
 import type { ActivityConfig } from '@/lib/activityConfig';
@@ -836,33 +836,39 @@ export default function MorningSparkV2Screen() {
 
       {/* Add New task/event modal — same as FAB */}
       <Modal visible={addNewModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={handleAddNewSubmitSuccess}
-          onClose={() => {
-            setAddNewModalVisible(false);
-            setAddNewConfig(null);
-          }}
-          config={addNewConfig || undefined}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode="create"
+            onSubmitSuccess={handleAddNewSubmitSuccess}
+            onClose={() => {
+              setAddNewModalVisible(false);
+              setAddNewConfig(null);
+            }}
+            config={addNewConfig || undefined}
+          />
+        </Suspense>
       </Modal>
 
       {/* Edit task modal — triggered from contract review step card tap */}
-      <ActionDetailsModal
-        visible={editTaskModalVisible}
-        task={editingTask}
-        onClose={() => {
-          setEditTaskModalVisible(false);
-          setEditingTask(null);
-        }}
-        onDelete={(_task) => {
-          setEditTaskModalVisible(false);
-          setEditingTask(null);
-          handleEditSubmitSuccess();
-        }}
-        onEdit={() => handleEditSubmitSuccess()}
-        onRefreshAssociatedItems={() => handleEditSubmitSuccess()}
-      />
+      {editTaskModalVisible && (
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <ActionDetailsModal
+            visible={editTaskModalVisible}
+            task={editingTask}
+            onClose={() => {
+              setEditTaskModalVisible(false);
+              setEditingTask(null);
+            }}
+            onDelete={(_task) => {
+              setEditTaskModalVisible(false);
+              setEditingTask(null);
+              handleEditSubmitSuccess();
+            }}
+            onEdit={() => handleEditSubmitSuccess()}
+            onRefreshAssociatedItems={() => handleEditSubmitSuccess()}
+          />
+        </Suspense>
+      )}
     </SafeAreaView>
   );
 }

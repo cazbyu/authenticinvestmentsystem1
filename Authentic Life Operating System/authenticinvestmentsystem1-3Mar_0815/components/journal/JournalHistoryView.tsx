@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import React, { useState, lazy, Suspense } from 'react';
+import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import MonthlyCardsView from '../reflections/MonthlyCardsView';
 import MonthlyIndexView from '../reflections/MonthlyIndexView';
 import DailyViewModal from '../reflections/DailyViewModal';
 import { ReflectionDetailsModal } from '../reflections/ReflectionDetailsModal';
-import { ActionDetailsModal } from '../tasks/ActionDetailsModal';
+const ActionDetailsModal = lazy(() => import('../tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
 import { DepositIdeaDetailModal } from '../depositIdeas/DepositIdeaDetailModal';
 import { getSupabaseClient } from '@/lib/supabase';
 import { ReflectionWithRelations, fetchAttachmentsForReflections } from '@/lib/reflectionUtils';
@@ -275,13 +275,17 @@ export default function JournalHistoryView() {
         onDelete={handleReflectionDelete}
       />
 
-      <ActionDetailsModal
-        visible={isTaskDetailVisible}
-        task={selectedTask}
-        onClose={handleTaskDetailClose}
-        onDelete={handleTaskDelete}
-        goalTitle={selectedTaskGoalTitle}
-      />
+      {isTaskDetailVisible && (
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <ActionDetailsModal
+            visible={isTaskDetailVisible}
+            task={selectedTask}
+            onClose={handleTaskDetailClose}
+            onDelete={handleTaskDelete}
+            goalTitle={selectedTaskGoalTitle}
+          />
+        </Suspense>
+      )}
 
       <DepositIdeaDetailModal
         visible={isDepositIdeaDetailVisible}

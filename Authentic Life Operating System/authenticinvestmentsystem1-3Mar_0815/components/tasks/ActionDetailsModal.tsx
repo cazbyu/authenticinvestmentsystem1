@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, TextInput, Platform } from 'react-native';
 import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip, Target, Flag, FileText, UserPlus } from 'lucide-react-native';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
@@ -12,7 +12,7 @@ import { Linking } from 'react-native';
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
-import TaskEventForm from './TaskEventForm';
+const TaskEventForm = lazy(() => import('./TaskEventForm'));
 import ParentItemInfo from '../followThrough/ParentItemInfo';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -728,50 +728,54 @@ export function ActionDetailsModal({
 
       {/* Follow Through Form Modal */}
       {followThroughFormVisible && (
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={() => {
-            setFollowThroughFormVisible(false);
-            if (onRefreshAssociatedItems) {
-              onRefreshAssociatedItems();
-            }
-            loadAssociatedItems();
-          }}
-          onClose={() => {
-            setFollowThroughFormVisible(false);
-            if (onRefreshAssociatedItems) {
-              onRefreshAssociatedItems();
-            }
-            loadAssociatedItems();
-          }}
-          preSelectedType={followThroughPreSelectedType}
-          parentId={task.id}
-          parentType={task.type === 'event' ? 'event' : 'task'}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode="create"
+            onSubmitSuccess={() => {
+              setFollowThroughFormVisible(false);
+              if (onRefreshAssociatedItems) {
+                onRefreshAssociatedItems();
+              }
+              loadAssociatedItems();
+            }}
+            onClose={() => {
+              setFollowThroughFormVisible(false);
+              if (onRefreshAssociatedItems) {
+                onRefreshAssociatedItems();
+              }
+              loadAssociatedItems();
+            }}
+            preSelectedType={followThroughPreSelectedType}
+            parentId={task.id}
+            parentType={task.type === 'event' ? 'event' : 'task'}
+          />
+        </Suspense>
       )}
 
       {/* Edit Form Modal */}
       {isEditMode && (
         <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-          <TaskEventForm
-            mode="edit"
-            initialData={{
-              ...task,
-              type: task.type,
-              roles: roles,
-              domains: domains,
-            }}
-            onClose={() => {
-              setIsEditMode(false);
-            }}
-            onSubmitSuccess={async () => {
-              setIsEditMode(false);
-              await fetchTaskNotes();
-              await loadAssociatedItems();
-              await fetchTaskMetadata();
-              onRefreshAssociatedItems?.();
-            }}
-          />
+          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+            <TaskEventForm
+              mode="edit"
+              initialData={{
+                ...task,
+                type: task.type,
+                roles: roles,
+                domains: domains,
+              }}
+              onClose={() => {
+                setIsEditMode(false);
+              }}
+              onSubmitSuccess={async () => {
+                setIsEditMode(false);
+                await fetchTaskNotes();
+                await loadAssociatedItems();
+                await fetchTaskMetadata();
+                onRefreshAssociatedItems?.();
+              }}
+            />
+          </Suspense>
         </Modal>
       )}
 

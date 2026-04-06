@@ -7,10 +7,11 @@ import {
   Animated,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
-import GaugeBg from '@/assets/images/gauge-bg.svg';
+const gaugeBgSource = require('@/assets/images/gauge-bg.png');
 import GaugeNeedle from '@/assets/images/gauge-needle.svg';
 import {
   FuelLevel,
@@ -146,7 +147,7 @@ export default function EnergyCheckStep({
 
       <View style={styles.gaugeContainer}>
         <View style={styles.gaugeSvgContainer}>
-          <GaugeBg width="100%" height="100%" />
+          <Image source={gaugeBgSource} style={{ width: '100%', height: '100%', position: 'absolute' }} resizeMode="contain" />
           <Animated.View
             style={[
               styles.needleContainer,

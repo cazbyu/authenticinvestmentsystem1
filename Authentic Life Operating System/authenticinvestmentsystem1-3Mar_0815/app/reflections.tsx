@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal } from 'react-native';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { View, Text, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Plus } from 'lucide-react-native';
@@ -10,8 +10,8 @@ import DailyNotesView from '@/components/reflections/DailyNotesView';
 import WeeklyReflectionView from '@/components/reflections/WeeklyReflectionView';
 import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
 import JournalForm from '@/components/reflections/JournalForm';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
-import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
+const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import ActionSelectionModal, { ActionType as ActionModalType } from '@/components/reflections/ActionSelectionModal';
@@ -285,18 +285,20 @@ export default function ReflectionsScreen() {
         presentationStyle="fullScreen"
         onRequestClose={handleTaskEventFormClose}
       >
-        <TaskEventForm
-          mode={taskFormMode}
-          initialData={editingTask || {
-            type: taskEventFormType,
-            notes: taskEventFormInitialData?.notes || '',
-            selectedRoleIds: taskEventFormInitialData?.selectedRoleIds || [],
-            selectedDomainIds: taskEventFormInitialData?.selectedDomainIds || [],
-            selectedKeyRelationshipIds: taskEventFormInitialData?.selectedKeyRelationshipIds || [],
-          }}
-          onSubmitSuccess={handleTaskEventFormSuccess}
-          onClose={handleTaskEventFormClose}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode={taskFormMode}
+            initialData={editingTask || {
+              type: taskEventFormType,
+              notes: taskEventFormInitialData?.notes || '',
+              selectedRoleIds: taskEventFormInitialData?.selectedRoleIds || [],
+              selectedDomainIds: taskEventFormInitialData?.selectedDomainIds || [],
+              selectedKeyRelationshipIds: taskEventFormInitialData?.selectedKeyRelationshipIds || [],
+            }}
+            onSubmitSuccess={handleTaskEventFormSuccess}
+            onClose={handleTaskEventFormClose}
+          />
+        </Suspense>
       </Modal>
 
       <ActionSelectionModal
@@ -309,21 +311,23 @@ export default function ReflectionsScreen() {
       />
 
       {isTaskDetailModalVisible && selectedTask && (
-        <ActionDetailsModal
-          visible={isTaskDetailModalVisible}
-          task={selectedTask}
-          onClose={() => {
-            setIsTaskDetailModalVisible(false);
-            setSelectedTask(null);
-          }}
-          onDelete={(task) => {
-            console.log('Delete task:', task.id);
-            setIsTaskDetailModalVisible(false);
-            setSelectedTask(null);
-          }}
-          onEdit={handleUpdateTask}
-          onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <ActionDetailsModal
+            visible={isTaskDetailModalVisible}
+            task={selectedTask}
+            onClose={() => {
+              setIsTaskDetailModalVisible(false);
+              setSelectedTask(null);
+            }}
+            onDelete={(task) => {
+              console.log('Delete task:', task.id);
+              setIsTaskDetailModalVisible(false);
+              setSelectedTask(null);
+            }}
+            onEdit={handleUpdateTask}
+            onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+          />
+        </Suspense>
       )}
 
       {isDepositIdeaModalVisible && selectedDepositIdea && (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,7 @@ import { toLocalISOString, formatLocalDate } from '@/lib/dateUtils';
 import TacticalDayRows, { EnrichedItem, WeekDay } from './TacticalDayRows';
 import TacticalDelegateCard, { DelegateContact } from './TacticalDelegateCard';
 import GoalCampaignsCard from './GoalCampaignsCard';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 import { AlignmentEscortCard } from './AlignmentEscortCard';
 import { WeekPlanReview } from './WeekPlanReview';
 import { updateStepTimestamp } from '@/lib/weeklyAlignment';
@@ -854,18 +854,20 @@ export function TacticalDeploymentStep({
       {/* Edit Modal */}
       {editingItem && (
         <Modal visible animationType="slide" presentationStyle="fullScreen">
-          <TaskEventForm
-            mode="edit"
-            initialData={{
-              ...editingItem,
-              type: editingItem.type,
-              roles: editingItem.roles,
-              domains: editingItem.domains,
-              goals: editingItem.goals,
-            }}
-            onClose={() => setEditingItem(null)}
-            onSubmitSuccess={handleEditComplete}
-          />
+          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+            <TaskEventForm
+              mode="edit"
+              initialData={{
+                ...editingItem,
+                type: editingItem.type,
+                roles: editingItem.roles,
+                domains: editingItem.domains,
+                goals: editingItem.goals,
+              }}
+              onClose={() => setEditingItem(null)}
+              onSubmitSuccess={handleEditComplete}
+            />
+          </Suspense>
         </Modal>
       )}
     </ScrollView>
