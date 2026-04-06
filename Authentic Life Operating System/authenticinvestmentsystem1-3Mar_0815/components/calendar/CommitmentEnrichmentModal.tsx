@@ -742,8 +742,8 @@ export default function CommitmentEnrichmentModal({
   const TAB_DEFS: Array<{ key: EnrichmentTab; Icon: any }> = [
     { key: 'roles', Icon: Users },
     { key: 'wellness', Icon: Heart },
-    { key: 'goals', Icon: Flag },
-    { key: 'priority', Icon: Target },
+    { key: 'goals', Icon: Target },
+    { key: 'priority', Icon: Flag },
     { key: 'notes', Icon: FileText },
     { key: 'delegate', Icon: UserPlus },
   ];

@@ -176,11 +176,10 @@ export function CalendarEventDisplay({
 
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('goals'); setEnrichModalVisible(true); }}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('priority'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Flag size={14} color={iconColor} />
-              {hasGoals && <View style={styles.enrichDot} />}
+              <Flag size={14} color={priorityIconColor} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -194,10 +193,11 @@ export function CalendarEventDisplay({
 
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('priority'); setEnrichModalVisible(true); }}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('goals'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Target size={14} color={priorityIconColor} />
+              <Target size={14} color={iconColor} />
+              {hasGoals && <View style={styles.enrichDot} />}
             </TouchableOpacity>
 
             <View style={styles.enrichSpacer} />
