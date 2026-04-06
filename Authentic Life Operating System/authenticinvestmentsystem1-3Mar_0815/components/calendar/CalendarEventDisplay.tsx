@@ -167,15 +167,6 @@ export function CalendarEventDisplay({
           <View style={styles.enrichmentRow}>
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('roles'); setEnrichModalVisible(true); }}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Users size={14} color={iconColor} />
-              {hasRoles && <View style={styles.enrichDot} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
               onPress={(e) => { e.stopPropagation?.(); setEnrichTab('priority'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
@@ -184,11 +175,28 @@ export function CalendarEventDisplay({
 
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('roles'); setEnrichModalVisible(true); }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Users size={14} color={iconColor} />
+              {(task as any).roles?.length > 0 && (
+                <View style={styles.enrichCount}>
+                  <Text style={styles.enrichCountText}>{(task as any).roles.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
               onPress={(e) => { e.stopPropagation?.(); setEnrichTab('wellness'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Heart size={14} color={iconColor} />
-              {hasWellness && <View style={styles.enrichDot} />}
+              {(task as any).domains?.length > 0 && (
+                <View style={styles.enrichCount}>
+                  <Text style={styles.enrichCountText}>{(task as any).domains.length}</Text>
+                </View>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -197,7 +205,11 @@ export function CalendarEventDisplay({
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Target size={14} color={iconColor} />
-              {hasGoals && <View style={styles.enrichDot} />}
+              {(task as any).goals?.length > 0 && (
+                <View style={styles.enrichCount}>
+                  <Text style={styles.enrichCountText}>{(task as any).goals.length}</Text>
+                </View>
+              )}
             </TouchableOpacity>
 
             <View style={styles.enrichSpacer} />
@@ -263,7 +275,6 @@ export function CalendarEventDisplay({
           onClose={() => setEnrichModalVisible(false)}
           onEnrichmentChange={() => {
             setEnrichModalVisible(false);
-            onCommitmentComplete?.(task.id);
           }}
         />
       )}
@@ -310,8 +321,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   completedTitle: {
-    textDecorationLine: 'line-through',
-    color: '#6b7280',
+    opacity: 0.7,
   },
   eventTime: {
     fontSize: 10,
@@ -386,5 +396,22 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: '#16a34a',
+  },
+  enrichCount: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  enrichCountText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '700',
   },
 });
