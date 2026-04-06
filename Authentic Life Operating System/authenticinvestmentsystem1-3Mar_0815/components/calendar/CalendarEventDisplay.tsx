@@ -4,6 +4,7 @@ import { Check, X } from 'lucide-react-native';
 import CommitmentEnrichmentModal from './CommitmentEnrichmentModal';
 import { Task } from '@/components/tasks/TaskCard';
 import { formatTimeForDisplay } from '@/lib/dateUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 interface CalendarEventDisplayProps {
   task: Task;
@@ -206,10 +207,13 @@ export function CalendarEventDisplay({
             external_recurrence_id: (task as any).external_recurrence_id ?? null,
           }}
           initialTab={enrichTab}
-          onClose={() => setEnrichModalVisible(false)}
+          onClose={() => {
+            setEnrichModalVisible(false);
+            // Trigger calendar data re-fetch so badge dots update with new enrichment data
+            eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+          }}
           onEnrichmentChange={() => {
             // Do not close — user may still be switching tabs
-            // Just signal parent to refresh badge data
           }}
           onPriorityChange={(u, i) => { setLocalUrgent(u); setLocalImportant(i); }}
         />
