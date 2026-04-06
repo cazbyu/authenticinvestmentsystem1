@@ -14,7 +14,9 @@ import {
   Image,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp, Flag, FileText, UserPlus } from 'lucide-react-native';
+import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
+import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform, Linking } from 'react-native';
@@ -223,6 +225,9 @@ export default function TaskEventForm({
 
   // Advanced section toggle - collapsed by default for simpler form
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
+  const [enrichModalVisible, setEnrichModalVisible] = useState(false);
+  const [showPriorityInline, setShowPriorityInline] = useState(false);
 
   // Context banner for Speed Dial
   const [showContextBanner, setShowContextBanner] = useState(true);
@@ -2167,28 +2172,56 @@ export default function TaskEventForm({
                     </View>
                   )}
 
-                  {/* Roles */}
-                  {renderToggleSwitchGrid(
-                    'Roles',
-                    roles,
-                    formData.selectedRoleIds,
-                    (id) => handleMultiSelect('selectedRoleIds', id)
-                  )}
+                  {/* Enrichment Icon Row */}
+                  {mode === 'edit' && initialData?.id ? (
+                    <View style={styles.enrichSection}>
+                      <View style={styles.enrichIconRow}>
+                        <TouchableOpacity style={styles.enrichIconBtn}
+                          onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                          <View>
+                            <RoleIcon size={28} color={formData.selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'} />
+                            {formData.selectedRoleIds.length > 0 && (
+                              <View style={styles.enrichBadge}>
+                                <Text style={styles.enrichBadgeText}>{formData.selectedRoleIds.length}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.enrichIconLabel}>Roles</Text>
+                        </TouchableOpacity>
 
-                  {/* Key Relationships */}
-                  {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid(
-                    'Key Relationships',
-                    filteredKeyRelationships,
-                    formData.selectedKeyRelationshipIds,
-                    (id) => handleMultiSelect('selectedKeyRelationshipIds', id)
-                  )}
+                        <TouchableOpacity style={styles.enrichIconBtn}
+                          onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                          <View>
+                            <WellnessIcon size={28} color={formData.selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'} />
+                            {formData.selectedDomainIds.length > 0 && (
+                              <View style={styles.enrichBadge}>
+                                <Text style={styles.enrichBadgeText}>{formData.selectedDomainIds.length}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.enrichIconLabel}>Wellness</Text>
+                        </TouchableOpacity>
 
-                  {/* Wellness Zones */}
-                  {renderToggleSwitchGrid(
-                    'Wellness Zones',
-                    domains,
-                    formData.selectedDomainIds,
-                    (id) => handleMultiSelect('selectedDomainIds', id)
+                        <TouchableOpacity style={styles.enrichIconBtn}
+                          onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                          <View>
+                            <GoalIcon size={28} color={formData.selectedGoalIds.length > 0 ? '#16a34a' : '#9ca3af'} />
+                            {formData.selectedGoalIds.length > 0 && (
+                              <View style={styles.enrichBadge}>
+                                <Text style={styles.enrichBadgeText}>{formData.selectedGoalIds.length}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.enrichIconLabel}>Goals</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      {renderToggleSwitchGrid('Roles', roles, formData.selectedRoleIds, (id) => handleMultiSelect('selectedRoleIds', id))}
+                      {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid('Key Relationships', filteredKeyRelationships, formData.selectedKeyRelationshipIds, (id) => handleMultiSelect('selectedKeyRelationshipIds', id))}
+                      {renderToggleSwitchGrid('Wellness Zones', domains, formData.selectedDomainIds, (id) => handleMultiSelect('selectedDomainIds', id))}
+                    </>
                   )}
                 </>
               )}
@@ -2378,41 +2411,12 @@ export default function TaskEventForm({
             </View>
           )}
 
-          {/* Switches Row - Only for task and event types */}
+          {/* Follow Up toggle - Only for task and event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
-            <>
-              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
-                  {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
-                </View>
+            <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+              <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
               </View>
-
-              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
-                    setFormData(prev => ({ ...prev, isDelegated: value }));
-                    if (value) {
-                      setShowDelegateModal(true);
-                    }
-                  })}
-                  {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
-                </View>
-              </View>
-            </>
-          )}
-
-          {/* Delegate Info */}
-          {(formData.type === 'task' || formData.type === 'event') && formData.isDelegated && formData.selectedDelegateId && (
-            <View style={styles.delegateInfoContainer}>
-              <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
-                {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
-                <Text style={[styles.changeDelegateText, { color: colors.primary }]}>
-                  Change
-                </Text>
-              </TouchableOpacity>
             </View>
           )}
 
@@ -2451,45 +2455,165 @@ export default function TaskEventForm({
             </View>
           )}
 
-          {/* Goal Toggle */}
+          {/* Enrichment Icon Row — for task/event types */}
           {(formData.type === 'task' || formData.type === 'event') && (
-            <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-              <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
-              </View>
-            </View>
-          )}
+            mode === 'edit' && initialData?.id ? (
+              <View style={styles.enrichSection}>
+                <View style={styles.enrichIconRow}>
+                  {/* Priority Flag — inline toggle */}
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => setShowPriorityInline(!showPriorityInline)}>
+                    <Flag size={28} color={
+                      formData.isUrgent && formData.isImportant ? '#ef4444' :
+                      formData.isImportant ? '#10b981' :
+                      formData.isUrgent ? '#f59e0b' : '#9ca3af'
+                    } />
+                    <Text style={styles.enrichIconLabel}>Priority</Text>
+                  </TouchableOpacity>
 
-          {/* Goal picker (shows when Goal toggle ON) */}
-          {formData.isGoal && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
-              {availableGoals.length === 0 ? (
-                <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
-              ) : (
-                <View style={styles.toggleSwitchContainer}>
-                  {availableGoals.map(g => {
-                    const active = formData.selectedGoal?.id === g.id;
-                    return (
-                      <View
-                        key={`${g.goal_type}-${g.id}`}
-                        style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                      >
-                        <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
-                          {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
-                        </Text>
-                        <Switch
-                          value={active}
-                          onValueChange={() => handleGoalPick(g.id)}
-                          trackColor={{ false: colors.border, true: colors.primary }}
-                          thumbColor={colors.surface}
-                        />
-                      </View>
-                    );
-                  })}
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <RoleIcon size={28} color={formData.selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'} />
+                      {formData.selectedRoleIds.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{formData.selectedRoleIds.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Roles</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <WellnessIcon size={28} color={formData.selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'} />
+                      {formData.selectedDomainIds.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{formData.selectedDomainIds.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Wellness</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <GoalIcon size={28} color={formData.selectedGoalIds?.length > 0 ? '#16a34a' : '#9ca3af'} />
+                      {formData.selectedGoalIds?.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{formData.selectedGoalIds.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Goals</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('notes'); setEnrichModalVisible(true); }}>
+                    <FileText size={28} color='#9ca3af' />
+                    <Text style={styles.enrichIconLabel}>Notes</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('delegate'); setEnrichModalVisible(true); }}>
+                    <UserPlus size={28} color={formData.isDelegated ? '#16a34a' : '#9ca3af'} />
+                    <Text style={styles.enrichIconLabel}>Delegate</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
-            </View>
+
+                {/* Priority inline chips */}
+                {showPriorityInline && (
+                  <View style={styles.priorityInlineRow}>
+                    <TouchableOpacity
+                      style={[styles.priorityChip, formData.isUrgent && styles.priorityChipActive, formData.isUrgent && { backgroundColor: '#f59e0b' }]}
+                      onPress={() => setFormData(prev => ({ ...prev, isUrgent: !prev.isUrgent }))}
+                    >
+                      <Text style={{ color: formData.isUrgent ? '#fff' : '#6b7280', fontWeight: '600', fontSize: 13 }}>Urgent</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.priorityChip, formData.isImportant && styles.priorityChipActive, formData.isImportant && { backgroundColor: '#10b981' }]}
+                      onPress={() => setFormData(prev => ({ ...prev, isImportant: !prev.isImportant }))}
+                    >
+                      <Text style={{ color: formData.isImportant ? '#fff' : '#6b7280', fontWeight: '600', fontSize: 13 }}>Important</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <>
+                {/* Create mode: keep inline pickers */}
+                <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                    {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
+                    {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+                  </View>
+                </View>
+
+                <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                    {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
+                      setFormData(prev => ({ ...prev, isDelegated: value }));
+                      if (value) setShowDelegateModal(true);
+                    })}
+                  </View>
+                </View>
+
+                {formData.isDelegated && formData.selectedDelegateId && (
+                  <View style={styles.delegateInfoContainer}>
+                    <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
+                      {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
+                    </Text>
+                    <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
+                      <Text style={[styles.changeDelegateText, { color: colors.primary }]}>Change</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Goal Toggle */}
+                <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
+                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                    {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                  </View>
+                </View>
+
+                {formData.isGoal && (
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
+                    {availableGoals.length === 0 ? (
+                      <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
+                    ) : (
+                      <View style={styles.toggleSwitchContainer}>
+                        {availableGoals.map(g => {
+                          const active = formData.selectedGoal?.id === g.id;
+                          return (
+                            <View
+                              key={`${g.goal_type}-${g.id}`}
+                              style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                            >
+                              <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
+                                {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
+                              </Text>
+                              <Switch
+                                value={active}
+                                onValueChange={() => handleGoalPick(g.id)}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                                thumbColor={colors.surface}
+                              />
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {renderToggleSwitchGrid('Roles', roles, formData.selectedRoleIds, (id) => handleMultiSelect('selectedRoleIds', id))}
+                {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid('Key Relationships', filteredKeyRelationships, formData.selectedKeyRelationshipIds, (id) => handleMultiSelect('selectedKeyRelationshipIds', id))}
+                {renderToggleSwitchGrid('Wellness Zones', domains, formData.selectedDomainIds, (id) => handleMultiSelect('selectedDomainIds', id))}
+              </>
+            )
           )}
 
           {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
@@ -2507,30 +2631,6 @@ export default function TaskEventForm({
                 keyboardType="decimal-pad"
               />
             </View>
-          )}
-
-          {/* Roles */}
-          {renderToggleSwitchGrid(
-            'Roles',
-            roles,
-            formData.selectedRoleIds,
-            (id) => handleMultiSelect('selectedRoleIds', id)
-          )}
-
-          {/* Key Relationships */}
-          {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid(
-            'Key Relationships',
-            filteredKeyRelationships,
-            formData.selectedKeyRelationshipIds,
-            (id) => handleMultiSelect('selectedKeyRelationshipIds', id)
-          )}
-
-          {/* Wellness Zones */}
-          {renderToggleSwitchGrid(
-            'Wellness Zones',
-            domains,
-            formData.selectedDomainIds,
-            (id) => handleMultiSelect('selectedDomainIds', id)
           )}
           </>
           )}
@@ -2855,6 +2955,19 @@ export default function TaskEventForm({
         initialIndex={selectedImageIndex}
         onClose={() => setImageViewerVisible(false)}
       />
+
+      {/* Commitment Enrichment Modal — for edit mode */}
+      {mode === 'edit' && initialData?.id && userId && (
+        <CommitmentEnrichmentModal
+          visible={enrichModalVisible}
+          onClose={() => setEnrichModalVisible(false)}
+          commitmentId={initialData.id}
+          userId={userId}
+          initialTab={enrichTab}
+          parentType={formData.type === 'reflection' ? 'reflection' : 'task'}
+          onEnrichmentChange={() => {}}
+        />
+      )}
     </View>
   );
 }
@@ -3647,6 +3760,60 @@ const styles = StyleSheet.create({
   moreAttachmentsText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  enrichSection: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  enrichIconRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+    paddingVertical: 8,
+  },
+  enrichIconBtn: {
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 48,
+  },
+  enrichIconLabel: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  enrichBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  enrichBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  priorityInlineRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  priorityChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f3f4f6',
+  },
+  priorityChipActive: {
+    borderColor: 'transparent',
   },
   reflectionContainer: {
     marginTop: 8,
