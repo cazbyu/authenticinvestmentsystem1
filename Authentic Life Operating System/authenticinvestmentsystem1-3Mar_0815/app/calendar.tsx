@@ -1,17 +1,16 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, useWindowDimensions } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Calendar } from 'react-native-calendars';
 import { Header } from '@/components/Header';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { PriorityQuadrant } from '@/components/calendar/PriorityQuadrant';
-import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 import { HourlyCalendarGrid } from '@/components/calendar/HourlyCalendarGrid';
 import { WeekColumnHeader } from '@/components/calendar/WeekColumnHeader';
 import { WeeklyTimeGrid } from '@/components/calendar/WeeklyTimeGrid';
 import { MonthlyCalendarGrid } from '@/components/calendar/MonthlyCalendarGrid';
-import { QuadrantTasksModal } from '@/components/calendar/QuadrantTasksModal';
+const QuadrantTasksModal = lazy(() => import('@/components/calendar/QuadrantTasksModal').then(m => ({ default: m.QuadrantTasksModal })));
 import { getSupabaseClient } from '@/lib/supabase';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react-native';
 import { expandEventsWithRecurrence } from '@/lib/recurrenceUtils';
@@ -350,7 +349,7 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
           .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr}),and(completed_at.gte.${startStr}T00:00:00,completed_at.lte.${endStr}T23:59:59)`),
         supabase
           .from('0008-ap-commitments')
-          .select('id, user_id, title, date, start_time, end_time, is_all_day, status, external_calendar_id')
+          .select('id, user_id, title, date, start_time, end_time, is_all_day, status, external_calendar_id, is_urgent, is_important')
           .eq('user_id', user.id)
           .gte('date', startStr)
           .lte('date', endStr),
@@ -396,8 +395,8 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
           end_time: c.end_time,
           due_date: null,
           completed_at: null,
-          is_urgent: false,
-          is_important: false,
+          is_urgent: c.is_urgent ?? false,
+          is_important: c.is_important ?? false,
           is_all_day: c.is_all_day,
           is_anytime: false,
           occurrence_date: c.date,
@@ -1050,30 +1049,40 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
       )}
 
       {/* Modals */}
-      <ActionDetailsModal
-        visible={isDetailModalVisible}
-        task={selectedTask}
-        onClose={() => setIsDetailModalVisible(false)}
-        onDelete={handleDeleteTask}
-        onEdit={handleUpdateTask}
-        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
-      />
+      {isDetailModalVisible && (
+        <Suspense fallback={<View style={styles.lazyFallback}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <ActionDetailsModal
+            visible={isDetailModalVisible}
+            task={selectedTask}
+            onClose={() => setIsDetailModalVisible(false)}
+            onDelete={handleDeleteTask}
+            onEdit={handleUpdateTask}
+            onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+          />
+        </Suspense>
+      )}
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <TaskEventForm
-          mode={editingTask ? "edit" : "create"}
-          initialData={editingTask || undefined}
-          onSubmitSuccess={handleFormSubmitSuccess}
-          onClose={handleFormClose}
-        />
+        <Suspense fallback={<View style={styles.lazyFallback}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode={editingTask ? "edit" : "create"}
+            initialData={editingTask || undefined}
+            onSubmitSuccess={handleFormSubmitSuccess}
+            onClose={handleFormClose}
+          />
+        </Suspense>
       </Modal>
 
-      <QuadrantTasksModal
-        visible={isQuadrantModalVisible}
-        quadrant={selectedQuadrant}
-        tasks={quadrantTasks}
-        onClose={() => setIsQuadrantModalVisible(false)}
-      />
+      {isQuadrantModalVisible && (
+        <Suspense fallback={<View style={styles.lazyFallback}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <QuadrantTasksModal
+            visible={isQuadrantModalVisible}
+            quadrant={selectedQuadrant}
+            tasks={quadrantTasks}
+            onClose={() => setIsQuadrantModalVisible(false)}
+          />
+        </Suspense>
+      )}
 
       <Modal visible={isDayTasksModalVisible} animationType="fade" transparent>
         <TouchableOpacity
@@ -1170,6 +1179,12 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
 }
 
 const styles = StyleSheet.create({
+  lazyFallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',

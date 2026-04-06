@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { toLocalISOString } from '@/lib/dateUtils';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
@@ -8,10 +8,10 @@ import { SpeedDialFab } from '@/components/SpeedDialFab';
 import { ActivityConfig, ACTIVITY_CONFIGS } from '@/lib/activityConfig';
 import { TaskCard, Task } from '@/components/tasks/TaskCard';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
-import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
+const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
 import { JournalView } from '@/components/journal/JournalView';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 import JournalForm from '@/components/reflections/JournalForm';
 import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
@@ -1020,25 +1020,31 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
       {/* Modals */}
       <Modal visible={taskFormVisible} animationType="slide" presentationStyle="pageSheet">
-        <TaskEventForm
-          mode={editingTask?.id ? "edit" : "create"}
-          initialData={editingTask || undefined}
-          config={selectedActivityConfig || undefined}
-          onSubmitSuccess={handleFormSubmitSuccess}
-          onClose={handleFormClose}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode={editingTask?.id ? "edit" : "create"}
+            initialData={editingTask || undefined}
+            config={selectedActivityConfig || undefined}
+            onSubmitSuccess={handleFormSubmitSuccess}
+            onClose={handleFormClose}
+          />
+        </Suspense>
       </Modal>
 
-      <ActionDetailsModal
-        visible={taskDetailVisible}
-        task={selectedTask}
-        onClose={() => setTaskDetailVisible(false)}
-        onEdit={handleUpdateTask}
-        onDelegate={handleDelegateTask}
-        onCancel={handleCancelTask}
-        onOpenFollowThrough={handleOpenFollowThrough}
-        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
-      />
+      {taskDetailVisible && (
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <ActionDetailsModal
+            visible={taskDetailVisible}
+            task={selectedTask}
+            onClose={() => setTaskDetailVisible(false)}
+            onEdit={handleUpdateTask}
+            onDelegate={handleDelegateTask}
+            onCancel={handleCancelTask}
+            onOpenFollowThrough={handleOpenFollowThrough}
+            onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+          />
+        </Suspense>
+      )}
 
       <DepositIdeaDetailModal
         visible={depositIdeaDetailVisible}
@@ -1052,14 +1058,16 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
       {/* Follow-through TaskEventForm Modal */}
       <Modal visible={followThroughFormVisible} animationType="slide" presentationStyle="fullScreen">
-        <TaskEventForm
-          mode="create"
-          onSubmitSuccess={handleFollowThroughFormClose}
-          onClose={() => setFollowThroughFormVisible(false)}
-          parentId={followThroughParentId}
-          parentType={followThroughParentType as any}
-          preSelectedType={followThroughPreSelectedType}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode="create"
+            onSubmitSuccess={handleFollowThroughFormClose}
+            onClose={() => setFollowThroughFormVisible(false)}
+            parentId={followThroughParentId}
+            parentType={followThroughParentType as any}
+            preSelectedType={followThroughPreSelectedType}
+          />
+        </Suspense>
       </Modal>
 
       <JournalForm

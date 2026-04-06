@@ -1,5 +1,5 @@
-# Netlify configuration for Expo Router SPA
-# This ensures proper routing and asset serving
+# Netlify configuration for Expo Router (static output)
+# Pre-rendered HTML per route, JS hydrates client-side
 
 [build]
   publish = "build"
@@ -33,7 +33,7 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
 
 [[headers]]
-  for = "/index.html"
+  for = "/*.html"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 

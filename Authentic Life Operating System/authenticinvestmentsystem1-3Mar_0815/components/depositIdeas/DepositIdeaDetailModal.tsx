@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, Linking, TextInput, Platform } from 'react-native';
 import { X, Play, Edit, Trash2, Paperclip, FileText } from 'lucide-react-native';
 import Autolink from 'react-native-autolink';
@@ -8,7 +8,7 @@ import ImageViewerModal from '../reflections/ImageViewerModal';
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
-import TaskEventForm from '../tasks/TaskEventForm';
+const TaskEventForm = lazy(() => import('../tasks/TaskEventForm'));
 import ParentItemInfo from '../followThrough/ParentItemInfo';
 import * as DocumentPicker from 'expo-document-picker';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
@@ -675,70 +675,74 @@ export function DepositIdeaDetailModal({
       {/* Follow Through Form Modal */}
       {followThroughFormVisible && (
         <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-          <TaskEventForm
-            visible={true}
-            onClose={() => {
-              setFollowThroughFormVisible(false);
-              setIsActivating(false);
-              if (onRefreshAssociatedItems) {
-                onRefreshAssociatedItems();
-              }
-              loadAssociatedItems();
-            }}
-            initialType={followThroughPreSelectedType}
-            parentId={isActivating ? undefined : depositIdea.id}
-            parentType={isActivating ? undefined : "depositIdea"}
-            initialData={isActivating ? {
-              title: depositIdea.title,
-              notes: notes.map(n => n.content).join('\n\n'),
-              selectedRoleIds: roles.map(r => r.id),
-              selectedDomainIds: domains.map(d => d.id),
-              selectedKeyRelationshipIds: keyRelationships.map(kr => kr.id),
-              is_deposit_idea: true,
-            } : undefined}
-            onSubmitSuccess={async (createdTask?: any) => {
-              setFollowThroughFormVisible(false);
+          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+            <TaskEventForm
+              visible={true}
+              onClose={() => {
+                setFollowThroughFormVisible(false);
+                setIsActivating(false);
+                if (onRefreshAssociatedItems) {
+                  onRefreshAssociatedItems();
+                }
+                loadAssociatedItems();
+              }}
+              initialType={followThroughPreSelectedType}
+              parentId={isActivating ? undefined : depositIdea.id}
+              parentType={isActivating ? undefined : "depositIdea"}
+              initialData={isActivating ? {
+                title: depositIdea.title,
+                notes: notes.map(n => n.content).join('\n\n'),
+                selectedRoleIds: roles.map(r => r.id),
+                selectedDomainIds: domains.map(d => d.id),
+                selectedKeyRelationshipIds: keyRelationships.map(kr => kr.id),
+                is_deposit_idea: true,
+              } : undefined}
+              onSubmitSuccess={async (createdTask?: any) => {
+                setFollowThroughFormVisible(false);
 
-              if (isActivating && createdTask?.id) {
-                // Complete the activation workflow
-                await handleActivationComplete(createdTask.id, createdTask.type || 'task');
-              }
+                if (isActivating && createdTask?.id) {
+                  // Complete the activation workflow
+                  await handleActivationComplete(createdTask.id, createdTask.type || 'task');
+                }
 
-              setIsActivating(false);
-              if (onRefreshAssociatedItems) {
-                onRefreshAssociatedItems();
-              }
-              await loadAssociatedItems();
-              await fetchMetadata();
-            }}
-          />
+                setIsActivating(false);
+                if (onRefreshAssociatedItems) {
+                  onRefreshAssociatedItems();
+                }
+                await loadAssociatedItems();
+                await fetchMetadata();
+              }}
+            />
+          </Suspense>
         </Modal>
       )}
 
       {/* Edit Form Modal */}
       {isEditMode && depositIdea && (
         <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-          <TaskEventForm
-            mode="edit"
-            initialData={{
-              ...depositIdea,
-              type: 'depositIdea',
-              roles: roles,
-              domains: domains,
-              goals: depositIdea.goals || [],
-              keyRelationships: keyRelationships,
-            }}
-            onClose={() => {
-              setIsEditMode(false);
-            }}
-            onSubmitSuccess={async () => {
-              setIsEditMode(false);
-              await fetchNotes();
-              await loadAssociatedItems();
-              await fetchMetadata();
-              onRefreshAssociatedItems?.();
-            }}
-          />
+          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+            <TaskEventForm
+              mode="edit"
+              initialData={{
+                ...depositIdea,
+                type: 'depositIdea',
+                roles: roles,
+                domains: domains,
+                goals: depositIdea.goals || [],
+                keyRelationships: keyRelationships,
+              }}
+              onClose={() => {
+                setIsEditMode(false);
+              }}
+              onSubmitSuccess={async () => {
+                setIsEditMode(false);
+                await fetchNotes();
+                await loadAssociatedItems();
+                await fetchMetadata();
+                onRefreshAssociatedItems?.();
+              }}
+            />
+          </Suspense>
         </Modal>
       )}
 

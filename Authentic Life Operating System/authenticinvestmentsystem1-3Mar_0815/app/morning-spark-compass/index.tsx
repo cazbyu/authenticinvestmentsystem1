@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,7 @@ import EnergyCheckStep from '@/components/morning-spark-v2/EnergyCheckStep';
 import { CompassDirectionHeader } from '@/components/compass/CompassDirectionHeader';
 
 // TaskEventForm for pre-filled capture routing
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 
 // Service layers
 import {
@@ -1427,34 +1427,36 @@ export default function MorningSparkCompassScreen() {
 
                 {/* TaskEventForm Modal — pre-filled from DD analysis */}
                 <Modal visible={showTaskEventForm} animationType="slide" presentationStyle="fullScreen">
-                  <TaskEventForm
-                    mode="create"
-                    preSelectedType={formPrefill?.type}
-                    initialData={formPrefill ? {
-                      title: formPrefill.title,
-                      type: formPrefill.type,
-                      selectedRoleIds: formPrefill.selectedRoleIds,
-                      selectedDomainIds: formPrefill.selectedDomainIds,
-                      selectedKeyRelationshipIds: formPrefill.selectedKeyRelationshipIds,
-                      is_deposit_idea: formPrefill.is_deposit_idea,
-                    } : undefined}
-                    onClose={() => {
-                      setShowTaskEventForm(false);
-                      setFormPrefill(null);
-                      // Move to next item
-                      setCurrentItemIndex(currentItemIndex + 1);
-                    }}
-                    onSubmitSuccess={() => {
-                      setShowTaskEventForm(false);
-                      setFormPrefill(null);
-                      setCapturedCount((c) => c + 1);
-                      if (Platform.OS !== 'web') {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      }
-                      // Move to next item
-                      setCurrentItemIndex(currentItemIndex + 1);
-                    }}
-                  />
+                  <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+                    <TaskEventForm
+                      mode="create"
+                      preSelectedType={formPrefill?.type}
+                      initialData={formPrefill ? {
+                        title: formPrefill.title,
+                        type: formPrefill.type,
+                        selectedRoleIds: formPrefill.selectedRoleIds,
+                        selectedDomainIds: formPrefill.selectedDomainIds,
+                        selectedKeyRelationshipIds: formPrefill.selectedKeyRelationshipIds,
+                        is_deposit_idea: formPrefill.is_deposit_idea,
+                      } : undefined}
+                      onClose={() => {
+                        setShowTaskEventForm(false);
+                        setFormPrefill(null);
+                        // Move to next item
+                        setCurrentItemIndex(currentItemIndex + 1);
+                      }}
+                      onSubmitSuccess={() => {
+                        setShowTaskEventForm(false);
+                        setFormPrefill(null);
+                        setCapturedCount((c) => c + 1);
+                        if (Platform.OS !== 'web') {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        }
+                        // Move to next item
+                        setCurrentItemIndex(currentItemIndex + 1);
+                      }}
+                    />
+                  </Suspense>
                 </Modal>
               </>
             )}
@@ -1648,17 +1650,19 @@ export default function MorningSparkCompassScreen() {
 
                 {/* Add Task Form Modal */}
                 <Modal visible={showFinalAddForm} animationType="slide" presentationStyle="fullScreen">
-                  <TaskEventForm
-                    mode="create"
-                    onClose={() => setShowFinalAddForm(false)}
-                    onSubmitSuccess={async () => {
-                      setShowFinalAddForm(false);
-                      // Refresh the review data
-                      const goalActionIds = Array.from(committedActionIds);
-                      const updated = await getFinalReviewData(userId, Array.from(selectedTaskIds), goalActionIds);
-                      setFinalReview(updated);
-                    }}
-                  />
+                  <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+                    <TaskEventForm
+                      mode="create"
+                      onClose={() => setShowFinalAddForm(false)}
+                      onSubmitSuccess={async () => {
+                        setShowFinalAddForm(false);
+                        // Refresh the review data
+                        const goalActionIds = Array.from(committedActionIds);
+                        const updated = await getFinalReviewData(userId, Array.from(selectedTaskIds), goalActionIds);
+                        setFinalReview(updated);
+                      }}
+                    />
+                  </Suspense>
                 </Modal>
               </>
             ) : (

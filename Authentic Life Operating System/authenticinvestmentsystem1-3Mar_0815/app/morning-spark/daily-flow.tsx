@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ import {
 import { calculateTaskPoints, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { MindsetCapture } from '@/components/morning-spark/MindsetCapture';
 import { DraggableFab } from '@/components/DraggableFab';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 
 // Import Morning Spark Components
 import { ScheduleSection } from '@/components/morning-spark/ScheduleSection';
@@ -2313,13 +2313,15 @@ export default function DailyFlowScreen() {
             <View style={{ width: 40 }} />
           </View>
 
-          <TaskEventForm
-            onSuccess={() => {
-              setIsFabModalVisible(false);
-              loadData(); // Reload data after creating task/event
-            }}
-            onCancel={() => setIsFabModalVisible(false)}
-          />
+          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+            <TaskEventForm
+              onSuccess={() => {
+                setIsFabModalVisible(false);
+                loadData(); // Reload data after creating task/event
+              }}
+              onCancel={() => setIsFabModalVisible(false)}
+            />
+          </Suspense>
         </SafeAreaView>
       </Modal>
 

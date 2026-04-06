@@ -1,7 +1,7 @@
 // Today Screen — Simple "ground level" view of what's on your plate today
 // Accessible from South on the compass
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -9,8 +9,8 @@ import { ArrowLeft, Plus, Sun, CheckCircle2 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
-import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 import { formatLocalDate, toLocalISOString } from '@/lib/dateUtils';
 import { completeTask } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
@@ -189,45 +189,51 @@ export default function TodayScreen() {
       </ScrollView>
 
       {/* Task Detail Modal */}
-      <ActionDetailsModal
-        visible={detailModalVisible}
-        task={selectedTask}
-        onClose={() => {
-          setDetailModalVisible(false);
-          setSelectedTask(null);
-        }}
-        onComplete={handleComplete}
-        onEdit={() => {
-          setDetailModalVisible(false);
-          setSelectedTask(selectedTask);
-          setFormType(selectedTask?.type === 'event' ? 'event' : 'task');
-          setFormVisible(true);
-        }}
-        onDelete={async (task) => {
-          try {
-            const supabase = getSupabaseClient();
-            await supabase.from('0008-ap-tasks').update({ deleted_at: toLocalISOString(new Date()) }).eq('id', task.id);
-            fetchTodayItems();
-            setDetailModalVisible(false);
-          } catch (error) {
-            console.error('Error deleting task:', error);
-          }
-        }}
-      />
+      {detailModalVisible && (
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <ActionDetailsModal
+            visible={detailModalVisible}
+            task={selectedTask}
+            onClose={() => {
+              setDetailModalVisible(false);
+              setSelectedTask(null);
+            }}
+            onComplete={handleComplete}
+            onEdit={() => {
+              setDetailModalVisible(false);
+              setSelectedTask(selectedTask);
+              setFormType(selectedTask?.type === 'event' ? 'event' : 'task');
+              setFormVisible(true);
+            }}
+            onDelete={async (task) => {
+              try {
+                const supabase = getSupabaseClient();
+                await supabase.from('0008-ap-tasks').update({ deleted_at: toLocalISOString(new Date()) }).eq('id', task.id);
+                fetchTodayItems();
+                setDetailModalVisible(false);
+              } catch (error) {
+                console.error('Error deleting task:', error);
+              }
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* Task/Event Form */}
       {formVisible && (
-        <TaskEventForm
-          visible={formVisible}
-          onClose={() => {
-            setFormVisible(false);
-            setSelectedTask(null);
-            fetchTodayItems();
-          }}
-          editTask={selectedTask}
-          preSelectedType={formType}
-          defaultDueDate={today}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            visible={formVisible}
+            onClose={() => {
+              setFormVisible(false);
+              setSelectedTask(null);
+              fetchTodayItems();
+            }}
+            editTask={selectedTask}
+            preSelectedType={formType}
+            defaultDueDate={today}
+          />
+        </Suspense>
       )}
     </SafeAreaView>
   );

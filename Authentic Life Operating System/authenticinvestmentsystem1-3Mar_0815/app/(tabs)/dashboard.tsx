@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Easing, Platform, FlatList, Image } from 'react-native';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Easing, Platform, FlatList, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
-import { ActionDetailsModal } from '@/components/tasks/ActionDetailsModal';
-import TaskEventForm from '@/components/tasks/TaskEventForm';
+const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
+const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 import RecurringTaskActionModal from '@/components/tasks/RecurringTaskActionModal';
 import DelegateModal from '@/components/tasks/DelegateModal';
 import JournalForm from '@/components/reflections/JournalForm';
@@ -1548,23 +1548,29 @@ const renderDashboardTabs = () => (
       />
 
       <Modal visible={isFormModalVisible} animationType="slide" presentationStyle="pageSheet">
-        <TaskEventForm
-          mode={editingTask ? "edit" : "create"}
-          initialData={editingTask || undefined}
-          onSubmitSuccess={handleFormSubmitSuccess}
-          onClose={handleFormClose}
-          config={editingTask ? undefined : selectedActivityConfig || undefined}
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            mode={editingTask ? "edit" : "create"}
+            initialData={editingTask || undefined}
+            onSubmitSuccess={handleFormSubmitSuccess}
+            onClose={handleFormClose}
+            config={editingTask ? undefined : selectedActivityConfig || undefined}
+          />
+        </Suspense>
       </Modal>
-      <ActionDetailsModal
-        visible={isDetailModalVisible}
-        task={selectedTask}
-        onClose={() => setIsDetailModalVisible(false)}
-        onDelete={handleDeleteTask}
-        onEdit={handleUpdateTask}
-        onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
-        onItemPress={handleAssociatedItemPress}
-      />
+      {isDetailModalVisible && (
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <ActionDetailsModal
+            visible={isDetailModalVisible}
+            task={selectedTask}
+            onClose={() => setIsDetailModalVisible(false)}
+            onDelete={handleDeleteTask}
+            onEdit={handleUpdateTask}
+            onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
+            onItemPress={handleAssociatedItemPress}
+          />
+        </Suspense>
+      )}
       <DepositIdeaDetailModal
         visible={isDepositIdeaDetailVisible}
         depositIdea={selectedDepositIdea}

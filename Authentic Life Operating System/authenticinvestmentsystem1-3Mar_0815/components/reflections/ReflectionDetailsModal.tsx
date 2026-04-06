@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, Linking } from 'react-native';
 import { X, BookOpen, Edit, Trash2 } from 'lucide-react-native';
 import Autolink from 'react-native-autolink';
@@ -9,7 +9,7 @@ import { ReflectionWithRelations, fetchReflectionAttachments } from '@/lib/refle
 import FollowThroughButtonBar from '../followThrough/FollowThroughButtonBar';
 import AssociatedItemsList, { AssociatedItem } from '../followThrough/AssociatedItemsList';
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
-import TaskEventForm from '../tasks/TaskEventForm';
+const TaskEventForm = lazy(() => import('../tasks/TaskEventForm'));
 import ParentItemInfo from '../followThrough/ParentItemInfo';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
 import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
@@ -437,47 +437,51 @@ export function ReflectionDetailsModal({
 
       {/* Follow Through Form Modal */}
       {followThroughFormVisible && (
-        <TaskEventForm
-          visible={followThroughFormVisible}
-          onClose={() => {
-            setFollowThroughFormVisible(false);
-            if (onRefreshAssociatedItems) {
-              onRefreshAssociatedItems();
-            }
-            loadAssociatedItems();
-          }}
-          initialType={followThroughPreSelectedType}
-          parentId={reflection.id}
-          parentType="reflection"
-        />
+        <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+          <TaskEventForm
+            visible={followThroughFormVisible}
+            onClose={() => {
+              setFollowThroughFormVisible(false);
+              if (onRefreshAssociatedItems) {
+                onRefreshAssociatedItems();
+              }
+              loadAssociatedItems();
+            }}
+            initialType={followThroughPreSelectedType}
+            parentId={reflection.id}
+            parentType="reflection"
+          />
+        </Suspense>
       )}
 
       {/* Edit Form Modal */}
       {isEditMode && reflection && (
         <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-          <TaskEventForm
-            mode="edit"
-            initialData={{
-              id: reflection.id,
-              title: reflection.reflection_title || '',
-              content: reflection.content || '',
-              type: reflection.daily_rose ? 'rose' : reflection.daily_thorn ? 'thorn' : 'reflection',
-              user_id: reflection.user_id,
-              created_at: reflection.created_at,
-              reflection_date: reflection.reflection_date,
-              daily_rose: reflection.daily_rose,
-              daily_thorn: reflection.daily_thorn,
-            }}
-            onClose={() => {
-              setIsEditMode(false);
-            }}
-            onSubmitSuccess={async () => {
-              setIsEditMode(false);
-              await fetchReflectionNotes();
-              await loadAssociatedItems();
-              onRefreshAssociatedItems?.();
-            }}
-          />
+          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
+            <TaskEventForm
+              mode="edit"
+              initialData={{
+                id: reflection.id,
+                title: reflection.reflection_title || '',
+                content: reflection.content || '',
+                type: reflection.daily_rose ? 'rose' : reflection.daily_thorn ? 'thorn' : 'reflection',
+                user_id: reflection.user_id,
+                created_at: reflection.created_at,
+                reflection_date: reflection.reflection_date,
+                daily_rose: reflection.daily_rose,
+                daily_thorn: reflection.daily_thorn,
+              }}
+              onClose={() => {
+                setIsEditMode(false);
+              }}
+              onSubmitSuccess={async () => {
+                setIsEditMode(false);
+                await fetchReflectionNotes();
+                await loadAssociatedItems();
+                onRefreshAssociatedItems?.();
+              }}
+            />
+          </Suspense>
         </Modal>
       )}
 
