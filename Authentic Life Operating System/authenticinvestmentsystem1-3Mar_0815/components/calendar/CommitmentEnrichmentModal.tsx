@@ -14,10 +14,7 @@ import {
 } from 'react-native';
 import {
   X,
-  Users,
   Flag,
-  Heart,
-  Target,
   FileText,
   UserPlus,
   Trash2,
@@ -26,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import DelegateModal from '@/components/tasks/DelegateModal';
+import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
 
 type EnrichmentTab =
   | 'roles'
@@ -136,7 +134,6 @@ export default function CommitmentEnrichmentModal({
       setIsUrgent(commitment.is_urgent);
       setIsImportant(commitment.is_important);
       setNoteText('');
-      setSelectedRelIds([]);
       loadAllData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,8 +186,19 @@ export default function CommitmentEnrichmentModal({
           relMap[rel.role_id].push({ id: rel.id, name: rel.name });
         }
         setRoleRelationships(relMap);
+
+        // Load selected key relationships for this commitment
+        const krJoinRes = await sb
+          .from('0008-ap-universal-key-relationships-join')
+          .select('key_relationship_id')
+          .eq('parent_id', commitment.id)
+          .eq('parent_type', PARENT_TYPE);
+        setSelectedRelIds(
+          ((krJoinRes.data ?? []) as any[]).map((r: any) => r.key_relationship_id),
+        );
       } else {
         setRoleRelationships({});
+        setSelectedRelIds([]);
       }
 
       // Wellness
@@ -353,13 +361,40 @@ export default function CommitmentEnrichmentModal({
     }
   };
 
-  // ──────────────── Key Relationship toggle (visual-only) ────────────────
+  // ──────────────── Key Relationship toggle (auto-save) ────────────────
 
-  const toggleRelationship = (relId: string) => {
-    setSelectedRelIds((prev) =>
-      prev.includes(relId) ? prev.filter((x) => x !== relId) : [...prev, relId],
-    );
-    // Visual-only for now — future: link to key-relationships-join table
+  const toggleRelationship = async (relId: string) => {
+    const isSelected = selectedRelIds.includes(relId);
+    const newIds = isSelected
+      ? selectedRelIds.filter((x) => x !== relId)
+      : [...selectedRelIds, relId];
+    setSelectedRelIds(newIds);
+    setIsSaving(true);
+    try {
+      const sb = getSupabaseClient();
+      if (isSelected) {
+        await sb
+          .from('0008-ap-universal-key-relationships-join')
+          .delete()
+          .eq('parent_id', commitment.id)
+          .eq('parent_type', PARENT_TYPE)
+          .eq('key_relationship_id', relId);
+      } else {
+        await sb
+          .from('0008-ap-universal-key-relationships-join')
+          .insert({
+            user_id: commitment.user_id,
+            key_relationship_id: relId,
+            parent_id: commitment.id,
+            parent_type: PARENT_TYPE,
+          });
+      }
+      onEnrichmentChange();
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] toggleRelationship save error:', err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // ──────────────── Notes ────────────────
@@ -758,9 +793,9 @@ export default function CommitmentEnrichmentModal({
   };
 
   const TAB_DEFS: Array<{ key: EnrichmentTab; Icon: any }> = [
-    { key: 'roles', Icon: Users },
-    { key: 'wellness', Icon: Heart },
-    { key: 'goals', Icon: Target },
+    { key: 'roles', Icon: RoleIcon },
+    { key: 'wellness', Icon: WellnessIcon },
+    { key: 'goals', Icon: GoalIcon },
     { key: 'priority', Icon: Flag },
     { key: 'notes', Icon: FileText },
     { key: 'delegate', Icon: UserPlus },
