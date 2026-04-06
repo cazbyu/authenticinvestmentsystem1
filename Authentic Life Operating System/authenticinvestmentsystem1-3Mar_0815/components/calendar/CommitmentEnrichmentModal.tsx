@@ -22,6 +22,7 @@ import {
   UserPlus,
   Trash2,
   Paperclip,
+  Plus,
 } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import DelegateModal from '@/components/tasks/DelegateModal';
@@ -89,7 +90,6 @@ export default function CommitmentEnrichmentModal({
 }: CommitmentEnrichmentModalProps) {
   const [activeTab, setActiveTab] = useState<EnrichmentTab>(initialTab);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [applyScope, setApplyScope] = useState<'one' | 'all'>('one');
   const isRecurring = !!commitment.external_recurrence_id;
 
@@ -99,6 +99,7 @@ export default function CommitmentEnrichmentModal({
   const [roleRelationships, setRoleRelationships] = useState<
     Record<string, Array<{ id: string; name: string }>>
   >({});
+  const [selectedRelIds, setSelectedRelIds] = useState<string[]>([]);
 
   // Wellness / Domains
   const [allDomains, setAllDomains] = useState<DomainRow[]>([]);
@@ -117,13 +118,14 @@ export default function CommitmentEnrichmentModal({
   // Notes
   const [noteText, setNoteText] = useState('');
   const [existingNotes, setExistingNotes] = useState<NoteRow[]>([]);
+  const [addingNote, setAddingNote] = useState(false);
 
   // Delegate
   const [existingDelegates, setExistingDelegates] = useState<DelegateRow[]>([]);
   const [delegateModalVisible, setDelegateModalVisible] = useState(false);
   const [currentDelegateId, setCurrentDelegateId] = useState<string | null>(null);
 
-  // Reset per-open state when modal opens (or commitment/initialTab changes)
+  // Load ALL data once when modal opens
   useEffect(() => {
     if (visible) {
       setActiveTab(initialTab);
@@ -131,148 +133,85 @@ export default function CommitmentEnrichmentModal({
       setIsUrgent(commitment.is_urgent);
       setIsImportant(commitment.is_important);
       setNoteText('');
+      setSelectedRelIds([]);
+      loadAllData();
     }
-  }, [
-    visible,
-    initialTab,
-    commitment.id,
-    commitment.is_urgent,
-    commitment.is_important,
-  ]);
-
-  // Load data for the active tab whenever modal is open and tab changes
-  useEffect(() => {
-    if (!visible) return;
-    loadTabData(activeTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, activeTab, commitment.id]);
+  }, [visible, commitment.id]);
 
-  const loadTabData = async (tab: EnrichmentTab) => {
+  const loadAllData = async () => {
     setLoading(true);
     try {
       const sb = getSupabaseClient();
 
-      if (tab === 'roles') {
-        const [rolesRes, joinsRes] = await Promise.all([
-          sb
-            .from('0008-ap-roles')
-            .select('id, label')
-            .eq('user_id', commitment.user_id)
-            .order('label'),
-          sb
-            .from('0008-ap-universal-roles-join')
-            .select('role_id')
-            .eq('parent_id', commitment.id)
-            .eq('parent_type', PARENT_TYPE),
-        ]);
-        const roles = (rolesRes.data ?? []) as RoleRow[];
-        setAllRoles(roles);
-        setSelectedRoleIds(
-          ((joinsRes.data ?? []) as any[]).map((r) => r.role_id),
-        );
+      const [
+        rolesRes, roleJoinsRes,
+        domRes, domJoinsRes,
+        twelveRes, customRes, goalJoinsRes,
+        notesRes,
+        delegatesRes, delegateJoinRes,
+      ] = await Promise.all([
+        // Roles
+        sb.from('0008-ap-roles').select('id, label').eq('user_id', commitment.user_id).order('label'),
+        sb.from('0008-ap-universal-roles-join').select('role_id').eq('parent_id', commitment.id).eq('parent_type', PARENT_TYPE),
+        // Wellness
+        sb.from('0008-ap-domains').select('id, name').order('name'),
+        sb.from('0008-ap-universal-domains-join').select('domain_id').eq('parent_id', commitment.id).eq('parent_type', PARENT_TYPE),
+        // Goals
+        sb.from('0008-ap-goals-12wk').select('id, title').eq('user_id', commitment.user_id),
+        sb.from('0008-ap-goals-custom').select('id, title').eq('user_id', commitment.user_id),
+        sb.from('0008-ap-universal-goals-join').select('goal_id, goal_type').eq('parent_id', commitment.id).eq('parent_type', PARENT_TYPE),
+        // Notes
+        sb.from('0008-ap-universal-notes-join').select('note_id, "0008-ap-notes"(id, content, created_at)').eq('parent_id', commitment.id).eq('parent_type', PARENT_TYPE),
+        // Delegates
+        sb.from('0008-ap-delegates').select('id, name, email, phone').eq('user_id', commitment.user_id).order('name'),
+        sb.from('0008-ap-universal-delegates-join').select('delegate_id').eq('parent_id', commitment.id).eq('parent_type', PARENT_TYPE).maybeSingle(),
+      ]);
 
-        // Fetch key relationships grouped by role
-        if (roles.length > 0) {
-          const relsRes = await sb
-            .from('0008-ap-key-relationships')
-            .select('id, name, role_id')
-            .eq('user_id', commitment.user_id)
-            .in('role_id', roles.map((r) => r.id));
-          const relMap: Record<string, Array<{ id: string; name: string }>> = {};
-          for (const rel of ((relsRes.data ?? []) as any[])) {
-            if (!relMap[rel.role_id]) relMap[rel.role_id] = [];
-            relMap[rel.role_id].push({ id: rel.id, name: rel.name });
-          }
-          setRoleRelationships(relMap);
-        } else {
-          setRoleRelationships({});
+      // Roles
+      const roles = (rolesRes.data ?? []) as RoleRow[];
+      setAllRoles(roles);
+      setSelectedRoleIds(((roleJoinsRes.data ?? []) as any[]).map((r) => r.role_id));
+
+      // Key relationships grouped by role
+      if (roles.length > 0) {
+        const relsRes = await sb
+          .from('0008-ap-key-relationships')
+          .select('id, name, role_id')
+          .eq('user_id', commitment.user_id)
+          .in('role_id', roles.map((r) => r.id));
+        const relMap: Record<string, Array<{ id: string; name: string }>> = {};
+        for (const rel of ((relsRes.data ?? []) as any[])) {
+          if (!relMap[rel.role_id]) relMap[rel.role_id] = [];
+          relMap[rel.role_id].push({ id: rel.id, name: rel.name });
         }
-      } else if (tab === 'wellness') {
-        const [domRes, joinsRes] = await Promise.all([
-          sb
-            .from('0008-ap-domains')
-            .select('id, name')
-            .order('name'),
-          sb
-            .from('0008-ap-universal-domains-join')
-            .select('domain_id')
-            .eq('parent_id', commitment.id)
-            .eq('parent_type', PARENT_TYPE),
-        ]);
-        setAllDomains(
-          ((domRes.data ?? []) as any[]).map((d) => ({
-            id: d.id,
-            label: d.name,
-          })),
-        );
-        setSelectedDomainIds(
-          ((joinsRes.data ?? []) as any[]).map((r) => r.domain_id),
-        );
-      } else if (tab === 'goals') {
-        const [twelveRes, customRes, joinsRes] = await Promise.all([
-          sb
-            .from('0008-ap-goals-12wk')
-            .select('id, title')
-            .eq('user_id', commitment.user_id),
-          sb
-            .from('0008-ap-goals-custom')
-            .select('id, title')
-            .eq('user_id', commitment.user_id),
-          sb
-            .from('0008-ap-universal-goals-join')
-            .select('goal_id, goal_type')
-            .eq('parent_id', commitment.id)
-            .eq('parent_type', PARENT_TYPE),
-        ]);
-        const twelve: GoalRow[] = ((twelveRes.data ?? []) as any[]).map((g) => ({
-          id: g.id,
-          title: g.title,
-          goal_type: 'twelve_wk_goal',
-        }));
-        const custom: GoalRow[] = ((customRes.data ?? []) as any[]).map((g) => ({
-          id: g.id,
-          title: g.title,
-          goal_type: 'custom_goal',
-        }));
-        setAllGoals([...twelve, ...custom]);
-        setSelectedGoals(
-          ((joinsRes.data ?? []) as any[]).map((r) => ({
-            goal_id: r.goal_id,
-            goal_type: r.goal_type,
-          })),
-        );
-      } else if (tab === 'notes') {
-        const { data } = await sb
-          .from('0008-ap-universal-notes-join')
-          .select('note_id, "0008-ap-notes"(id, content, created_at)')
-          .eq('parent_id', commitment.id)
-          .eq('parent_type', PARENT_TYPE);
-        const notes = ((data ?? []) as any[])
-          .map((r) => r['0008-ap-notes'])
-          .filter(Boolean) as NoteRow[];
-        notes.sort((a, b) => b.created_at.localeCompare(a.created_at));
-        setExistingNotes(notes);
-      } else if (tab === 'delegate') {
-        const [delegatesRes, joinRes] = await Promise.all([
-          sb
-            .from('0008-ap-delegates')
-            .select('id, name, email, phone')
-            .eq('user_id', commitment.user_id)
-            .order('name'),
-          sb
-            .from('0008-ap-universal-delegates-join')
-            .select('delegate_id')
-            .eq('parent_id', commitment.id)
-            .eq('parent_type', PARENT_TYPE)
-            .maybeSingle(),
-        ]);
-        setExistingDelegates((delegatesRes.data ?? []) as DelegateRow[]);
-        setCurrentDelegateId(
-          ((joinRes.data as any)?.delegate_id) ?? null,
-        );
+        setRoleRelationships(relMap);
+      } else {
+        setRoleRelationships({});
       }
+
+      // Wellness
+      setAllDomains(((domRes.data ?? []) as any[]).map((d) => ({ id: d.id, label: d.name })));
+      setSelectedDomainIds(((domJoinsRes.data ?? []) as any[]).map((r) => r.domain_id));
+
+      // Goals
+      const twelve: GoalRow[] = ((twelveRes.data ?? []) as any[]).map((g) => ({ id: g.id, title: g.title, goal_type: 'twelve_wk_goal' }));
+      const custom: GoalRow[] = ((customRes.data ?? []) as any[]).map((g) => ({ id: g.id, title: g.title, goal_type: 'custom_goal' }));
+      setAllGoals([...twelve, ...custom]);
+      setSelectedGoals(((goalJoinsRes.data ?? []) as any[]).map((r) => ({ goal_id: r.goal_id, goal_type: r.goal_type })));
+
+      // Notes
+      const notes = ((notesRes.data ?? []) as any[])
+        .map((r) => r['0008-ap-notes'])
+        .filter(Boolean) as NoteRow[];
+      notes.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      setExistingNotes(notes);
+
+      // Delegates
+      setExistingDelegates((delegatesRes.data ?? []) as DelegateRow[]);
+      setCurrentDelegateId(((delegateJoinRes.data as any)?.delegate_id) ?? null);
     } catch (err) {
-      console.error('[CommitmentEnrichmentModal] loadTabData error:', err);
+      console.error('[CommitmentEnrichmentModal] loadAllData error:', err);
     } finally {
       setLoading(false);
     }
@@ -293,122 +232,158 @@ export default function CommitmentEnrichmentModal({
     return ((data ?? []) as any[]).map((r) => r.id);
   };
 
-  // ──────────────── Save handlers ────────────────
+  // ──────────────── Auto-save chip toggles ────────────────
 
-  const saveRoles = async () => {
-    const sb = getSupabaseClient();
-    const targets = await getTargetCommitmentIds();
-    for (const pid of targets) {
-      await sb
-        .from('0008-ap-universal-roles-join')
-        .delete()
-        .eq('parent_id', pid)
-        .eq('parent_type', PARENT_TYPE);
-      if (selectedRoleIds.length > 0) {
-        const rows = selectedRoleIds.map((role_id) => ({
-          parent_id: pid,
-          parent_type: PARENT_TYPE,
-          role_id,
-          user_id: commitment.user_id,
-        }));
-        const { error } = await sb
-          .from('0008-ap-universal-roles-join')
-          .insert(rows);
-        if (error) throw error;
+  const toggleRole = async (id: string) => {
+    const newIds = selectedRoleIds.includes(id)
+      ? selectedRoleIds.filter((x) => x !== id)
+      : [...selectedRoleIds, id];
+    setSelectedRoleIds(newIds);
+    try {
+      const sb = getSupabaseClient();
+      const targets = await getTargetCommitmentIds();
+      for (const pid of targets) {
+        await sb.from('0008-ap-universal-roles-join').delete().eq('parent_id', pid).eq('parent_type', PARENT_TYPE);
+        if (newIds.length > 0) {
+          await sb.from('0008-ap-universal-roles-join').insert(
+            newIds.map((role_id) => ({
+              parent_id: pid,
+              parent_type: PARENT_TYPE,
+              role_id,
+              user_id: commitment.user_id,
+            })),
+          );
+        }
       }
+      onEnrichmentChange();
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] toggleRole save error:', err);
     }
   };
 
-  const saveWellness = async () => {
-    const sb = getSupabaseClient();
-    const targets = await getTargetCommitmentIds();
-    for (const pid of targets) {
-      await sb
-        .from('0008-ap-universal-domains-join')
-        .delete()
-        .eq('parent_id', pid)
-        .eq('parent_type', PARENT_TYPE);
-      if (selectedDomainIds.length > 0) {
-        const rows = selectedDomainIds.map((domain_id) => ({
-          parent_id: pid,
-          parent_type: PARENT_TYPE,
-          domain_id,
-          user_id: commitment.user_id,
-        }));
-        const { error } = await sb
-          .from('0008-ap-universal-domains-join')
-          .insert(rows);
-        if (error) throw error;
+  const toggleDomain = async (id: string) => {
+    const newIds = selectedDomainIds.includes(id)
+      ? selectedDomainIds.filter((x) => x !== id)
+      : [...selectedDomainIds, id];
+    setSelectedDomainIds(newIds);
+    try {
+      const sb = getSupabaseClient();
+      const targets = await getTargetCommitmentIds();
+      for (const pid of targets) {
+        await sb.from('0008-ap-universal-domains-join').delete().eq('parent_id', pid).eq('parent_type', PARENT_TYPE);
+        if (newIds.length > 0) {
+          await sb.from('0008-ap-universal-domains-join').insert(
+            newIds.map((domain_id) => ({
+              parent_id: pid,
+              parent_type: PARENT_TYPE,
+              domain_id,
+              user_id: commitment.user_id,
+            })),
+          );
+        }
       }
+      onEnrichmentChange();
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] toggleDomain save error:', err);
     }
   };
 
-  const saveGoals = async () => {
-    const sb = getSupabaseClient();
-    const targets = await getTargetCommitmentIds();
-    for (const pid of targets) {
-      await sb
-        .from('0008-ap-universal-goals-join')
-        .delete()
-        .eq('parent_id', pid)
-        .eq('parent_type', PARENT_TYPE);
-      if (selectedGoals.length > 0) {
-        const rows = selectedGoals.map((g) => ({
-          parent_id: pid,
-          parent_type: PARENT_TYPE,
-          goal_id: g.goal_id,
-          goal_type: g.goal_type,
-          user_id: commitment.user_id,
-        }));
-        const { error } = await sb
-          .from('0008-ap-universal-goals-join')
-          .insert(rows);
-        if (error) throw error;
+  const toggleGoal = async (g: GoalRow) => {
+    const exists = selectedGoals.find(
+      (s) => s.goal_id === g.id && s.goal_type === g.goal_type,
+    );
+    const newGoals = exists
+      ? selectedGoals.filter((s) => !(s.goal_id === g.id && s.goal_type === g.goal_type))
+      : [...selectedGoals, { goal_id: g.id, goal_type: g.goal_type }];
+    setSelectedGoals(newGoals);
+    try {
+      const sb = getSupabaseClient();
+      const targets = await getTargetCommitmentIds();
+      for (const pid of targets) {
+        await sb.from('0008-ap-universal-goals-join').delete().eq('parent_id', pid).eq('parent_type', PARENT_TYPE);
+        if (newGoals.length > 0) {
+          await sb.from('0008-ap-universal-goals-join').insert(
+            newGoals.map((goal) => ({
+              parent_id: pid,
+              parent_type: PARENT_TYPE,
+              goal_id: goal.goal_id,
+              goal_type: goal.goal_type,
+              user_id: commitment.user_id,
+            })),
+          );
+        }
       }
+      onEnrichmentChange();
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] toggleGoal save error:', err);
     }
   };
 
-  const savePriority = async () => {
-    const sb = getSupabaseClient();
-    const targets = await getTargetCommitmentIds();
-    const { error } = await sb
-      .from('0008-ap-commitments')
-      .update({
-        is_urgent: isUrgent,
-        is_important: isImportant,
-        updated_at: new Date().toISOString(),
-      })
-      .in('id', targets);
-    if (error) throw error;
+  // ──────────────── Auto-save priority ────────────────
+
+  const selectPriority = async (u: boolean, i: boolean) => {
+    setIsUrgent(u);
+    setIsImportant(i);
+    try {
+      const sb = getSupabaseClient();
+      const targets = await getTargetCommitmentIds();
+      await sb
+        .from('0008-ap-commitments')
+        .update({ is_urgent: u, is_important: i, updated_at: new Date().toISOString() })
+        .in('id', targets);
+      onEnrichmentChange();
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] selectPriority save error:', err);
+    }
   };
 
-  const saveNote = async () => {
+  // ──────────────── Key Relationship toggle (visual-only) ────────────────
+
+  const toggleRelationship = (relId: string) => {
+    setSelectedRelIds((prev) =>
+      prev.includes(relId) ? prev.filter((x) => x !== relId) : [...prev, relId],
+    );
+    // Visual-only for now — future: link to key-relationships-join table
+  };
+
+  // ──────────────── Notes ────────────────
+
+  const addNote = async () => {
     const trimmed = noteText.trim();
     if (!trimmed) return;
-    const sb = getSupabaseClient();
-    const now = new Date().toISOString();
-    const { data: noteRow, error: noteErr } = await sb
-      .from('0008-ap-notes')
-      .insert({
-        user_id: commitment.user_id,
-        content: trimmed,
-        created_at: now,
-        updated_at: now,
-      })
-      .select('id, content, created_at')
-      .single();
-    if (noteErr || !noteRow) throw noteErr ?? new Error('Failed to insert note');
-    const { error: joinErr } = await sb
-      .from('0008-ap-universal-notes-join')
-      .insert({
-        user_id: commitment.user_id,
-        note_id: noteRow.id,
-        parent_id: commitment.id,
-        parent_type: PARENT_TYPE,
-      });
-    if (joinErr) throw joinErr;
-    setExistingNotes((prev) => [noteRow as NoteRow, ...prev]);
-    setNoteText('');
+    setAddingNote(true);
+    try {
+      const sb = getSupabaseClient();
+      const now = new Date().toISOString();
+      const { data: noteRow, error: noteErr } = await sb
+        .from('0008-ap-notes')
+        .insert({
+          user_id: commitment.user_id,
+          content: trimmed,
+          created_at: now,
+          updated_at: now,
+        })
+        .select('id, content, created_at')
+        .single();
+      if (noteErr || !noteRow) throw noteErr ?? new Error('Failed to insert note');
+      const { error: joinErr } = await sb
+        .from('0008-ap-universal-notes-join')
+        .insert({
+          user_id: commitment.user_id,
+          note_id: noteRow.id,
+          parent_id: commitment.id,
+          parent_type: PARENT_TYPE,
+        });
+      if (joinErr) throw joinErr;
+      setExistingNotes((prev) => [noteRow as NoteRow, ...prev]);
+      setNoteText('');
+      onEnrichmentChange();
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] addNote error:', err);
+      Alert.alert('Error', 'Failed to add note.');
+    } finally {
+      setAddingNote(false);
+    }
   };
 
   const deleteNote = async (noteId: string) => {
@@ -428,6 +403,8 @@ export default function CommitmentEnrichmentModal({
       Alert.alert('Error', 'Failed to delete note.');
     }
   };
+
+  // ──────────────── Delegate ────────────────
 
   const handleDelegateSelected = async (delegateId: string) => {
     setDelegateModalVisible(false);
@@ -456,62 +433,12 @@ export default function CommitmentEnrichmentModal({
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      switch (activeTab) {
-        case 'roles':
-          await saveRoles();
-          break;
-        case 'wellness':
-          await saveWellness();
-          break;
-        case 'goals':
-          await saveGoals();
-          break;
-        case 'priority':
-          await savePriority();
-          break;
-        case 'notes':
-          await saveNote();
-          break;
-        case 'delegate':
-          // Delegate tab writes are handled inside handleDelegateSelected.
-          break;
-      }
-      onEnrichmentChange();
-      onClose();
-    } catch (err) {
-      console.error('[CommitmentEnrichmentModal] save error:', err);
-      Alert.alert('Error', 'Failed to save. Please try again.');
-    } finally {
-      setSaving(false);
-    }
+  // ──────────────── Close handler ────────────────
+
+  const handleClose = () => {
+    onEnrichmentChange();
+    onClose();
   };
-
-  // ──────────────── Chip toggles ────────────────
-
-  const toggleRole = (id: string) =>
-    setSelectedRoleIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-
-  const toggleDomain = (id: string) =>
-    setSelectedDomainIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-
-  const toggleGoal = (g: GoalRow) =>
-    setSelectedGoals((prev) => {
-      const exists = prev.find(
-        (s) => s.goal_id === g.id && s.goal_type === g.goal_type,
-      );
-      if (exists)
-        return prev.filter(
-          (s) => !(s.goal_id === g.id && s.goal_type === g.goal_type),
-        );
-      return [...prev, { goal_id: g.id, goal_type: g.goal_type }];
-    });
 
   // ──────────────── Renderers ────────────────
 
@@ -614,11 +541,31 @@ export default function CommitmentEnrichmentModal({
                     <View key={roleId} style={styles.relGroup}>
                       <Text style={styles.relRoleLabel}>{roleName}</Text>
                       <View style={styles.relChipRow}>
-                        {rels.map((rel) => (
-                          <View key={rel.id} style={styles.relChip}>
-                            <Text style={styles.relChipText}>{rel.name}</Text>
-                          </View>
-                        ))}
+                        {rels.map((rel) => {
+                          const isRelSelected = selectedRelIds.includes(rel.id);
+                          return (
+                            <TouchableOpacity
+                              key={rel.id}
+                              onPress={(e) => {
+                                e.stopPropagation?.();
+                                toggleRelationship(rel.id);
+                              }}
+                              style={[
+                                styles.relChip,
+                                isRelSelected && styles.relChipSelected,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.relChipText,
+                                  isRelSelected && styles.relChipTextSelected,
+                                ]}
+                              >
+                                {rel.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
                       </View>
                     </View>
                   );
@@ -678,10 +625,7 @@ export default function CommitmentEnrichmentModal({
           const active = isUrgent === u && isImportant === i;
           return (
             <TouchableOpacity
-              onPress={() => {
-                setIsUrgent(u);
-                setIsImportant(i);
-              }}
+              onPress={() => selectPriority(u, i)}
               style={[
                 styles.quadrant,
                 {
@@ -741,18 +685,34 @@ export default function CommitmentEnrichmentModal({
               multiline
               textAlignVertical="top"
             />
-            <TouchableOpacity
-              style={styles.attachBtn}
-              onPress={() =>
-                Alert.alert(
-                  'Add attachment',
-                  'Attachment picker will be wired to mirror TaskEventForm’s noteAttachmentUtils flow in a follow-up pass.',
-                )
-              }
-            >
-              <Paperclip size={16} color={PRIMARY} />
-              <Text style={styles.attachBtnText}>Add attachment</Text>
-            </TouchableOpacity>
+            <View style={styles.noteActions}>
+              <TouchableOpacity
+                style={[styles.addNoteBtn, (!noteText.trim() || addingNote) && styles.addNoteBtnDisabled]}
+                onPress={addNote}
+                disabled={!noteText.trim() || addingNote}
+              >
+                {addingNote ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Plus size={14} color="#fff" />
+                    <Text style={styles.addNoteBtnText}>Add</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachBtn}
+                onPress={() =>
+                  Alert.alert(
+                    'Add attachment',
+                    'Attachment picker will be wired to mirror TaskEventForm\'s noteAttachmentUtils flow in a follow-up pass.',
+                  )
+                }
+              >
+                <Paperclip size={16} color={PRIMARY} />
+                <Text style={styles.attachBtnText}>Add attachment</Text>
+              </TouchableOpacity>
+            </View>
           </>
         );
 
@@ -796,7 +756,7 @@ export default function CommitmentEnrichmentModal({
         visible={visible}
         transparent
         animationType="slide"
-        onRequestClose={onClose}
+        onRequestClose={handleClose}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -808,7 +768,7 @@ export default function CommitmentEnrichmentModal({
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {commitment.title}
               </Text>
-              <TouchableOpacity onPress={onClose} style={styles.headerClose}>
+              <TouchableOpacity onPress={handleClose} style={styles.headerClose}>
                 <X size={22} color="#111827" />
               </TouchableOpacity>
             </View>
@@ -837,21 +797,6 @@ export default function CommitmentEnrichmentModal({
             <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
               {renderTabContent()}
             </ScrollView>
-
-            {/* Save button (hidden on delegate tab — DelegateModal has its own Save) */}
-            {activeTab !== 'delegate' && (
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -989,7 +934,7 @@ const styles = StyleSheet.create({
   noteText: { flex: 1, fontSize: 13, color: '#374151' },
   noteDeleteBtn: { padding: 4, marginLeft: 8 },
   noteInput: {
-    minHeight: 100,
+    minHeight: 80,
     borderWidth: 1,
     borderColor: BORDER,
     borderRadius: 8,
@@ -998,11 +943,27 @@ const styles = StyleSheet.create({
     color: '#111827',
     backgroundColor: '#fff',
   },
+  noteActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  addNoteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: PRIMARY,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addNoteBtnDisabled: { opacity: 0.4 },
+  addNoteBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   attachBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 10,
     paddingVertical: 8,
   },
   attachBtnText: { color: PRIMARY, fontSize: 13, fontWeight: '500' },
@@ -1016,17 +977,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   delegateOpenBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-
-  saveBtn: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    backgroundColor: PRIMARY,
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
 
   loadingBox: { padding: 40, alignItems: 'center' },
 
@@ -1054,5 +1004,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bfdbfe',
   },
+  relChipSelected: {
+    backgroundColor: '#1d4ed8',
+    borderColor: '#1d4ed8',
+  },
   relChipText: { fontSize: 12, color: '#1d4ed8' },
+  relChipTextSelected: { color: '#ffffff' },
 });
