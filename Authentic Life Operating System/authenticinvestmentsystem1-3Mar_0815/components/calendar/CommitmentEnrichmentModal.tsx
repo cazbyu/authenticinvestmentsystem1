@@ -96,6 +96,9 @@ export default function CommitmentEnrichmentModal({
   // Roles
   const [allRoles, setAllRoles] = useState<RoleRow[]>([]);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [roleRelationships, setRoleRelationships] = useState<
+    Record<string, Array<{ id: string; name: string }>>
+  >({});
 
   // Wellness / Domains
   const [allDomains, setAllDomains] = useState<DomainRow[]>([]);
@@ -162,10 +165,28 @@ export default function CommitmentEnrichmentModal({
             .eq('parent_id', commitment.id)
             .eq('parent_type', PARENT_TYPE),
         ]);
-        setAllRoles((rolesRes.data ?? []) as RoleRow[]);
+        const roles = (rolesRes.data ?? []) as RoleRow[];
+        setAllRoles(roles);
         setSelectedRoleIds(
           ((joinsRes.data ?? []) as any[]).map((r) => r.role_id),
         );
+
+        // Fetch key relationships grouped by role
+        if (roles.length > 0) {
+          const relsRes = await sb
+            .from('0008-ap-key-relationships')
+            .select('id, name, role_id')
+            .eq('user_id', commitment.user_id)
+            .in('role_id', roles.map((r) => r.id));
+          const relMap: Record<string, Array<{ id: string; name: string }>> = {};
+          for (const rel of ((relsRes.data ?? []) as any[])) {
+            if (!relMap[rel.role_id]) relMap[rel.role_id] = [];
+            relMap[rel.role_id].push({ id: rel.id, name: rel.name });
+          }
+          setRoleRelationships(relMap);
+        } else {
+          setRoleRelationships({});
+        }
       } else if (tab === 'wellness') {
         const [domRes, joinsRes] = await Promise.all([
           sb
@@ -583,6 +604,27 @@ export default function CommitmentEnrichmentModal({
                 <Text style={styles.emptyText}>No roles found.</Text>
               )}
             </View>
+            {selectedRoleIds.length > 0 && (
+              <View style={styles.relSection}>
+                {selectedRoleIds.map((roleId) => {
+                  const rels = roleRelationships[roleId] ?? [];
+                  if (rels.length === 0) return null;
+                  const roleName = allRoles.find((r) => r.id === roleId)?.label ?? '';
+                  return (
+                    <View key={roleId} style={styles.relGroup}>
+                      <Text style={styles.relRoleLabel}>{roleName}</Text>
+                      <View style={styles.relChipRow}>
+                        {rels.map((rel) => (
+                          <View key={rel.id} style={styles.relChip}>
+                            <Text style={styles.relChipText}>{rel.name}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
             {renderRecurrenceScope()}
           </>
         );
@@ -987,4 +1029,30 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
 
   loadingBox: { padding: 40, alignItems: 'center' },
+
+  relSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  relGroup: { marginBottom: 12 },
+  relRoleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  relChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  relChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  relChipText: { fontSize: 12, color: '#1d4ed8' },
 });
