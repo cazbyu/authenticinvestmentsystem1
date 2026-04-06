@@ -145,55 +145,42 @@ async function ensureValidToken(connection: any) {
   }
 
   try {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
+    const response = await fetch('/.netlify/functions/refresh-google-token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID!,
-        client_secret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET!,
-        refresh_token: connection.refresh_token,
-        grant_type: 'refresh_token',
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: connection.user_id }),
     });
 
     if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (errorData.needsReconnect) {
+        throw new Error('Refresh token expired or revoked. User needs to reconnect.');
+      }
       throw new Error('Failed to refresh token');
     }
 
     const data = await response.json();
-    
-    // Update the connection with new token
-    const supabase = getSupabaseClient();
-    const newExpiresAt = new Date();
-    newExpiresAt.setSeconds(newExpiresAt.getSeconds() + data.expires_in);
-
-    await supabase
-      .from('0008-ap-calendar-connections')
-      .update({
-        access_token: data.access_token,
-        token_expires_at: newExpiresAt.toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', connection.id);
 
     return { accessToken: data.access_token, success: true };
   } catch (error) {
     console.error('[GoogleSync] Error refreshing token:', error);
-    return { 
-      success: false, 
-      error: 'Failed to refresh access token. User needs to reconnect.' 
+    return {
+      success: false,
+      error: 'Failed to refresh access token. User needs to reconnect.'
     };
   }
 }
 
 /**
- * Fetch events from Google Calendar API
+ * Fetch events from Google Calendar API.
+ * On 401, attempts a token refresh via Netlify function and retries once.
  */
 async function fetchGoogleCalendarEvents(
   accessToken: string,
   calendarId: string,
   timeMin: string,
-  timeMax: string
+  timeMax: string,
+  userId?: string,
 ): Promise<GoogleCalendarEvent[]> {
   const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
   url.searchParams.append('timeMin', timeMin);
@@ -202,12 +189,44 @@ async function fetchGoogleCalendarEvents(
   url.searchParams.append('orderBy', 'startTime');
   url.searchParams.append('maxResults', '250');
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Accept': 'application/json',
-    },
-  });
+  const doFetch = (token: string) =>
+    fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+      },
+    });
+
+  let response = await doFetch(accessToken);
+
+  // On 401, attempt refresh + single retry
+  if (response.status === 401 && userId) {
+    console.warn('[GoogleSync] 401 from Calendar API — attempting token refresh + retry');
+    try {
+      const refreshResponse = await fetch('/.netlify/functions/refresh-google-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+
+      if (refreshResponse.ok) {
+        const tokenData = await refreshResponse.json();
+        if (tokenData.access_token) {
+          console.log('[GoogleSync] Token refreshed, retrying Calendar API call');
+          response = await doFetch(tokenData.access_token);
+        }
+      } else {
+        const errorData = await refreshResponse.json().catch(() => ({}));
+        if (errorData.needsReconnect) {
+          throw new Error('Google Calendar session expired. Please reconnect in Settings.');
+        }
+      }
+    } catch (refreshErr: any) {
+      // If the refresh error is our own "needs reconnect" message, re-throw it
+      if (refreshErr.message?.includes('reconnect')) throw refreshErr;
+      console.error('[GoogleSync] Token refresh failed:', refreshErr);
+    }
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -219,71 +238,47 @@ async function fetchGoogleCalendarEvents(
 }
 
 /**
- * Convert Google Calendar event to our task format
+ * Convert Google Calendar event to a commitment record
  */
-function convertGoogleEventToTask(
+function convertGoogleEventToCommitment(
   googleEvent: GoogleCalendarEvent,
   userId: string,
   calendarId: string
 ): any {
-  const isAllDay = !!googleEvent.start.date; // date field means all-day event
+  const isAllDay = !!googleEvent.start.date;
 
-  let startDate: string;
-  let endDate: string | null = null;
+  let date: string;
   let startTime: string | null = null;
   let endTime: string | null = null;
 
   if (isAllDay) {
-    // All-day event
-    startDate = googleEvent.start.date!;
-    endDate = googleEvent.end.date || startDate;
+    date = googleEvent.start.date!;
   } else {
-    // Timed event
     const startDateTime = new Date(googleEvent.start.dateTime!);
     const endDateTime = googleEvent.end.dateTime
       ? new Date(googleEvent.end.dateTime)
       : startDateTime;
 
-    startDate = formatLocalDate(startDateTime);
-    endDate = formatLocalDate(endDateTime);
-
-    // Extract time portions
+    date = formatLocalDate(startDateTime);
     startTime = startDateTime.toTimeString().split(' ')[0]; // HH:MM:SS
     endTime = endDateTime.toTimeString().split(' ')[0];
   }
-
-  // Store additional metadata
-  const metadata = {
-    google_html_link: googleEvent.htmlLink,
-    google_description: googleEvent.description,
-    google_attendees: googleEvent.attendees?.map(a => ({
-      email: a.email,
-      name: a.displayName,
-      status: a.responseStatus,
-    })),
-    google_conference_link: googleEvent.conferenceData?.entryPoints?.find(
-      e => e.entryPointType === 'video'
-    )?.uri,
-  };
 
   return {
     user_id: userId,
     title: googleEvent.summary || '(No title)',
     description: googleEvent.description || null,
-    type: 'event',
-    start_date: startDate,
-    end_date: endDate,
+    date,
     start_time: startTime,
     end_time: endTime,
     is_all_day: isAllDay,
-    is_anytime: false,
-    status: googleEvent.status === 'cancelled' ? 'cancelled' : 'pending',
+    status: googleEvent.status === 'cancelled' ? 'missed' : 'pending',
     external_source: 'google',
     external_event_id: googleEvent.id,
     external_calendar_id: calendarId,
-    external_sync_direction: 'pull',
-    external_metadata: metadata,
-    last_external_sync_at: new Date().toISOString(),
+    location: null,
+    synced_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -349,7 +344,8 @@ export async function syncGoogleCalendarEvents(
           tokenResult.accessToken!,
           calendarId,
           timeMin.toISOString(),
-          timeMax.toISOString()
+          timeMax.toISOString(),
+          userId,
         );
 
         const taggedEvents = events.map(event => ({ event, calendarId }));
@@ -367,47 +363,51 @@ export async function syncGoogleCalendarEvents(
     let eventsUpdated = 0;
     let eventsSkipped = 0;
 
-    // 5. Process each event
+    // 5. Process each event into 0008-ap-commitments
     for (const { event: googleEvent, calendarId } of allGoogleEvents) {
       try {
-        // Check if we already have this event
-        const { data: existingTask } = await supabase
-          .from('0008-ap-tasks')
-          .select('id, updated_at')
+        const commitmentData = convertGoogleEventToCommitment(googleEvent, userId, calendarId);
+
+        // Check if this commitment already exists
+        const { data: existing } = await supabase
+          .from('0008-ap-commitments')
+          .select('id')
           .eq('user_id', userId)
-          .eq('external_source', 'google')
           .eq('external_event_id', googleEvent.id)
-          .is('deleted_at', null)
           .maybeSingle();
 
-        const taskData = convertGoogleEventToTask(googleEvent, userId, calendarId);
-
-        if (existingTask) {
-          // Update existing event
+        if (existing) {
+          // Update existing — preserve user-set status/reviewed_at/missed_reason
           const { error: updateError } = await supabase
-            .from('0008-ap-tasks')
+            .from('0008-ap-commitments')
             .update({
-              ...taskData,
-              updated_at: new Date().toISOString(),
+              title: commitmentData.title,
+              description: commitmentData.description,
+              date: commitmentData.date,
+              start_time: commitmentData.start_time,
+              end_time: commitmentData.end_time,
+              is_all_day: commitmentData.is_all_day,
+              external_calendar_id: commitmentData.external_calendar_id,
+              location: commitmentData.location,
+              synced_at: commitmentData.synced_at,
+              updated_at: commitmentData.updated_at,
             })
-            .eq('id', existingTask.id);
+            .eq('id', existing.id);
 
           if (updateError) {
-            console.error('[GoogleSync] Error updating event:', updateError);
+            console.error('[GoogleSync] Error updating commitment:', updateError);
             eventsSkipped++;
           } else {
             eventsUpdated++;
           }
         } else {
-  // Create new event
-  console.log('[GoogleSync] Inserting taskData:', JSON.stringify(taskData, null, 2));
-
-  const { error: insertError } = await supabase
-    .from('0008-ap-tasks')
-    .insert(taskData);
+          // Insert new commitment
+          const { error: insertError } = await supabase
+            .from('0008-ap-commitments')
+            .insert(commitmentData);
 
           if (insertError) {
-            console.error('[GoogleSync] Error creating event:', insertError);
+            console.error('[GoogleSync] Error creating commitment:', insertError);
             eventsSkipped++;
           } else {
             eventsCreated++;
