@@ -406,7 +406,7 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
     forceFullSync: boolean,
     syncToken: string | null,
     connection: GoogleCalendarConnection,
-  ): Promise<{ events: number; newSyncToken: string | null; lastUsedToken: string }> => {
+  ): Promise<{ events: number; newSyncToken: string | null; lastUsedToken: string; seenEventIds: string[] }> => {
     const supabase = getSupabaseClient();
 
     // Build the API URL
@@ -454,6 +454,7 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
 
     // Process events into 0008-ap-commitments
     let processedCount = 0;
+    const seenEventIds: string[] = [];
     for (const event of events) {
       // Skip cancelled events (delete them from our DB)
       if (event.status === 'cancelled') {
@@ -464,6 +465,9 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
           .eq('user_id', userId);
         continue;
       }
+
+      // Track all non-cancelled event IDs for reconciliation
+      seenEventIds.push(event.id);
 
       // Parse event data
       const date = event.start?.date || event.start?.dateTime?.split('T')[0];
@@ -533,7 +537,7 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       }
     }
 
-    return { events: processedCount, newSyncToken, lastUsedToken: usedToken };
+    return { events: processedCount, newSyncToken, lastUsedToken: usedToken, seenEventIds };
   }, [fetchWithTokenRetry]);
 
   /**
@@ -583,6 +587,9 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
 
       let totalProcessed = 0;
       let currentToken = accessToken;
+      const allSeenEventIds: string[] = [];
+      // Track whether we actually did a full sync (not incremental) for reconciliation
+      const didFullSync = forceFullSync || !connection.sync_token;
 
       // Sync each selected calendar
       for (const calendarId of selectedCalendars) {
@@ -596,6 +603,7 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
             connection,
           );
           totalProcessed += result.events;
+          allSeenEventIds.push(...result.seenEventIds);
           // If the token was refreshed during this calendar sync, use the new one for subsequent calendars
           currentToken = result.lastUsedToken;
 
@@ -610,6 +618,57 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
         } catch (calError) {
           console.error(`[GoogleCalendarSync] Error syncing calendar ${calendarId}:`, calError);
           // Continue with other calendars
+        }
+      }
+
+      // ── Reconciliation sweep (full sync only) ──
+      // During full sync, Google returns ALL events in the date range.
+      // Any commitment in our DB whose external_event_id is NOT in the
+      // fetched set has been deleted on Google → mark as 'missed'.
+      if (didFullSync && allSeenEventIds.length > 0) {
+        try {
+          const timeMin = new Date();
+          timeMin.setDate(timeMin.getDate() - 30);
+          const timeMax = new Date();
+          timeMax.setDate(timeMax.getDate() + 90);
+          const minDate = timeMin.toISOString().split('T')[0];
+          const maxDate = timeMax.toISOString().split('T')[0];
+
+          // Fetch all Google-sourced commitments in the sync window
+          const { data: dbRows, error: dbErr } = await supabase
+            .from('0008-ap-commitments')
+            .select('id, external_event_id')
+            .eq('user_id', user.id)
+            .eq('external_source', 'google')
+            .gte('date', minDate)
+            .lte('date', maxDate)
+            .not('status', 'in', '("missed","completed")');
+
+          if (dbErr) {
+            console.error('[GoogleCalendarSync] Reconciliation query error:', dbErr);
+          } else if (dbRows && dbRows.length > 0) {
+            const seenSet = new Set(allSeenEventIds);
+            const orphanIds = dbRows
+              .filter(row => row.external_event_id && !seenSet.has(row.external_event_id))
+              .map(row => row.id);
+
+            if (orphanIds.length > 0) {
+              console.log(`[GoogleCalendarSync] Reconciliation: marking ${orphanIds.length} orphaned commitment(s) as missed`);
+              const { error: updateErr } = await supabase
+                .from('0008-ap-commitments')
+                .update({ status: 'missed', updated_at: new Date().toISOString() })
+                .in('id', orphanIds);
+
+              if (updateErr) {
+                console.error('[GoogleCalendarSync] Reconciliation update error:', updateErr);
+              }
+            } else {
+              console.log('[GoogleCalendarSync] Reconciliation: no orphaned commitments found');
+            }
+          }
+        } catch (reconErr) {
+          console.error('[GoogleCalendarSync] Reconciliation sweep error:', reconErr);
+          // Non-fatal: don't fail the sync over reconciliation
         }
       }
 
