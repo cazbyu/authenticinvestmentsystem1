@@ -999,7 +999,12 @@ export default function CommitmentEnrichmentModal({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.overlay}
         >
-          <View style={styles.sheet}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={handleClose}
+          />
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.sheet}>
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.headerTitle} numberOfLines={1}>
@@ -1047,7 +1052,7 @@ export default function CommitmentEnrichmentModal({
             <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
               {renderTabContent()}
             </ScrollView>
-          </View>
+          </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
 
