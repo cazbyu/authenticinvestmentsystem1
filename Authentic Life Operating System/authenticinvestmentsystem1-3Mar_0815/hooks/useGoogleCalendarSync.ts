@@ -234,6 +234,66 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
   }, []);
 
   /**
+   * Force-refresh the access token by skipping the "still valid" check (Priority 3).
+   * Used after a 401 response indicates the current token is rejected by Google.
+   */
+  const forceRefreshToken = useCallback(async (connection: GoogleCalendarConnection): Promise<string | null> => {
+    console.log('[GoogleCalendarSync] Force-refreshing token after 401...');
+    // Invalidate the stored expiry so refreshTokenIfNeeded skips Priority 3
+    const patched: GoogleCalendarConnection = {
+      ...connection,
+      token_expires_at: new Date(0).toISOString(), // already expired
+    };
+    return refreshTokenIfNeeded(patched);
+  }, [refreshTokenIfNeeded]);
+
+  /**
+   * Wrapper around fetch() for Google API calls.
+   * On 401, force-refreshes the token and retries once.
+   * Returns the Response object on success, or throws with a clear error.
+   */
+  const fetchWithTokenRetry = useCallback(async (
+    url: string,
+    accessToken: string,
+    connection: GoogleCalendarConnection,
+    extraHeaders?: Record<string, string>,
+  ): Promise<{ response: Response; usedToken: string }> => {
+    const doFetch = (token: string) =>
+      fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...extraHeaders,
+        },
+      });
+
+    const firstResponse = await doFetch(accessToken);
+
+    if (firstResponse.status !== 401) {
+      return { response: firstResponse, usedToken: accessToken };
+    }
+
+    // 401 — token rejected by Google. Force-refresh and retry once.
+    console.warn(`[GoogleCalendarSync] 401 from ${url} — attempting token refresh + retry`);
+
+    const freshToken = await forceRefreshToken(connection);
+    if (!freshToken) {
+      throw new Error(
+        'Google Calendar authentication failed. Your session has expired — please reconnect Google Calendar in Settings.'
+      );
+    }
+
+    const retryResponse = await doFetch(freshToken);
+
+    if (retryResponse.status === 401) {
+      throw new Error(
+        'Google Calendar authentication failed after token refresh. Please reconnect Google Calendar in Settings.'
+      );
+    }
+
+    return { response: retryResponse, usedToken: freshToken };
+  }, [forceRefreshToken]);
+
+  /**
    * Fetch list of available calendars from Google
    */
   const fetchCalendarList = useCallback(async (): Promise<CalendarInfo[]> => {
@@ -247,13 +307,10 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
         return [];
       }
 
-      const response = await fetch(
+      const { response } = await fetchWithTokenRetry(
         'https://www.googleapis.com/calendar/v3/users/me/calendarList',
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
+        accessToken,
+        connection,
       );
 
       if (!response.ok) {
@@ -293,7 +350,7 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       console.error('[GoogleCalendarSync] Error fetching calendar list:', error);
       return [];
     }
-  }, [checkConnection, refreshTokenIfNeeded]);
+  }, [checkConnection, refreshTokenIfNeeded, fetchWithTokenRetry]);
 
   /**
    * Update selected calendars
@@ -347,10 +404,11 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
     accessToken: string,
     userId: string,
     forceFullSync: boolean,
-    syncToken: string | null
-  ): Promise<{ events: number; newSyncToken: string | null }> => {
+    syncToken: string | null,
+    connection: GoogleCalendarConnection,
+  ): Promise<{ events: number; newSyncToken: string | null; lastUsedToken: string }> => {
     const supabase = getSupabaseClient();
-    
+
     // Build the API URL
     const encodedCalendarId = encodeURIComponent(calendarId);
     let apiUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodedCalendarId}/events?`;
@@ -370,24 +428,20 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       timeMin.setDate(timeMin.getDate() - 30);
       const timeMax = new Date();
       timeMax.setDate(timeMax.getDate() + 90);
-      
+
       params.set('timeMin', timeMin.toISOString());
       params.set('timeMax', timeMax.toISOString());
     }
 
     apiUrl += params.toString();
 
-    const response = await fetch(apiUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const { response, usedToken } = await fetchWithTokenRetry(apiUrl, accessToken, connection);
 
     if (!response.ok) {
       if (response.status === 410) {
         // Sync token expired, need full sync
         console.log(`[GoogleCalendarSync] Sync token expired for calendar: ${calendarId}`);
-        return syncCalendar(calendarId, accessToken, userId, true, null);
+        return syncCalendar(calendarId, usedToken, userId, true, null, connection);
       }
       throw new Error(`Google Calendar API error: ${response.status}`);
     }
@@ -479,8 +533,8 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       }
     }
 
-    return { events: processedCount, newSyncToken };
-  }, []);
+    return { events: processedCount, newSyncToken, lastUsedToken: usedToken };
+  }, [fetchWithTokenRetry]);
 
   /**
    * Perform incremental sync with Google Calendar API (all selected calendars)
@@ -528,18 +582,22 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       console.log(`[GoogleCalendarSync] Syncing ${selectedCalendars.length} calendar(s)`);
 
       let totalProcessed = 0;
+      let currentToken = accessToken;
 
       // Sync each selected calendar
       for (const calendarId of selectedCalendars) {
         try {
           const result = await syncCalendar(
             calendarId,
-            accessToken,
+            currentToken,
             user.id,
             forceFullSync,
-            connection.sync_token // For now, using one sync token - could be per-calendar
+            connection.sync_token, // For now, using one sync token - could be per-calendar
+            connection,
           );
           totalProcessed += result.events;
+          // If the token was refreshed during this calendar sync, use the new one for subsequent calendars
+          currentToken = result.lastUsedToken;
 
           // Update sync token (using the last one - could improve this)
           if (result.newSyncToken) {
