@@ -11,6 +11,8 @@ import AssociatedItemsList, { AssociatedItem } from '../followThrough/Associated
 import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from '../tasks/TaskEventForm';
 import ParentItemInfo from '../followThrough/ParentItemInfo';
+import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
+import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
 
 const roseImage = require('@/assets/images/rose-81.png');
 const thornImage = require('@/assets/images/thorn-81.png');
@@ -54,6 +56,8 @@ export function ReflectionDetailsModal({
   const [loadingAssociatedItems, setLoadingAssociatedItems] = useState(false);
   const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
   const [followThroughPreSelectedType, setFollowThroughPreSelectedType] = useState<'task' | 'event' | 'rose' | 'thorn' | 'depositIdea' | 'reflection'>('task');
+  const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
+  const [enrichModalVisible, setEnrichModalVisible] = useState(false);
 
   useEffect(() => {
     if (visible && reflection?.id) {
@@ -238,28 +242,49 @@ export function ReflectionDetailsModal({
                 </View>
               </View>
 
-              {/* Alignment Chips - Roles, Domains, Key Relationships */}
-              {((reflection.roles && reflection.roles.length > 0) ||
-                (reflection.domains && reflection.domains.length > 0) ||
-                (reflection.keyRelationships && reflection.keyRelationships.length > 0)) && (
-                <View style={styles.alignmentChips}>
-                  {reflection.roles?.map(role => (
-                    <View key={role.id} style={[styles.chip, { backgroundColor: role.color || '#e0e7ff' }]}>
-                      <Text style={styles.chipText}>{role.label}</Text>
+              {/* Enrichment Icon Row */}
+              <View style={styles.enrichSection}>
+                <Text style={styles.enrichSectionTitle}>Add Context</Text>
+                <View style={styles.enrichIconRow}>
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <RoleIcon size={28} color={
+                        (reflection.roles?.length ?? 0) > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {(reflection.roles?.length ?? 0) > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{reflection.roles!.length}</Text>
+                        </View>
+                      )}
                     </View>
-                  ))}
-                  {reflection.domains?.map(domain => (
-                    <View key={domain.id} style={[styles.chip, { backgroundColor: domain.color || '#dbeafe' }]}>
-                      <Text style={styles.chipText}>{domain.name}</Text>
+                    <Text style={styles.enrichIconLabel}>Roles</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <WellnessIcon size={28} color={
+                        (reflection.domains?.length ?? 0) > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {(reflection.domains?.length ?? 0) > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{reflection.domains!.length}</Text>
+                        </View>
+                      )}
                     </View>
-                  ))}
-                  {reflection.keyRelationships?.map(kr => (
-                    <View key={kr.id} style={[styles.chip, { backgroundColor: '#fef3c7' }]}>
-                      <Text style={styles.chipText}>{kr.name}</Text>
+                    <Text style={styles.enrichIconLabel}>Wellness</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <GoalIcon size={28} color={'#9ca3af'} />
                     </View>
-                  ))}
+                    <Text style={styles.enrichIconLabel}>Goals</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
+              </View>
 
               {/* Parent Info */}
               {reflection.parent_id && reflection.parent_type && (
@@ -454,6 +479,24 @@ export function ReflectionDetailsModal({
             }}
           />
         </Modal>
+      )}
+
+      {/* Enrichment Modal */}
+      {enrichModalVisible && reflection?.user_id && (
+        <CommitmentEnrichmentModal
+          visible={enrichModalVisible}
+          commitment={{
+            id: reflection.id,
+            title: reflection.reflection_title || 'Reflection',
+            user_id: reflection.user_id,
+            is_urgent: false,
+            is_important: false,
+          }}
+          initialTab={enrichTab}
+          parentType="reflection"
+          onClose={() => setEnrichModalVisible(false)}
+          onEnrichmentChange={() => {}}
+        />
       )}
 
       {/* Image Viewer Modal */}
@@ -654,5 +697,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#dc2626',
     fontWeight: '500',
+  },
+  enrichSection: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  enrichSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  enrichIconRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+  },
+  enrichIconBtn: {
+    alignItems: 'center',
+    gap: 4,
+    position: 'relative',
+    minWidth: 48,
+  },
+  enrichIconLabel: {
+    fontSize: 10,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  enrichBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  enrichBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
 });
