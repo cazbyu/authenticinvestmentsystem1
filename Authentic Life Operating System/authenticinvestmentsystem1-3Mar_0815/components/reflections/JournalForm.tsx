@@ -22,8 +22,6 @@ import {
   ListOrdered,
   Image as ImageIcon,
   File,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react-native';
 import AttachmentThumbnail from '../attachments/AttachmentThumbnail';
 import { getAttachmentSignedUrl } from '@/lib/reflectionUtils';
@@ -40,6 +38,8 @@ import {
   ReflectionWithRelations,
 } from '@/lib/reflectionUtils';
 import { eventBus, EVENTS } from '@/lib/eventBus';
+import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
+import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
 
 interface Role {
   id: string;
@@ -104,6 +104,10 @@ export default function JournalForm({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals'>('roles');
+  const [enrichModalVisible, setEnrichModalVisible] = useState(false);
+  const [savedItemId, setSavedItemId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
 
   const [showFollowUpCalendar, setShowFollowUpCalendar] = useState(false);
   const [followUpDate, setFollowUpDate] = useState<string | null>(null);
@@ -118,12 +122,20 @@ export default function JournalForm({
   });
 
   useEffect(() => {
+    getSupabaseClient().auth.getUser().then(({ data }) => {
+      if (data.user) setCurrentUserId(data.user.id);
+    });
+  }, []);
+
+  useEffect(() => {
     if (visible) {
       fetchData();
       if (mode === 'edit' && initialData) {
         populateFormWithInitialData();
+        setSavedItemId(initialData.id);
       } else {
         resetForm();
+        setSavedItemId(null);
       }
     }
   }, [visible, mode, initialData]);
@@ -488,6 +500,7 @@ export default function JournalForm({
           throw new Error('Failed to save reflection');
         }
         reflectionId = newReflectionId;
+        setSavedItemId(newReflectionId);
       }
 
       // Upload only new attachments (not existing ones)
@@ -656,6 +669,7 @@ export default function JournalForm({
   const styles = getStyles(colors, isDarkMode);
 
   return (
+    <>
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
         {/* Header */}
@@ -801,140 +815,56 @@ export default function JournalForm({
               )}
             </View>
 
-            {/* Advanced Options Toggle */}
-            <TouchableOpacity
-              style={[styles.advancedToggle, { borderColor: colors.border }]}
-              onPress={() => setShowAdvanced(!showAdvanced)}
-            >
-              <Text style={[styles.advancedToggleText, { color: colors.primary }]}>
-                {showAdvanced ? 'Hide Advanced Options' : 'Advanced Options'}
+            {/* Enrichment Icon Row */}
+            {savedItemId ? (
+              <View style={styles.enrichSection}>
+                <Text style={styles.enrichSectionTitle}>Add Context</Text>
+                <View style={styles.enrichIconRow}>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <RoleIcon size={28} color={
+                        selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {selectedRoleIds.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{selectedRoleIds.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Roles</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <WellnessIcon size={28} color={
+                        selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {selectedDomainIds.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{selectedDomainIds.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Wellness</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <GoalIcon size={28} color={'#9ca3af'} />
+                    </View>
+                    <Text style={styles.enrichIconLabel}>Goals</Text>
+                  </TouchableOpacity>
+
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.enrichPendingText}>
+                Save first to add roles, wellness zones, and goals
               </Text>
-              {showAdvanced ? (
-                <ChevronUp size={18} color={colors.primary} />
-              ) : (
-                <ChevronDown size={18} color={colors.primary} />
-              )}
-            </TouchableOpacity>
-
-            {/* Advanced Options Content */}
-            {showAdvanced && (
-              <>
-                {(roles.length > 0 || domains.length > 0 || filteredKeyRelationships.length > 0) && (
-                  <View style={styles.section}>
-                    <Text style={[styles.helperText, { fontStyle: 'italic' }]}>
-                      Is this reflection associated with any of the following roles or domains? If so, check those that are applicable.
-                    </Text>
-                  </View>
-                )}
-
-                {/* Roles */}
-                {roles.length > 0 && (
-                  <View style={styles.section}>
-                    <View style={styles.checkboxContainer}>
-                      <Text style={styles.label}>Roles</Text>
-                      <View style={styles.checkboxList}>
-                        {roles.map((role) => (
-                          <TouchableOpacity
-                            key={role.id}
-                            style={styles.checkboxRow}
-                            onPress={() => toggleRole(role.id)}
-                          >
-                            <View
-                              style={[
-                                styles.checkboxSquare,
-                                { borderColor: colors.border },
-                                selectedRoleIds.includes(role.id) && {
-                                  backgroundColor: colors.primary,
-                                  borderColor: colors.primary,
-                                },
-                              ]}
-                            >
-                              {selectedRoleIds.includes(role.id) && (
-                                <Text style={styles.checkmark}>✓</Text>
-                              )}
-                            </View>
-                            <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                              {role.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  </View>
-                )}
-
-                {/* Domains */}
-                {domains.length > 0 && (
-                  <View style={styles.section}>
-                    <View style={styles.checkboxContainer}>
-                      <Text style={styles.label}>Domains</Text>
-                      <View style={styles.checkboxList}>
-                        {domains.map((domain) => (
-                          <TouchableOpacity
-                            key={domain.id}
-                            style={styles.checkboxRow}
-                            onPress={() => toggleDomain(domain.id)}
-                          >
-                            <View
-                              style={[
-                                styles.checkboxSquare,
-                                { borderColor: colors.border },
-                                selectedDomainIds.includes(domain.id) && {
-                                  backgroundColor: colors.primary,
-                                  borderColor: colors.primary,
-                                },
-                              ]}
-                            >
-                              {selectedDomainIds.includes(domain.id) && (
-                                <Text style={styles.checkmark}>✓</Text>
-                              )}
-                            </View>
-                            <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                              {domain.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  </View>
-                )}
-
-                {/* Key Relationships */}
-                {filteredKeyRelationships.length > 0 && (
-                  <View style={styles.section}>
-                    <View style={styles.checkboxContainer}>
-                      <Text style={styles.label}>Key Relationships</Text>
-                      <View style={styles.checkboxList}>
-                        {filteredKeyRelationships.map((kr) => (
-                          <TouchableOpacity
-                            key={kr.id}
-                            style={styles.checkboxRow}
-                            onPress={() => toggleKeyRelationship(kr.id)}
-                          >
-                            <View
-                              style={[
-                                styles.checkboxSquare,
-                                { borderColor: colors.border },
-                                selectedKeyRelationshipIds.includes(kr.id) && {
-                                  backgroundColor: colors.primary,
-                                  borderColor: colors.primary,
-                                },
-                              ]}
-                            >
-                              {selectedKeyRelationshipIds.includes(kr.id) && (
-                                <Text style={styles.checkmark}>✓</Text>
-                              )}
-                            </View>
-                            <Text style={[styles.checkboxLabel, { color: colors.text }]}>
-                              {kr.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </>
             )}
 
             {/* Actions */}
@@ -1062,6 +992,26 @@ export default function JournalForm({
         </Modal>
       </View>
     </Modal>
+
+    {/* Enrichment Modal */}
+    {enrichModalVisible && savedItemId && currentUserId && (
+      <CommitmentEnrichmentModal
+        visible={enrichModalVisible}
+        commitment={{
+          id: savedItemId,
+          title: content.slice(0, 50) || 'Reflection',
+          user_id: currentUserId,
+          is_urgent: false,
+          is_important: false,
+          external_recurrence_id: null,
+        }}
+        parentType="reflection"
+        initialTab={enrichTab as any}
+        onClose={() => setEnrichModalVisible(false)}
+        onEnrichmentChange={() => {}}
+      />
+    )}
+    </>
   );
 }
 
@@ -1380,5 +1330,59 @@ const getStyles = (colors: any, isDarkMode: boolean) =>
     advancedToggleText: {
       fontSize: 14,
       fontWeight: '600',
+    },
+    enrichSection: {
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f3f4f6',
+    },
+    enrichSectionTitle: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#9ca3af',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 12,
+    },
+    enrichIconRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'flex-start',
+    },
+    enrichIconBtn: {
+      alignItems: 'center',
+      gap: 4,
+      position: 'relative',
+      minWidth: 48,
+    },
+    enrichIconLabel: {
+      fontSize: 10,
+      color: '#6b7280',
+      textAlign: 'center',
+    },
+    enrichBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: '#16a34a',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 3,
+    },
+    enrichBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontWeight: '700',
+    },
+    enrichPendingText: {
+      fontSize: 13,
+      color: '#9ca3af',
+      fontStyle: 'italic',
+      textAlign: 'center',
+      paddingVertical: 12,
     },
   });
