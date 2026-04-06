@@ -350,7 +350,7 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
           .or(`and(occurrence_date.gte.${startStr},occurrence_date.lte.${endStr}),and(due_date.gte.${startStr},due_date.lte.${endStr}),and(start_date.gte.${startStr},start_date.lte.${endStr}),and(completed_at.gte.${startStr}T00:00:00,completed_at.lte.${endStr}T23:59:59)`),
         supabase
           .from('0008-ap-commitments')
-          .select('id, title, date, start_time, end_time, is_all_day, status, external_calendar_id')
+          .select('id, user_id, title, date, start_time, end_time, is_all_day, status, external_calendar_id')
           .eq('user_id', user.id)
           .gte('date', startStr)
           .lte('date', endStr),
@@ -415,6 +415,7 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
           roleColor: '#4285F4',
           isGoalActionTask: false,
           isCommitment: true,
+          user_id: c.user_id,
           external_calendar_id: c.external_calendar_id,
           calendarColor: calendarBg,
           calendarTextColor: calendarBg ? getTextColor(calendarBg) : undefined,

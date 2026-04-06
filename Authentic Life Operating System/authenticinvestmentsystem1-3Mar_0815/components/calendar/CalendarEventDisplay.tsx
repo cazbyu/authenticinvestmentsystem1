@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Check, X, Users, Flag, Heart, FileText, UserPlus } from 'lucide-react-native';
+import { Check, X, Users, Flag, Heart, Target, FileText, UserPlus } from 'lucide-react-native';
+import CommitmentEnrichmentModal from './CommitmentEnrichmentModal';
 import { Task } from '@/components/tasks/TaskCard';
 import { formatTimeForDisplay } from '@/lib/dateUtils';
 
@@ -9,6 +10,8 @@ interface CalendarEventDisplayProps {
   onPress: (task: Task) => void;
   onCommitmentComplete?: (id: string) => void;
   onCommitmentDismiss?: (id: string) => void;
+  onCommitmentEnrich?: (commitmentId: string, tab: 'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate') => void;
+  currentUserId?: string;
   style?: any;
 }
 
@@ -17,8 +20,12 @@ export function CalendarEventDisplay({
   onPress,
   onCommitmentComplete,
   onCommitmentDismiss,
+  onCommitmentEnrich,
+  currentUserId,
   style,
 }: CalendarEventDisplayProps) {
+  const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
+  const [enrichModalVisible, setEnrichModalVisible] = useState(false);
   const formatTime = (timeString: string) => {
     return formatTimeForDisplay(timeString);
   };
@@ -100,6 +107,11 @@ export function CalendarEventDisplay({
   const hasNotes     = (task as any).has_notes === true;
   const hasDelegates = (task as any).has_delegates === true;
 
+  // Priority icon uses quadrant color
+  const urg = task.is_urgent ?? false;
+  const imp = task.is_important ?? false;
+  const priorityIconColor = (urg && imp) ? '#ef4444' : (!urg && imp) ? '#10b981' : (urg && !imp) ? '#f59e0b' : (iconColor ?? '#6b7280');
+
   return (
     <TouchableOpacity
       style={[
@@ -155,7 +167,7 @@ export function CalendarEventDisplay({
           <View style={styles.enrichmentRow}>
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('roles'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Users size={14} color={iconColor} />
@@ -164,7 +176,7 @@ export function CalendarEventDisplay({
 
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('goals'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Flag size={14} color={iconColor} />
@@ -173,18 +185,26 @@ export function CalendarEventDisplay({
 
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('wellness'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Heart size={14} color={iconColor} />
               {hasWellness && <View style={styles.enrichDot} />}
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('priority'); setEnrichModalVisible(true); }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Target size={14} color={priorityIconColor} />
+            </TouchableOpacity>
+
             <View style={styles.enrichSpacer} />
 
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('notes'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <FileText size={14} color={iconColor} />
@@ -193,7 +213,7 @@ export function CalendarEventDisplay({
 
             <TouchableOpacity
               style={[styles.enrichBtn, { backgroundColor: iconBtnBg }]}
-              onPress={(e) => { e.stopPropagation?.(); onPress(task); }}
+              onPress={(e) => { e.stopPropagation?.(); setEnrichTab('delegate'); setEnrichModalVisible(true); }}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <UserPlus size={14} color={iconColor} />
@@ -227,6 +247,26 @@ export function CalendarEventDisplay({
           </View>
         )}
       </View>
+
+      {isCommitment && enrichModalVisible && (task as any).user_id && (
+        <CommitmentEnrichmentModal
+          visible={enrichModalVisible}
+          commitment={{
+            id: task.id,
+            title: task.title,
+            user_id: (task as any).user_id,
+            is_urgent: task.is_urgent ?? false,
+            is_important: task.is_important ?? false,
+            external_recurrence_id: (task as any).external_recurrence_id ?? null,
+          }}
+          initialTab={enrichTab}
+          onClose={() => setEnrichModalVisible(false)}
+          onEnrichmentChange={() => {
+            setEnrichModalVisible(false);
+            onCommitmentComplete?.(task.id);
+          }}
+        />
+      )}
     </TouchableOpacity>
   );
 }
