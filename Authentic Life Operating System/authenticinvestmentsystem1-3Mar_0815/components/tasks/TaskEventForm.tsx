@@ -627,7 +627,7 @@ export default function TaskEventForm({
       isAnytime: initialData.is_all_day || false,
       isUrgent: initialData.is_urgent || false,
       isImportant: initialData.is_important || false,
-      isGoal: hasActiveGoals || initialData.is_twelve_week_goal || false,
+      isGoal: hasActiveGoals || false,
       selectedRoleIds: initialData.roles?.map((r: any) => r.id) || initialData.selectedRoleIds || [],
       selectedDomainIds: initialData.domains?.map((d: any) => d.id) || initialData.selectedDomainIds || [],
       selectedKeyRelationshipIds: initialData.keyRelationships?.map((kr: any) => kr.id) || initialData.selectedKeyRelationshipIds || [],
@@ -1404,25 +1404,8 @@ export default function TaskEventForm({
         is_all_day: formData.isAnytime,
         is_urgent: formData.isUrgent,
         is_important: formData.isImportant,
-        is_twelve_week_goal: formData.isGoal,
-        is_deposit_idea: initialData?.is_deposit_idea || false,
-
-        // Direct goal FK for easier querying
-goal_12wk_id: formData.selectedGoal?.goal_type === '12week'
-  ? formData.selectedGoal.id
-  : null,
-parent_goal_id: formData.selectedGoal?.goal_type === 'custom'
-  ? formData.selectedGoal.id
-  : null,
-parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
-  ? 'custom_goal'
-  : null,
-
         recurrence_rule: formData.recurrenceRule || null,
         recurrence_end_date: formData.recurrenceEndDate || null,
-        // Parent relationship for follow-through items
-        parent_id: formData.parentId || null,
-        parent_type: formData.parentType || null,
         // Preserve completion status and timestamp when editing
         ...(mode === 'edit' && initialData?.id ? {
           // Explicitly preserve completed status - never change it back to pending
@@ -1482,8 +1465,8 @@ parent_goal_type: formData.selectedGoal?.goal_type === 'custom'
       }
       mainRecordId = mainRecord.id;
 
-      // Handle joins for the new task/event (use its type for role/domain/etc. joins)
-      const parentType = formData.type;
+      // Handle joins for the new task/event — join tables use 'task' parent_type for all task-table records
+      const parentType = 'task';
 
       // Clear existing joins if editing
       if (mode === 'edit' && initialData?.id) {

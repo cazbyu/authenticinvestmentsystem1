@@ -15,6 +15,8 @@ interface HourlyCalendarGridProps {
   currentTimeString: string;
   onCompleteTask: (taskId: string) => void;
   onTaskPress: (task: Task) => void;
+  onCommitmentComplete?: (id: string) => void;
+  onCommitmentDismiss?: (id: string) => void;
   viewMode?: 'daily' | 'weekly' | 'monthly';
 }
 
@@ -112,6 +114,8 @@ const HourlyCalendarGridComponent = ({
   currentTimeString,
   onCompleteTask,
   onTaskPress,
+  onCommitmentComplete,
+  onCommitmentDismiss,
   viewMode = 'daily',
 }: HourlyCalendarGridProps) => {
   const scrollRef = useRef<ScrollView>(null);
@@ -202,14 +206,29 @@ const HourlyCalendarGridComponent = ({
         <View style={styles.allDaySection}>
           <Text style={styles.allDayLabel}>All Day</Text>
           <View style={styles.allDayEvents}>
-            {uniqByIdAndDate(allDayItems).map((task, idx) => (
-              <TaskCard
-                key={`${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`}
-                task={task}
-                onComplete={onCompleteTask}
-                onPress={onTaskPress}
-              />
-            ))}
+            {uniqByIdAndDate(allDayItems).map((task, idx) => {
+              const k = `${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`;
+              if ((task as any).isCommitment) {
+                return (
+                  <CalendarEventDisplay
+                    key={k}
+                    task={task}
+                    onPress={onTaskPress}
+                    onCommitmentComplete={onCommitmentComplete}
+                    onCommitmentDismiss={onCommitmentDismiss}
+                    style={{ marginBottom: 6 }}
+                  />
+                );
+              }
+              return (
+                <TaskCard
+                  key={k}
+                  task={task}
+                  onComplete={onCompleteTask}
+                  onPress={onTaskPress}
+                />
+              );
+            })}
           </View>
         </View>
       )}
@@ -218,14 +237,29 @@ const HourlyCalendarGridComponent = ({
         <View style={styles.anytimeSection}>
           <Text style={styles.anytimeLabel}>Anytime</Text>
           <View style={styles.anytimeEvents}>
-            {uniqByIdAndDate(anytimeItems).map((task, idx) => (
-              <TaskCard
-                key={`${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`}
-                task={task}
-                onComplete={onCompleteTask}
-                onPress={onTaskPress}
-              />
-            ))}
+            {uniqByIdAndDate(anytimeItems).map((task, idx) => {
+              const k = `${task.id}-${task.start_date || task.due_date || selectedDate}-${task.type || 'task'}-${idx}`;
+              if ((task as any).isCommitment) {
+                return (
+                  <CalendarEventDisplay
+                    key={k}
+                    task={task}
+                    onPress={onTaskPress}
+                    onCommitmentComplete={onCommitmentComplete}
+                    onCommitmentDismiss={onCommitmentDismiss}
+                    style={{ marginBottom: 6 }}
+                  />
+                );
+              }
+              return (
+                <TaskCard
+                  key={k}
+                  task={task}
+                  onComplete={onCompleteTask}
+                  onPress={onTaskPress}
+                />
+              );
+            })}
           </View>
         </View>
       )}
@@ -267,6 +301,8 @@ const HourlyCalendarGridComponent = ({
                 key={`${event.id}-${event.start_time || ''}-${event.end_time || ''}-${selectedDate}-${event.type}-${idx}`}
                 task={event}
                 onPress={onTaskPress}
+                onCommitmentComplete={onCommitmentComplete}
+                onCommitmentDismiss={onCommitmentDismiss}
                 style={{
                   position: 'absolute',
                   top,

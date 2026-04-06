@@ -933,7 +933,6 @@ export interface TaskEventFormPrefill {
   selectedRoleIds: string[];
   selectedDomainIds: string[];
   selectedKeyRelationshipIds: string[];
-  is_deposit_idea?: boolean;
 }
 
 /**
@@ -1148,7 +1147,6 @@ export function buildFormPrefill(item: ParsedCaptureItem): TaskEventFormPrefill 
     selectedRoleIds: item.suggested_role_id ? [item.suggested_role_id] : [],
     selectedDomainIds: item.suggested_domain_ids || [],
     selectedKeyRelationshipIds: item.suggested_key_relationship_ids || [],
-    is_deposit_idea: item.suggested_type === 'depositIdea',
   };
 }
 

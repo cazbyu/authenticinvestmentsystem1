@@ -35,7 +35,7 @@ export function calculateTaskPoints(
   let points = 0;
 
   // BASE SCORE: Deposit Idea vs Regular Task (MUTUALLY EXCLUSIVE)
-  if (task.is_deposit_idea || task.deposit_idea) {
+  if (task.deposit_idea) {
     points = 5; // Complete Deposit
   } else {
     points = 3; // Complete Task

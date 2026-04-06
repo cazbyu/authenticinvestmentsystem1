@@ -139,7 +139,7 @@ export function GoalJournalView({
       if (taskIds.length > 0) {
         let tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, status, completed_at, is_urgent, is_important, is_deposit_idea')
+          .select('id, title, type, status, completed_at, is_urgent, is_important')
           .in('id', taskIds)
           .eq('user_id', user.id)
           .eq('status', 'completed')

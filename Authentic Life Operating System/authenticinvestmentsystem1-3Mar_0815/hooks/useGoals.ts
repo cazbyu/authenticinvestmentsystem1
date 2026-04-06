@@ -536,7 +536,6 @@ export function useGoals(options: UseGoalsOptions = {}) {
           unit: 'days',
           status: 'pending',
           due_date: null, // Parent tasks should not have a due_date
-          is_twelve_week_goal: timeline.source === 'global',
           recurrence_rule: taskData.recurrenceRule,
           
           // Conditionally add the correct timeline foreign key to the main task record

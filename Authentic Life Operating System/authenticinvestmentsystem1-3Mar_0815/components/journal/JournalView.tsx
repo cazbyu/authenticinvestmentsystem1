@@ -156,7 +156,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       // 1a) Completed TASKS
       let completedTasksQuery = supabase
         .from('0008-ap-tasks')
-        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
         .eq('user_id', user.id)
         .eq('type', 'task')
         .eq('status', 'completed')
@@ -178,7 +178,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       // 1b) Completed EVENTS
       let completedEventsQuery = supabase
         .from('0008-ap-tasks')
-        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, is_twelve_week_goal, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
         .eq('user_id', user.id)
         .eq('type', 'event')
         .eq('status', 'completed')

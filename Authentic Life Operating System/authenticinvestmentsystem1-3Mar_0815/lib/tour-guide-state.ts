@@ -255,7 +255,7 @@ async function fetchRolesWithActivity(
       // Step 2: Fetch those tasks filtered by date range
       const { data: tasks } = await supabase
         .from('0008-ap-tasks')
-        .select('id, status, is_deposit_idea, due_date, completed_at')
+        .select('id, status, due_date, completed_at')
         .in('id', taskIds)
         .gte('due_date', weekStart)
         .lte('due_date', weekEnd)
@@ -263,7 +263,7 @@ async function fetchRolesWithActivity(
 
       const taskList = tasks || [];
       const completed = taskList.filter((t: any) => t.status === 'completed').length;
-      const deposits = taskList.filter((t: any) => t.is_deposit_idea === true).length;
+      const deposits = taskList.filter((t: any) => t.deposit_idea === true).length;
 
       return {
         label: role.label,
@@ -321,7 +321,7 @@ async function fetchActivitySummary(
     .eq('user_id', userId)
     .gte('due_date', weekStart)
     .lte('due_date', weekEnd)
-    .eq('is_deposit_idea', true)
+    .eq('deposit_idea', true)
     .neq('status', 'cancelled');
 
   // Recent completed titles

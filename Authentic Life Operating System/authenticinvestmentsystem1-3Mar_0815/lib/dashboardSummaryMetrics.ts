@@ -69,7 +69,7 @@ export async function fetchDashboardMetrics(
   try {
     const completedTasksQuery = supabase
       .from('0008-ap-tasks')
-      .select('id, title, type, is_urgent, is_important, is_twelve_week_goal, completed_at')
+      .select('id, title, type, is_urgent, is_important, completed_at')
       .eq('user_id', userId)
       .eq('type', 'task')
       .eq('status', 'completed')
@@ -80,7 +80,7 @@ export async function fetchDashboardMetrics(
 
     const completedEventsQuery = supabase
       .from('0008-ap-tasks')
-      .select('id, title, type, is_urgent, is_important, is_twelve_week_goal, completed_at')
+      .select('id, title, type, is_urgent, is_important, completed_at')
       .eq('user_id', userId)
       .eq('type', 'event')
       .eq('status', 'completed')

@@ -70,6 +70,7 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
 
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncTimeRef = useRef<number>(0);
+  const isSyncingRef = useRef<boolean>(false);
   const isMountedRef = useRef(true);
   const connectionRef = useRef<GoogleCalendarConnection | null>(null);
 
@@ -397,13 +398,13 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
 
     console.log(`[GoogleCalendarSync] Calendar ${calendarId}: ${events.length} events`);
 
-    // Process events
+    // Process events into 0008-ap-commitments
     let processedCount = 0;
     for (const event of events) {
       // Skip cancelled events (delete them from our DB)
       if (event.status === 'cancelled') {
         await supabase
-          .from('0008-ap-tasks')
+          .from('0008-ap-commitments')
           .delete()
           .eq('external_event_id', event.id)
           .eq('user_id', userId);
@@ -411,42 +412,70 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       }
 
       // Parse event data
-      const startDate = event.start?.date || event.start?.dateTime?.split('T')[0];
-      const endDate = event.end?.date || event.end?.dateTime?.split('T')[0];
+      const date = event.start?.date || event.start?.dateTime?.split('T')[0];
       const startTime = event.start?.dateTime ? event.start.dateTime.split('T')[1]?.substring(0, 5) : null;
       const endTime = event.end?.dateTime ? event.end.dateTime.split('T')[1]?.substring(0, 5) : null;
       const isAllDay = !event.start?.dateTime;
 
-      // Upsert the event
-      const { error: upsertError } = await supabase
-  .from('0008-ap-tasks')
-  .upsert({
-    user_id: userId,
-    external_event_id: event.id,
-    external_calendar_id: calendarId,
-    title: event.summary || 'Untitled Event',
-    description: event.description || null,
-    type: 'event',
-    status: 'pending',
-    start_date: startDate,
-    end_date: endDate !== startDate ? endDate : null,
-    start_time: startTime,
-    end_time: endTime,
-    is_all_day: isAllDay,
-    location: event.location || null,
-    recurrence_rule: null,
-    external_source: 'google',
-    external_sync_direction: 'pull',
-    last_external_sync_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }, {
-    onConflict: 'external_event_id,user_id',
-  });
+      // Check if exists so we can preserve user-set status/reviewed_at
+      const { data: existing } = await supabase
+        .from('0008-ap-commitments')
+        .select('id')
+        .eq('external_event_id', event.id)
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      if (upsertError) {
-        console.error('[GoogleCalendarSync] Error upserting event:', upsertError);
+      if (existing) {
+        // Update — don't overwrite status or reviewed_at
+        const { error: updateError } = await supabase
+          .from('0008-ap-commitments')
+          .update({
+            title: event.summary || 'Untitled Event',
+            description: event.description || null,
+            date,
+            start_time: startTime,
+            end_time: endTime,
+            is_all_day: isAllDay,
+            location: event.location || null,
+            external_calendar_id: calendarId,
+            external_recurrence_id: event.recurringEventId ?? null,
+            synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+
+        if (updateError) {
+          console.error('[GoogleCalendarSync] Error updating commitment:', updateError);
+        } else {
+          processedCount++;
+        }
       } else {
-        processedCount++;
+        // Insert new commitment
+        const { error: insertError } = await supabase
+          .from('0008-ap-commitments')
+          .insert({
+            user_id: userId,
+            external_event_id: event.id,
+            external_calendar_id: calendarId,
+            external_recurrence_id: event.recurringEventId ?? null,
+            title: event.summary || 'Untitled Event',
+            description: event.description || null,
+            date,
+            start_time: startTime,
+            end_time: endTime,
+            is_all_day: isAllDay,
+            location: event.location || null,
+            external_source: 'google',
+            status: 'pending',
+            synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+        if (insertError) {
+          console.error('[GoogleCalendarSync] Error inserting commitment:', insertError);
+        } else {
+          processedCount++;
+        }
       }
     }
 
@@ -457,12 +486,14 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
    * Perform incremental sync with Google Calendar API (all selected calendars)
    */
   const performSync = useCallback(async (forceFullSync: boolean = false): Promise<boolean> => {
-    // Prevent sync spam
+    // Prevent sync spam — set lastSyncTimeRef synchronously BEFORE any await
+    // so a second caller entering during this await is blocked by the time guard.
     const now = Date.now();
     if (now - lastSyncTimeRef.current < MIN_SYNC_INTERVAL_MS && !forceFullSync) {
       console.log('[GoogleCalendarSync] Skipping sync - too soon since last sync');
       return false;
     }
+    lastSyncTimeRef.current = now;
 
     const connection = await checkConnection();
     if (!connection) {
@@ -470,14 +501,14 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       return false;
     }
 
-    // Check if already syncing
-    if (syncState.isSyncing) {
+    // Check if already syncing — use a ref so there is no React state timing gap
+    if (isSyncingRef.current) {
       console.log('[GoogleCalendarSync] Already syncing, skipping');
       return false;
     }
+    isSyncingRef.current = true;
 
     setSyncState(prev => ({ ...prev, isSyncing: true, lastSyncError: null }));
-    lastSyncTimeRef.current = now;
 
     try {
       const accessToken = await refreshTokenIfNeeded(connection);
@@ -576,10 +607,20 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
           lastSyncError: (error as Error).message,
         }));
       }
-      
+
       return false;
+    } finally {
+      isSyncingRef.current = false;
     }
   }, [syncState.isSyncing, checkConnection, refreshTokenIfNeeded, syncCalendar]);
+
+  // Keep a ref to the latest performSync so effects can call it
+  // without listing performSync as a dependency (which would cause them
+  // to re-run every time performSync's identity changes mid-sync).
+  const performSyncRef = useRef(performSync);
+  useEffect(() => {
+    performSyncRef.current = performSync;
+  }, [performSync]);
 
   /**
    * Manual sync trigger (exposed to components)
@@ -658,13 +699,15 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
     };
   }, [syncState.isConnected, startBackgroundSync, stopBackgroundSync, performSync]);
 
-  // Sync when Calendar tab becomes active
+  // Sync when Calendar tab becomes active.
+  // Uses performSyncRef so this effect does NOT depend on performSync's identity —
+  // otherwise it would re-fire whenever performSync recomputes mid-sync.
   useEffect(() => {
     if (isCalendarTabActive && syncState.isConnected) {
       console.log('[GoogleCalendarSync] Calendar tab active, triggering sync');
-      performSync(false);
+      performSyncRef.current(false);
     }
-  }, [isCalendarTabActive, syncState.isConnected, performSync]);
+  }, [isCalendarTabActive, syncState.isConnected]);
 
   return {
     ...syncState,

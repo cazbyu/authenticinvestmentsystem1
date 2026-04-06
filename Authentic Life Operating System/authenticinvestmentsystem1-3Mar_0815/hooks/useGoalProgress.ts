@@ -232,7 +232,6 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
     // Filter by timeline
     if (selectedTimeline.source === 'global') {
       query = query
-        .eq('is_twelve_week_goal', true)
         .eq('0008-ap-task-week-plan.user_global_timeline_id', selectedTimeline.id);
     } else {
       query = query
@@ -327,7 +326,6 @@ export function useGoalProgress(options: UseGoalProgressOptions = {}) {
       due_date: whenISO,
       completed_at: toLocalISOString(new Date()),
       parent_task_id: parentTaskId,
-      is_twelve_week_goal: selectedTimeline.source === 'global',
       // Only set custom_timeline_id for custom timelines
       ...(selectedTimeline.source === 'custom' ? { custom_timeline_id: selectedTimeline.id } : {}),
     };

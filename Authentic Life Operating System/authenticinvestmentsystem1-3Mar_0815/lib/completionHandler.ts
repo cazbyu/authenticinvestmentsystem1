@@ -51,7 +51,6 @@ export async function handleActionCompletion(
       due_date: dueDate,
       completed_at: toLocalISOString(new Date()),
       parent_task_id: actionId,
-      is_twelve_week_goal: !!(parent.user_global_timeline_id || (timeline?.source === 'global')),
     };
 
     if (parent.custom_timeline_id) {
@@ -205,7 +204,6 @@ export async function handleRecurringTaskCompletion(
       is_urgent: sourceTask.is_urgent,
       is_important: sourceTask.is_important,
       is_all_day: sourceTask.is_all_day,
-      is_twelve_week_goal: sourceTask.is_twelve_week_goal,
       user_global_timeline_id: sourceTask.user_global_timeline_id,
       custom_timeline_id: sourceTask.custom_timeline_id,
     };

@@ -12,7 +12,7 @@ import {
 import { SquareCheck as CheckSquare, Calendar, Check, CircleUser as UserCircle, Trash2, Circle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { getSupabaseClient } from '@/lib/supabase';
-import { calculateTaskPoints } from '@/lib/taskUtils';
+import { calculateTaskPoints, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { TimePeriod } from '@/lib/dashboardSummaryMetrics';
 import { ActFilter } from './ActFilterButtons';
 import { eventBus, EVENTS } from '@/lib/eventBus';
@@ -37,7 +37,6 @@ interface ActionItem {
   due_time: string | null;
   is_urgent: boolean;
   is_important: boolean;
-  is_deposit_idea: boolean;
   depositValue: number;
   isOverdue?: boolean;
   originalDate?: string;
@@ -469,7 +468,7 @@ export function ActionsTableView({
       if (filter === 'task') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
@@ -484,7 +483,7 @@ export function ActionsTableView({
       } else if (filter === 'event') {
         let query = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'event')
           .is('deleted_at', null)
@@ -500,7 +499,7 @@ export function ActionsTableView({
       } else {
         let tasksQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'task')
           .is('deleted_at', null)
@@ -509,7 +508,7 @@ export function ActionsTableView({
 
         let eventsQuery = supabase
           .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, is_deposit_idea, status, completed_at')
+          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, status, completed_at')
           .eq('user_id', userId)
           .eq('type', 'event')
           .is('deleted_at', null)
@@ -550,9 +549,7 @@ export function ActionsTableView({
             .eq('parent_type', 'task'),
           supabase
             .from('0008-ap-universal-goals-join')
-            .select(
-              'parent_id, goal_type, tw:0008-ap-goals-12wk(id, title, status), cg:0008-ap-goals-custom(id, title, status)'
-            )
+            .select('parent_id, goal_id, goal_type')
             .in('parent_id', taskIds)
             .eq('parent_type', 'task'),
           supabase
@@ -574,10 +571,11 @@ export function ActionsTableView({
           domainsByTask.get(d.parent_id)!.push(d.domain);
         });
 
+        const goalsById = await fetchGoalsForJoinRows(supabase, goalsRes.data || []);
         const goalsByTask = new Map<string, any[]>();
         (goalsRes.data || []).forEach((g: any) => {
           if (!goalsByTask.has(g.parent_id)) goalsByTask.set(g.parent_id, []);
-          const goal = g.goal_type === 'twelve_wk_goal' ? g.tw : g.cg;
+          const goal = goalsById.get(g.goal_id);
           if (goal && goal.status !== 'archived' && goal.status !== 'cancelled') {
             goalsByTask.get(g.parent_id)!.push(goal);
           }
@@ -615,7 +613,7 @@ export function ActionsTableView({
             due_time: task.due_time,
             is_urgent: task.is_urgent,
             is_important: task.is_important,
-            is_deposit_idea: task.is_deposit_idea || false,
+            is_deposit_idea: false,
             depositValue: score,
             isOverdue,
             originalDate: isOverdue ? displayDate : undefined,
