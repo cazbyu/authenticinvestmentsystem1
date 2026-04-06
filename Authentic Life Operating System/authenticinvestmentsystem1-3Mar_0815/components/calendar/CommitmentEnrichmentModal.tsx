@@ -44,6 +44,7 @@ interface CommitmentEnrichmentModalProps {
     external_recurrence_id?: string | null;
   };
   initialTab: EnrichmentTab;
+  parentType?: string;
   onClose: () => void;
   onEnrichmentChange: () => void;
   onPriorityChange?: (urgent: boolean, important: boolean) => void;
@@ -78,16 +79,16 @@ const PRIMARY = '#3b82f6';
 const GRAY_TEXT = '#6b7280';
 const BORDER = '#d1d5db';
 const BG_GRAY = '#f3f4f6';
-const PARENT_TYPE = 'commitment' as const;
-
 export default function CommitmentEnrichmentModal({
   visible,
   commitment,
   initialTab,
+  parentType = 'commitment',
   onClose,
   onEnrichmentChange,
   onPriorityChange,
 }: CommitmentEnrichmentModalProps) {
+  const PARENT_TYPE = parentType;
   const [activeTab, setActiveTab] = useState<EnrichmentTab>(initialTab);
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);

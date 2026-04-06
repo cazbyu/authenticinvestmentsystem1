@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, Linking, TextInput, Platform } from 'react-native';
-import { X, Play, Edit, Trash2, Paperclip } from 'lucide-react-native';
+import { X, Play, Edit, Trash2, Paperclip, FileText } from 'lucide-react-native';
 import Autolink from 'react-native-autolink';
 import { getSupabaseClient } from '@/lib/supabase';
 import { fetchAttachmentsForNotes, uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
@@ -11,6 +11,8 @@ import { fetchAssociatedItems } from '@/lib/followThroughUtils';
 import TaskEventForm from '../tasks/TaskEventForm';
 import ParentItemInfo from '../followThrough/ParentItemInfo';
 import * as DocumentPicker from 'expo-document-picker';
+import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
+import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
 
 const depositIdeaImage = require('@/assets/images/deposit-idea.png');
 
@@ -80,6 +82,9 @@ export function DepositIdeaDetailModal({
   const [newNoteText, setNewNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<any[]>([]);
+  const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
+  const [enrichModalVisible, setEnrichModalVisible] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible && depositIdea?.id) {
@@ -146,6 +151,7 @@ export function DepositIdeaDetailModal({
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setCurrentUserId(user.id);
       const items = await fetchAssociatedItems(depositIdea.id, 'depositIdea', user.id);
       setAssociatedItems(items);
     } catch (error) {
@@ -461,26 +467,57 @@ export function DepositIdeaDetailModal({
                 </View>
               )}
 
-              {/* Alignment Chips - Roles, Domains, Key Relationships */}
-              {(roles.length > 0 || domains.length > 0 || keyRelationships.length > 0) && (
-                <View style={styles.alignmentChips}>
-                  {roles.map(role => (
-                    <View key={role.id} style={[styles.chip, { backgroundColor: role.color || '#e0e7ff' }]}>
-                      <Text style={styles.chipText}>{role.label}</Text>
+              {/* Enrichment Icon Row */}
+              <View style={styles.enrichSection}>
+                <Text style={styles.enrichSectionTitle}>Add Context</Text>
+                <View style={styles.enrichIconRow}>
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <RoleIcon size={28} color={
+                        roles.length > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {roles.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{roles.length}</Text>
+                        </View>
+                      )}
                     </View>
-                  ))}
-                  {domains.map(domain => (
-                    <View key={domain.id} style={[styles.chip, { backgroundColor: '#dbeafe' }]}>
-                      <Text style={styles.chipText}>{domain.name}</Text>
+                    <Text style={styles.enrichIconLabel}>Roles</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <WellnessIcon size={28} color={
+                        domains.length > 0 ? '#16a34a' : '#9ca3af'
+                      } />
+                      {domains.length > 0 && (
+                        <View style={styles.enrichBadge}>
+                          <Text style={styles.enrichBadgeText}>{domains.length}</Text>
+                        </View>
+                      )}
                     </View>
-                  ))}
-                  {keyRelationships.map(kr => (
-                    <View key={kr.id} style={[styles.chip, { backgroundColor: '#fef3c7' }]}>
-                      <Text style={styles.chipText}>{kr.name}</Text>
+                    <Text style={styles.enrichIconLabel}>Wellness</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                    <View>
+                      <GoalIcon size={28} color={'#9ca3af'} />
                     </View>
-                  ))}
+                    <Text style={styles.enrichIconLabel}>Goals</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.enrichIconBtn}
+                    onPress={() => { setEnrichTab('notes'); setEnrichModalVisible(true); }}>
+                    <FileText size={28} color={
+                      depositIdea.has_notes ? '#16a34a' : '#9ca3af'
+                    } />
+                    <Text style={styles.enrichIconLabel}>Notes</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
+              </View>
 
               {/* Parent Info */}
               {depositIdea.parent_id && depositIdea.parent_type && (
@@ -797,6 +834,24 @@ export function DepositIdeaDetailModal({
           </View>
         </View>
       </Modal>
+
+      {/* Enrichment Modal */}
+      {enrichModalVisible && currentUserId && depositIdea && (
+        <CommitmentEnrichmentModal
+          visible={enrichModalVisible}
+          commitment={{
+            id: depositIdea.id,
+            title: depositIdea.title,
+            user_id: currentUserId,
+            is_urgent: false,
+            is_important: false,
+          }}
+          initialTab={enrichTab}
+          parentType="depositIdea"
+          onClose={() => setEnrichModalVisible(false)}
+          onEnrichmentChange={() => {}}
+        />
+      )}
 
       {/* Image Viewer Modal */}
       <ImageViewerModal
@@ -1172,5 +1227,51 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  enrichSection: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  enrichSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  enrichIconRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+  },
+  enrichIconBtn: {
+    alignItems: 'center',
+    gap: 4,
+    position: 'relative',
+    minWidth: 48,
+  },
+  enrichIconLabel: {
+    fontSize: 10,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  enrichBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  enrichBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
 });
