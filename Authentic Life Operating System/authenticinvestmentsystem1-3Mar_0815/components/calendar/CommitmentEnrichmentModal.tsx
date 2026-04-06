@@ -21,7 +21,9 @@ import {
   Paperclip,
   Plus,
 } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import { getSupabaseClient } from '@/lib/supabase';
+import { uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import DelegateModal from '@/components/tasks/DelegateModal';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
 
@@ -127,6 +129,25 @@ export default function CommitmentEnrichmentModal({
   const [delegateModalVisible, setDelegateModalVisible] = useState(false);
   const [currentDelegateId, setCurrentDelegateId] = useState<string | null>(null);
 
+  // Attachments
+  const [attachments, setAttachments] = useState<Array<{ id: string; file_name: string; file_path: string; file_type: string }>>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+
+  const getAttachmentTable = () =>
+    ['commitment', 'task', 'event'].includes(PARENT_TYPE)
+      ? '0008-ap-note-attachments'
+      : '0008-ap-reflection-attachments';
+
+  const getAttachmentBucket = () =>
+    ['commitment', 'task', 'event'].includes(PARENT_TYPE)
+      ? '0008-note-attachments'
+      : '0008-reflection-attachments';
+
+  const getAttachmentForeignKey = (noteId: string) =>
+    ['commitment', 'task', 'event'].includes(PARENT_TYPE)
+      ? { note_id: noteId }
+      : { reflection_id: commitment.id };
+
   // Load ALL data once when modal opens
   useEffect(() => {
     if (visible) {
@@ -222,6 +243,25 @@ export default function CommitmentEnrichmentModal({
       // Delegates
       setExistingDelegates((delegatesRes.data ?? []) as DelegateRow[]);
       setCurrentDelegateId(((delegateJoinRes.data as any)?.delegate_id) ?? null);
+
+      // Attachments — load after notes are set
+      const isNoteType = ['commitment', 'task', 'event'].includes(PARENT_TYPE);
+      if (isNoteType && notes.length > 0) {
+        const noteIds = notes.map(n => n.id);
+        const { data: attData } = await sb
+          .from('0008-ap-note-attachments')
+          .select('id, file_name, file_path, file_type')
+          .in('note_id', noteIds);
+        setAttachments(attData ?? []);
+      } else if (!isNoteType) {
+        const { data: attData } = await sb
+          .from('0008-ap-reflection-attachments')
+          .select('id, file_name, file_path, file_type')
+          .eq('reflection_id', commitment.id);
+        setAttachments(attData ?? []);
+      } else {
+        setAttachments([]);
+      }
     } catch (err) {
       console.error('[CommitmentEnrichmentModal] loadAllData error:', err);
     } finally {
@@ -453,6 +493,135 @@ export default function CommitmentEnrichmentModal({
     } catch (err) {
       console.error('[CommitmentEnrichmentModal] deleteNote error:', err);
       Alert.alert('Error', 'Failed to delete note.');
+    }
+  };
+
+  // ──────────────── Attachments ────────────────
+
+  const loadAttachments = async () => {
+    try {
+      const sb = getSupabaseClient();
+      const table = getAttachmentTable();
+      const isNoteType = ['commitment', 'task', 'event'].includes(PARENT_TYPE);
+
+      if (isNoteType) {
+        // For note-based types, fetch attachments via note IDs from existing notes
+        if (existingNotes.length === 0) { setAttachments([]); return; }
+        const noteIds = existingNotes.map(n => n.id);
+        const { data, error } = await sb
+          .from(table)
+          .select('id, file_name, file_path, file_type')
+          .in('note_id', noteIds);
+        if (error) throw error;
+        setAttachments(data ?? []);
+      } else {
+        // For reflection-based types, fetch directly by reflection_id
+        const { data, error } = await sb
+          .from(table)
+          .select('id, file_name, file_path, file_type')
+          .eq('reflection_id', commitment.id);
+        if (error) throw error;
+        setAttachments(data ?? []);
+      }
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] loadAttachments error:', err);
+    }
+  };
+
+  const handlePickAttachment = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      const asset = result.assets[0];
+      const MAX_FILE_SIZE = 10 * 1024 * 1024;
+      const fileSize = asset.size || 0;
+
+      if (fileSize > MAX_FILE_SIZE) {
+        Alert.alert('File too large', `${asset.name} exceeds the 10 MB limit.`);
+        return;
+      }
+
+      setUploadingAttachment(true);
+      const sb = getSupabaseClient();
+      const isNoteType = ['commitment', 'task', 'event'].includes(PARENT_TYPE);
+      const bucket = getAttachmentBucket();
+      const table = getAttachmentTable();
+      const fileName = asset.name;
+      const fileType = asset.mimeType || 'application/octet-stream';
+
+      // Upload to storage
+      const timestamp = Date.now();
+      const randomStr = Math.random().toString(36).substring(7);
+      const fileExt = fileName.split('.').pop() || '';
+      const storagePath = `${commitment.user_id}/${timestamp}_${randomStr}.${fileExt}`;
+
+      // Fetch the file as blob for upload
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      const { data: uploadData, error: uploadError } = await sb.storage
+        .from(bucket)
+        .upload(storagePath, blob, { contentType: fileType, upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      if (isNoteType) {
+        // For note-based types: create a note first (or use existing), then attach
+        // Create a placeholder note to attach the file to
+        const now = new Date().toISOString();
+        const { data: noteRow, error: noteErr } = await sb
+          .from('0008-ap-notes')
+          .insert({ user_id: commitment.user_id, content: `📎 ${fileName}`, created_at: now, updated_at: now })
+          .select('id, content, created_at')
+          .single();
+        if (noteErr || !noteRow) throw noteErr ?? new Error('Failed to create note for attachment');
+
+        // Link note to parent
+        await sb.from('0008-ap-universal-notes-join').insert({
+          user_id: commitment.user_id,
+          note_id: noteRow.id,
+          parent_id: commitment.id,
+          parent_type: PARENT_TYPE,
+        });
+
+        // Save attachment metadata
+        const { data: attRow, error: attErr } = await sb.from(table).insert({
+          note_id: noteRow.id,
+          user_id: commitment.user_id,
+          file_name: fileName,
+          file_path: uploadData.path,
+          file_type: fileType,
+          file_size: fileSize,
+        }).select('id, file_name, file_path, file_type').single();
+        if (attErr) throw attErr;
+
+        setExistingNotes(prev => [noteRow as NoteRow, ...prev]);
+        if (attRow) setAttachments(prev => [...prev, attRow]);
+      } else {
+        // For reflection-based types: insert directly
+        const { data: attRow, error: attErr } = await sb.from(table).insert({
+          reflection_id: commitment.id,
+          user_id: commitment.user_id,
+          file_name: fileName,
+          file_path: uploadData.path,
+          file_type: fileType,
+          file_size: fileSize,
+        }).select('id, file_name, file_path, file_type').single();
+        if (attErr) throw attErr;
+        if (attRow) setAttachments(prev => [...prev, attRow]);
+      }
+
+      onEnrichmentChange();
+    } catch (err) {
+      console.error('[CommitmentEnrichmentModal] handlePickAttachment error:', err);
+      Alert.alert('Error', 'Failed to upload attachment.');
+    } finally {
+      setUploadingAttachment(false);
     }
   };
 
@@ -753,18 +922,34 @@ export default function CommitmentEnrichmentModal({
                 )}
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.attachBtn}
-                onPress={() =>
-                  Alert.alert(
-                    'Add attachment',
-                    'Attachment picker will be wired to mirror TaskEventForm\'s noteAttachmentUtils flow in a follow-up pass.',
-                  )
-                }
+                style={[styles.attachBtn, uploadingAttachment && { opacity: 0.5 }]}
+                onPress={handlePickAttachment}
+                disabled={uploadingAttachment}
               >
-                <Paperclip size={16} color={PRIMARY} />
-                <Text style={styles.attachBtnText}>Add attachment</Text>
+                {uploadingAttachment ? (
+                  <ActivityIndicator size="small" color={PRIMARY} />
+                ) : (
+                  <Paperclip size={16} color={PRIMARY} />
+                )}
+                <Text style={styles.attachBtnText}>
+                  {uploadingAttachment ? 'Uploading…' : 'Add attachment'}
+                </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Existing attachments */}
+            {attachments.length > 0 && (
+              <View style={styles.attachmentsList}>
+                {attachments.map((att) => (
+                  <View key={att.id} style={styles.attachmentRow}>
+                    <Paperclip size={14} color={GRAY_TEXT} />
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                      {att.file_name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </>
         );
 
@@ -1033,6 +1218,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   attachBtnText: { color: PRIMARY, fontSize: 13, fontWeight: '500' },
+  attachmentsList: {
+    marginTop: 8,
+    gap: 6,
+  },
+  attachmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: BG_GRAY,
+    borderRadius: 6,
+  },
+  attachmentName: {
+    fontSize: 12,
+    color: '#374151',
+    flex: 1,
+  },
 
   delegatePane: { gap: 16 },
   delegateCurrent: { fontSize: 14, color: '#374151' },
