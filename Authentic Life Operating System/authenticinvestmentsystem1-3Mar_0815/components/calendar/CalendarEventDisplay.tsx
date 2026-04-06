@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import CommitmentEnrichmentModal from './CommitmentEnrichmentModal';
 import { Task } from '@/components/tasks/TaskCard';
@@ -28,6 +28,7 @@ export function CalendarEventDisplay({
   const [enrichModalVisible, setEnrichModalVisible] = useState(false);
   const [localUrgent, setLocalUrgent] = useState<boolean>(task.is_urgent ?? false);
   const [localImportant, setLocalImportant] = useState<boolean>(task.is_important ?? false);
+  const [isHovered, setIsHovered] = useState(false);
   const formatTime = (timeString: string) => {
     return formatTimeForDisplay(timeString);
   };
@@ -90,7 +91,9 @@ export function CalendarEventDisplay({
   const showCompletedBadge = isCommitment && eventState === 'completed';
 
   // Enrichment bar: only for commitments that aren't dismissed
-  const showEnrichmentBar = isCommitment && eventState !== 'dismissed';
+  // On web, only show on hover to save space in tight weekly cards
+  const showEnrichmentBar = isCommitment && eventState !== 'dismissed' &&
+    (Platform.OS !== 'web' || isHovered);
 
   // Enrichment flags — show a green dot if the task already has data
   const hasRoles     = Array.isArray((task as any).roles)   && (task as any).roles.length > 0;
@@ -109,11 +112,16 @@ export function CalendarEventDisplay({
         style,
         cardBg ? { backgroundColor: cardBg } : null,
         accentLeftBorder ? { borderLeftColor: accentLeftBorder, borderLeftWidth: 4 } : null,
+        Platform.OS === 'web' && isHovered && { zIndex: 10, elevation: 10 },
       ]}
       onPress={() => onPress(task)}
       onLongPress={isCommitment ? () => { setEnrichTab('roles'); setEnrichModalVisible(true); } : undefined}
       delayLongPress={400}
       activeOpacity={0.8}
+      {...(Platform.OS === 'web' ? {
+        onMouseEnter: () => setIsHovered(true),
+        onMouseLeave: () => setIsHovered(false),
+      } as any : {})}
     >
       {showCompletedBadge && (
         <View style={styles.completedBadge}>
