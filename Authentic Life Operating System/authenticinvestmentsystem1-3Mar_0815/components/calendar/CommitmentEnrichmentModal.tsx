@@ -48,6 +48,7 @@ interface CommitmentEnrichmentModalProps {
   initialTab: EnrichmentTab;
   onClose: () => void;
   onEnrichmentChange: () => void;
+  onPriorityChange?: (urgent: boolean, important: boolean) => void;
 }
 
 interface RoleRow {
@@ -87,9 +88,11 @@ export default function CommitmentEnrichmentModal({
   initialTab,
   onClose,
   onEnrichmentChange,
+  onPriorityChange,
 }: CommitmentEnrichmentModalProps) {
   const [activeTab, setActiveTab] = useState<EnrichmentTab>(initialTab);
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [applyScope, setApplyScope] = useState<'one' | 'all'>('one');
   const isRecurring = !!commitment.external_recurrence_id;
 
@@ -239,6 +242,7 @@ export default function CommitmentEnrichmentModal({
       ? selectedRoleIds.filter((x) => x !== id)
       : [...selectedRoleIds, id];
     setSelectedRoleIds(newIds);
+    setIsSaving(true);
     try {
       const sb = getSupabaseClient();
       const targets = await getTargetCommitmentIds();
@@ -258,6 +262,8 @@ export default function CommitmentEnrichmentModal({
       onEnrichmentChange();
     } catch (err) {
       console.error('[CommitmentEnrichmentModal] toggleRole save error:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -266,6 +272,7 @@ export default function CommitmentEnrichmentModal({
       ? selectedDomainIds.filter((x) => x !== id)
       : [...selectedDomainIds, id];
     setSelectedDomainIds(newIds);
+    setIsSaving(true);
     try {
       const sb = getSupabaseClient();
       const targets = await getTargetCommitmentIds();
@@ -285,6 +292,8 @@ export default function CommitmentEnrichmentModal({
       onEnrichmentChange();
     } catch (err) {
       console.error('[CommitmentEnrichmentModal] toggleDomain save error:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -296,6 +305,7 @@ export default function CommitmentEnrichmentModal({
       ? selectedGoals.filter((s) => !(s.goal_id === g.id && s.goal_type === g.goal_type))
       : [...selectedGoals, { goal_id: g.id, goal_type: g.goal_type }];
     setSelectedGoals(newGoals);
+    setIsSaving(true);
     try {
       const sb = getSupabaseClient();
       const targets = await getTargetCommitmentIds();
@@ -316,6 +326,8 @@ export default function CommitmentEnrichmentModal({
       onEnrichmentChange();
     } catch (err) {
       console.error('[CommitmentEnrichmentModal] toggleGoal save error:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -324,6 +336,7 @@ export default function CommitmentEnrichmentModal({
   const selectPriority = async (u: boolean, i: boolean) => {
     setIsUrgent(u);
     setIsImportant(i);
+    setIsSaving(true);
     try {
       const sb = getSupabaseClient();
       const targets = await getTargetCommitmentIds();
@@ -331,9 +344,12 @@ export default function CommitmentEnrichmentModal({
         .from('0008-ap-commitments')
         .update({ is_urgent: u, is_important: i, updated_at: new Date().toISOString() })
         .in('id', targets);
+      onPriorityChange?.(u, i);
       onEnrichmentChange();
     } catch (err) {
       console.error('[CommitmentEnrichmentModal] selectPriority save error:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -768,6 +784,7 @@ export default function CommitmentEnrichmentModal({
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {commitment.title}
               </Text>
+              {isSaving && <Text style={styles.savingText}>Saving...</Text>}
               <TouchableOpacity onPress={handleClose} style={styles.headerClose}>
                 <X size={22} color="#111827" />
               </TouchableOpacity>
@@ -777,6 +794,18 @@ export default function CommitmentEnrichmentModal({
             <View style={styles.tabBar}>
               {TAB_DEFS.map(({ key, Icon }) => {
                 const active = activeTab === key;
+                const tabHasData = (() => {
+                  switch (key) {
+                    case 'roles': return selectedRoleIds.length > 0;
+                    case 'wellness': return selectedDomainIds.length > 0;
+                    case 'goals': return selectedGoals.length > 0;
+                    case 'priority': return isUrgent || isImportant;
+                    case 'notes': return existingNotes.length > 0;
+                    case 'delegate': return currentDelegateId !== null;
+                    default: return false;
+                  }
+                })();
+                const iconColor = active ? PRIMARY : tabHasData ? '#16a34a' : GRAY_TEXT;
                 return (
                   <TouchableOpacity
                     key={key}
@@ -785,7 +814,7 @@ export default function CommitmentEnrichmentModal({
                   >
                     <Icon
                       size={22}
-                      color={active ? PRIMARY : GRAY_TEXT}
+                      color={iconColor}
                       fill={active ? PRIMARY : 'transparent'}
                     />
                   </TouchableOpacity>
@@ -842,6 +871,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   headerClose: { padding: 4 },
+  savingText: { fontSize: 12, color: '#9ca3af', marginRight: 8 },
 
   tabBar: {
     flexDirection: 'row',
