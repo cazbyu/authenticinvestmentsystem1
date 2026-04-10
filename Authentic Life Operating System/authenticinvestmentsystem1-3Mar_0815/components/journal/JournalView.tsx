@@ -1121,6 +1121,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         </View>
       ) : (
         <SectionList
+          style={{ flex: 1 }}
           sections={sections}
           keyExtractor={(item) => `${item.source_type}-${item.id}`}
           renderSectionHeader={renderSectionHeader}

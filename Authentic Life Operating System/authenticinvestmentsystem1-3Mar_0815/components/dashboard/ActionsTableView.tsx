@@ -976,6 +976,7 @@ export function ActionsTableView({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SectionList
+        style={{ flex: 1 }}
         sections={sections}
         keyExtractor={(item, index) => `${item.type}-${index}`}
         renderSectionHeader={renderSectionHeader}
