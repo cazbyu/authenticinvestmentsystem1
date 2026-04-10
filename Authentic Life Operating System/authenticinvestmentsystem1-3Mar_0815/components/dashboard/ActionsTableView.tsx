@@ -216,7 +216,7 @@ function SwipeableRow({
         </View>
       )}
 
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={panGesture} touchAction="pan-y">
         <Animated.View style={[animatedStyle]}>
           {childrenWithProps}
         </Animated.View>
