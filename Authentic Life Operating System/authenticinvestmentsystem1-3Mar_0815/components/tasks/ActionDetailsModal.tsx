@@ -422,7 +422,13 @@ export function ActionDetailsModal({
             <View style={styles.headerActions}>
               {!isEditMode && (
                 <TouchableOpacity
-                  onPress={() => setIsEditMode(true)}
+                  onPress={() => {
+                    if (task?.recurrence_rule && onEdit) {
+                      onEdit(task);
+                      return;
+                    }
+                    setIsEditMode(true);
+                  }}
                   style={styles.headerButton}
                 >
                   <Edit size={20} color="#3b82f6" />
@@ -488,8 +494,8 @@ export function ActionDetailsModal({
               )}
             </View>
 
-            {/* Commitment Enrichment Row */}
-            {((task as any).isCommitment || (task as any).is_commitment) && ((task as any).user_id || currentUserId) && (
+            {/* Enrichment Row — shown for all items */}
+            {((task as any).user_id || currentUserId) && (
               <View style={styles.enrichSection}>
                 <Text style={styles.enrichSectionTitle}>Add Context</Text>
                 <View style={styles.enrichIconRow}>
@@ -770,7 +776,19 @@ export function ActionDetailsModal({
           <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
             <TaskEventForm
               mode="edit"
-              initialData={{
+              initialData={((task as any).isCommitment || (task as any).is_commitment) ? {
+                ...task,
+                type: 'event',
+                due_date: (task as any).date,
+                start_date: (task as any).date,
+                end_date: (task as any).date,
+                start_time: (task as any).start_time,
+                end_time: (task as any).end_time,
+                content: (task as any).description || '',
+                roles: roles,
+                domains: domains,
+                isCommitment: true,
+              } : {
                 ...task,
                 type: task.type,
                 roles: roles,
@@ -799,19 +817,20 @@ export function ActionDetailsModal({
         onClose={() => setImageViewerVisible(false)}
       />
 
-      {/* Commitment Enrichment Modal */}
-      {(task as any).isCommitment && enrichModalVisible && (task as any).user_id && (
+      {/* Enrichment Modal — open for any item */}
+      {enrichModalVisible && ((task as any).user_id || currentUserId) && (
         <CommitmentEnrichmentModal
           visible={enrichModalVisible}
           commitment={{
             id: task.id,
             title: task.title,
-            user_id: (task as any).user_id,
+            user_id: (task as any).user_id || currentUserId || '',
             is_urgent: task.is_urgent ?? false,
             is_important: task.is_important ?? false,
             external_recurrence_id: (task as any).external_recurrence_id ?? null,
           }}
           initialTab={enrichTab}
+          parentType={(task as any).isCommitment || (task as any).is_commitment ? 'commitment' : 'task'}
           onClose={() => setEnrichModalVisible(false)}
           onEnrichmentChange={() => {}}
         />

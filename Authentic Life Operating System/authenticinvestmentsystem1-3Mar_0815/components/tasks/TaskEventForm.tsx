@@ -2964,7 +2964,10 @@ export default function TaskEventForm({
           commitmentId={initialData.id}
           userId={userId}
           initialTab={enrichTab}
-          parentType={formData.type === 'reflection' ? 'reflection' : 'task'}
+          parentType={
+            formData.type === 'reflection' ? 'reflection' :
+            (formData as any).isCommitment ? 'commitment' : 'task'
+          }
           onEnrichmentChange={() => {}}
         />
       )}
