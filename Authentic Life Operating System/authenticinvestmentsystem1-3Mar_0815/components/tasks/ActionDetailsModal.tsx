@@ -96,7 +96,8 @@ export function ActionDetailsModal({
     setLoadingNotes(true);
     try {
       const supabase = getSupabaseClient();
-      const parentType = task.type === 'event' ? 'event' : 'task';
+      const isCommitment = !!((task as any).isCommitment || (task as any).is_commitment);
+      const parentType = isCommitment ? 'commitment' : (task.type === 'event' ? 'event' : 'task');
 
       const { data, error } = await supabase
         .from('0008-ap-universal-notes-join')
@@ -141,7 +142,8 @@ export function ActionDetailsModal({
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const parentType = task.type === 'event' ? 'event' : 'task';
+      const isCommitment = !!((task as any).isCommitment || (task as any).is_commitment);
+      const parentType = isCommitment ? 'commitment' : (task.type === 'event' ? 'event' : 'task');
       const items = await fetchAssociatedItems(task.id, parentType, user.id);
       setAssociatedItems(items);
     } catch (error) {
@@ -300,8 +302,9 @@ export function ActionDetailsModal({
 
       if (noteError) throw noteError;
 
-      // Link note to task/event
-      const parentType = task.type === 'event' ? 'event' : 'task';
+      // Link note to task/event/commitment
+      const isCommitment = !!((task as any).isCommitment || (task as any).is_commitment);
+      const parentType = isCommitment ? 'commitment' : (task.type === 'event' ? 'event' : 'task');
       const { error: noteJoinError } = await supabase
         .from('0008-ap-universal-notes-join')
         .insert({
