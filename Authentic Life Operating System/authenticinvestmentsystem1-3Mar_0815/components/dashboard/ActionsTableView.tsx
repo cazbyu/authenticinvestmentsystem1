@@ -981,6 +981,7 @@ export function ActionsTableView({
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={sections.length === 0 ? styles.emptyList : { paddingBottom: 100 }}
         stickySectionHeadersEnabled={true}
+        scrollEnabled={Platform.OS !== 'web'}
         nestedScrollEnabled={true}
         showsVerticalScrollIndicator={true}
       />
@@ -990,7 +991,7 @@ export function ActionsTableView({
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
