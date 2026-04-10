@@ -1375,18 +1375,28 @@ const renderDashboardTabs = () => (
       {/* Dashboard Sub-Header Tabs */}
       {renderDashboardTabs()}
 
-      {activeTab === 'act' && Platform.OS !== 'web' ? (
+      {(activeTab === 'act' || activeTab === 'journal') && Platform.OS !== 'web' ? (
         <View style={styles.scrollContainer}>
           <View style={styles.summarySection}>
             <View style={styles.controlsRow}>
               <PeriodSelector
                 selectedPeriod={selectedPeriod}
                 onPeriodChange={setSelectedPeriod}
+                score={activeTab === 'journal' ? journalPeriodScore : undefined}
               />
             </View>
           </View>
           <View style={{ flex: 1 }}>
-            {actionsTableViewElement}
+            {activeTab === 'act' ? (
+              actionsTableViewElement
+            ) : (
+              <JournalView
+                scope={{ type: 'user', id: userId }}
+                onEntryPress={handleJournalEntryPress}
+                dateRange={selectedPeriod}
+                refreshKey={journalRefreshKey}
+              />
+            )}
           </View>
         </View>
       ) : (
