@@ -972,7 +972,7 @@ export function ActionsTableView({
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }, Platform.select({ web: { overflowY: 'auto', maxHeight: '100vh' } as any, default: {} })]}>
       <SectionList
         sections={sections}
         keyExtractor={(item, index) => `${item.type}-${index}`}
@@ -990,7 +990,8 @@ export function ActionsTableView({
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
+    flex: 1,
+    minHeight: Platform.OS === 'web' ? '100%' as any : undefined,
   },
   loadingContainer: {
     flex: 1,

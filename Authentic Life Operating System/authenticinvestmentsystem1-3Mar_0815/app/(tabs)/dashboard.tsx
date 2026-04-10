@@ -1278,7 +1278,7 @@ const renderDashboardTabs = () => (
       {/* Dashboard Sub-Header Tabs */}
       {renderDashboardTabs()}
 
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true} scrollEnabled={activeTab !== 'act'}>
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
         {activeTab !== 'home' && (
           <View style={styles.summarySection}>
             <View style={styles.controlsRow}>
@@ -1742,7 +1742,7 @@ const styles = StyleSheet.create({
       justifyContent: 'flex-start',
       gap: 12,
     },
-    content: { flex: 1 },
+    content: { flex: 1, ...Platform.select({ web: { overflow: 'visible' } as any, default: {} }) },
     draggableList: { flex: 1 },
     scrollContent: { flex: 1 },
     scrollContentContainer: { flexGrow: 1, paddingBottom: 100 },
