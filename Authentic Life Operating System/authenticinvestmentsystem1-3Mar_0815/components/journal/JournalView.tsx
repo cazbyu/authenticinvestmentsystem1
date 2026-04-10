@@ -175,30 +175,41 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         throw completedTasksError;
       }
 
-      // 1b) Completed EVENTS
-      let completedEventsQuery = supabase
-        .from('0008-ap-tasks')
-        .select('id, title, type, status, completed_at, due_date, start_date, end_date, start_time, end_time, is_all_day, is_urgent, is_important, recurrence_rule, user_global_timeline_id, custom_timeline_id, parent_task_id')
+      // 1b) Completed COMMITMENTS (Google Calendar events)
+      let completedCommitmentsQuery = supabase
+        .from('0008-ap-commitments')
+        .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source')
         .eq('user_id', user.id)
-        .eq('type', 'event')
-        .eq('status', 'completed')
-        .is('deleted_at', null)
-        .is('parent_task_id', null)
-        .not('completed_at', 'is', null);
+        .eq('status', 'completed');
 
       if (dateFilter) {
-        // For events, filter by end_date (or start_date if no end_date)
-        completedEventsQuery = completedEventsQuery.or(`end_date.gte.${dateFilter},and(end_date.is.null,start_date.gte.${dateFilter})`);
+        const dateFilterStr = dateFilter.slice(0, 10); // extract YYYY-MM-DD from ISO string
+        completedCommitmentsQuery = completedCommitmentsQuery.gte('date', dateFilterStr);
       }
 
-      const { data: completedEventsData, error: completedEventsError } = await completedEventsQuery;
-      console.log('[JournalView] Completed EVENTS query result:', completedEventsData?.length || 0, 'events found');
-      if (completedEventsError) {
-        console.error('[JournalView] Completed events query error:', completedEventsError);
-        throw completedEventsError;
+      const { data: completedCommitmentsData, error: completedCommitmentsError } = await completedCommitmentsQuery;
+      console.log('[JournalView] Completed COMMITMENTS query result:', completedCommitmentsData?.length || 0, 'commitments found');
+      if (completedCommitmentsError) {
+        console.error('[JournalView] Completed commitments query error:', completedCommitmentsError);
+        throw completedCommitmentsError;
       }
 
-      const tasksData = [...(completedTasksData || []), ...(completedEventsData || [])];
+      // Map commitments to the same shape as tasks for unified processing
+      const mappedCommitments = (completedCommitmentsData || []).map((c: any) => ({
+        ...c,
+        type: 'event',
+        completed_at: c.date,
+        due_date: c.date,
+        start_date: c.date,
+        end_date: null,
+        recurrence_rule: null,
+        user_global_timeline_id: null,
+        custom_timeline_id: null,
+        parent_task_id: null,
+        is_commitment: true,
+      }));
+
+      const tasksData = [...(completedTasksData || []), ...mappedCommitments];
 
       if (tasksData && tasksData.length) {
         const taskIds = tasksData.map((t: any) => t.id);
