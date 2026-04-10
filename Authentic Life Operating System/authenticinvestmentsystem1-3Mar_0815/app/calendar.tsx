@@ -649,14 +649,34 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
   const handleDeleteTask = async (task: Task) => {
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('0008-ap-tasks')
-        .update({ is_active: false })
-        .eq('id', task.id);
 
-      if (error) throw error;
-      Alert.alert('Success', 'Task has been deleted');
+      // Check if this item lives in commitments table
+      const { data: commitmentRow } = await supabase
+        .from('0008-ap-commitments')
+        .select('id')
+        .eq('id', task.id)
+        .maybeSingle();
+
+      if (commitmentRow) {
+        // Archive commitment
+        const { error } = await supabase
+          .from('0008-ap-commitments')
+          .update({ status: 'archived', updated_at: new Date().toISOString() })
+          .eq('id', task.id);
+        if (error) throw error;
+      } else {
+        // Existing tasks-table delete path
+        const { error } = await supabase
+          .from('0008-ap-tasks')
+          .update({ is_active: false })
+          .eq('id', task.id);
+        if (error) throw error;
+      }
+
+      Alert.alert('Success', 'Event has been deleted');
       setIsDetailModalVisible(false);
+      eventBus.emit(EVENTS.TASK_DELETED, { taskId: task.id });
+      eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
       fetchTasksAndEvents(currentDate, viewMode);
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
