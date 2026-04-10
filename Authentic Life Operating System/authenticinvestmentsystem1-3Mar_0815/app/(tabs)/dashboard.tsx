@@ -1269,7 +1269,104 @@ const renderDashboardTabs = () => (
     </View>
   </View>
 );
-  
+
+  const actionsTableViewElement = (
+    <ActionsTableView
+      filter={'all'}
+      period={selectedPeriod}
+      userId={userId}
+      onRefresh={() => {
+        refreshScore();
+        loadJournalPeriodScore();
+      }}
+      onTaskPress={async (taskId) => {
+        try {
+          const supabase = getSupabaseClient();
+          const { data: task } = await supabase
+            .from('0008-ap-tasks')
+            .select('*')
+            .eq('id', taskId)
+            .single();
+          if (task) {
+            setSelectedTask(task as Task);
+            setIsDetailModalVisible(true);
+          }
+        } catch (error) {
+          console.error('Error loading task:', error);
+        }
+      }}
+      onComplete={async (taskId) => {
+        try {
+          const supabase = getSupabaseClient();
+          const { data: task } = await supabase
+            .from('0008-ap-tasks')
+            .select('*')
+            .eq('id', taskId)
+            .single();
+          if (task) {
+            await handleCompleteTask(task as Task);
+          }
+        } catch (error) {
+          console.error('Error completing task:', error);
+          Alert.alert('Error', 'Failed to complete task');
+        }
+      }}
+      onDelegate={async (taskId) => {
+        try {
+          const supabase = getSupabaseClient();
+          const { data: task } = await supabase
+            .from('0008-ap-tasks')
+            .select('*')
+            .eq('id', taskId)
+            .single();
+          if (task) {
+            await handleDelegateTask(task as Task);
+            setIsDelegateModalVisible(true);
+          }
+        } catch (error) {
+          console.error('Error delegating task:', error);
+          Alert.alert('Error', 'Failed to delegate task');
+        }
+      }}
+      onDelete={async (actionId, isCommitment) => {
+        console.log('[Dashboard] onDelete called for actionId:', actionId, 'isCommitment:', isCommitment);
+        try {
+          const supabase = getSupabaseClient();
+
+          if (isCommitment) {
+            // Archive commitment in commitments table
+            const { error } = await supabase
+              .from('0008-ap-commitments')
+              .update({ status: 'archived', updated_at: new Date().toISOString() })
+              .eq('id', actionId)
+              .eq('user_id', userId);
+            if (error) throw error;
+            console.log('[Dashboard] Commitment archived successfully');
+            eventBus.emit(EVENTS.TASK_DELETED, { taskId: actionId });
+            await refreshScore(true);
+            return;
+          }
+
+          const { data: task } = await supabase
+            .from('0008-ap-tasks')
+            .select('*')
+            .eq('id', actionId)
+            .single();
+          console.log('[Dashboard] Fetched task for deletion:', task);
+          if (task) {
+            await handleDeleteTask(task as Task);
+            console.log('[Dashboard] Task deleted successfully');
+            eventBus.emit(EVENTS.TASK_DELETED, { taskId: actionId });
+            await refreshScore(true);
+          }
+        } catch (error) {
+          console.error('[Dashboard] Error deleting action:', error);
+          Alert.alert('Error', 'Failed to delete action');
+        }
+      }}
+    />
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Universal Header */}
@@ -1278,6 +1375,21 @@ const renderDashboardTabs = () => (
       {/* Dashboard Sub-Header Tabs */}
       {renderDashboardTabs()}
 
+      {activeTab === 'act' && Platform.OS !== 'web' ? (
+        <View style={styles.scrollContainer}>
+          <View style={styles.summarySection}>
+            <View style={styles.controlsRow}>
+              <PeriodSelector
+                selectedPeriod={selectedPeriod}
+                onPeriodChange={setSelectedPeriod}
+              />
+            </View>
+          </View>
+          <View style={{ flex: 1 }}>
+            {actionsTableViewElement}
+          </View>
+        </View>
+      ) : (
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
         {activeTab !== 'home' && (
           <View style={styles.summarySection}>
@@ -1376,100 +1488,7 @@ const renderDashboardTabs = () => (
             onDepositIdeaPress={handleDepositIdeaPressById}
           />
         ) : activeTab === 'act' ? (
-          <ActionsTableView
-            filter={'all'}
-            period={selectedPeriod}
-            userId={userId}
-            onRefresh={() => {
-              refreshScore();
-              loadJournalPeriodScore();
-            }}
-            onTaskPress={async (taskId) => {
-              try {
-                const supabase = getSupabaseClient();
-                const { data: task } = await supabase
-                  .from('0008-ap-tasks')
-                  .select('*')
-                  .eq('id', taskId)
-                  .single();
-                if (task) {
-                  setSelectedTask(task as Task);
-                  setIsDetailModalVisible(true);
-                }
-              } catch (error) {
-                console.error('Error loading task:', error);
-              }
-            }}
-            onComplete={async (taskId) => {
-              try {
-                const supabase = getSupabaseClient();
-                const { data: task } = await supabase
-                  .from('0008-ap-tasks')
-                  .select('*')
-                  .eq('id', taskId)
-                  .single();
-                if (task) {
-                  await handleCompleteTask(task as Task);
-                }
-              } catch (error) {
-                console.error('Error completing task:', error);
-                Alert.alert('Error', 'Failed to complete task');
-              }
-            }}
-            onDelegate={async (taskId) => {
-              try {
-                const supabase = getSupabaseClient();
-                const { data: task } = await supabase
-                  .from('0008-ap-tasks')
-                  .select('*')
-                  .eq('id', taskId)
-                  .single();
-                if (task) {
-                  await handleDelegateTask(task as Task);
-                  setIsDelegateModalVisible(true);
-                }
-              } catch (error) {
-                console.error('Error delegating task:', error);
-                Alert.alert('Error', 'Failed to delegate task');
-              }
-            }}
-            onDelete={async (actionId, isCommitment) => {
-              console.log('[Dashboard] onDelete called for actionId:', actionId, 'isCommitment:', isCommitment);
-              try {
-                const supabase = getSupabaseClient();
-
-                if (isCommitment) {
-                  // Archive commitment in commitments table
-                  const { error } = await supabase
-                    .from('0008-ap-commitments')
-                    .update({ status: 'archived', updated_at: new Date().toISOString() })
-                    .eq('id', actionId)
-                    .eq('user_id', userId);
-                  if (error) throw error;
-                  console.log('[Dashboard] Commitment archived successfully');
-                  eventBus.emit(EVENTS.TASK_DELETED, { taskId: actionId });
-                  await refreshScore(true);
-                  return;
-                }
-
-                const { data: task } = await supabase
-                  .from('0008-ap-tasks')
-                  .select('*')
-                  .eq('id', actionId)
-                  .single();
-                console.log('[Dashboard] Fetched task for deletion:', task);
-                if (task) {
-                  await handleDeleteTask(task as Task);
-                  console.log('[Dashboard] Task deleted successfully');
-                  eventBus.emit(EVENTS.TASK_DELETED, { taskId: actionId });
-                  await refreshScore(true);
-                }
-              } catch (error) {
-                console.error('[Dashboard] Error deleting action:', error);
-                Alert.alert('Error', 'Failed to delete action');
-              }
-            }}
-          />
+          actionsTableViewElement
         ) : activeTab === 'journal' ? (
           <JournalView
             scope={{ type: 'user', id: userId }}
@@ -1542,6 +1561,7 @@ const renderDashboardTabs = () => (
         }
         </View>
       </ScrollView>
+      )}
 
       {/* Speed Dial FAB - Coach option when enabled, else direct to capture */}
       <SpeedDialFab
