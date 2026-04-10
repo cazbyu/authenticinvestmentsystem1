@@ -1375,7 +1375,7 @@ const renderDashboardTabs = () => (
       {/* Dashboard Sub-Header Tabs */}
       {renderDashboardTabs()}
 
-      {(activeTab === 'act' || activeTab === 'journal') && Platform.OS !== 'web' ? (
+      {activeTab === 'act' || activeTab === 'journal' ? (
         <View style={styles.scrollContainer}>
           <View style={styles.summarySection}>
             <View style={styles.controlsRow}>
