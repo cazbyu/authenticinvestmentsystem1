@@ -986,7 +986,7 @@ export function ActionsTableView({
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={sections.length === 0 ? styles.emptyList : { paddingBottom: 100 }}
         stickySectionHeadersEnabled={true}
-        scrollEnabled={Platform.OS !== 'web'}
+        scrollEnabled={true}
         nestedScrollEnabled={true}
         showsVerticalScrollIndicator={true}
       />
