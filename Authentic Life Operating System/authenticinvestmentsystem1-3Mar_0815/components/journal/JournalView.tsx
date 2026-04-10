@@ -178,7 +178,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       // 1b) Completed COMMITMENTS (Google Calendar events)
       let completedCommitmentsQuery = supabase
         .from('0008-ap-commitments')
-        .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source')
+        .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source, user_id')
         .eq('user_id', user.id)
         .eq('status', 'completed');
 
@@ -206,7 +206,8 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         user_global_timeline_id: null,
         custom_timeline_id: null,
         parent_task_id: null,
-        is_commitment: true,
+        isCommitment: true,
+        user_id: c.user_id,
       }));
 
       const tasksData = [...(completedTasksData || []), ...mappedCommitments];
