@@ -44,7 +44,7 @@ interface ActionItem {
   domains?: any[];
   delegateName?: string | null;
   isCompleted?: boolean;
-  is_commitment?: boolean;
+  isCommitment?: boolean;
   is_all_day?: boolean;
 }
 
@@ -486,7 +486,7 @@ export function ActionsTableView({
         // Events now live in the commitments table
         const { data, error } = await supabase
           .from('0008-ap-commitments')
-          .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source')
+          .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source, user_id')
           .eq('user_id', userId)
           .neq('status', 'archived')
           .gte('date', todayStr)
@@ -501,7 +501,8 @@ export function ActionsTableView({
           start_date: c.date,
           due_time: null,
           completed_at: null,
-          is_commitment: true,
+          isCommitment: true,
+          user_id: c.user_id,
         }));
       } else {
         // 'all' filter: tasks from tasks table + events from commitments table
@@ -518,7 +519,7 @@ export function ActionsTableView({
 
         const commitmentsQuery = supabase
           .from('0008-ap-commitments')
-          .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source')
+          .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source, user_id')
           .eq('user_id', userId)
           .neq('status', 'archived')
           .gte('date', todayStr)
@@ -541,7 +542,8 @@ export function ActionsTableView({
           start_date: c.date,
           due_time: null,
           completed_at: null,
-          is_commitment: true,
+          isCommitment: true,
+          user_id: c.user_id,
         }));
 
         tasksData = [
@@ -638,7 +640,7 @@ export function ActionsTableView({
             domains: domains,
             delegateName: delegatesByTask.get(task.id) || null,
             isCompleted: task.status === 'completed',
-            is_commitment: !!task.is_commitment,
+            isCommitment: !!(task.isCommitment || task.is_commitment),
             is_all_day: !!task.is_all_day,
           };
         });
@@ -845,7 +847,7 @@ export function ActionsTableView({
       );
 
       if (onDelete) {
-        onDelete(action.id, action.is_commitment);
+        onDelete(action.id, action.isCommitment);
       }
     };
 

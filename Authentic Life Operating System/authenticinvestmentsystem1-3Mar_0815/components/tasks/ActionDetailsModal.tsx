@@ -44,6 +44,7 @@ export function ActionDetailsModal({
   goalTitle
 }: ActionDetailsModalProps) {
   const [isEditMode, setIsEditMode] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [taskNotes, setTaskNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [noteAttachmentsMap, setNoteAttachmentsMap] = useState<Map<string, any[]>>(new Map());
@@ -64,6 +65,14 @@ export function ActionDetailsModal({
   const [noteAttachments, setNoteAttachments] = useState<any[]>([]);
   const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
   const [enrichModalVisible, setEnrichModalVisible] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id ?? null);
+    })();
+  }, []);
 
   useEffect(() => {
     if (visible && task?.id) {
@@ -477,7 +486,7 @@ export function ActionDetailsModal({
             </View>
 
             {/* Commitment Enrichment Row */}
-            {(task as any).isCommitment && (task as any).user_id && (
+            {((task as any).isCommitment || (task as any).is_commitment) && ((task as any).user_id || currentUserId) && (
               <View style={styles.enrichSection}>
                 <Text style={styles.enrichSectionTitle}>Add Context</Text>
                 <View style={styles.enrichIconRow}>
