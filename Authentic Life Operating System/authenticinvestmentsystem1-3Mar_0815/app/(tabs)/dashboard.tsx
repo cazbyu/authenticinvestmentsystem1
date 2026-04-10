@@ -1278,7 +1278,7 @@ const renderDashboardTabs = () => (
       {/* Dashboard Sub-Header Tabs */}
       {renderDashboardTabs()}
 
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true} scrollEnabled={activeTab !== 'act'}>
         {activeTab !== 'home' && (
           <View style={styles.summarySection}>
             <View style={styles.controlsRow}>
