@@ -99,7 +99,6 @@ interface FormData {
   endDate: string;
   startTime: string;
   endTime: string;
-  withdrawalDate: string;
   amount: string;
   isAnytime: boolean;
   isUrgent: boolean;
@@ -184,7 +183,6 @@ export default function TaskEventForm({
     endDate: formatLocalDate(new Date()),
     startTime: getInitialDefaultTime(),
     endTime: '',
-    withdrawalDate: formatLocalDate(new Date()),
     amount: '',
     isAnytime: true, // Default to Anytime for tasks
     isUrgent: false,
@@ -218,7 +216,7 @@ export default function TaskEventForm({
 
   // Calendar state
   const [showCalendar, setShowCalendar] = useState(false);
-  const [calendarMode, setCalendarMode] = useState<'due' | 'start' | 'end' | 'withdrawal' | 'followUp'>('due');
+  const [calendarMode, setCalendarMode] = useState<'due' | 'start' | 'end' | 'followUp'>('due');
 
   // Recurrence state
   const [showCustomRecurrenceModal, setShowCustomRecurrenceModal] = useState(false);
@@ -627,7 +625,6 @@ export default function TaskEventForm({
       endDate: initialData.end_date || formatLocalDate(new Date()),
       startTime: initialData.start_time || '',
       endTime: initialData.end_time || '',
-      withdrawalDate: initialData.withdrawn_at || formatLocalDate(new Date()),
       amount: initialData.amount?.toString() || '',
       isAnytime: initialData.is_all_day || false,
       isUrgent: initialData.is_urgent || false,
@@ -915,7 +912,7 @@ export default function TaskEventForm({
     }
   };
 
-  const handleCalendarOpen = (mode: 'due' | 'start' | 'end' | 'withdrawal' | 'followUp') => {
+  const handleCalendarOpen = (mode: 'due' | 'start' | 'end' | 'followUp') => {
     setCalendarMode(mode);
     setShowCalendar(true);
   };
@@ -937,9 +934,6 @@ export default function TaskEventForm({
         break;
       case 'end':
         setFormData(prev => ({ ...prev, endDate: selectedDate }));
-        break;
-      case 'withdrawal':
-        setFormData(prev => ({ ...prev, withdrawalDate: selectedDate }));
         break;
       case 'followUp':
         setFormData(prev => ({ ...prev, followUpDate: selectedDate }));
@@ -970,7 +964,6 @@ export default function TaskEventForm({
         case 'due': return formData.dueDate;
         case 'start': return formData.startDate;
         case 'end': return formData.endDate;
-        case 'withdrawal': return formData.withdrawalDate;
         default: return formData.dueDate;
       }
     })();
@@ -1470,8 +1463,13 @@ export default function TaskEventForm({
       }
       mainRecordId = mainRecord.id;
 
-      // Handle joins for the new task/event — join tables use 'task' parent_type for all task-table records
-      const parentType = 'task';
+      // Handle joins — parent_type depends on activity type
+      const parentType =
+        formData.type === 'reflection' ||
+        formData.type === 'rose' ||
+        formData.type === 'thorn' ? 'reflection' :
+        formData.type === 'depositIdea' ? 'depositIdea' :
+        (formData as any).isCommitment ? 'commitment' : 'task';
 
       // Clear existing joins if editing
       if (mode === 'edit' && initialData?.id) {
@@ -1612,9 +1610,7 @@ export default function TaskEventForm({
       Alert.alert('Success', `${formData.type.charAt(0).toUpperCase() + formData.type.slice(1)} ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
 
       // Broadcast event to notify other components
-      if (formData.type === 'withdrawal') {
-        eventBus.emit(mode === 'edit' ? EVENTS.WITHDRAWAL_CREATED : EVENTS.WITHDRAWAL_CREATED);
-      } else if (formData.type === 'depositIdea') {
+      if (formData.type === 'depositIdea') {
         eventBus.emit(mode === 'edit' ? EVENTS.DEPOSIT_IDEA_UPDATED : EVENTS.DEPOSIT_IDEA_CREATED);
       } else {
         eventBus.emit(mode === 'edit' ? EVENTS.TASK_UPDATED : EVENTS.TASK_CREATED, {
@@ -1754,7 +1750,7 @@ export default function TaskEventForm({
   const renderDateField = (
     label: string,
     value: string,
-    mode: 'due' | 'start' | 'end' | 'withdrawal'
+    mode: 'due' | 'start' | 'end'
   ) => (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
@@ -1908,11 +1904,9 @@ export default function TaskEventForm({
                     : formData.reflectionMode === 'reflection'
                       ? 'Reflection'
                       : 'Deposit Idea'
-                : formData.type === 'withdrawal'
-                  ? initialData?.id ? 'Thorn' : 'Withdrawal'
-                  : formData.type === 'depositIdea'
-                    ? 'Item'
-                    : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
+                : formData.type === 'depositIdea'
+                  ? 'Item'
+                  : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
             }
           </Text>
           {isEditingCompletedTask && (
@@ -2616,22 +2610,6 @@ export default function TaskEventForm({
             )
           )}
 
-          {formData.type === 'withdrawal' && renderDateField('Withdrawal Date', formData.withdrawalDate, 'withdrawal')}
-
-          {/* Amount field for withdrawals */}
-          {formData.type === 'withdrawal' && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Amount *</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                value={formData.amount}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, amount: text }))}
-                placeholder="0.0"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          )}
           </>
           )}
           {/* === ADVANCED SECTION END === */}
@@ -2788,7 +2766,7 @@ export default function TaskEventForm({
           <View style={[styles.calendarContainer, { backgroundColor: colors.surface }]}>
             <View style={[styles.calendarHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.calendarTitle, { color: colors.text }]}>
-                Select {calendarMode === 'due' ? 'Due' : calendarMode === 'start' ? 'Start' : calendarMode === 'end' ? 'End' : 'Withdrawal'} Date
+                Select {calendarMode === 'due' ? 'Due' : calendarMode === 'start' ? 'Start' : 'End'} Date
               </Text>
               <TouchableOpacity onPress={() => setShowCalendar(false)}>
                 <X size={20} color={colors.textSecondary} />
@@ -2965,7 +2943,10 @@ export default function TaskEventForm({
           userId={userId}
           initialTab={enrichTab}
           parentType={
-            formData.type === 'reflection' ? 'reflection' :
+            formData.type === 'reflection' ||
+            formData.type === 'rose' ||
+            formData.type === 'thorn' ? 'reflection' :
+            formData.type === 'depositIdea' ? 'depositIdea' :
             (formData as any).isCommitment ? 'commitment' : 'task'
           }
           onEnrichmentChange={() => {}}
