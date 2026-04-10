@@ -44,6 +44,8 @@ interface ActionItem {
   domains?: any[];
   delegateName?: string | null;
   isCompleted?: boolean;
+  is_commitment?: boolean;
+  is_all_day?: boolean;
 }
 
 interface TypeGroup {
@@ -481,22 +483,28 @@ export function ActionsTableView({
         if (error) throw error;
         tasksData = data || [];
       } else if (filter === 'event') {
-        let query = supabase
-          .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, status, completed_at')
+        // Events now live in the commitments table
+        const { data, error } = await supabase
+          .from('0008-ap-commitments')
+          .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source')
           .eq('user_id', userId)
-          .eq('type', 'event')
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .gte('start_date', todayStr)
-          .lte('start_date', endStr);
-
-        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
-
-        const { data, error } = await query.order('start_date', { ascending: true });
+          .neq('status', 'archived')
+          .gte('date', todayStr)
+          .lte('date', endStr)
+          .order('date', { ascending: true })
+          .order('start_time', { ascending: true });
         if (error) throw error;
-        tasksData = data || [];
+        tasksData = (data || []).map((c: any) => ({
+          ...c,
+          type: 'event' as const,
+          due_date: c.date,
+          start_date: c.date,
+          due_time: null,
+          completed_at: null,
+          is_commitment: true,
+        }));
       } else {
+        // 'all' filter: tasks from tasks table + events from commitments table
         let tasksQuery = supabase
           .from('0008-ap-tasks')
           .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, status, completed_at')
@@ -506,30 +514,39 @@ export function ActionsTableView({
           .is('parent_task_id', null)
           .lte('due_date', endStr);
 
-        let eventsQuery = supabase
-          .from('0008-ap-tasks')
-          .select('id, title, type, due_date, start_date, start_time, end_time, due_time, is_urgent, is_important, status, completed_at')
-          .eq('user_id', userId)
-          .eq('type', 'event')
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .gte('start_date', todayStr)
-          .lte('start_date', endStr);
-
         tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
-        eventsQuery = eventsQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
 
-        const [tasksResult, eventsResult] = await Promise.all([
+        const commitmentsQuery = supabase
+          .from('0008-ap-commitments')
+          .select('id, title, date, start_time, end_time, is_all_day, is_urgent, is_important, status, external_source')
+          .eq('user_id', userId)
+          .neq('status', 'archived')
+          .gte('date', todayStr)
+          .lte('date', endStr)
+          .order('date', { ascending: true })
+          .order('start_time', { ascending: true });
+
+        const [tasksResult, commitmentsResult] = await Promise.all([
           tasksQuery.order('due_date', { ascending: true }),
-          eventsQuery.order('start_date', { ascending: true }),
+          commitmentsQuery,
         ]);
 
         if (tasksResult.error) throw tasksResult.error;
-        if (eventsResult.error) throw eventsResult.error;
+        if (commitmentsResult.error) throw commitmentsResult.error;
+
+        const mappedCommitments = (commitmentsResult.data || []).map((c: any) => ({
+          ...c,
+          type: 'event' as const,
+          due_date: c.date,
+          start_date: c.date,
+          due_time: null,
+          completed_at: null,
+          is_commitment: true,
+        }));
 
         tasksData = [
+          ...mappedCommitments,
           ...(tasksResult.data || []),
-          ...(eventsResult.data || []),
         ];
       }
 
@@ -621,6 +638,8 @@ export function ActionsTableView({
             domains: domains,
             delegateName: delegatesByTask.get(task.id) || null,
             isCompleted: task.status === 'completed',
+            is_commitment: !!task.is_commitment,
+            is_all_day: !!task.is_all_day,
           };
         });
 
@@ -960,8 +979,10 @@ export function ActionsTableView({
         renderSectionHeader={renderSectionHeader}
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={sections.length === 0 ? styles.emptyList : undefined}
+        contentContainerStyle={sections.length === 0 ? styles.emptyList : { paddingBottom: 100 }}
         stickySectionHeadersEnabled={true}
+        nestedScrollEnabled={true}
+        showsVerticalScrollIndicator={true}
       />
     </View>
   );
@@ -969,7 +990,7 @@ export function ActionsTableView({
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,
