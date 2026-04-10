@@ -972,7 +972,7 @@ export function ActionsTableView({
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }, Platform.select({ web: { overflowY: 'auto', maxHeight: '100vh' } as any, default: {} })]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SectionList
         sections={sections}
         keyExtractor={(item, index) => `${item.type}-${index}`}
@@ -981,6 +981,7 @@ export function ActionsTableView({
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={sections.length === 0 ? styles.emptyList : { paddingBottom: 100 }}
         stickySectionHeadersEnabled={true}
+        scrollEnabled={Platform.OS !== 'web'}
         nestedScrollEnabled={true}
         showsVerticalScrollIndicator={true}
       />
@@ -991,7 +992,6 @@ export function ActionsTableView({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    minHeight: Platform.OS === 'web' ? '100%' as any : undefined,
   },
   loadingContainer: {
     flex: 1,
