@@ -66,7 +66,7 @@ interface ActionsTableViewProps {
   onTaskPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
   onDelegate?: (taskId: string) => void;
-  onDelete?: (taskId: string) => void;
+  onDelete?: (actionId: string, isCommitment?: boolean) => void;
 }
 
 function getDateRange(period: TimePeriod): { start: Date; end: Date } {
@@ -845,7 +845,7 @@ export function ActionsTableView({
       );
 
       if (onDelete) {
-        onDelete(action.id);
+        onDelete(action.id, action.is_commitment);
       }
     };
 

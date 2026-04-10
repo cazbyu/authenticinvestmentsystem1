@@ -1433,27 +1433,40 @@ const renderDashboardTabs = () => (
                 Alert.alert('Error', 'Failed to delegate task');
               }
             }}
-            onDelete={async (taskId) => {
-              console.log('[Dashboard] onDelete called for taskId:', taskId);
+            onDelete={async (actionId, isCommitment) => {
+              console.log('[Dashboard] onDelete called for actionId:', actionId, 'isCommitment:', isCommitment);
               try {
                 const supabase = getSupabaseClient();
+
+                if (isCommitment) {
+                  // Archive commitment in commitments table
+                  const { error } = await supabase
+                    .from('0008-ap-commitments')
+                    .update({ status: 'archived', updated_at: new Date().toISOString() })
+                    .eq('id', actionId)
+                    .eq('user_id', userId);
+                  if (error) throw error;
+                  console.log('[Dashboard] Commitment archived successfully');
+                  eventBus.emit(EVENTS.TASK_DELETED, { taskId: actionId });
+                  await refreshScore(true);
+                  return;
+                }
+
                 const { data: task } = await supabase
                   .from('0008-ap-tasks')
                   .select('*')
-                  .eq('id', taskId)
+                  .eq('id', actionId)
                   .single();
                 console.log('[Dashboard] Fetched task for deletion:', task);
                 if (task) {
                   await handleDeleteTask(task as Task);
                   console.log('[Dashboard] Task deleted successfully');
-                  // Emit event to notify other components
-                  eventBus.emit(EVENTS.TASK_DELETED, { taskId });
-                  // Refresh score after deletion
+                  eventBus.emit(EVENTS.TASK_DELETED, { taskId: actionId });
                   await refreshScore(true);
                 }
               } catch (error) {
-                console.error('[Dashboard] Error deleting task:', error);
-                Alert.alert('Error', 'Failed to delete task');
+                console.error('[Dashboard] Error deleting action:', error);
+                Alert.alert('Error', 'Failed to delete action');
               }
             }}
           />
