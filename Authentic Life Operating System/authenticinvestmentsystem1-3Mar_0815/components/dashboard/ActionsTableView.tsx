@@ -139,6 +139,8 @@ function SwipeableRow({
 
   const panGesture = Gesture.Pan()
     .enabled(!isDisabled)
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-10, 10])
     .onStart(() => {
       runOnJS(setIsSwiping)(false);
     })
