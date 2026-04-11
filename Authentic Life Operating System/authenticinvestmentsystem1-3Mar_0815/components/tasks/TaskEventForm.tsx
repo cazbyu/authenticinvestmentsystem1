@@ -14,9 +14,10 @@ import {
   Image,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp, Flag, FileText, UserPlus } from 'lucide-react-native';
+import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp, Flag, FileText, UserPlus, User, Zap, Star, Target, Heart } from 'lucide-react-native';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
 import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
+import { EnrichmentChip, chipWrapStyle, ENRICHMENT_CHIP_COLORS } from '@/components/common/EnrichmentChip';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform, Linking } from 'react-native';
@@ -2480,82 +2481,143 @@ export default function TaskEventForm({
               {/* Inline panels (create mode only) */}
               {mode === 'create' && inlinePanel === 'priority' && (
                 <View style={styles.inlinePanel}>
-                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                    {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
-                    {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+                  <View style={chipWrapStyle}>
+                    <EnrichmentChip
+                      label="Urgent"
+                      selected={formData.isUrgent}
+                      onPress={() => setFormData(prev => ({ ...prev, isUrgent: !prev.isUrgent }))}
+                      icon={<Zap size={16} color={formData.isUrgent ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                    />
+                    <EnrichmentChip
+                      label="Important"
+                      selected={formData.isImportant}
+                      onPress={() => setFormData(prev => ({ ...prev, isImportant: !prev.isImportant }))}
+                      icon={<Star size={16} color={formData.isImportant ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                    />
                   </View>
                 </View>
               )}
 
               {mode === 'create' && inlinePanel === 'roles' && (
                 <View style={styles.inlinePanel}>
-                  {renderToggleSwitchGrid('Roles', roles, formData.selectedRoleIds, (id) => handleMultiSelect('selectedRoleIds', id))}
-                  {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid('Key Relationships', filteredKeyRelationships, formData.selectedKeyRelationshipIds, (id) => handleMultiSelect('selectedKeyRelationshipIds', id))}
+                  <View style={chipWrapStyle}>
+                    {roles.map(r => {
+                      const isSel = formData.selectedRoleIds.includes(r.id);
+                      return (
+                        <EnrichmentChip
+                          key={r.id}
+                          label={r.label}
+                          selected={isSel}
+                          onPress={() => handleMultiSelect('selectedRoleIds', r.id)}
+                          icon={<User size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                        />
+                      );
+                    })}
+                  </View>
+                  {filteredKeyRelationships.length > 0 && (
+                    <>
+                      <Text style={styles.inlinePanelSubLabel}>Key Relationships</Text>
+                      <View style={chipWrapStyle}>
+                        {filteredKeyRelationships.map(kr => {
+                          const isSel = formData.selectedKeyRelationshipIds.includes(kr.id);
+                          return (
+                            <EnrichmentChip
+                              key={kr.id}
+                              label={kr.name}
+                              selected={isSel}
+                              onPress={() => handleMultiSelect('selectedKeyRelationshipIds', kr.id)}
+                              icon={<Heart size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                            />
+                          );
+                        })}
+                      </View>
+                    </>
+                  )}
                 </View>
               )}
 
               {mode === 'create' && inlinePanel === 'wellness' && (
                 <View style={styles.inlinePanel}>
-                  {renderToggleSwitchGrid('Wellness Zones', domains, formData.selectedDomainIds, (id) => handleMultiSelect('selectedDomainIds', id))}
+                  <View style={chipWrapStyle}>
+                    {domains.map(d => {
+                      const isSel = formData.selectedDomainIds.includes(d.id);
+                      return (
+                        <EnrichmentChip
+                          key={d.id}
+                          label={d.name}
+                          selected={isSel}
+                          onPress={() => handleMultiSelect('selectedDomainIds', d.id)}
+                          icon={<Heart size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                        />
+                      );
+                    })}
+                  </View>
                 </View>
               )}
 
               {mode === 'create' && inlinePanel === 'goals' && (
                 <View style={styles.inlinePanel}>
-                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                    {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                  <View style={chipWrapStyle}>
+                    <EnrichmentChip
+                      label="Link to a goal"
+                      selected={formData.isGoal}
+                      onPress={() => setFormData(prev => ({ ...prev, isGoal: !prev.isGoal }))}
+                      icon={<Target size={16} color={formData.isGoal ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                    />
                   </View>
                   {formData.isGoal && (
-                    <View style={styles.field}>
-                      <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
+                    <>
                       {availableGoals.length === 0 ? (
-                        <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
+                        <Text style={[styles.emptyGoalsText, { color: colors.textSecondary, marginTop: 8 }]}>No active goals</Text>
                       ) : (
-                        <View style={styles.toggleSwitchContainer}>
+                        <View style={[chipWrapStyle, { marginTop: 10 }]}>
                           {availableGoals.map(g => {
-                            const active = formData.selectedGoal?.id === g.id;
+                            const isSel = formData.selectedGoal?.id === g.id;
                             return (
-                              <View
+                              <EnrichmentChip
                                 key={`${g.goal_type}-${g.id}`}
-                                style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                              >
-                                <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
-                                  {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
-                                </Text>
-                                <Switch
-                                  value={active}
-                                  onValueChange={() => handleGoalPick(g.id)}
-                                  trackColor={{ false: colors.border, true: colors.primary }}
-                                  thumbColor={colors.surface}
-                                />
-                              </View>
+                                label={g.title}
+                                selected={isSel}
+                                onPress={() => handleGoalPick(g.id)}
+                                icon={<Target size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                                subtitle={g.goal_type === '12week' ? '12wk' : 'Custom'}
+                              />
                             );
                           })}
                         </View>
                       )}
-                    </View>
+                    </>
                   )}
                 </View>
               )}
 
               {mode === 'create' && inlinePanel === 'delegate' && (
                 <View style={styles.inlinePanel}>
-                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                    {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
-                      setFormData(prev => ({ ...prev, isDelegated: value }));
-                      if (value) setShowDelegateModal(true);
+                  <View style={chipWrapStyle}>
+                    {delegates.map(d => {
+                      const isSel = formData.isDelegated && formData.selectedDelegateId === d.id;
+                      return (
+                        <EnrichmentChip
+                          key={d.id}
+                          label={d.name}
+                          selected={isSel}
+                          onPress={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              isDelegated: !isSel,
+                              selectedDelegateId: !isSel ? d.id : null,
+                            }));
+                          }}
+                          icon={<UserPlus size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                        />
+                      );
                     })}
+                    <EnrichmentChip
+                      label="+ Manage"
+                      selected={false}
+                      onPress={() => setShowDelegateModal(true)}
+                    />
                   </View>
-                  {formData.isDelegated && formData.selectedDelegateId && (
-                    <View style={styles.delegateInfoContainer}>
-                      <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
-                        {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
-                      </Text>
-                      <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
-                        <Text style={[styles.changeDelegateText, { color: colors.primary }]}>Change</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
                 </View>
               )}
             </View>
@@ -3825,6 +3887,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
+  },
+  inlinePanelSubLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 12,
+    marginBottom: 6,
   },
   priorityInlineRow: {
     flexDirection: 'row',
