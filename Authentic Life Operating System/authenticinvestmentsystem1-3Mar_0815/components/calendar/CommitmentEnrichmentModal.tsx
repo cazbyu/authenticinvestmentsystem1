@@ -26,6 +26,8 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { uploadNoteAttachment, saveNoteAttachmentMetadata } from '@/lib/noteAttachmentUtils';
 import DelegateModal from '@/components/tasks/DelegateModal';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
+import { EnrichmentChip, ENRICHMENT_CHIP_COLORS } from '@/components/common/EnrichmentChip';
+import { User, Heart, Target } from 'lucide-react-native';
 
 type EnrichmentTab =
   | 'roles'
@@ -668,32 +670,25 @@ export default function CommitmentEnrichmentModal({
     selected: boolean,
     onPress: () => void,
     subtitle?: string,
-  ) => (
-    <TouchableOpacity
-      key={`${label}-${subtitle ?? ''}`}
-      onPress={onPress}
-      style={[styles.chip, selected ? styles.chipSelected : styles.chipUnselected]}
-    >
-      <Text
-        style={[
-          styles.chipText,
-          selected ? styles.chipTextSelected : styles.chipTextUnselected,
-        ]}
-      >
-        {label}
-      </Text>
-      {subtitle ? (
-        <Text
-          style={[
-            styles.chipSubtitle,
-            selected ? styles.chipTextSelected : styles.chipTextUnselected,
-          ]}
-        >
-          {subtitle}
-        </Text>
-      ) : null}
-    </TouchableOpacity>
-  );
+    iconType?: 'role' | 'wellness' | 'goal',
+  ) => {
+    const iconColor = selected ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive;
+    const icon =
+      iconType === 'role' ? <User size={16} color={iconColor} /> :
+      iconType === 'wellness' ? <Heart size={16} color={iconColor} /> :
+      iconType === 'goal' ? <Target size={16} color={iconColor} /> :
+      undefined;
+    return (
+      <EnrichmentChip
+        key={`${label}-${subtitle ?? ''}`}
+        label={label}
+        selected={selected}
+        onPress={onPress}
+        subtitle={subtitle}
+        icon={icon}
+      />
+    );
+  };
 
   const renderRecurrenceScope = () => {
     if (!isRecurring) return null;
@@ -744,8 +739,12 @@ export default function CommitmentEnrichmentModal({
           <>
             <View style={styles.chipWrap}>
               {allRoles.map((r) =>
-                renderChip(r.label, selectedRoleIds.includes(r.id), () =>
-                  toggleRole(r.id),
+                renderChip(
+                  r.label,
+                  selectedRoleIds.includes(r.id),
+                  () => toggleRole(r.id),
+                  undefined,
+                  'role',
                 ),
               )}
               {allRoles.length === 0 && (
@@ -802,8 +801,12 @@ export default function CommitmentEnrichmentModal({
           <>
             <View style={styles.chipWrap}>
               {allDomains.map((d) =>
-                renderChip(d.label, selectedDomainIds.includes(d.id), () =>
-                  toggleDomain(d.id),
+                renderChip(
+                  d.label,
+                  selectedDomainIds.includes(d.id),
+                  () => toggleDomain(d.id),
+                  undefined,
+                  'wellness',
                 ),
               )}
               {allDomains.length === 0 && (
@@ -826,6 +829,7 @@ export default function CommitmentEnrichmentModal({
                   ),
                   () => toggleGoal(g),
                   g.goal_type === 'twelve_wk_goal' ? '12-week' : 'Custom',
+                  'goal',
                 ),
               )}
               {allGoals.length === 0 && (
@@ -1112,21 +1116,6 @@ const styles = StyleSheet.create({
   bodyContent: { padding: 20, paddingBottom: 8 },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  chipSelected: { backgroundColor: PRIMARY },
-  chipUnselected: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  chipText: { fontSize: 14, fontWeight: '500' },
-  chipTextSelected: { color: '#fff' },
-  chipTextUnselected: { color: GRAY_TEXT },
-  chipSubtitle: { fontSize: 10, marginTop: 1 },
   emptyText: {
     color: GRAY_TEXT,
     fontSize: 14,
