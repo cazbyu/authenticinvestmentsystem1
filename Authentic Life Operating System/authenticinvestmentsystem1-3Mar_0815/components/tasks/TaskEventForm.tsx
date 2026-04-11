@@ -3006,12 +3006,18 @@ export default function TaskEventForm({
       />
 
       {/* Commitment Enrichment Modal — for edit mode */}
-      {mode === 'edit' && initialData?.id && userId && (
+      {mode === 'edit' && initialData?.id && userId && enrichModalVisible && (
         <CommitmentEnrichmentModal
           visible={enrichModalVisible}
           onClose={() => setEnrichModalVisible(false)}
-          commitmentId={initialData.id}
-          userId={userId}
+          commitment={{
+            id: initialData.id,
+            title: initialData.title || formData.title || '',
+            user_id: userId,
+            is_urgent: formData.isUrgent ?? false,
+            is_important: formData.isImportant ?? false,
+            external_recurrence_id: (initialData as any)?.external_recurrence_id ?? null,
+          }}
           initialTab={enrichTab}
           parentType={
             formData.type === 'reflection' ||
