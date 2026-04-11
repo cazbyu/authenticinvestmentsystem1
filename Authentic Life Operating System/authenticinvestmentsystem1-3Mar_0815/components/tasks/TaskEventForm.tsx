@@ -417,34 +417,12 @@ export default function TaskEventForm({
 
   // Check if editing a completed task and show warning
   useEffect(() => {
-    const checkCompletedTaskWarning = async () => {
+    const checkCompletedTaskWarning = () => {
       if (mode === 'edit' && initialData?.status === 'completed' && (initialData.type === 'task' || initialData.type === 'event')) {
         setIsEditingCompletedTask(true);
-
-        // Check user preference
-        try {
-          const supabase = getSupabaseClient();
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
-
-          const { data: userProfile, error: profileError } = await supabase
-            .from('0008-ap-users')
-            .select('hide_completed_task_warning')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          // If the column doesn't exist or query fails, default to showing the warning
-          if (profileError) {
-            console.warn('Could not fetch completed task warning preference (column may not exist):', profileError.message);
-            setShowCompletedWarning(true);
-          } else if (!userProfile?.hide_completed_task_warning) {
-            setShowCompletedWarning(true);
-          }
-        } catch (error) {
-          console.warn('Error checking completed task warning preference (non-critical):', error);
-          // Default to showing warning on any error - this is a non-critical preference
-          setShowCompletedWarning(true);
-        }
+        // Column `hide_completed_task_warning` does not exist in `0008-ap-users`.
+        // Default behavior: always show the warning when editing a completed task.
+        setShowCompletedWarning(true);
       }
     };
 
@@ -1011,27 +989,9 @@ export default function TaskEventForm({
     return { start, end };
   };
 
-  const handleDismissCompletedWarning = async () => {
-    if (dontShowWarningAgain) {
-      try {
-        const supabase = getSupabaseClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { error: updateError } = await supabase
-            .from('0008-ap-users')
-            .update({ hide_completed_task_warning: true })
-            .eq('id', user.id);
-
-          if (updateError) {
-            console.warn('Could not save warning preference (column may not exist):', updateError.message);
-            // Continue anyway - this is a non-critical preference
-          }
-        }
-      } catch (error) {
-        console.warn('Error updating completed task warning preference (non-critical):', error);
-        // Continue anyway - this is a non-critical preference
-      }
-    }
+  const handleDismissCompletedWarning = () => {
+    // Column `hide_completed_task_warning` does not exist in `0008-ap-users`.
+    // Dismiss only affects the current session; the warning will show again next time.
     setShowCompletedWarning(false);
   };
 

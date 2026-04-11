@@ -1123,6 +1123,13 @@ export default function Dashboard() {
 
   const handleJournalEntryPress = (entry: any) => {
     if (entry.source_type === 'task') {
+      // Short-circuit for commitments: source_data already has everything; no fetch needed.
+      if (entry.source_data?.isCommitment || entry.source_data?.is_commitment) {
+        console.log('[Dashboard] Journal entry pressed - Commitment:', entry.source_data.id);
+        setSelectedTask(entry.source_data);
+        setIsDetailModalVisible(true);
+        return;
+      }
       console.log('[Dashboard] Journal entry pressed - Task data:', {
         id: entry.source_data.id,
         title: entry.source_data.title,
@@ -1282,13 +1289,29 @@ const renderDashboardTabs = () => (
       onTaskPress={async (taskId) => {
         try {
           const supabase = getSupabaseClient();
+          // Try tasks table first
           const { data: task } = await supabase
             .from('0008-ap-tasks')
             .select('*')
             .eq('id', taskId)
-            .single();
+            .maybeSingle();
           if (task) {
             setSelectedTask(task as Task);
+            setIsDetailModalVisible(true);
+            return;
+          }
+          // Fallback: commitment
+          const { data: commitment } = await supabase
+            .from('0008-ap-commitments')
+            .select('*')
+            .eq('id', taskId)
+            .maybeSingle();
+          if (commitment) {
+            setSelectedTask({
+              ...commitment,
+              type: 'event',
+              isCommitment: true,
+            } as unknown as Task);
             setIsDetailModalVisible(true);
           }
         } catch (error) {
@@ -1298,13 +1321,37 @@ const renderDashboardTabs = () => (
       onComplete={async (taskId) => {
         try {
           const supabase = getSupabaseClient();
+          // Try tasks table first
           const { data: task } = await supabase
             .from('0008-ap-tasks')
             .select('*')
             .eq('id', taskId)
-            .single();
+            .maybeSingle();
           if (task) {
             await handleCompleteTask(task as Task);
+            return;
+          }
+          // Fallback: commitment — mark completed directly
+          const { data: commitment } = await supabase
+            .from('0008-ap-commitments')
+            .select('id, status')
+            .eq('id', taskId)
+            .maybeSingle();
+          if (commitment) {
+            const newStatus = commitment.status === 'completed' ? 'pending' : 'completed';
+            const { error } = await supabase
+              .from('0008-ap-commitments')
+              .update({
+                status: newStatus,
+                reviewed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', taskId);
+            if (error) throw error;
+            eventBus.emit(EVENTS.TASK_UPDATED, { taskId });
+            eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+            setJournalRefreshKey(prev => prev + 1);
+            await refreshScore(true);
           }
         } catch (error) {
           console.error('Error completing task:', error);
@@ -1318,11 +1365,14 @@ const renderDashboardTabs = () => (
             .from('0008-ap-tasks')
             .select('*')
             .eq('id', taskId)
-            .single();
+            .maybeSingle();
           if (task) {
             await handleDelegateTask(task as Task);
             setIsDelegateModalVisible(true);
+            return;
           }
+          // Commitments don't have delegate flow today — silently no-op
+          console.log('[Dashboard] onDelegate: no task row found for', taskId);
         } catch (error) {
           console.error('Error delegating task:', error);
           Alert.alert('Error', 'Failed to delegate task');
