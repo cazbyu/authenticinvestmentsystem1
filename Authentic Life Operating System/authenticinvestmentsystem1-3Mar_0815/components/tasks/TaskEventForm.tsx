@@ -346,7 +346,7 @@ export default function TaskEventForm({
     };
 
     initialize();
-  }, [mode, initialData]);
+  }, [mode, initialData?.id]);
 
   // ============================================
   // NEW: Apply Speed Dial config defaults
@@ -687,6 +687,10 @@ export default function TaskEventForm({
       const krIds = ((krJoinRes.data ?? []) as any[]).map(r => r.key_relationship_id);
       const goalIds = ((goalsJoinRes.data ?? []) as any[]).map(r => r.goal_id);
       const delegateId = ((delegateJoinRes.data as any)?.delegate_id) ?? null;
+
+      console.log('[loadExistingEnrichment]', {
+        parentType, roleIds, domainIds, krIds, goalIds, delegateId,
+      });
 
       setFormData(prev => ({
         ...prev,
@@ -2484,7 +2488,7 @@ export default function TaskEventForm({
                       ) : (
                         <View style={[chipWrapStyle, { marginTop: 10 }]}>
                           {availableGoals.map(g => {
-                            const isSel = formData.selectedGoal?.id === g.id;
+                            const isSel = formData.selectedGoalIds?.includes(g.id) || formData.selectedGoal?.id === g.id;
                             return (
                               <EnrichmentChip
                                 key={`${g.goal_type}-${g.id}`}
