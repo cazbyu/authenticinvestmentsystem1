@@ -72,10 +72,12 @@ export function ActionDetailsModal({
   const [allDomains, setAllDomains] = useState<Array<{ id: string; name: string }>>([]);
   const [allGoals, setAllGoals] = useState<Array<{ id: string; title: string; goal_type: 'twelve_wk_goal' | 'custom_goal' }>>([]);
   const [allDelegates, setAllDelegates] = useState<Array<{ id: string; name: string }>>([]);
+  const [allKeyRelationships, setAllKeyRelationships] = useState<Array<{ id: string; name: string; role_id: string }>>([]);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>([]);
   const [selectedGoalKeys, setSelectedGoalKeys] = useState<Array<{ goal_id: string; goal_type: string }>>([]);
   const [selectedDelegateId, setSelectedDelegateId] = useState<string | null>(null);
+  const [selectedKeyRelationshipIds, setSelectedKeyRelationshipIds] = useState<string[]>([]);
   const [localIsUrgent, setLocalIsUrgent] = useState<boolean>(false);
   const [localIsImportant, setLocalIsImportant] = useState<boolean>(false);
 
@@ -221,6 +223,7 @@ export function ActionDetailsModal({
         domRes, domJoinRes,
         twelveRes, customRes, goalJoinRes,
         delegatesRes, delegateJoinRes,
+        krRes, krJoinRes,
       ] = await Promise.all([
         supabase.from('0008-ap-roles').select('id, label').eq('user_id', uid).order('label'),
         supabase.from('0008-ap-universal-roles-join').select('role_id').eq('parent_id', task.id).eq('parent_type', parentType),
@@ -231,6 +234,8 @@ export function ActionDetailsModal({
         supabase.from('0008-ap-universal-goals-join').select('goal_id, goal_type').eq('parent_id', task.id).eq('parent_type', parentType),
         supabase.from('0008-ap-delegates').select('id, name').eq('user_id', uid).order('name'),
         supabase.from('0008-ap-universal-delegates-join').select('delegate_id').eq('parent_id', task.id).eq('parent_type', parentType).maybeSingle(),
+        supabase.from('0008-ap-key-relationships').select('id, name, role_id').eq('user_id', uid),
+        supabase.from('0008-ap-universal-key-relationships-join').select('key_relationship_id').eq('parent_id', task.id).eq('parent_type', parentType),
       ]);
 
       setAllRoles((rolesRes.data ?? []) as any[]);
@@ -243,6 +248,8 @@ export function ActionDetailsModal({
       setSelectedGoalKeys(((goalJoinRes.data ?? []) as any[]).map(g => ({ goal_id: g.goal_id, goal_type: g.goal_type })));
       setAllDelegates((delegatesRes.data ?? []) as any[]);
       setSelectedDelegateId(((delegateJoinRes.data as any)?.delegate_id) ?? null);
+      setAllKeyRelationships((krRes.data ?? []) as any[]);
+      setSelectedKeyRelationshipIds(((krJoinRes.data ?? []) as any[]).map((r: any) => r.key_relationship_id));
     } catch (err) {
       console.error('[ActionDetailsModal] loadEnrichmentData error:', err);
     }
@@ -268,6 +275,40 @@ export function ActionDetailsModal({
       await fetchTaskMetadata();
     } catch (err) {
       console.error('[ActionDetailsModal] toggleRoleInline error:', err);
+    }
+  };
+
+  const toggleKeyRelationshipInline = async (krId: string) => {
+    if (!task?.id) return;
+    const isSelected = selectedKeyRelationshipIds.includes(krId);
+    const newIds = isSelected
+      ? selectedKeyRelationshipIds.filter(x => x !== krId)
+      : [...selectedKeyRelationshipIds, krId];
+    setSelectedKeyRelationshipIds(newIds);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = (task as any).user_id || user?.id;
+      const parentType = getParentType();
+      if (isSelected) {
+        await supabase
+          .from('0008-ap-universal-key-relationships-join')
+          .delete()
+          .eq('parent_id', task.id)
+          .eq('parent_type', parentType)
+          .eq('key_relationship_id', krId);
+      } else {
+        await supabase
+          .from('0008-ap-universal-key-relationships-join')
+          .insert({
+            parent_id: task.id,
+            parent_type: parentType,
+            key_relationship_id: krId,
+            user_id: uid,
+          });
+      }
+    } catch (err) {
+      console.error('[ActionDetailsModal] toggleKeyRelationshipInline error:', err);
     }
   };
 
@@ -584,7 +625,7 @@ export function ActionDetailsModal({
 
   return (
     <>
-      <Modal visible={visible && !followThroughFormVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={visible && !followThroughFormVisible && !isEditMode} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
@@ -785,24 +826,46 @@ export function ActionDetailsModal({
                   </View>
                 )}
 
-                {inlinePanel === 'roles' && (
-                  <View style={styles.inlinePanel}>
-                    <View style={chipWrapStyle}>
-                      {allRoles.map(r => {
-                        const isSel = selectedRoleIds.includes(r.id);
-                        return (
-                          <EnrichmentChip
-                            key={r.id}
-                            label={r.label}
-                            selected={isSel}
-                            onPress={() => toggleRoleInline(r.id)}
-                            icon={<User size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
-                          />
-                        );
-                      })}
+                {inlinePanel === 'roles' && (() => {
+                  const filteredKR = allKeyRelationships.filter(kr => selectedRoleIds.includes(kr.role_id));
+                  return (
+                    <View style={styles.inlinePanel}>
+                      <View style={chipWrapStyle}>
+                        {allRoles.map(r => {
+                          const isSel = selectedRoleIds.includes(r.id);
+                          return (
+                            <EnrichmentChip
+                              key={r.id}
+                              label={r.label}
+                              selected={isSel}
+                              onPress={() => toggleRoleInline(r.id)}
+                              icon={<User size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                            />
+                          );
+                        })}
+                      </View>
+                      {filteredKR.length > 0 && (
+                        <>
+                          <Text style={styles.inlinePanelSubLabel}>Key Relationships</Text>
+                          <View style={chipWrapStyle}>
+                            {filteredKR.map(kr => {
+                              const isSel = selectedKeyRelationshipIds.includes(kr.id);
+                              return (
+                                <EnrichmentChip
+                                  key={kr.id}
+                                  label={kr.name}
+                                  selected={isSel}
+                                  onPress={() => toggleKeyRelationshipInline(kr.id)}
+                                  icon={<Heart size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                                />
+                              );
+                            })}
+                          </View>
+                        </>
+                      )}
                     </View>
-                  </View>
-                )}
+                  );
+                })()}
 
                 {inlinePanel === 'wellness' && (
                   <View style={styles.inlinePanel}>
@@ -1645,5 +1708,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  inlinePanelSubLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 12,
+    marginBottom: 6,
   },
 });

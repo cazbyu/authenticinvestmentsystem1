@@ -203,7 +203,7 @@ export function ReflectionDetailsModal({
 
   return (
     <>
-      <Modal visible={visible && !followThroughFormVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={visible && !followThroughFormVisible && !isEditMode} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>

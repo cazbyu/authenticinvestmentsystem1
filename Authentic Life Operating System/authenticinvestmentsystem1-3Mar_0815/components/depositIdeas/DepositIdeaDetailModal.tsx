@@ -420,7 +420,7 @@ export function DepositIdeaDetailModal({
 
   return (
     <>
-      <Modal visible={visible && !followThroughFormVisible && !addNoteModalVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={visible && !followThroughFormVisible && !addNoteModalVisible && !isEditMode && !isActivating} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
