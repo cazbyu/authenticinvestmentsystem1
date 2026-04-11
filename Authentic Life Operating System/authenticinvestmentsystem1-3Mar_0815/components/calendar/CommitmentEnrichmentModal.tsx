@@ -97,7 +97,7 @@ export default function CommitmentEnrichmentModal({
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [applyScope, setApplyScope] = useState<'one' | 'all'>('one');
-  const isRecurring = !!commitment.external_recurrence_id;
+  const isRecurring = !!commitment?.external_recurrence_id;
 
   // Roles
   const [allRoles, setAllRoles] = useState<RoleRow[]>([]);
@@ -118,8 +118,8 @@ export default function CommitmentEnrichmentModal({
   >([]);
 
   // Priority
-  const [isUrgent, setIsUrgent] = useState(commitment.is_urgent);
-  const [isImportant, setIsImportant] = useState(commitment.is_important);
+  const [isUrgent, setIsUrgent] = useState(commitment?.is_urgent ?? false);
+  const [isImportant, setIsImportant] = useState(commitment?.is_important ?? false);
 
   // Notes
   const [noteText, setNoteText] = useState('');
@@ -152,7 +152,7 @@ export default function CommitmentEnrichmentModal({
 
   // Load ALL data once when modal opens
   useEffect(() => {
-    if (visible) {
+    if (visible && commitment) {
       setActiveTab(initialTab);
       setApplyScope('one');
       setIsUrgent(commitment.is_urgent);
@@ -161,7 +161,11 @@ export default function CommitmentEnrichmentModal({
       loadAllData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, commitment.id]);
+  }, [visible, commitment?.id]);
+
+  // Defense: if parent renders this with undefined commitment, bail out gracefully.
+  // Placed after all hooks so hook ordering is preserved on every render.
+  if (!commitment) return null;
 
   const loadAllData = async () => {
     setLoading(true);
