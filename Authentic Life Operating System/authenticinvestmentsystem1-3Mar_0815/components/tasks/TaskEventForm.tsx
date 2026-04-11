@@ -336,6 +336,10 @@ export default function TaskEventForm({
       await fetchFormData();
       if (initialData) {
         await loadInitialData();
+        // In edit mode, fetch existing enrichment joins from DB
+        if (mode === 'edit' && initialData.id) {
+          await loadExistingEnrichment();
+        }
       }
       // Mark initial load as complete
       setIsInitialLoad(false);
@@ -632,6 +636,71 @@ export default function TaskEventForm({
     };
 
     setFormData(newFormData);
+  };
+
+  const loadExistingEnrichment = async () => {
+    if (!initialData?.id || mode !== 'edit') return;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = (initialData as any).user_id || user?.id;
+      if (!uid) return;
+
+      // Detect parent_type: commitment vs task vs reflection etc.
+      const isCommitment = !!((initialData as any).isCommitment || (initialData as any).is_commitment);
+      const parentType = isCommitment ? 'commitment'
+        : initialData.type === 'reflection' ? 'reflection'
+        : initialData.type === 'depositIdea' ? 'depositIdea'
+        : 'task';
+
+      const [rolesJoinRes, domainsJoinRes, krJoinRes, goalsJoinRes, delegateJoinRes] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('role_id')
+          .eq('parent_id', initialData.id)
+          .eq('parent_type', parentType),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('domain_id')
+          .eq('parent_id', initialData.id)
+          .eq('parent_type', parentType),
+        supabase
+          .from('0008-ap-universal-key-relationships-join')
+          .select('key_relationship_id')
+          .eq('parent_id', initialData.id)
+          .eq('parent_type', parentType),
+        supabase
+          .from('0008-ap-universal-goals-join')
+          .select('goal_id, goal_type')
+          .eq('parent_id', initialData.id)
+          .eq('parent_type', parentType),
+        supabase
+          .from('0008-ap-universal-delegates-join')
+          .select('delegate_id')
+          .eq('parent_id', initialData.id)
+          .eq('parent_type', parentType)
+          .maybeSingle(),
+      ]);
+
+      const roleIds = ((rolesJoinRes.data ?? []) as any[]).map(r => r.role_id);
+      const domainIds = ((domainsJoinRes.data ?? []) as any[]).map(r => r.domain_id);
+      const krIds = ((krJoinRes.data ?? []) as any[]).map(r => r.key_relationship_id);
+      const goalIds = ((goalsJoinRes.data ?? []) as any[]).map(r => r.goal_id);
+      const delegateId = ((delegateJoinRes.data as any)?.delegate_id) ?? null;
+
+      setFormData(prev => ({
+        ...prev,
+        selectedRoleIds: roleIds.length > 0 ? roleIds : prev.selectedRoleIds,
+        selectedDomainIds: domainIds.length > 0 ? domainIds : prev.selectedDomainIds,
+        selectedKeyRelationshipIds: krIds.length > 0 ? krIds : prev.selectedKeyRelationshipIds,
+        selectedGoalIds: goalIds.length > 0 ? goalIds : prev.selectedGoalIds,
+        isGoal: goalIds.length > 0 || prev.isGoal,
+        isDelegated: !!delegateId || prev.isDelegated,
+        selectedDelegateId: delegateId ?? prev.selectedDelegateId,
+      }));
+    } catch (err) {
+      console.error('[TaskEventForm] loadExistingEnrichment error:', err);
+    }
   };
 
   const loadAttachmentsForExistingNotes = async (notes: Array<{id: string; content: string; created_at: string}>) => {
@@ -2220,133 +2289,13 @@ export default function TaskEventForm({
             </>
           )}
 
-          {/* Date Fields */}
-          {formData.type === 'task' && (
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.text }]}>Due Date & Time</Text>
-              <View style={styles.dateTimeRow}>
-                <View style={styles.dateFieldWrapper}>
-                  <TouchableOpacity
-                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleCalendarOpen('due')}
-                  >
-                    <CalendarIcon size={16} color={colors.textSecondary} />
-                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
-                      {formatDateForDisplay(formData.dueDate)}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                {!formData.isAnytime && (
-                  <TimePickerDropdown
-                    value={formData.dueTime}
-                    onChange={(time) => setFormData(prev => ({ ...prev, dueTime: time }))}
-                    placeholder="Select time"
-                    isDark={isDarkMode}
-                  />
-                )}
-                <View style={styles.anytimeToggleInline}>
-                  <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
-                  <Switch
-                    value={formData.isAnytime}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                    thumbColor={colors.surface}
-                  />
-                </View>
-              </View>
-            </View>
-          )}
-          {formData.type === 'event' && (
-            <View style={styles.field}>
-              {/* First Row: Date and Time Range */}
-              <View style={styles.googleStyleDateTimeRow}>
-                {/* Start Date */}
-                <TouchableOpacity
-                  style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  onPress={() => handleCalendarOpen('start')}
-                >
-                  <CalendarIcon size={16} color={colors.textSecondary} />
-                  <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
-                    {formatDateForDisplay(formData.startDate)}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Start Time */}
-                <TimePickerDropdown
-                  value={formData.startTime}
-                  onChange={(time) => setFormData(prev => ({ ...prev, startTime: time }))}
-                  placeholder="Select time"
-                  isDark={isDarkMode}
-                />
-
-                {/* Dash Separator */}
-                <Text style={[styles.timeSeparator, { color: colors.text }]}>–</Text>
-
-                {/* End Time */}
-                <TimePickerDropdown
-                  value={formData.endTime}
-                  onChange={(time) => setFormData(prev => ({ ...prev, endTime: time }))}
-                  referenceTime={formData.startTime}
-                  startDate={formData.startDate}
-                  endDate={formData.endDate}
-                  minTime={formData.startTime}
-                  placeholder="Select time"
-                  isDark={isDarkMode}
-                />
-
-                {/* End Date - Only show if different from start date */}
-                {formData.endDate !== formData.startDate && (
-                  <TouchableOpacity
-                    style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleCalendarOpen('end')}
-                  >
-                    <CalendarIcon size={16} color={colors.textSecondary} />
-                    <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
-                      {formatDateForDisplay(formData.endDate)}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Second Row: All Day and Make Multi-day */}
-              <View style={styles.googleSecondRow}>
-                {/* All day toggle */}
-                <View style={styles.googleAllDayToggle}>
-                  <Text style={[styles.googleAllDayLabel, { color: colors.text }]}>All day</Text>
-                  <Switch
-                    value={formData.isAnytime}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                    thumbColor={colors.surface}
-                  />
-                </View>
-
-                {/* Show multi-day button only for same-day events */}
-                {formData.endDate === formData.startDate && (
-                  <TouchableOpacity
-                    style={styles.multiDayButtonInline}
-                    onPress={() => handleCalendarOpen('end')}
-                  >
-                    <Text style={[styles.multiDayButtonText, { color: colors.primary }]}>Make multi-day event</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
-
           {/* ADD CONTEXT — 6-button enrichment row for task/event */}
           {(formData.type === 'task' || formData.type === 'event') && (
             <View style={styles.enrichSection}>
               <Text style={styles.enrichSectionTitle}>Add Context</Text>
               <View style={styles.enrichIconRow}>
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => {
-                    if (mode === 'edit' && initialData?.id) {
-                      setEnrichTab('priority'); setEnrichModalVisible(true);
-                    } else {
-                      setInlinePanel(inlinePanel === 'priority' ? null : 'priority');
-                    }
-                  }}>
+                  onPress={() => setInlinePanel(inlinePanel === 'priority' ? null : 'priority')}>
                   <Flag size={28} color={
                     formData.isUrgent && formData.isImportant ? '#ef4444' :
                     formData.isImportant ? '#10b981' :
@@ -2356,13 +2305,7 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => {
-                    if (mode === 'edit' && initialData?.id) {
-                      setEnrichTab('roles'); setEnrichModalVisible(true);
-                    } else {
-                      setInlinePanel(inlinePanel === 'roles' ? null : 'roles');
-                    }
-                  }}>
+                  onPress={() => setInlinePanel(inlinePanel === 'roles' ? null : 'roles')}>
                   <View>
                     <RoleIcon size={28} color={formData.selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedRoleIds.length > 0 && (
@@ -2375,13 +2318,7 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => {
-                    if (mode === 'edit' && initialData?.id) {
-                      setEnrichTab('wellness'); setEnrichModalVisible(true);
-                    } else {
-                      setInlinePanel(inlinePanel === 'wellness' ? null : 'wellness');
-                    }
-                  }}>
+                  onPress={() => setInlinePanel(inlinePanel === 'wellness' ? null : 'wellness')}>
                   <View>
                     <WellnessIcon size={28} color={formData.selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedDomainIds.length > 0 && (
@@ -2394,13 +2331,7 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => {
-                    if (mode === 'edit' && initialData?.id) {
-                      setEnrichTab('goals'); setEnrichModalVisible(true);
-                    } else {
-                      setInlinePanel(inlinePanel === 'goals' ? null : 'goals');
-                    }
-                  }}>
+                  onPress={() => setInlinePanel(inlinePanel === 'goals' ? null : 'goals')}>
                   <View>
                     <GoalIcon size={28} color={formData.selectedGoalIds?.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedGoalIds?.length > 0 && (
@@ -2437,20 +2368,14 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => {
-                    if (mode === 'edit' && initialData?.id) {
-                      setEnrichTab('delegate'); setEnrichModalVisible(true);
-                    } else {
-                      setInlinePanel(inlinePanel === 'delegate' ? null : 'delegate');
-                    }
-                  }}>
+                  onPress={() => setInlinePanel(inlinePanel === 'delegate' ? null : 'delegate')}>
                   <UserPlus size={28} color={formData.isDelegated ? '#16a34a' : '#9ca3af'} />
                   <Text style={styles.enrichIconLabel}>Delegate</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Inline panels (create mode only) */}
-              {mode === 'create' && inlinePanel === 'priority' && (
+              {/* Inline panels */}
+              {inlinePanel === 'priority' && (
                 <View style={styles.inlinePanel}>
                   <View style={styles.quadrantGrid}>
                     <View style={styles.quadrantRow}>
@@ -2485,7 +2410,7 @@ export default function TaskEventForm({
                 </View>
               )}
 
-              {mode === 'create' && inlinePanel === 'roles' && (
+              {inlinePanel === 'roles' && (
                 <View style={styles.inlinePanel}>
                   <View style={chipWrapStyle}>
                     {roles.map(r => {
@@ -2523,7 +2448,7 @@ export default function TaskEventForm({
                 </View>
               )}
 
-              {mode === 'create' && inlinePanel === 'wellness' && (
+              {inlinePanel === 'wellness' && (
                 <View style={styles.inlinePanel}>
                   <View style={chipWrapStyle}>
                     {domains.map(d => {
@@ -2542,7 +2467,7 @@ export default function TaskEventForm({
                 </View>
               )}
 
-              {mode === 'create' && inlinePanel === 'goals' && (
+              {inlinePanel === 'goals' && (
                 <View style={styles.inlinePanel}>
                   <View style={chipWrapStyle}>
                     <EnrichmentChip
@@ -2578,7 +2503,7 @@ export default function TaskEventForm({
                 </View>
               )}
 
-              {mode === 'create' && inlinePanel === 'delegate' && (
+              {inlinePanel === 'delegate' && (
                 <View style={styles.inlinePanel}>
                   <View style={chipWrapStyle}>
                     {delegates.map(d => {
@@ -2751,6 +2676,120 @@ export default function TaskEventForm({
                   )}
                 </View>
               )}
+            </View>
+          )}
+
+          {/* Date Fields */}
+          {formData.type === 'task' && (
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.text }]}>Due Date & Time</Text>
+              <View style={styles.dateTimeRow}>
+                <View style={styles.dateFieldWrapper}>
+                  <TouchableOpacity
+                    style={[styles.dateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('due')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.dateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.dueDate)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {!formData.isAnytime && (
+                  <TimePickerDropdown
+                    value={formData.dueTime}
+                    onChange={(time) => setFormData(prev => ({ ...prev, dueTime: time }))}
+                    placeholder="Select time"
+                    isDark={isDarkMode}
+                  />
+                )}
+                <View style={styles.anytimeToggleInline}>
+                  <Text style={[styles.anytimeLabel, { color: colors.text }]}>Anytime</Text>
+                  <Switch
+                    value={formData.isAnytime}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+          {formData.type === 'event' && (
+            <View style={styles.field}>
+              {/* First Row: Date and Time Range */}
+              <View style={styles.googleStyleDateTimeRow}>
+                {/* Start Date */}
+                <TouchableOpacity
+                  style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={() => handleCalendarOpen('start')}
+                >
+                  <CalendarIcon size={16} color={colors.textSecondary} />
+                  <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
+                    {formatDateForDisplay(formData.startDate)}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Start Time */}
+                <TimePickerDropdown
+                  value={formData.startTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, startTime: time }))}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+
+                {/* Dash Separator */}
+                <Text style={[styles.timeSeparator, { color: colors.text }]}>–</Text>
+
+                {/* End Time */}
+                <TimePickerDropdown
+                  value={formData.endTime}
+                  onChange={(time) => setFormData(prev => ({ ...prev, endTime: time }))}
+                  referenceTime={formData.startTime}
+                  startDate={formData.startDate}
+                  endDate={formData.endDate}
+                  minTime={formData.startTime}
+                  placeholder="Select time"
+                  isDark={isDarkMode}
+                />
+
+                {/* End Date - Only show if different from start date */}
+                {formData.endDate !== formData.startDate && (
+                  <TouchableOpacity
+                    style={[styles.googleDateButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleCalendarOpen('end')}
+                  >
+                    <CalendarIcon size={16} color={colors.textSecondary} />
+                    <Text style={[styles.googleDateButtonText, { color: colors.text }]}>
+                      {formatDateForDisplay(formData.endDate)}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Second Row: All Day and Make Multi-day */}
+              <View style={styles.googleSecondRow}>
+                {/* All day toggle */}
+                <View style={styles.googleAllDayToggle}>
+                  <Text style={[styles.googleAllDayLabel, { color: colors.text }]}>All day</Text>
+                  <Switch
+                    value={formData.isAnytime}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, isAnytime: value }))}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.surface}
+                  />
+                </View>
+
+                {/* Show multi-day button only for same-day events */}
+                {formData.endDate === formData.startDate && (
+                  <TouchableOpacity
+                    style={styles.multiDayButtonInline}
+                    onPress={() => handleCalendarOpen('end')}
+                  >
+                    <Text style={[styles.multiDayButtonText, { color: colors.primary }]}>Make multi-day event</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
 
