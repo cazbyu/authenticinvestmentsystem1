@@ -226,6 +226,9 @@ export default function TaskEventForm({
   const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
   const [enrichModalVisible, setEnrichModalVisible] = useState(false);
   const [showPriorityInline, setShowPriorityInline] = useState(false);
+  // Inline panel shown below the enrichment icon row in create mode
+  const [inlinePanel, setInlinePanel] = useState<'priority' | 'roles' | 'wellness' | 'goals' | 'delegate' | null>(null);
+  const notesInputRef = useRef<TextInput>(null);
 
   // Context banner for Speed Dial
   const [showContextBanner, setShowContextBanner] = useState(true);
@@ -2374,12 +2377,15 @@ export default function TaskEventForm({
           {(formData.type === 'task' || formData.type === 'event') && (
             <View style={styles.enrichSection}>
               <Text style={styles.enrichSectionTitle}>Add Context</Text>
-              <View
-                style={[styles.enrichIconRow, (mode !== 'edit' || !initialData?.id) && { opacity: 0.4 }]}
-                pointerEvents={mode === 'edit' && initialData?.id ? 'auto' : 'none'}
-              >
+              <View style={styles.enrichIconRow}>
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => { setEnrichTab('priority'); setEnrichModalVisible(true); }}>
+                  onPress={() => {
+                    if (mode === 'edit' && initialData?.id) {
+                      setEnrichTab('priority'); setEnrichModalVisible(true);
+                    } else {
+                      setInlinePanel(inlinePanel === 'priority' ? null : 'priority');
+                    }
+                  }}>
                   <Flag size={28} color={
                     formData.isUrgent && formData.isImportant ? '#ef4444' :
                     formData.isImportant ? '#10b981' :
@@ -2389,7 +2395,13 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                  onPress={() => {
+                    if (mode === 'edit' && initialData?.id) {
+                      setEnrichTab('roles'); setEnrichModalVisible(true);
+                    } else {
+                      setInlinePanel(inlinePanel === 'roles' ? null : 'roles');
+                    }
+                  }}>
                   <View>
                     <RoleIcon size={28} color={formData.selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedRoleIds.length > 0 && (
@@ -2402,7 +2414,13 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                  onPress={() => {
+                    if (mode === 'edit' && initialData?.id) {
+                      setEnrichTab('wellness'); setEnrichModalVisible(true);
+                    } else {
+                      setInlinePanel(inlinePanel === 'wellness' ? null : 'wellness');
+                    }
+                  }}>
                   <View>
                     <WellnessIcon size={28} color={formData.selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedDomainIds.length > 0 && (
@@ -2415,7 +2433,13 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                  onPress={() => {
+                    if (mode === 'edit' && initialData?.id) {
+                      setEnrichTab('goals'); setEnrichModalVisible(true);
+                    } else {
+                      setInlinePanel(inlinePanel === 'goals' ? null : 'goals');
+                    }
+                  }}>
                   <View>
                     <GoalIcon size={28} color={formData.selectedGoalIds?.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedGoalIds?.length > 0 && (
@@ -2428,19 +2452,111 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => { setEnrichTab('notes'); setEnrichModalVisible(true); }}>
-                  <FileText size={28} color='#9ca3af' />
+                  onPress={() => {
+                    if (mode === 'edit' && initialData?.id) {
+                      setEnrichTab('notes'); setEnrichModalVisible(true);
+                    } else {
+                      setInlinePanel(null);
+                      notesInputRef.current?.focus();
+                    }
+                  }}>
+                  <FileText size={28} color={formData.notes?.trim() ? '#16a34a' : '#9ca3af'} />
                   <Text style={styles.enrichIconLabel}>Notes</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => { setEnrichTab('delegate'); setEnrichModalVisible(true); }}>
+                  onPress={() => {
+                    if (mode === 'edit' && initialData?.id) {
+                      setEnrichTab('delegate'); setEnrichModalVisible(true);
+                    } else {
+                      setInlinePanel(inlinePanel === 'delegate' ? null : 'delegate');
+                    }
+                  }}>
                   <UserPlus size={28} color={formData.isDelegated ? '#16a34a' : '#9ca3af'} />
                   <Text style={styles.enrichIconLabel}>Delegate</Text>
                 </TouchableOpacity>
               </View>
-              {(mode !== 'edit' || !initialData?.id) && (
-                <Text style={[styles.enrichHelperText, { color: colors.textSecondary }]}>Save first to add context</Text>
+
+              {/* Inline panels (create mode only) */}
+              {mode === 'create' && inlinePanel === 'priority' && (
+                <View style={styles.inlinePanel}>
+                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                    {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
+                    {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
+                  </View>
+                </View>
+              )}
+
+              {mode === 'create' && inlinePanel === 'roles' && (
+                <View style={styles.inlinePanel}>
+                  {renderToggleSwitchGrid('Roles', roles, formData.selectedRoleIds, (id) => handleMultiSelect('selectedRoleIds', id))}
+                  {filteredKeyRelationships.length > 0 && renderToggleSwitchGrid('Key Relationships', filteredKeyRelationships, formData.selectedKeyRelationshipIds, (id) => handleMultiSelect('selectedKeyRelationshipIds', id))}
+                </View>
+              )}
+
+              {mode === 'create' && inlinePanel === 'wellness' && (
+                <View style={styles.inlinePanel}>
+                  {renderToggleSwitchGrid('Wellness Zones', domains, formData.selectedDomainIds, (id) => handleMultiSelect('selectedDomainIds', id))}
+                </View>
+              )}
+
+              {mode === 'create' && inlinePanel === 'goals' && (
+                <View style={styles.inlinePanel}>
+                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                    {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
+                  </View>
+                  {formData.isGoal && (
+                    <View style={styles.field}>
+                      <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
+                      {availableGoals.length === 0 ? (
+                        <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
+                      ) : (
+                        <View style={styles.toggleSwitchContainer}>
+                          {availableGoals.map(g => {
+                            const active = formData.selectedGoal?.id === g.id;
+                            return (
+                              <View
+                                key={`${g.goal_type}-${g.id}`}
+                                style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                              >
+                                <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
+                                  {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
+                                </Text>
+                                <Switch
+                                  value={active}
+                                  onValueChange={() => handleGoalPick(g.id)}
+                                  trackColor={{ false: colors.border, true: colors.primary }}
+                                  thumbColor={colors.surface}
+                                />
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {mode === 'create' && inlinePanel === 'delegate' && (
+                <View style={styles.inlinePanel}>
+                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
+                    {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
+                      setFormData(prev => ({ ...prev, isDelegated: value }));
+                      if (value) setShowDelegateModal(true);
+                    })}
+                  </View>
+                  {formData.isDelegated && formData.selectedDelegateId && (
+                    <View style={styles.delegateInfoContainer}>
+                      <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
+                        {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
+                      </Text>
+                      <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
+                        <Text style={[styles.changeDelegateText, { color: colors.primary }]}>Change</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               )}
             </View>
           )}
@@ -2546,6 +2662,7 @@ export default function TaskEventForm({
 
             {/* Add new note */}
             <TextInput
+              ref={notesInputRef}
               style={[styles.textArea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
               value={formData.notes}
               onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}
@@ -2663,104 +2780,6 @@ export default function TaskEventForm({
             </View>
           )}
 
-          {/* More Options toggle (renamed from Advanced Options) */}
-          {(formData.type === 'task' || formData.type === 'event') && (
-            <TouchableOpacity
-              style={[styles.advancedToggle, { borderColor: colors.border }]}
-              onPress={() => setShowAdvanced(!showAdvanced)}
-            >
-              <Text style={[styles.advancedToggleText, { color: colors.primary }]}>
-                {showAdvanced ? 'Hide More Options' : 'More Options'}
-              </Text>
-              {showAdvanced ? (
-                <ChevronUp size={18} color={colors.primary} />
-              ) : (
-                <ChevronDown size={18} color={colors.primary} />
-              )}
-            </TouchableOpacity>
-          )}
-
-          {/* More Options content */}
-          {showAdvanced && (formData.type === 'task' || formData.type === 'event') && (
-            <>
-              {/* Create-mode: Urgent/Important switches (edit mode uses Priority icon in enrichment row) */}
-              {mode === 'create' && (
-                <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                    {renderSwitchField('Urgent', formData.isUrgent, (value) => setFormData(prev => ({ ...prev, isUrgent: value })))}
-                    {renderSwitchField('Important', formData.isImportant, (value) => setFormData(prev => ({ ...prev, isImportant: value })))}
-                  </View>
-                </View>
-              )}
-
-              {/* Create-mode: Delegate (edit mode uses Delegate icon in enrichment row) */}
-              {mode === 'create' && (
-                <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                  <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                    {renderSwitchField('Delegate to', formData.isDelegated, (value) => {
-                      setFormData(prev => ({ ...prev, isDelegated: value }));
-                      if (value) setShowDelegateModal(true);
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {mode === 'create' && formData.isDelegated && formData.selectedDelegateId && (
-                <View style={styles.delegateInfoContainer}>
-                  <Text style={[styles.delegateInfoText, { color: colors.textSecondary }]}>
-                    {delegates.find(d => d.id === formData.selectedDelegateId)?.name || 'Selected delegate'}
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowDelegateModal(true)}>
-                    <Text style={[styles.changeDelegateText, { color: colors.primary }]}>Change</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Goal Toggle (both modes) */}
-              <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
-                <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
-                  {renderSwitchField('Goal', formData.isGoal, (value) => setFormData(prev => ({ ...prev, isGoal: value })))}
-                </View>
-              </View>
-
-              {formData.isGoal && (
-                <View style={styles.field}>
-                  <Text style={[styles.label, { color: colors.text }]}>Select Goal</Text>
-                  {availableGoals.length === 0 ? (
-                    <Text style={[styles.emptyGoalsText, { color: colors.textSecondary }]}>No active goals</Text>
-                  ) : (
-                    <View style={styles.toggleSwitchContainer}>
-                      {availableGoals.map(g => {
-                        const active = formData.selectedGoal?.id === g.id;
-                        return (
-                          <View
-                            key={`${g.goal_type}-${g.id}`}
-                            style={[styles.toggleSwitchItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                          >
-                            <Text style={[styles.toggleSwitchLabel, { color: colors.text }]} numberOfLines={1}>
-                              {g.title} {g.goal_type === '12week' ? '• 12wk' : '• Custom'}
-                            </Text>
-                            <Switch
-                              value={active}
-                              onValueChange={() => handleGoalPick(g.id)}
-                              trackColor={{ false: colors.border, true: colors.primary }}
-                              thumbColor={colors.surface}
-                            />
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Create-mode: Roles grid (with Key Relationships linked under Roles) */}
-              {mode === 'create' && renderToggleSwitchGrid('Roles', roles, formData.selectedRoleIds, (id) => handleMultiSelect('selectedRoleIds', id))}
-              {mode === 'create' && filteredKeyRelationships.length > 0 && renderToggleSwitchGrid('Key Relationships', filteredKeyRelationships, formData.selectedKeyRelationshipIds, (id) => handleMultiSelect('selectedKeyRelationshipIds', id))}
-              {/* Create-mode: Wellness Zones grid */}
-              {mode === 'create' && renderToggleSwitchGrid('Wellness Zones', domains, formData.selectedDomainIds, (id) => handleMultiSelect('selectedDomainIds', id))}
-            </>
-          )}
           {/* === RESTRUCTURED SECTION END === */}
         </View>
       </ScrollView>
@@ -3800,6 +3819,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  inlinePanel: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
   },
   priorityInlineRow: {
     flexDirection: 'row',
