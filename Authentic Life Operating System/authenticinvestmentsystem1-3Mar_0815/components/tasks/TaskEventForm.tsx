@@ -228,7 +228,7 @@ export default function TaskEventForm({
   const [enrichModalVisible, setEnrichModalVisible] = useState(false);
   const [showPriorityInline, setShowPriorityInline] = useState(false);
   // Inline panel shown below the enrichment icon row in create mode
-  const [inlinePanel, setInlinePanel] = useState<'priority' | 'roles' | 'wellness' | 'goals' | 'delegate' | null>(null);
+  const [inlinePanel, setInlinePanel] = useState<'priority' | 'roles' | 'wellness' | 'goals' | 'notes' | 'delegate' | null>(null);
   const notesInputRef = useRef<TextInput>(null);
 
   // Context banner for Speed Dial
@@ -2453,15 +2453,26 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => {
-                    if (mode === 'edit' && initialData?.id) {
-                      setEnrichTab('notes'); setEnrichModalVisible(true);
-                    } else {
-                      setInlinePanel(null);
-                      notesInputRef.current?.focus();
-                    }
-                  }}>
-                  <FileText size={28} color={formData.notes?.trim() ? '#16a34a' : '#9ca3af'} />
+                  onPress={() => setInlinePanel(inlinePanel === 'notes' ? null : 'notes')}>
+                  <View>
+                    {(() => {
+                      const totalAttachments = Array.from(noteAttachmentsMap.values()).reduce((n, arr) => n + arr.length, 0);
+                      const notesCount =
+                        mode === 'edit'
+                          ? existingNotes.length + totalAttachments
+                          : attachedFiles.length + (formData.notes?.trim() ? 1 : 0);
+                      return (
+                        <>
+                          <FileText size={28} color={notesCount > 0 ? '#16a34a' : '#9ca3af'} />
+                          {notesCount > 0 && (
+                            <View style={styles.enrichBadge}>
+                              <Text style={styles.enrichBadgeText}>{notesCount}</Text>
+                            </View>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </View>
                   <Text style={styles.enrichIconLabel}>Notes</Text>
                 </TouchableOpacity>
 
@@ -2481,19 +2492,35 @@ export default function TaskEventForm({
               {/* Inline panels (create mode only) */}
               {mode === 'create' && inlinePanel === 'priority' && (
                 <View style={styles.inlinePanel}>
-                  <View style={chipWrapStyle}>
-                    <EnrichmentChip
-                      label="Urgent"
-                      selected={formData.isUrgent}
-                      onPress={() => setFormData(prev => ({ ...prev, isUrgent: !prev.isUrgent }))}
-                      icon={<Zap size={16} color={formData.isUrgent ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
-                    />
-                    <EnrichmentChip
-                      label="Important"
-                      selected={formData.isImportant}
-                      onPress={() => setFormData(prev => ({ ...prev, isImportant: !prev.isImportant }))}
-                      icon={<Star size={16} color={formData.isImportant ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
-                    />
+                  <View style={styles.quadrantGrid}>
+                    <View style={styles.quadrantRow}>
+                      <TouchableOpacity
+                        onPress={() => setFormData(prev => ({ ...prev, isUrgent: true, isImportant: true }))}
+                        style={[styles.quadrant, { backgroundColor: '#ef4444' }, (formData.isUrgent && formData.isImportant) && styles.quadrantActive]}
+                      >
+                        <Text style={styles.quadrantText}>Urgent &{'\n'}Important</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setFormData(prev => ({ ...prev, isUrgent: false, isImportant: true }))}
+                        style={[styles.quadrant, { backgroundColor: '#10b981' }, (!formData.isUrgent && formData.isImportant) && styles.quadrantActive]}
+                      >
+                        <Text style={styles.quadrantText}>Important{'\n'}Only</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.quadrantRow}>
+                      <TouchableOpacity
+                        onPress={() => setFormData(prev => ({ ...prev, isUrgent: true, isImportant: false }))}
+                        style={[styles.quadrant, { backgroundColor: '#f59e0b' }, (formData.isUrgent && !formData.isImportant) && styles.quadrantActive]}
+                      >
+                        <Text style={styles.quadrantText}>Urgent{'\n'}Only</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setFormData(prev => ({ ...prev, isUrgent: false, isImportant: false }))}
+                        style={[styles.quadrant, { backgroundColor: '#9ca3af' }, (!formData.isUrgent && !formData.isImportant) && styles.quadrantActive]}
+                      >
+                        <Text style={styles.quadrantText}>Neither</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               )}
@@ -2620,153 +2647,151 @@ export default function TaskEventForm({
                   </View>
                 </View>
               )}
-            </View>
-          )}
 
-          {/* === RESTRUCTURED SECTION START === */}
-          {/* Notes - always visible for task/event, both create and edit mode */}
-          {(formData.type === 'task' || formData.type === 'event') && (
-          <View style={styles.field}>
-            <View style={styles.notesHeader}>
-              <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
-              <TouchableOpacity
-                style={styles.attachmentButton}
-                onPress={handlePickFile}
-              >
-                <Paperclip size={20} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
+              {inlinePanel === 'notes' && (formData.type === 'task' || formData.type === 'event') && (
+                <View style={styles.inlinePanel}>
+                  <View style={styles.notesHeader}>
+                    <Text style={[styles.label, { color: colors.text }]}>Notes</Text>
+                    <TouchableOpacity
+                      style={styles.attachmentButton}
+                      onPress={handlePickFile}
+                    >
+                      <Paperclip size={20} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
 
-            {/* Display existing notes in stacked format */}
-            {existingNotes.length > 0 && (
-              <View style={styles.existingNotesContainer}>
-                {existingNotes.map((note) => {
-                  const noteAttachments = noteAttachmentsMap.get(note.id) || [];
-                  return (
-                    <View key={note.id} style={styles.existingNoteItem}>
-                      <Text style={[styles.existingNoteContent, { color: colors.text }]}>{note.content}</Text>
-                      <Text style={[styles.existingNoteDate, { color: colors.textSecondary }]}>
-                        {new Date(note.created_at).toLocaleDateString('en-US', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
-                        })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })})
-                      </Text>
-                      {noteAttachments.length > 0 && (
-                        <View style={styles.noteAttachmentsContainer}>
-                          <View style={styles.existingAttachmentsHeader}>
-                            <AttachmentBadge count={noteAttachments.length} size="small" />
-                          </View>
-                          <View style={styles.attachmentsGrid}>
-                            {noteAttachments.slice(0, 4).map((file, index) => {
-                              const isImage = file.type?.startsWith('image/');
-                              return (
-                                <TouchableOpacity
-                                  key={index}
-                                  style={styles.attachmentThumbnailWrapper}
-                                  onPress={() => {
-                                    if (isImage) {
-                                      const imageAttachments = noteAttachments.filter(f => f.type?.startsWith('image/'));
-                                      const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
-                                      setSelectedImages(imageAttachments);
-                                      setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
-                                      setImageViewerVisible(true);
-                                    } else {
-                                      Linking.openURL(file.uri);
-                                    }
-                                  }}
-                                  activeOpacity={0.7}
-                                >
-                                  {isImage ? (
-                                    <Image
-                                      source={{ uri: file.uri }}
-                                      style={styles.existingThumbnailImage}
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <View style={styles.existingDocumentThumbnail}>
-                                      <AttachmentThumbnail
-                                        uri={file.uri}
-                                        fileType={file.type}
-                                        fileName={file.name}
-                                        size="small"
-                                      />
+                  {/* Display existing notes in stacked format */}
+                  {existingNotes.length > 0 && (
+                    <View style={styles.existingNotesContainer}>
+                      {existingNotes.map((note) => {
+                        const noteAttachments = noteAttachmentsMap.get(note.id) || [];
+                        return (
+                          <View key={note.id} style={styles.existingNoteItem}>
+                            <Text style={[styles.existingNoteContent, { color: colors.text }]}>{note.content}</Text>
+                            <Text style={[styles.existingNoteDate, { color: colors.textSecondary }]}>
+                              {new Date(note.created_at).toLocaleDateString('en-US', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })} ({new Date(note.created_at).toLocaleTimeString('en-US', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                              })})
+                            </Text>
+                            {noteAttachments.length > 0 && (
+                              <View style={styles.noteAttachmentsContainer}>
+                                <View style={styles.existingAttachmentsHeader}>
+                                  <AttachmentBadge count={noteAttachments.length} size="small" />
+                                </View>
+                                <View style={styles.attachmentsGrid}>
+                                  {noteAttachments.slice(0, 4).map((file, index) => {
+                                    const isImage = file.type?.startsWith('image/');
+                                    return (
+                                      <TouchableOpacity
+                                        key={index}
+                                        style={styles.attachmentThumbnailWrapper}
+                                        onPress={() => {
+                                          if (isImage) {
+                                            const imageAttachments = noteAttachments.filter(f => f.type?.startsWith('image/'));
+                                            const imageIndex = imageAttachments.findIndex(img => img.id === file.id);
+                                            setSelectedImages(imageAttachments);
+                                            setSelectedImageIndex(imageIndex >= 0 ? imageIndex : 0);
+                                            setImageViewerVisible(true);
+                                          } else {
+                                            Linking.openURL(file.uri);
+                                          }
+                                        }}
+                                        activeOpacity={0.7}
+                                      >
+                                        {isImage ? (
+                                          <Image
+                                            source={{ uri: file.uri }}
+                                            style={styles.existingThumbnailImage}
+                                            resizeMode="cover"
+                                          />
+                                        ) : (
+                                          <View style={styles.existingDocumentThumbnail}>
+                                            <AttachmentThumbnail
+                                              uri={file.uri}
+                                              fileType={file.type}
+                                              fileName={file.name}
+                                              size="small"
+                                            />
+                                          </View>
+                                        )}
+                                        <Text
+                                          style={[styles.thumbnailFileName, { color: colors.text }]}
+                                          numberOfLines={1}
+                                        >
+                                          {file.name}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                  {noteAttachments.length > 4 && (
+                                    <View style={styles.moreAttachmentsIndicator}>
+                                      <Text style={[styles.moreAttachmentsText, { color: colors.textSecondary }]}>
+                                        +{noteAttachments.length - 4}
+                                      </Text>
                                     </View>
                                   )}
-                                  <Text
-                                    style={[styles.thumbnailFileName, { color: colors.text }]}
-                                    numberOfLines={1}
-                                  >
-                                    {file.name}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                            {noteAttachments.length > 4 && (
-                              <View style={styles.moreAttachmentsIndicator}>
-                                <Text style={[styles.moreAttachmentsText, { color: colors.textSecondary }]}>
-                                  +{noteAttachments.length - 4}
-                                </Text>
+                                </View>
                               </View>
                             )}
                           </View>
-                        </View>
-                      )}
+                        );
+                      })}
                     </View>
-                  );
-                })}
-              </View>
-            )}
+                  )}
 
-            {/* Add new note */}
-            <TextInput
-              ref={notesInputRef}
-              style={[styles.textArea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-              value={formData.notes}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}
-              placeholder={existingNotes.length > 0 ? "Add another note..." : "Add notes..."}
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={3}
-            />
+                  {/* Add new note */}
+                  <TextInput
+                    ref={notesInputRef}
+                    style={[styles.textArea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
+                    value={formData.notes}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}
+                    placeholder={existingNotes.length > 0 ? "Add another note..." : "Add notes..."}
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={3}
+                  />
 
-            {/* Attached Files Display for New Note */}
-            {attachedFiles.length > 0 && (
-              <View style={styles.attachmentsContainer}>
-                <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
-                  Attachments ({attachedFiles.length})
-                </Text>
-                <View style={styles.attachmentsGrid}>
-                  {attachedFiles.map((file, index) => (
-                    <View key={index} style={styles.attachmentThumbnailWrapper}>
-                      <AttachmentThumbnail
-                        uri={file.uri}
-                        fileType={file.type}
-                        fileName={file.name}
-                        size="medium"
-                      />
-                      <TouchableOpacity
-                        style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
-                        onPress={() => handleRemoveAttachment(index)}
-                      >
-                        <X size={14} color="#ffffff" />
-                      </TouchableOpacity>
-                      <Text
-                        style={[styles.thumbnailFileName, { color: colors.text }]}
-                        numberOfLines={1}
-                      >
-                        {file.name}
+                  {/* Attached Files Display for New Note */}
+                  {attachedFiles.length > 0 && (
+                    <View style={styles.attachmentsContainer}>
+                      <Text style={[styles.attachmentsLabel, { color: colors.textSecondary }]}>
+                        Attachments ({attachedFiles.length})
                       </Text>
+                      <View style={styles.attachmentsGrid}>
+                        {attachedFiles.map((file, index) => (
+                          <View key={index} style={styles.attachmentThumbnailWrapper}>
+                            <AttachmentThumbnail
+                              uri={file.uri}
+                              fileType={file.type}
+                              fileName={file.name}
+                              size="medium"
+                            />
+                            <TouchableOpacity
+                              style={[styles.removeButton, { backgroundColor: colors.error || '#ef4444' }]}
+                              onPress={() => handleRemoveAttachment(index)}
+                            >
+                              <X size={14} color="#ffffff" />
+                            </TouchableOpacity>
+                            <Text
+                              style={[styles.thumbnailFileName, { color: colors.text }]}
+                              numberOfLines={1}
+                            >
+                              {file.name}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
                     </View>
-                  ))}
+                  )}
                 </View>
-              </View>
-            )}
-          </View>
+              )}
+            </View>
           )}
 
           {/* Google Calendar-style Recurrence Dropdown (always visible for tasks and events when Goal is OFF) */}
@@ -3896,6 +3921,32 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 12,
     marginBottom: 6,
+  },
+  quadrantGrid: {
+    gap: 8,
+  },
+  quadrantRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quadrant: {
+    flex: 1,
+    height: 80,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0,
+    borderColor: 'transparent',
+  },
+  quadrantActive: {
+    borderWidth: 3,
+    borderColor: '#1e3a5f',
+  },
+  quadrantText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   priorityInlineRow: {
     flexDirection: 'row',

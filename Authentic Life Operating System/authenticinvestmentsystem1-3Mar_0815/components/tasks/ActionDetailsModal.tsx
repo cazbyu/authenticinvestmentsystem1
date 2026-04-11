@@ -1,8 +1,9 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator, Image, TextInput, Platform } from 'react-native';
-import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip, Target, Flag, FileText, UserPlus } from 'lucide-react-native';
+import { X, Calendar, CheckSquare, Edit, Trash2, Plus, Paperclip, Target, Flag, FileText, UserPlus, User, Heart } from 'lucide-react-native';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
 import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
+import { EnrichmentChip, chipWrapStyle, ENRICHMENT_CHIP_COLORS } from '@/components/common/EnrichmentChip';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Task } from './TaskCard';
 import { describeRRule } from '@/lib/rruleUtils';
@@ -65,6 +66,18 @@ export function ActionDetailsModal({
   const [noteAttachments, setNoteAttachments] = useState<any[]>([]);
   const [enrichTab, setEnrichTab] = useState<'roles' | 'wellness' | 'goals' | 'priority' | 'notes' | 'delegate'>('roles');
   const [enrichModalVisible, setEnrichModalVisible] = useState(false);
+  // Inline enrichment panels
+  const [inlinePanel, setInlinePanel] = useState<'priority' | 'roles' | 'wellness' | 'goals' | 'notes' | 'delegate' | null>(null);
+  const [allRoles, setAllRoles] = useState<Array<{ id: string; label: string }>>([]);
+  const [allDomains, setAllDomains] = useState<Array<{ id: string; name: string }>>([]);
+  const [allGoals, setAllGoals] = useState<Array<{ id: string; title: string; goal_type: 'twelve_wk_goal' | 'custom_goal' }>>([]);
+  const [allDelegates, setAllDelegates] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [selectedDomainIds, setSelectedDomainIds] = useState<string[]>([]);
+  const [selectedGoalKeys, setSelectedGoalKeys] = useState<Array<{ goal_id: string; goal_type: string }>>([]);
+  const [selectedDelegateId, setSelectedDelegateId] = useState<string | null>(null);
+  const [localIsUrgent, setLocalIsUrgent] = useState<boolean>(false);
+  const [localIsImportant, setLocalIsImportant] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
@@ -79,6 +92,10 @@ export function ActionDetailsModal({
       fetchTaskNotes();
       loadAssociatedItems();
       fetchTaskMetadata();
+      loadEnrichmentData();
+      setInlinePanel(null);
+      setLocalIsUrgent(!!task.is_urgent);
+      setLocalIsImportant(!!task.is_important);
       setIsEditMode(false);
     }
   }, [visible, task?.id]);
@@ -181,6 +198,161 @@ export function ActionDetailsModal({
       console.error('Error fetching metadata:', error);
     } finally {
       setLoadingMetadata(false);
+    }
+  };
+
+  const getParentType = (): 'commitment' | 'event' | 'task' => {
+    const isCommitment = !!((task as any)?.isCommitment || (task as any)?.is_commitment);
+    if (isCommitment) return 'commitment';
+    return task?.type === 'event' ? 'event' : 'task';
+  };
+
+  const loadEnrichmentData = async () => {
+    if (!task?.id) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = (task as any).user_id || user?.id;
+      if (!uid) return;
+      const parentType = getParentType();
+
+      const [
+        rolesRes, roleJoinRes,
+        domRes, domJoinRes,
+        twelveRes, customRes, goalJoinRes,
+        delegatesRes, delegateJoinRes,
+      ] = await Promise.all([
+        supabase.from('0008-ap-roles').select('id, label').eq('user_id', uid).order('label'),
+        supabase.from('0008-ap-universal-roles-join').select('role_id').eq('parent_id', task.id).eq('parent_type', parentType),
+        supabase.from('0008-ap-domains').select('id, name').order('name'),
+        supabase.from('0008-ap-universal-domains-join').select('domain_id').eq('parent_id', task.id).eq('parent_type', parentType),
+        supabase.from('0008-ap-goals-12wk').select('id, title').eq('user_id', uid),
+        supabase.from('0008-ap-goals-custom').select('id, title').eq('user_id', uid),
+        supabase.from('0008-ap-universal-goals-join').select('goal_id, goal_type').eq('parent_id', task.id).eq('parent_type', parentType),
+        supabase.from('0008-ap-delegates').select('id, name').eq('user_id', uid).order('name'),
+        supabase.from('0008-ap-universal-delegates-join').select('delegate_id').eq('parent_id', task.id).eq('parent_type', parentType).maybeSingle(),
+      ]);
+
+      setAllRoles((rolesRes.data ?? []) as any[]);
+      setSelectedRoleIds(((roleJoinRes.data ?? []) as any[]).map(r => r.role_id));
+      setAllDomains((domRes.data ?? []) as any[]);
+      setSelectedDomainIds(((domJoinRes.data ?? []) as any[]).map(r => r.domain_id));
+      const twelve = ((twelveRes.data ?? []) as any[]).map(g => ({ id: g.id, title: g.title, goal_type: 'twelve_wk_goal' as const }));
+      const custom = ((customRes.data ?? []) as any[]).map(g => ({ id: g.id, title: g.title, goal_type: 'custom_goal' as const }));
+      setAllGoals([...twelve, ...custom]);
+      setSelectedGoalKeys(((goalJoinRes.data ?? []) as any[]).map(g => ({ goal_id: g.goal_id, goal_type: g.goal_type })));
+      setAllDelegates((delegatesRes.data ?? []) as any[]);
+      setSelectedDelegateId(((delegateJoinRes.data as any)?.delegate_id) ?? null);
+    } catch (err) {
+      console.error('[ActionDetailsModal] loadEnrichmentData error:', err);
+    }
+  };
+
+  const toggleRoleInline = async (roleId: string) => {
+    if (!task?.id) return;
+    const newIds = selectedRoleIds.includes(roleId)
+      ? selectedRoleIds.filter(x => x !== roleId)
+      : [...selectedRoleIds, roleId];
+    setSelectedRoleIds(newIds);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = (task as any).user_id || user?.id;
+      const parentType = getParentType();
+      await supabase.from('0008-ap-universal-roles-join').delete().eq('parent_id', task.id).eq('parent_type', parentType);
+      if (newIds.length > 0) {
+        await supabase.from('0008-ap-universal-roles-join').insert(
+          newIds.map(id => ({ parent_id: task.id, parent_type: parentType, role_id: id, user_id: uid }))
+        );
+      }
+      await fetchTaskMetadata();
+    } catch (err) {
+      console.error('[ActionDetailsModal] toggleRoleInline error:', err);
+    }
+  };
+
+  const toggleDomainInline = async (domainId: string) => {
+    if (!task?.id) return;
+    const newIds = selectedDomainIds.includes(domainId)
+      ? selectedDomainIds.filter(x => x !== domainId)
+      : [...selectedDomainIds, domainId];
+    setSelectedDomainIds(newIds);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = (task as any).user_id || user?.id;
+      const parentType = getParentType();
+      await supabase.from('0008-ap-universal-domains-join').delete().eq('parent_id', task.id).eq('parent_type', parentType);
+      if (newIds.length > 0) {
+        await supabase.from('0008-ap-universal-domains-join').insert(
+          newIds.map(id => ({ parent_id: task.id, parent_type: parentType, domain_id: id, user_id: uid }))
+        );
+      }
+      await fetchTaskMetadata();
+    } catch (err) {
+      console.error('[ActionDetailsModal] toggleDomainInline error:', err);
+    }
+  };
+
+  const toggleGoalInline = async (g: { id: string; goal_type: 'twelve_wk_goal' | 'custom_goal' }) => {
+    if (!task?.id) return;
+    const exists = selectedGoalKeys.find(s => s.goal_id === g.id && s.goal_type === g.goal_type);
+    const newKeys = exists
+      ? selectedGoalKeys.filter(s => !(s.goal_id === g.id && s.goal_type === g.goal_type))
+      : [...selectedGoalKeys, { goal_id: g.id, goal_type: g.goal_type }];
+    setSelectedGoalKeys(newKeys);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = (task as any).user_id || user?.id;
+      const parentType = getParentType();
+      await supabase.from('0008-ap-universal-goals-join').delete().eq('parent_id', task.id).eq('parent_type', parentType);
+      if (newKeys.length > 0) {
+        await supabase.from('0008-ap-universal-goals-join').insert(
+          newKeys.map(k => ({ parent_id: task.id, parent_type: parentType, goal_id: k.goal_id, goal_type: k.goal_type, user_id: uid }))
+        );
+      }
+    } catch (err) {
+      console.error('[ActionDetailsModal] toggleGoalInline error:', err);
+    }
+  };
+
+  const selectPriorityInline = async (u: boolean, i: boolean) => {
+    if (!task?.id) return;
+    setLocalIsUrgent(u);
+    setLocalIsImportant(i);
+    try {
+      const supabase = getSupabaseClient();
+      const isCommitment = !!((task as any).isCommitment || (task as any).is_commitment);
+      const table = isCommitment ? '0008-ap-commitments' : '0008-ap-tasks';
+      await supabase.from(table)
+        .update({ is_urgent: u, is_important: i, updated_at: new Date().toISOString() })
+        .eq('id', task.id);
+    } catch (err) {
+      console.error('[ActionDetailsModal] selectPriorityInline error:', err);
+    }
+  };
+
+  const toggleDelegateInline = async (delegateId: string) => {
+    if (!task?.id) return;
+    const newId = selectedDelegateId === delegateId ? null : delegateId;
+    setSelectedDelegateId(newId);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = (task as any).user_id || user?.id;
+      const parentType = getParentType();
+      await supabase.from('0008-ap-universal-delegates-join').delete().eq('parent_id', task.id).eq('parent_type', parentType);
+      if (newId) {
+        await supabase.from('0008-ap-universal-delegates-join').insert({
+          parent_id: task.id,
+          parent_type: parentType,
+          delegate_id: newId,
+          user_id: uid,
+        });
+      }
+    } catch (err) {
+      console.error('[ActionDetailsModal] toggleDelegateInline error:', err);
     }
   };
 
@@ -501,24 +673,22 @@ export function ActionDetailsModal({
                 <View style={styles.enrichIconRow}>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('priority'); setEnrichModalVisible(true); }}>
+                    onPress={() => setInlinePanel(inlinePanel === 'priority' ? null : 'priority')}>
                     <Flag size={28} color={
-                      (task.is_urgent && task.is_important) ? '#ef4444' :
-                      (!task.is_urgent && task.is_important) ? '#10b981' :
-                      (task.is_urgent && !task.is_important) ? '#f59e0b' : '#9ca3af'
+                      (localIsUrgent && localIsImportant) ? '#ef4444' :
+                      (!localIsUrgent && localIsImportant) ? '#10b981' :
+                      (localIsUrgent && !localIsImportant) ? '#f59e0b' : '#9ca3af'
                     } />
                     <Text style={styles.enrichIconLabel}>Priority</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                    onPress={() => setInlinePanel(inlinePanel === 'roles' ? null : 'roles')}>
                     <View>
-                      <RoleIcon size={28} color={
-                        (task as any).roles?.length > 0 ? '#16a34a' : '#9ca3af'
-                      } />
-                      {(task as any).roles?.length > 0 && (
+                      <RoleIcon size={28} color={selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'} />
+                      {selectedRoleIds.length > 0 && (
                         <View style={styles.enrichBadge}>
-                          <Text style={styles.enrichBadgeText}>{(task as any).roles.length}</Text>
+                          <Text style={styles.enrichBadgeText}>{selectedRoleIds.length}</Text>
                         </View>
                       )}
                     </View>
@@ -526,14 +696,12 @@ export function ActionDetailsModal({
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                    onPress={() => setInlinePanel(inlinePanel === 'wellness' ? null : 'wellness')}>
                     <View>
-                      <WellnessIcon size={28} color={
-                        (task as any).domains?.length > 0 ? '#16a34a' : '#9ca3af'
-                      } />
-                      {(task as any).domains?.length > 0 && (
+                      <WellnessIcon size={28} color={selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'} />
+                      {selectedDomainIds.length > 0 && (
                         <View style={styles.enrichBadge}>
-                          <Text style={styles.enrichBadgeText}>{(task as any).domains.length}</Text>
+                          <Text style={styles.enrichBadgeText}>{selectedDomainIds.length}</Text>
                         </View>
                       )}
                     </View>
@@ -541,14 +709,12 @@ export function ActionDetailsModal({
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                    onPress={() => setInlinePanel(inlinePanel === 'goals' ? null : 'goals')}>
                     <View>
-                      <GoalIcon size={28} color={
-                        (task as any).goals?.length > 0 ? '#16a34a' : '#9ca3af'
-                      } />
-                      {(task as any).goals?.length > 0 && (
+                      <GoalIcon size={28} color={selectedGoalKeys.length > 0 ? '#16a34a' : '#9ca3af'} />
+                      {selectedGoalKeys.length > 0 && (
                         <View style={styles.enrichBadge}>
-                          <Text style={styles.enrichBadgeText}>{(task as any).goals.length}</Text>
+                          <Text style={styles.enrichBadgeText}>{selectedGoalKeys.length}</Text>
                         </View>
                       )}
                     </View>
@@ -556,50 +722,180 @@ export function ActionDetailsModal({
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('notes'); setEnrichModalVisible(true); }}>
-                    <FileText size={28} color={
-                      (task as any).has_notes ? '#16a34a' : '#9ca3af'
-                    } />
+                    onPress={() => setInlinePanel(inlinePanel === 'notes' ? null : 'notes')}>
+                    <View>
+                      {(() => {
+                        const notesCount = taskNotes.length + allAttachments.length;
+                        return (
+                          <>
+                            <FileText size={28} color={notesCount > 0 ? '#16a34a' : '#9ca3af'} />
+                            {notesCount > 0 && (
+                              <View style={styles.enrichBadge}>
+                                <Text style={styles.enrichBadgeText}>{notesCount}</Text>
+                              </View>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </View>
                     <Text style={styles.enrichIconLabel}>Notes</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('delegate'); setEnrichModalVisible(true); }}>
-                    <UserPlus size={28} color={
-                      (task as any).has_delegates ? '#16a34a' : '#9ca3af'
-                    } />
+                    onPress={() => setInlinePanel(inlinePanel === 'delegate' ? null : 'delegate')}>
+                    <UserPlus size={28} color={selectedDelegateId ? '#16a34a' : '#9ca3af'} />
                     <Text style={styles.enrichIconLabel}>Delegate</Text>
                   </TouchableOpacity>
 
                 </View>
+
+                {/* Inline panels */}
+                {inlinePanel === 'priority' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={styles.quadrantGrid}>
+                      <View style={styles.quadrantRow}>
+                        <TouchableOpacity
+                          onPress={() => selectPriorityInline(true, true)}
+                          style={[styles.quadrant, { backgroundColor: '#ef4444' }, (localIsUrgent && localIsImportant) && styles.quadrantActive]}
+                        >
+                          <Text style={styles.quadrantText}>Urgent &{'\n'}Important</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => selectPriorityInline(false, true)}
+                          style={[styles.quadrant, { backgroundColor: '#10b981' }, (!localIsUrgent && localIsImportant) && styles.quadrantActive]}
+                        >
+                          <Text style={styles.quadrantText}>Important{'\n'}Only</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.quadrantRow}>
+                        <TouchableOpacity
+                          onPress={() => selectPriorityInline(true, false)}
+                          style={[styles.quadrant, { backgroundColor: '#f59e0b' }, (localIsUrgent && !localIsImportant) && styles.quadrantActive]}
+                        >
+                          <Text style={styles.quadrantText}>Urgent{'\n'}Only</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => selectPriorityInline(false, false)}
+                          style={[styles.quadrant, { backgroundColor: '#9ca3af' }, (!localIsUrgent && !localIsImportant) && styles.quadrantActive]}
+                        >
+                          <Text style={styles.quadrantText}>Neither</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {inlinePanel === 'roles' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={chipWrapStyle}>
+                      {allRoles.map(r => {
+                        const isSel = selectedRoleIds.includes(r.id);
+                        return (
+                          <EnrichmentChip
+                            key={r.id}
+                            label={r.label}
+                            selected={isSel}
+                            onPress={() => toggleRoleInline(r.id)}
+                            icon={<User size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                          />
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {inlinePanel === 'wellness' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={chipWrapStyle}>
+                      {allDomains.map(d => {
+                        const isSel = selectedDomainIds.includes(d.id);
+                        return (
+                          <EnrichmentChip
+                            key={d.id}
+                            label={d.name}
+                            selected={isSel}
+                            onPress={() => toggleDomainInline(d.id)}
+                            icon={<Heart size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                          />
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {inlinePanel === 'goals' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={chipWrapStyle}>
+                      {allGoals.map(g => {
+                        const isSel = selectedGoalKeys.some(s => s.goal_id === g.id && s.goal_type === g.goal_type);
+                        return (
+                          <EnrichmentChip
+                            key={`${g.goal_type}-${g.id}`}
+                            label={g.title}
+                            selected={isSel}
+                            onPress={() => toggleGoalInline(g)}
+                            icon={<Target size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                            subtitle={g.goal_type === 'twelve_wk_goal' ? '12wk' : 'Custom'}
+                          />
+                        );
+                      })}
+                      {allGoals.length === 0 && (
+                        <Text style={[styles.emptyText, { color: '#6b7280' }]}>No active goals</Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {inlinePanel === 'notes' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionLabel}>Notes</Text>
+                      <TouchableOpacity
+                        style={styles.addNoteButton}
+                        onPress={() => setAddNoteModalVisible(true)}
+                      >
+                        <Text style={styles.addNoteButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {loadingNotes ? (
+                      <ActivityIndicator size="small" color="#3b82f6" />
+                    ) : taskNotes.length > 0 ? (
+                      <View style={styles.notesContainer}>
+                        {taskNotes.map(note => (
+                          <View key={note.id}>
+                            {renderNoteWithLinks(note.content)}
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.emptyText}>No notes added</Text>
+                    )}
+                  </View>
+                )}
+
+                {inlinePanel === 'delegate' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={chipWrapStyle}>
+                      {allDelegates.map(d => {
+                        const isSel = selectedDelegateId === d.id;
+                        return (
+                          <EnrichmentChip
+                            key={d.id}
+                            label={d.name}
+                            selected={isSel}
+                            onPress={() => toggleDelegateInline(d.id)}
+                            icon={<UserPlus size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                          />
+                        );
+                      })}
+                      {allDelegates.length === 0 && (
+                        <Text style={[styles.emptyText, { color: '#6b7280' }]}>No delegates yet</Text>
+                      )}
+                    </View>
+                  </View>
+                )}
               </View>
             )}
-
-            {/* Body - Notes */}
-            <View style={styles.bodySection}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>Notes</Text>
-                <TouchableOpacity
-                  style={styles.addNoteButton}
-                  onPress={() => setAddNoteModalVisible(true)}
-                >
-                  <Text style={styles.addNoteButtonText}>+</Text>
-                </TouchableOpacity>
-              </View>
-              {loadingNotes ? (
-                <ActivityIndicator size="small" color="#3b82f6" />
-              ) : taskNotes.length > 0 ? (
-                <View style={styles.notesContainer}>
-                  {taskNotes.map(note => (
-                    <View key={note.id}>
-                      {renderNoteWithLinks(note.content)}
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.emptyText}>No notes added</Text>
-              )}
-            </View>
 
             {/* Attachments Gallery */}
             {allAttachments.length > 0 && (
@@ -1317,5 +1613,37 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 9,
     fontWeight: '700',
+  },
+  inlinePanel: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  quadrantGrid: {
+    gap: 8,
+  },
+  quadrantRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quadrant: {
+    flex: 1,
+    height: 80,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0,
+    borderColor: 'transparent',
+  },
+  quadrantActive: {
+    borderWidth: 3,
+    borderColor: '#1e3a5f',
+  },
+  quadrantText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });
