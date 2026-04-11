@@ -708,7 +708,7 @@ export function ActionDetailsModal({
             </View>
 
             {/* Enrichment Row — shown for all items */}
-            {((task as any).user_id || currentUserId) && (
+            {((task as any)?.user_id || currentUserId) && (
               <View style={styles.enrichSection}>
                 <Text style={styles.enrichSectionTitle}>Add Context</Text>
                 <View style={styles.enrichIconRow}>
@@ -1177,19 +1177,19 @@ export function ActionDetailsModal({
       />
 
       {/* Enrichment Modal — open for any item */}
-      {enrichModalVisible && ((task as any).user_id || currentUserId) && (
+      {task && enrichModalVisible && ((task as any)?.user_id || currentUserId) && (
         <CommitmentEnrichmentModal
           visible={enrichModalVisible}
           commitment={{
             id: task.id,
             title: task.title,
-            user_id: (task as any).user_id || currentUserId || '',
+            user_id: (task as any)?.user_id || currentUserId || '',
             is_urgent: task.is_urgent ?? false,
             is_important: task.is_important ?? false,
-            external_recurrence_id: (task as any).external_recurrence_id ?? null,
+            external_recurrence_id: (task as any)?.external_recurrence_id ?? null,
           }}
           initialTab={enrichTab}
-          parentType={(task as any).isCommitment || (task as any).is_commitment ? 'commitment' : 'task'}
+          parentType={(task as any)?.isCommitment || (task as any)?.is_commitment ? 'commitment' : 'task'}
           onClose={() => setEnrichModalVisible(false)}
           onEnrichmentChange={() => {}}
         />
