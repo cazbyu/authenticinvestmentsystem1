@@ -469,11 +469,46 @@ export function useGoogleCalendarSync(isCalendarTabActive: boolean = false) {
       // Track all non-cancelled event IDs for reconciliation
       seenEventIds.push(event.id);
 
-      // Parse event data
-      const date = event.start?.date || event.start?.dateTime?.split('T')[0];
-      const startTime = event.start?.dateTime ? event.start.dateTime.split('T')[1]?.substring(0, 5) : null;
-      const endTime = event.end?.dateTime ? event.end.dateTime.split('T')[1]?.substring(0, 5) : null;
+      // Parse event data — convert Google's ISO dateTime (which includes a timezone
+      // offset or a trailing Z for UTC) into the user's LOCAL wall-clock time, then
+      // store that in the naive `date`/`start_time`/`end_time` columns. Using
+      // string-slicing here would drop the timezone offset and store UTC as-if-local.
+      let date: string;
+      let startTime: string | null = null;
+      let endTime: string | null = null;
       const isAllDay = !event.start?.dateTime;
+
+      if (event.start?.date) {
+        // All-day event: Google returns just YYYY-MM-DD, no time component.
+        date = event.start.date;
+      } else if (event.start?.dateTime) {
+        // Timed event: `new Date(iso)` parses the offset/Z suffix and anchors to UTC
+        // internally. Local-timezone getters (getFullYear/getHours/etc.) then return
+        // values in the runtime's local zone — exactly what we want to store.
+        const startDateObj = new Date(event.start.dateTime);
+        const endDateObj = event.end?.dateTime ? new Date(event.end.dateTime) : startDateObj;
+
+        const yyyy = startDateObj.getFullYear();
+        const mm = String(startDateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(startDateObj.getDate()).padStart(2, '0');
+        date = `${yyyy}-${mm}-${dd}`;
+
+        const fmtLocalTime = (d: Date) => {
+          const h = String(d.getHours()).padStart(2, '0');
+          const m = String(d.getMinutes()).padStart(2, '0');
+          const s = String(d.getSeconds()).padStart(2, '0');
+          return `${h}:${m}:${s}`;
+        };
+        startTime = fmtLocalTime(startDateObj);
+        endTime = fmtLocalTime(endDateObj);
+      } else {
+        // Fallback — valid Google events always have start.date or start.dateTime.
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        date = `${yyyy}-${mm}-${dd}`;
+      }
 
       // Check if exists so we can preserve user-set status/reviewed_at
       const { data: existing } = await supabase
