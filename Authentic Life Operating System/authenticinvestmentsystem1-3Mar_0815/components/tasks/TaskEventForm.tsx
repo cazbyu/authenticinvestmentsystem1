@@ -1806,6 +1806,17 @@ export default function TaskEventForm({
               });
             }}
           >
+            <Image
+              source={
+                type === 'task' ? require('@/assets/images/task-list.png') :
+                type === 'event' ? require('@/assets/images/calendar.png') :
+                require('@/assets/images/reflections-72.png')
+              }
+              style={[
+                styles.typeButtonIcon,
+                { opacity: formData.type === type ? 1 : 0.5 },
+              ]}
+            />
             <Text style={[
               styles.typeButtonText,
               { color: formData.type === type ? '#ffffff' : colors.text }
@@ -3324,13 +3335,22 @@ const styles = StyleSheet.create({
   },
   typeButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  typeButtonIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
   },
   typeButtonText: {
     fontSize: 14,
     fontWeight: '500',
+    textAlign: 'center',
   },
   // Context Banner Styles (Speed Dial)
   contextBanner: {
