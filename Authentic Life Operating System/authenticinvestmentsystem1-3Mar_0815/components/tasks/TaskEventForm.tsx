@@ -331,18 +331,32 @@ export default function TaskEventForm({
 
   useEffect(() => {
     const initialize = async () => {
-      // Mark that we're in initial load phase
-      setIsInitialLoad(true);
-      await fetchFormData();
-      if (initialData) {
-        await loadInitialData();
-        // In edit mode, fetch existing enrichment joins from DB
-        if (mode === 'edit' && initialData.id) {
-          await loadExistingEnrichment();
+      console.log('[initialize] start — mode:', mode, 'initialData?.id:', initialData?.id, 'initialData?.type:', (initialData as any)?.type);
+      try {
+        // Mark that we're in initial load phase
+        setIsInitialLoad(true);
+        await fetchFormData();
+        console.log('[initialize] fetchFormData done');
+        if (initialData) {
+          await loadInitialData();
+          console.log('[initialize] loadInitialData done');
+          // In edit mode, fetch existing enrichment joins from DB
+          if (mode === 'edit' && initialData.id) {
+            console.log('[initialize] calling loadExistingEnrichment');
+            await loadExistingEnrichment();
+            console.log('[initialize] loadExistingEnrichment done');
+          } else {
+            console.log('[initialize] skipping loadExistingEnrichment — mode:', mode, 'id:', initialData?.id);
+          }
+        } else {
+          console.log('[initialize] no initialData, skipping loadInitialData + loadExistingEnrichment');
         }
+      } catch (err) {
+        console.error('[initialize] error:', err);
+      } finally {
+        // Mark initial load as complete
+        setIsInitialLoad(false);
       }
-      // Mark initial load as complete
-      setIsInitialLoad(false);
     };
 
     initialize();
@@ -583,22 +597,37 @@ export default function TaskEventForm({
 
     // Determine reflection mode from database flags
     let reflectionMode: ReflectionMode = 'rose';
-    let determinedType: SchedulingType = initialData.type || 'task';
+    // Strong-priority cascade: explicit initialData.type always wins over content heuristics
+    let determinedType: SchedulingType =
+      initialData.type === 'task' ? 'task' :
+      initialData.type === 'event' ? 'event' :
+      initialData.type === 'rose' ? 'reflection' :
+      initialData.type === 'thorn' ? 'reflection' :
+      initialData.type === 'depositIdea' ? 'reflection' :
+      initialData.type === 'reflection' ? 'reflection' :
+      (initialData.daily_rose || initialData.daily_thorn) ? 'reflection' :
+      (initialData.content && !initialData.due_date && !initialData.start_date) ? 'reflection' :
+      'task';
 
     if (initialData.daily_rose) {
       reflectionMode = 'rose';
-      determinedType = 'reflection';
     } else if (initialData.daily_thorn) {
       reflectionMode = 'thorn';
-      determinedType = 'reflection';
     } else if (initialData.type === 'depositIdea') {
       reflectionMode = 'depositIdea';
-      determinedType = 'reflection';
-    } else if (initialData.content && !initialData.due_date && !initialData.start_date) {
-      // If there's content but no date fields, it's likely a reflection
+    } else if (determinedType === 'reflection') {
       reflectionMode = 'reflection';
-      determinedType = 'reflection';
     }
+    console.log('[loadInitialData] type detection —', {
+      'initialData.type': initialData.type,
+      daily_rose: initialData.daily_rose,
+      daily_thorn: initialData.daily_thorn,
+      has_content: !!initialData.content,
+      has_due_date: !!initialData.due_date,
+      has_start_date: !!initialData.start_date,
+      determinedType,
+      reflectionMode,
+    });
 
     // Build formData, handling both edit mode (with id) and create mode (pre-fill only)
     const newFormData: FormData = {
@@ -639,7 +668,11 @@ export default function TaskEventForm({
   };
 
   const loadExistingEnrichment = async () => {
-    if (!initialData?.id || mode !== 'edit') return;
+    console.log('[loadExistingEnrichment] called — mode:', mode, 'initialData?.id:', initialData?.id);
+    if (!initialData?.id || mode !== 'edit') {
+      console.log('[loadExistingEnrichment] early return — mode:', mode, 'id:', initialData?.id);
+      return;
+    }
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -2143,12 +2176,13 @@ export default function TaskEventForm({
               {/* ADD CONTEXT — 3-button enrichment row for reflection types */}
               <View style={styles.enrichSection}>
                 <Text style={styles.enrichSectionTitle}>Add Context</Text>
-                <View
-                  style={[styles.enrichIconRow, (mode !== 'edit' || !initialData?.id) && { opacity: 0.4 }]}
-                  pointerEvents={mode === 'edit' && initialData?.id ? 'auto' : 'none'}
-                >
+                {(() => { console.log('[render] Block A (reflection) — type:', formData.type, 'inlinePanel:', inlinePanel); return null; })()}
+                <View style={styles.enrichIconRow}>
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('roles'); setEnrichModalVisible(true); }}>
+                    onPress={() => {
+                      console.log('[icon tapped] A Roles — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                      setInlinePanel(inlinePanel === 'roles' ? null : 'roles');
+                    }}>
                     <View>
                       <RoleIcon size={28} color={formData.selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                       {formData.selectedRoleIds.length > 0 && (
@@ -2161,7 +2195,10 @@ export default function TaskEventForm({
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('wellness'); setEnrichModalVisible(true); }}>
+                    onPress={() => {
+                      console.log('[icon tapped] A Wellness — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                      setInlinePanel(inlinePanel === 'wellness' ? null : 'wellness');
+                    }}>
                     <View>
                       <WellnessIcon size={28} color={formData.selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                       {formData.selectedDomainIds.length > 0 && (
@@ -2174,7 +2211,10 @@ export default function TaskEventForm({
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.enrichIconBtn}
-                    onPress={() => { setEnrichTab('goals'); setEnrichModalVisible(true); }}>
+                    onPress={() => {
+                      console.log('[icon tapped] A Goals — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                      setInlinePanel(inlinePanel === 'goals' ? null : 'goals');
+                    }}>
                     <View>
                       <GoalIcon size={28} color={formData.selectedGoalIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                       {formData.selectedGoalIds.length > 0 && (
@@ -2186,8 +2226,99 @@ export default function TaskEventForm({
                     <Text style={styles.enrichIconLabel}>Goals</Text>
                   </TouchableOpacity>
                 </View>
-                {(mode !== 'edit' || !initialData?.id) && (
-                  <Text style={[styles.enrichHelperText, { color: colors.textSecondary }]}>Save first to add context</Text>
+
+                {/* Inline panels for Block A — mirror Block B pattern */}
+                {inlinePanel === 'roles' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={chipWrapStyle}>
+                      {roles.map(r => {
+                        const isSel = formData.selectedRoleIds.includes(r.id);
+                        return (
+                          <EnrichmentChip
+                            key={r.id}
+                            label={r.label}
+                            selected={isSel}
+                            onPress={() => handleMultiSelect('selectedRoleIds', r.id)}
+                            icon={<User size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                          />
+                        );
+                      })}
+                    </View>
+                    {filteredKeyRelationships.length > 0 && (
+                      <>
+                        <Text style={styles.inlinePanelSubLabel}>Key Relationships</Text>
+                        <View style={chipWrapStyle}>
+                          {filteredKeyRelationships.map(kr => {
+                            const isSel = formData.selectedKeyRelationshipIds.includes(kr.id);
+                            return (
+                              <EnrichmentChip
+                                key={kr.id}
+                                label={kr.name}
+                                selected={isSel}
+                                onPress={() => handleMultiSelect('selectedKeyRelationshipIds', kr.id)}
+                                icon={<Heart size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                              />
+                            );
+                          })}
+                        </View>
+                      </>
+                    )}
+                  </View>
+                )}
+
+                {inlinePanel === 'wellness' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={chipWrapStyle}>
+                      {domains.map(d => {
+                        const isSel = formData.selectedDomainIds.includes(d.id);
+                        return (
+                          <EnrichmentChip
+                            key={d.id}
+                            label={d.name}
+                            selected={isSel}
+                            onPress={() => handleMultiSelect('selectedDomainIds', d.id)}
+                            icon={<Heart size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                          />
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {inlinePanel === 'goals' && (
+                  <View style={styles.inlinePanel}>
+                    <View style={chipWrapStyle}>
+                      <EnrichmentChip
+                        label="Link to a goal"
+                        selected={formData.isGoal}
+                        onPress={() => setFormData(prev => ({ ...prev, isGoal: !prev.isGoal }))}
+                        icon={<Target size={16} color={formData.isGoal ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                      />
+                    </View>
+                    {formData.isGoal && (
+                      <>
+                        {availableGoals.length === 0 ? (
+                          <Text style={[styles.emptyGoalsText, { color: colors.textSecondary, marginTop: 8 }]}>No active goals</Text>
+                        ) : (
+                          <View style={[chipWrapStyle, { marginTop: 10 }]}>
+                            {availableGoals.map(g => {
+                              const isSel = formData.selectedGoalIds?.includes(g.id) || formData.selectedGoal?.id === g.id;
+                              return (
+                                <EnrichmentChip
+                                  key={`${g.goal_type}-${g.id}`}
+                                  label={g.title}
+                                  selected={isSel}
+                                  onPress={() => handleGoalPick(g.id)}
+                                  icon={<Target size={16} color={isSel ? ENRICHMENT_CHIP_COLORS.active : ENRICHMENT_CHIP_COLORS.inactive} />}
+                                  subtitle={g.goal_type === '12week' ? '12wk' : 'Custom'}
+                                />
+                              );
+                            })}
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </View>
                 )}
               </View>
 
@@ -2293,13 +2424,18 @@ export default function TaskEventForm({
             </>
           )}
 
+          {/* Diagnostic D: log Block B render decision */}
+          {(() => { console.log('[render] Block B decision — type:', formData.type, 'inlinePanel:', inlinePanel); return null; })()}
           {/* ADD CONTEXT — 6-button enrichment row for task/event */}
           {(formData.type === 'task' || formData.type === 'event') && (
             <View style={styles.enrichSection}>
               <Text style={styles.enrichSectionTitle}>Add Context</Text>
               <View style={styles.enrichIconRow}>
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => setInlinePanel(inlinePanel === 'priority' ? null : 'priority')}>
+                  onPress={() => {
+                    console.log('[icon tapped] B Priority — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                    setInlinePanel(inlinePanel === 'priority' ? null : 'priority');
+                  }}>
                   <Flag size={28} color={
                     formData.isUrgent && formData.isImportant ? '#ef4444' :
                     formData.isImportant ? '#10b981' :
@@ -2309,7 +2445,10 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => setInlinePanel(inlinePanel === 'roles' ? null : 'roles')}>
+                  onPress={() => {
+                    console.log('[icon tapped] B Roles — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                    setInlinePanel(inlinePanel === 'roles' ? null : 'roles');
+                  }}>
                   <View>
                     <RoleIcon size={28} color={formData.selectedRoleIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedRoleIds.length > 0 && (
@@ -2322,7 +2461,10 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => setInlinePanel(inlinePanel === 'wellness' ? null : 'wellness')}>
+                  onPress={() => {
+                    console.log('[icon tapped] B Wellness — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                    setInlinePanel(inlinePanel === 'wellness' ? null : 'wellness');
+                  }}>
                   <View>
                     <WellnessIcon size={28} color={formData.selectedDomainIds.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedDomainIds.length > 0 && (
@@ -2335,7 +2477,10 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => setInlinePanel(inlinePanel === 'goals' ? null : 'goals')}>
+                  onPress={() => {
+                    console.log('[icon tapped] B Goals — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                    setInlinePanel(inlinePanel === 'goals' ? null : 'goals');
+                  }}>
                   <View>
                     <GoalIcon size={28} color={formData.selectedGoalIds?.length > 0 ? '#16a34a' : '#9ca3af'} />
                     {formData.selectedGoalIds?.length > 0 && (
@@ -2372,7 +2517,10 @@ export default function TaskEventForm({
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.enrichIconBtn}
-                  onPress={() => setInlinePanel(inlinePanel === 'delegate' ? null : 'delegate')}>
+                  onPress={() => {
+                    console.log('[icon tapped] B Delegate — inlinePanel was:', inlinePanel, 'formData.type:', formData.type);
+                    setInlinePanel(inlinePanel === 'delegate' ? null : 'delegate');
+                  }}>
                   <UserPlus size={28} color={formData.isDelegated ? '#16a34a' : '#9ca3af'} />
                   <Text style={styles.enrichIconLabel}>Delegate</Text>
                 </TouchableOpacity>
