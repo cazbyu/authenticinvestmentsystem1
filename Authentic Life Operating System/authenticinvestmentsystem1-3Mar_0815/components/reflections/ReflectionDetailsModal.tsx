@@ -433,6 +433,24 @@ export function ReflectionDetailsModal({
             </View>
           </ScrollView>
         </View>
+
+        {/* Enrichment Modal — must be INSIDE pageSheet Modal to stack correctly on iOS */}
+        {enrichModalVisible && reflection?.user_id && (
+          <CommitmentEnrichmentModal
+            visible={enrichModalVisible}
+            commitment={{
+              id: reflection.id,
+              title: reflection.reflection_title || 'Reflection',
+              user_id: reflection.user_id,
+              is_urgent: false,
+              is_important: false,
+            }}
+            initialTab={enrichTab}
+            parentType="reflection"
+            onClose={() => setEnrichModalVisible(false)}
+            onEnrichmentChange={() => {}}
+          />
+        )}
       </Modal>
 
       {/* Follow Through Form Modal */}
@@ -483,24 +501,6 @@ export function ReflectionDetailsModal({
             />
           </Suspense>
         </Modal>
-      )}
-
-      {/* Enrichment Modal */}
-      {enrichModalVisible && reflection?.user_id && (
-        <CommitmentEnrichmentModal
-          visible={enrichModalVisible}
-          commitment={{
-            id: reflection.id,
-            title: reflection.reflection_title || 'Reflection',
-            user_id: reflection.user_id,
-            is_urgent: false,
-            is_important: false,
-          }}
-          initialTab={enrichTab}
-          parentType="reflection"
-          onClose={() => setEnrichModalVisible(false)}
-          onEnrichmentChange={() => {}}
-        />
       )}
 
       {/* Image Viewer Modal */}
