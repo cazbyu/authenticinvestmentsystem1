@@ -1,74 +1,13 @@
-import React, { useMemo, useCallback, memo, useState } from 'react';
+import React, { useMemo, useCallback, memo, useState, useEffect, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
-import { Target, Calendar, Plus, TrendingUp, Check, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Target, Calendar, Plus, TrendingUp, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { GoalProgress } from '@/hooks/useGoalProgress';
 import { parseLocalDate, formatLocalDate } from '@/lib/dateUtils';
+import { DayDot } from './DayDot';
+import { MilestoneSessionRow } from './MilestoneSessionRow';
+import { getMilestonesForGoal, MilestoneSummary } from '@/services/milestoneService';
 
-// Memoized DayDot component for optimal performance
-const DayDot = memo(function DayDot({
-  date,
-  dayName,
-  hasLog,
-  onToggle,
-  onLabelPress,
-  trackingTemplate,
-  disabled
-}: {
-  date: string;
-  dayName: string;
-  hasLog: boolean;
-  onToggle: (date: string) => void;
-  onLabelPress?: (date: string) => void;
-  trackingTemplate?: string | null;
-  disabled: boolean;
-}) {
-  const [isToggling, setIsToggling] = useState(false);
-
-  const handlePress = useCallback(async () => {
-    if (disabled || isToggling) return;
-
-    setIsToggling(true);
-    try {
-      await onToggle(date);
-    } finally {
-      // Small delay to prevent rapid successive toggles
-      setTimeout(() => setIsToggling(false), 300);
-    }
-  }, [date, disabled, isToggling, onToggle]);
-
-  const handleLabelPress = useCallback(() => {
-    if (onLabelPress) onLabelPress(date);
-  }, [date, onLabelPress]);
-
-  return (
-    <View style={styles.dayDotContainer}>
-      {onLabelPress && trackingTemplate ? (
-        <TouchableOpacity
-          onPress={handleLabelPress}
-          hitSlop={{ top: 8, bottom: 4, left: 8, right: 8 }}
-          activeOpacity={0.6}
-        >
-          <Text style={[styles.dayLabelText, styles.dayLabelTappable]}>{dayName}</Text>
-          <View style={styles.dayLabelIndicator} />
-        </TouchableOpacity>
-      ) : (
-        <Text style={styles.dayLabelText}>{dayName}</Text>
-      )}
-      <TouchableOpacity
-        style={[
-          styles.dayDot,
-          hasLog && styles.dayDotCompleted,
-          isToggling && styles.dayDotToggling
-        ]}
-        onPress={handlePress}
-        activeOpacity={disabled ? 1 : 0.7}
-        disabled={disabled || isToggling}
-      >
-        {hasLog && <Check size={12} color="#ffffff" />}
-      </TouchableOpacity>
-    </View>
-  );
-});
+const MilestoneExercisePanel = lazy(() => import('./MilestoneExercisePanel'));
 
 interface WeekData {
   weekNumber: number;
@@ -133,7 +72,33 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   committedTaskIds,
 }: GoalProgressCardProps) {
   const weekActions = weekActionsProp ?? [];
-  
+
+  // ── Milestone state (fetched internally, not via prop) ──
+  const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
+
+  // ── Exercise panel state (null = hidden, object = visible) ──
+  const [exercisePanelState, setExercisePanelState] = useState<{
+    milestoneId: string;
+    taskId: string;
+    milestoneName: string;
+    selectedDate: string;
+    selectedDayLabel: string;
+    completionRule: { type: string; required?: number; of?: number };
+  } | null>(null);
+
+  // Fetch milestones for this goal on mount / when goal changes
+  useEffect(() => {
+    if (!goal?.id || compact) return;
+    let cancelled = false;
+    setMilestonesLoading(true);
+    getMilestonesForGoal(goal.id)
+      .then(data => { if (!cancelled) setMilestones(data); })
+      .catch(err => console.error('[GoalProgressCard] Milestone fetch error:', err))
+      .finally(() => { if (!cancelled) setMilestonesLoading(false); });
+    return () => { cancelled = true; };
+  }, [goal?.id, compact]);
+
   // ADD THIS DEBUG LOG HERE (after weekActions is defined):
   console.log('[GoalProgressCard] Render check:', {
     goalTitle: goal?.title,
@@ -502,6 +467,39 @@ export const GoalProgressCard = memo(function GoalProgressCard({
           </View>
         )}
 
+        {/* Milestone sessions (rendered after action rows) */}
+        {expanded && week && milestones.length > 0 && (
+          <View style={styles.weekActionsSection}>
+            {milestones.map(ms => {
+              const weekDays = generateWeekDays(week.startDate);
+              // Find matching shadow task to get weeklyTarget from week-plan
+              const shadowAction = weekActions.find(a => a.id === ms.task_id);
+              const targetDays = shadowAction?.weeklyTarget ?? 7;
+
+              return (
+                <MilestoneSessionRow
+                  key={ms.milestone_id}
+                  milestone={ms}
+                  weekDays={weekDays}
+                  weekStart={week.startDate}
+                  weekEnd={week.endDate}
+                  targetDays={targetDays}
+                  onDayPress={(date, dayLabel) => {
+                    setExercisePanelState({
+                      milestoneId: ms.milestone_id,
+                      taskId: ms.task_id ?? '',
+                      milestoneName: ms.milestone_name,
+                      selectedDate: date,
+                      selectedDayLabel: dayLabel,
+                      completionRule: ms.completion_rule,
+                    });
+                  }}
+                />
+              );
+            })}
+          </View>
+        )}
+
         {/* Tags */}
         {expanded && (goal.roles?.length > 0 || goal.domains?.length > 0) && (
           <View style={styles.tagsSection}>
@@ -523,6 +521,39 @@ export const GoalProgressCard = memo(function GoalProgressCard({
               </View>
             )}
           </View>
+        )}
+        {/* Milestone Exercise Panel */}
+        {exercisePanelState && (
+          <Suspense fallback={null}>
+            <MilestoneExercisePanel
+              milestoneId={exercisePanelState.milestoneId}
+              taskId={exercisePanelState.taskId}
+              milestoneName={exercisePanelState.milestoneName}
+              selectedDate={exercisePanelState.selectedDate}
+              selectedDayLabel={exercisePanelState.selectedDayLabel}
+              completionRule={exercisePanelState.completionRule}
+              onClose={() => setExercisePanelState(null)}
+              onSaved={async (completed) => {
+                setExercisePanelState(null);
+                // If completion rule met, trigger shadow task completion via existing pipeline
+                if (completed && onToggleCompletion && exercisePanelState.taskId) {
+                  try {
+                    await onToggleCompletion(
+                      exercisePanelState.taskId,
+                      exercisePanelState.selectedDate,
+                      false // not currently completed → mark as completed
+                    );
+                  } catch (err) {
+                    console.error('[GoalProgressCard] Shadow task completion error:', err);
+                  }
+                }
+                // Refresh milestones to update progress bars
+                getMilestonesForGoal(goal.id)
+                  .then(setMilestones)
+                  .catch(err => console.error('[GoalProgressCard] Milestone refresh error:', err));
+              }}
+            />
+          </Suspense>
         )}
       </View>
     </TouchableOpacity>
@@ -836,50 +867,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     justifyContent: 'center',
-  },
-  dayDotContainer: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  dayLabelText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  dayLabelTappable: {
-    color: '#0078d4',
-  },
-  dayLabelIndicator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#0078d4',
-    alignSelf: 'center',
-    marginTop: 1,
-  },
-  dayDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#6b7280',
-  },
-  dayDotCompleted: {
-    backgroundColor: '#1f2937',
-    borderColor: '#1f2937',
-  },
-  dayDotToggling: {
-    opacity: 0.6,
-  },
-  dayDotTouchable: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   editButton: {
     padding: 8,
