@@ -1756,7 +1756,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
           }}
           activeOpacity={0.7}
         >
-          <Plus size={14} color="#6366f1" />
+          <Plus size={14} color="#ffffff" />
           <Text style={styles.addSessionText}>Add Session</Text>
         </TouchableOpacity>
 
@@ -3026,20 +3026,19 @@ liBubbleFill: {
   addSessionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 8,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     marginHorizontal: 16,
-    backgroundColor: '#f5f3ff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    alignSelf: 'flex-start',
+    marginTop: 8,
+    marginBottom: 8,
+    backgroundColor: '#6366f1',
   },
   addSessionText: {
-    fontSize: 13,
+    color: '#ffffff',
+    fontSize: 16,
     fontWeight: '600',
-    color: '#6366f1',
   },
 });
