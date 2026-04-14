@@ -208,8 +208,8 @@ const styles = StyleSheet.create({
     borderColor: '#22c55e',
   },
   dayBubbleMissed: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#ef4444',
+    backgroundColor: '#f3f4f6',
+    borderColor: '#9ca3af',
   },
   dayBubbleLabel: {
     fontSize: 10,
@@ -220,6 +220,6 @@ const styles = StyleSheet.create({
     color: '#16a34a',
   },
   dayBubbleLabelMissed: {
-    color: '#ef4444',
+    color: '#9ca3af',
   },
 });
