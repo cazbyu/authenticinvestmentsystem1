@@ -1730,7 +1730,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
         {milestones.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              WORKOUT SESSIONS
+              SESSIONS
             </Text>
             {milestones.map(ms => {
               // Generate weekDays from currentWeekData
@@ -1753,6 +1753,10 @@ console.log('[DEBUG] completedDays array:', completedDays);
                   weekStart={currentWeekData.startDate}
                   weekEnd={currentWeekData.endDate}
                   targetDays={7}
+                  onEdit={() => {
+                    // Edit session - Session D
+                    console.log('[GoalDetailView] Edit session tapped:', ms.milestone_id);
+                  }}
                   onDayPress={(date, dayLabel) => {
                     setExercisePanelState({
                       milestoneId: ms.milestone_id,
