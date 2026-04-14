@@ -25,6 +25,10 @@ import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/
 import { fetchGoalActionsForWeek, TaskWithLogs } from '@/hooks/fetchGoalActionsForWeek';
 import { useGoals, Timeline } from '@/hooks/useGoals';
 import { GoalJournalView } from './GoalJournalView';
+import { MilestoneSessionRow } from './MilestoneSessionRow';
+import { getMilestonesForGoal, MilestoneSummary } from '@/services/milestoneService';
+
+const CreateMilestoneModal = React.lazy(() => import('./CreateMilestoneModal'));
 
 interface GoalDetailViewProps {
   goal: UnifiedGoal;
@@ -99,6 +103,8 @@ export function GoalDetailView({
   // ActionEffortModal state
   const [showActionEffortModal, setShowActionEffortModal] = useState(false);
   const [editingAction, setEditingAction] = useState<TaskWithLogs | null>(null);
+  const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [showCreateMilestone, setShowCreateMilestone] = useState(false);
 
   // EditGoalModal state
   const [showEditGoalModal, setShowEditGoalModal] = useState(false);
@@ -116,6 +122,17 @@ export function GoalDetailView({
 
   // Get createTaskWithWeekPlan from useGoals hook
   const { createTaskWithWeekPlan } = useGoals();
+
+  // Fetch milestones for this goal
+  useEffect(() => {
+    if (!goal?.id) return;
+    getMilestonesForGoal(goal.id)
+      .then(data => {
+        console.log('[GoalDetailView] Milestones fetched:', goal.id, JSON.stringify(data));
+        setMilestones(data);
+      })
+      .catch(err => console.error('[GoalDetailView] Milestone fetch error:', err));
+  }, [goal?.id]);
 
   // Ideas tab state
   const [ideas, setIdeas] = useState<DepositIdea[]>([]);
@@ -1694,6 +1711,55 @@ console.log('[DEBUG] completedDays array:', completedDays);
           </View>
         )}
 
+        {/* Workout Sessions */}
+        {milestones.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              WORKOUT SESSIONS
+            </Text>
+            {milestones.map(ms => {
+              // Generate weekDays from currentWeekData
+              const days = [];
+              const start = parseLocalDate(currentWeekData.startDate);
+              for (let i = 0; i < 7; i++) {
+                const day = new Date(start);
+                day.setDate(start.getDate() + i);
+                days.push({
+                  date: formatLocalDate(day),
+                  dayName: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day.getDay()],
+                  dayOfWeek: day.getDay(),
+                });
+              }
+              return (
+                <MilestoneSessionRow
+                  key={ms.milestone_id}
+                  milestone={ms}
+                  weekDays={days}
+                  weekStart={currentWeekData.startDate}
+                  weekEnd={currentWeekData.endDate}
+                  targetDays={7}
+                  onDayPress={(date, dayLabel) => {
+                    // Exercise panel will be handled in a future session
+                  }}
+                />
+              );
+            })}
+          </View>
+        )}
+
+        {/* Add Session button */}
+        <TouchableOpacity
+          style={styles.addSessionButton}
+          onPress={() => {
+            if (!timeline) return;
+            setShowCreateMilestone(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Plus size={14} color="#6366f1" />
+          <Text style={styles.addSessionText}>Add Session</Text>
+        </TouchableOpacity>
+
         {oneTimeActions.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -2224,6 +2290,23 @@ console.log('[DEBUG] completedDays array:', completedDays);
             date={activityLogState.date}
             templateType={activityLogState.templateType}
             dataSchema={activityLogState.dataSchema}
+          />
+        </Suspense>
+      )}
+      {showCreateMilestone && timeline && (
+        <Suspense fallback={null}>
+          <CreateMilestoneModal
+            visible={showCreateMilestone}
+            onClose={() => setShowCreateMilestone(false)}
+            onCreated={() => {
+              setShowCreateMilestone(false);
+              getMilestonesForGoal(goal.id)
+                .then(setMilestones)
+                .catch(err => console.error('[GoalDetailView] Milestone refresh error:', err));
+            }}
+            goal={goal}
+            timeline={timeline}
+            currentWeekNumber={currentWeekData?.weekNumber ?? 1}
           />
         </Suspense>
       )}
@@ -2939,5 +3022,24 @@ liBubbleFill: {
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  addSessionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    marginHorizontal: 16,
+    backgroundColor: '#f5f3ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e7ff',
+    alignSelf: 'flex-start',
+  },
+  addSessionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6366f1',
   },
 });
