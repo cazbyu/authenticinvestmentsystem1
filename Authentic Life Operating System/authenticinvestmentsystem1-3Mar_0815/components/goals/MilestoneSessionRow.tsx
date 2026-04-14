@@ -1,8 +1,8 @@
 // components/goals/MilestoneSessionRow.tsx
 import React, { memo, useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Dumbbell } from 'lucide-react-native';
-import { DayDot } from './DayDot';
+import { formatLocalDate } from '@/lib/dateUtils';
 import { getMilestoneCompletionsForWeek, MilestoneSummary } from '@/services/milestoneService';
 
 interface MilestoneSessionRowProps {
@@ -23,6 +23,7 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
   targetDays,
 }: MilestoneSessionRowProps) {
   const [completedDates, setCompletedDates] = useState<string[]>([]);
+  const today = formatLocalDate(new Date());
 
   useEffect(() => {
     let cancelled = false;
@@ -87,26 +88,32 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
         />
       </View>
 
-      {/* Day dots */}
+      {/* Day bubbles — matches liBubble pattern from GoalDetailView */}
       <View style={styles.dayDotsRow}>
-        {weekDays.map(day => {
-          const hasLog = completedDates.includes(day.date);
-          const dayLabel = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day.dayOfWeek];
+        {weekDays.map((day) => {
+          const isCompleted = completedDates.includes(day.date);
+          const isPast = day.date < today;
+          const isMissed = isPast && !isCompleted;
 
           return (
-            /* onToggle opens the exercise panel, not a direct completion toggle.
-               Milestone circles are driven by exercise logging — DayDot is reused
-               for visual consistency only. The parent handles completion state. */
-            <DayDot
+            <TouchableOpacity
               key={day.date}
-              date={day.date}
-              dayName={day.dayName}
-              hasLog={hasLog}
-              onToggle={(date: string) => {
-                onDayPress(date, dayLabel);
-              }}
-              disabled={false}
-            />
+              onPress={() => onDayPress(day.date, day.dayName)}
+              activeOpacity={0.7}
+              style={[
+                styles.dayBubble,
+                isCompleted && styles.dayBubbleCompleted,
+                isMissed && styles.dayBubbleMissed,
+              ]}
+            >
+              <Text style={[
+                styles.dayBubbleLabel,
+                isCompleted && styles.dayBubbleLabelCompleted,
+                isMissed && styles.dayBubbleLabelMissed,
+              ]}>
+                {day.dayName.slice(0, 1)}
+              </Text>
+            </TouchableOpacity>
           );
         })}
       </View>
@@ -182,7 +189,37 @@ const styles = StyleSheet.create({
   },
   dayDotsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 0,
+  },
+  dayBubble: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#374151',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  dayBubbleCompleted: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+  },
+  dayBubbleMissed: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+  },
+  dayBubbleLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  dayBubbleLabelCompleted: {
+    color: '#16a34a',
+  },
+  dayBubbleLabelMissed: {
+    color: '#ef4444',
   },
 });
