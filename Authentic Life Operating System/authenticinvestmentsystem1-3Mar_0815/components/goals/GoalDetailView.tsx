@@ -1432,7 +1432,12 @@ const scheduledDays = hasSpecificDays
                     isCompleted && [styles.liBubbleCompleted, { backgroundColor: colors.primary, borderColor: colors.primary }],
                     !isScheduled && [styles.liBubbleDisabled, { backgroundColor: colors.border + '40' }],
                   ]}>
-                    {isCompleted && <View style={styles.liBubbleFill} />}
+                    <Text style={[
+                      styles.liBubbleLabel,
+                      isCompleted && styles.liBubbleLabelCompleted,
+                    ]}>
+                      {label.slice(0, 1)}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -1569,12 +1574,13 @@ console.log('[DEBUG] completedDays array:', completedDays);
                     hasSpecificDays && isAvailable && !isCompleted && !isMissed && styles.liBubbleScheduled,
                     !isAvailable && styles.liBubbleDisabled,
                   ]}>
-                    {isCompleted && (
-                      <Check size={16} color="#22c55e" strokeWidth={3} />
-                    )}
-                    {isMissed && (
-                      <X size={16} color="#ef4444" strokeWidth={3} />
-                    )}
+                    <Text style={[
+                      styles.liBubbleLabel,
+                      isCompleted && styles.liBubbleLabelCompleted,
+                      isMissed && styles.liBubbleLabelMissed,
+                    ]}>
+                      {label.slice(0, 1)}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -2682,15 +2688,26 @@ liBubbleCompleted: {
   borderColor: '#22c55e',
 },
 liBubbleMissed: {
-  backgroundColor: '#fee2e2',
-  borderColor: '#ef4444',
+  backgroundColor: '#f3f4f6',
+  borderColor: '#9ca3af',
 },
 liBubbleDisabled: {
   opacity: 0.3,
   borderColor: '#d1d5db',
 },
 liBubbleFill: {
-  // No longer used - we use icons now
+  // No longer used - we use letters now
+},
+liBubbleLabel: {
+  fontSize: 10,
+  fontWeight: '600',
+  color: '#374151',
+},
+liBubbleLabelCompleted: {
+  color: '#16a34a',
+},
+liBubbleLabelMissed: {
+  color: '#9ca3af',
 },
   liCount: {
     fontSize: 14,
