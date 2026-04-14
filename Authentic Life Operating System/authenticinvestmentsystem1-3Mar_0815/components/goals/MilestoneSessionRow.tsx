@@ -12,6 +12,7 @@ interface MilestoneSessionRowProps {
   weekEnd: string;
   onDayPress: (date: string, dayLabel: string) => void;
   targetDays: number;
+  onEdit?: () => void;
 }
 
 export const MilestoneSessionRow = memo(function MilestoneSessionRow({
@@ -21,6 +22,7 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
   weekEnd,
   onDayPress,
   targetDays,
+  onEdit,
 }: MilestoneSessionRowProps) {
   const [completedDates, setCompletedDates] = useState<string[]>([]);
   const today = formatLocalDate(new Date());
@@ -39,21 +41,9 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
 
   const completedCount = completedDates.length;
 
-  const getProgressColor = useCallback((actual: number, target: number) => {
-    const pct = target > 0 ? (actual / target) * 100 : 0;
-    if (pct >= 85) return '#16a34a';
-    if (pct >= 60) return '#eab308';
-    return '#dc2626';
-  }, []);
-
   const progressPct = useMemo(() => {
     return targetDays > 0 ? Math.min(100, (completedCount / targetDays) * 100) : 0;
   }, [completedCount, targetDays]);
-
-  const progressColor = useMemo(
-    () => getProgressColor(completedCount, targetDays),
-    [completedCount, targetDays, getProgressColor]
-  );
 
   return (
     <View style={styles.container}>
@@ -69,12 +59,13 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
           </Text>
         </View>
         <View style={styles.headerRight}>
-          <Text style={styles.exerciseCount}>
-            {milestone.exercise_count} {milestone.exercise_count === 1 ? 'exercise' : 'exercises'}
-          </Text>
-          <Text style={styles.count}>
-            {completedCount}/{targetDays}
-          </Text>
+          <Text style={styles.pctText}>{Math.round(progressPct)}%</Text>
+          <Text style={styles.countText}>{completedCount}/{targetDays}</Text>
+          {onEdit && (
+            <TouchableOpacity onPress={onEdit} activeOpacity={0.7}>
+              <Text style={styles.editText}>Edit</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -83,7 +74,7 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
         <View
           style={[
             styles.progressFill,
-            { width: `${progressPct}%`, backgroundColor: progressColor },
+            { width: `${progressPct}%` },
           ]}
         />
       </View>
@@ -167,25 +158,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  exerciseCount: {
-    fontSize: 11,
-    color: '#9ca3af',
-  },
-  count: {
-    fontSize: 12,
+  pctText: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#6b7280',
   },
+  countText: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  editText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
   progressBar: {
-    height: 3,
+    height: 8,
     backgroundColor: '#f3f4f6',
-    borderRadius: 1.5,
+    borderRadius: 4,
     marginBottom: 8,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 1.5,
+    borderRadius: 4,
+    backgroundColor: '#6366f1',
   },
   dayDotsRow: {
     flexDirection: 'row',
