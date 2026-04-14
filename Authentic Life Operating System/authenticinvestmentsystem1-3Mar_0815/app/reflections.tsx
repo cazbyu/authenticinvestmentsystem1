@@ -89,7 +89,7 @@ export default function ReflectionsScreen() {
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
       const { data: tasks, error: tasksError } = await supabase
-        .from('0008-ap-tasks')
+        .from('v_user_tasks')
         .select('*')
         .eq('user_id', user.id)
         .is('deleted_at', null)

@@ -256,7 +256,7 @@ const { isConnected, isSyncing, syncNow, availableCalendars } = useGoogleCalenda
       if (!user) return;
 
       const { data, error } = await supabase
-        .from('0008-ap-tasks')
+        .from('v_user_tasks')
         .select(`
           id, title, type, due_date, start_date, end_date, start_time, end_time,
           is_all_day, is_anytime, is_urgent, is_important,

@@ -541,7 +541,7 @@ export default function DailyFlowScreen() {
 
       // Load ALL tasks due today or overdue (not just urgent)
       const { data, error } = await supabase
-        .from('0008-ap-tasks')
+        .from('v_user_tasks')
         .select('*')
         .eq('user_id', userId)
         .eq('type', 'task')
@@ -856,7 +856,7 @@ export default function DailyFlowScreen() {
       const today = toLocalISOString(new Date()).split('T')[0];
 
       const { data, error } = await supabase
-        .from('0008-ap-tasks')
+        .from('v_user_tasks')
         .select('*')
         .eq('user_id', userId)
         .eq('type', 'task')
@@ -985,7 +985,7 @@ export default function DailyFlowScreen() {
       const today = toLocalISOString(new Date()).split('T')[0];
 
       const { count, error } = await supabase
-        .from('0008-ap-tasks')
+        .from('v_user_tasks')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', uid)
         .eq('type', 'task')

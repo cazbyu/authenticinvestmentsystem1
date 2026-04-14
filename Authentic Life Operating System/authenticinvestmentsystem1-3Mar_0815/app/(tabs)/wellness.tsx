@@ -197,7 +197,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
         // Now fetch only the tasks that have this domain
         const { data: tasksData, error: tasksError } = await supabase
-          .from('0008-ap-tasks')
+          .from('v_user_tasks')
           .select('*, custom_timeline_id')
           .eq('user_id', user.id)
           .in('id', domainTaskIds)
