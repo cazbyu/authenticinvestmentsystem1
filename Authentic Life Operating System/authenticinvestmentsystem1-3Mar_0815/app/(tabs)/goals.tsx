@@ -1474,6 +1474,14 @@ export default function Goals() {
                   onDeleteAction={handleDeleteAction}
                   onToggleExpanded={() => toggleGoalExpanded(goal.id)}
                   committedTaskIds={committedTaskIds}
+                  timeline={selectedTimeline}
+                  currentWeekNumber={currentWeek?.week_number ?? 1}
+                  onRefresh={async () => {
+                    if (selectedTimeline) {
+                      const newGoals = await fetchTimelineGoals(selectedTimeline);
+                      await fetchWeekActions(newGoals);
+                    }
+                  }}
                 />
               );
             }}
