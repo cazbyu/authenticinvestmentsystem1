@@ -116,9 +116,11 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',
@@ -149,10 +151,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1f2937',
-    flex: 1,
   },
   headerRight: {
     flexDirection: 'row',

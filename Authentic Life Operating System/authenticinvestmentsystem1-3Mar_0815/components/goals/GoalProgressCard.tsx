@@ -103,7 +103,12 @@ export const GoalProgressCard = memo(function GoalProgressCard({
     let cancelled = false;
     setMilestonesLoading(true);
     getMilestonesForGoal(goal.id)
-      .then(data => { if (!cancelled) setMilestones(data); })
+      .then(data => {
+        if (!cancelled) {
+          console.log('[GoalProgressCard] Milestones fetched for goal:', goal.id, goal.title, 'Result:', JSON.stringify(data));
+          setMilestones(data);
+        }
+      })
       .catch(err => console.error('[GoalProgressCard] Milestone fetch error:', err))
       .finally(() => { if (!cancelled) setMilestonesLoading(false); });
     return () => { cancelled = true; };
