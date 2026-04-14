@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 const ActivityLogModal = React.lazy(() => import('./ActivityLogModal'));
+const MilestoneExercisePanel = React.lazy(() => import('./MilestoneExercisePanel'));
 import { Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare, Calendar as CalendarIcon, Check } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
@@ -105,6 +106,14 @@ export function GoalDetailView({
   const [editingAction, setEditingAction] = useState<TaskWithLogs | null>(null);
   const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
   const [showCreateMilestone, setShowCreateMilestone] = useState(false);
+  const [exercisePanelState, setExercisePanelState] = useState<{
+    milestoneId: string;
+    taskId: string;
+    milestoneName: string;
+    selectedDate: string;
+    selectedDayLabel: string;
+    completionRule: { type: string; required?: number; of?: number };
+  } | null>(null);
 
   // EditGoalModal state
   const [showEditGoalModal, setShowEditGoalModal] = useState(false);
@@ -1739,7 +1748,14 @@ console.log('[DEBUG] completedDays array:', completedDays);
                   weekEnd={currentWeekData.endDate}
                   targetDays={7}
                   onDayPress={(date, dayLabel) => {
-                    // Exercise panel will be handled in a future session
+                    setExercisePanelState({
+                      milestoneId: ms.milestone_id,
+                      taskId: ms.task_id,
+                      milestoneName: ms.milestone_name,
+                      selectedDate: date,
+                      selectedDayLabel: dayLabel,
+                      completionRule: ms.completion_rule,
+                    });
                   }}
                 />
               );
@@ -2307,6 +2323,25 @@ console.log('[DEBUG] completedDays array:', completedDays);
             goal={goal}
             timeline={timeline}
             currentWeekNumber={currentWeekData?.weekNumber ?? 1}
+          />
+        </Suspense>
+      )}
+      {exercisePanelState && (
+        <Suspense fallback={null}>
+          <MilestoneExercisePanel
+            milestoneId={exercisePanelState.milestoneId}
+            taskId={exercisePanelState.taskId}
+            milestoneName={exercisePanelState.milestoneName}
+            selectedDate={exercisePanelState.selectedDate}
+            selectedDayLabel={exercisePanelState.selectedDayLabel}
+            completionRule={exercisePanelState.completionRule}
+            onClose={() => setExercisePanelState(null)}
+            onSaved={(completed) => {
+              setExercisePanelState(null);
+              getMilestonesForGoal(goal.id)
+                .then(setMilestones)
+                .catch(err => console.error('[GoalDetailView] Milestone refresh error:', err));
+            }}
           />
         </Suspense>
       )}
