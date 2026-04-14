@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform }
 import { Target, Calendar, Plus, TrendingUp, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { GoalProgress } from '@/hooks/useGoalProgress';
 import { parseLocalDate, formatLocalDate } from '@/lib/dateUtils';
+import { Timeline } from '@/hooks/useGoals';
 import { DayDot } from './DayDot';
 import { MilestoneSessionRow } from './MilestoneSessionRow';
 import { getMilestonesForGoal, MilestoneSummary } from '@/services/milestoneService';
 
 const MilestoneExercisePanel = lazy(() => import('./MilestoneExercisePanel'));
+const CreateMilestoneModal = lazy(() => import('./CreateMilestoneModal'));
 
 interface WeekData {
   weekNumber: number;
@@ -50,6 +52,9 @@ interface GoalProgressCardProps {
   onDeleteAction?: (actionId: string, weekNumber: number) => void; // New prop for deleting actions
   onToggleExpanded?: () => void; // New prop for toggling collapse/expand
   committedTaskIds?: Set<string>; // Today's contract committed task IDs
+  timeline?: Timeline | null;
+  currentWeekNumber?: number;
+  onRefresh?: () => void;
 }
 
 export const GoalProgressCard = memo(function GoalProgressCard({
@@ -70,6 +75,9 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   onDeleteAction,
   onToggleExpanded,
   committedTaskIds,
+  timeline,
+  currentWeekNumber,
+  onRefresh,
 }: GoalProgressCardProps) {
   const weekActions = weekActionsProp ?? [];
 
@@ -86,6 +94,8 @@ export const GoalProgressCard = memo(function GoalProgressCard({
     selectedDayLabel: string;
     completionRule: { type: string; required?: number; of?: number };
   } | null>(null);
+
+  const [showCreateMilestone, setShowCreateMilestone] = useState(false);
 
   // Fetch milestones for this goal on mount / when goal changes
   useEffect(() => {
@@ -467,8 +477,8 @@ export const GoalProgressCard = memo(function GoalProgressCard({
           </View>
         )}
 
-        {/* Milestone sessions (rendered after action rows) */}
-        {expanded && week && milestones.length > 0 && (
+        {/* Milestone sessions + Add Session button */}
+        {expanded && week && (
           <View style={styles.weekActionsSection}>
             {milestones.map(ms => {
               const weekDays = generateWeekDays(week.startDate);
@@ -497,6 +507,19 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                 />
               );
             })}
+
+            {/* Add Session button */}
+            <TouchableOpacity
+              style={styles.addSessionButton}
+              onPress={() => {
+                if (!timeline) return;
+                setShowCreateMilestone(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Plus size={14} color="#6366f1" />
+              <Text style={styles.addSessionText}>Add Session</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -521,6 +544,26 @@ export const GoalProgressCard = memo(function GoalProgressCard({
               </View>
             )}
           </View>
+        )}
+        {/* Create Milestone Modal */}
+        {showCreateMilestone && timeline && (
+          <Suspense fallback={null}>
+            <CreateMilestoneModal
+              visible={showCreateMilestone}
+              onClose={() => setShowCreateMilestone(false)}
+              onCreated={() => {
+                setShowCreateMilestone(false);
+                // Refresh milestones list
+                getMilestonesForGoal(goal.id)
+                  .then(setMilestones)
+                  .catch(err => console.error('[GoalProgressCard] Milestone refresh error:', err));
+                onRefresh?.();
+              }}
+              goal={goal}
+              timeline={timeline}
+              currentWeekNumber={currentWeekNumber ?? 1}
+            />
+          </Suspense>
         )}
         {/* Milestone Exercise Panel */}
         {exercisePanelState && (
@@ -885,5 +928,23 @@ const styles = StyleSheet.create({
   goalTotalScoreText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  addSessionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    backgroundColor: '#f5f3ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e7ff',
+    alignSelf: 'flex-start',
+  },
+  addSessionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6366f1',
   },
 });

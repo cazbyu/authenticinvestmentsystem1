@@ -163,7 +163,7 @@ export default function Dashboard() {
       const endStr = now.toISOString();
 
       const { data: tasksData } = await supabase
-        .from('0008-ap-tasks')
+        .from('v_user_tasks')
         .select('id, is_urgent, is_important')
         .eq('user_id', user.id)
         .eq('status', 'completed')
@@ -287,7 +287,7 @@ export default function Dashboard() {
         // Fetch all pending/in-progress tasks directly from the tasks table
         // This includes both recurring and non-recurring tasks
         const { data: tasksData, error: tasksError } = await supabase
-          .from('0008-ap-tasks')
+          .from('v_user_tasks')
           .select('*')
           .eq('user_id', user.id)
           .in('status', ['pending', 'in_progress'])
