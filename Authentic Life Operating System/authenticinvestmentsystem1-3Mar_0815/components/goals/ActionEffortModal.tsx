@@ -19,6 +19,8 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { Timeline } from '@/hooks/useGoals';
 import { TEMPLATE_TYPES, TEMPLATE_CONFIGS, TemplateType } from '@/lib/activityTemplates';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
+import { ExerciseFormRow, ExerciseFormData } from '@/components/goals/ExerciseFormRow';
+import { createMilestone, addExerciseToMilestone } from '@/services/milestoneService';
 import {
   getDefaultStartTime,
   getDefaultEndTime,
@@ -133,6 +135,11 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   const [newCategoryText, setNewCategoryText] = useState('');
   const [trackingExpanded, setTrackingExpanded] = useState(false);
 
+  // Exercise builder state (workout template)
+  const [exercises, setExercises] = useState<ExerciseFormData[]>([]);
+  const [completionRule, setCompletionRule] = useState<'all' | 'threshold'>('all');
+  const [completionThreshold, setCompletionThreshold] = useState<number>(1);
+
   // Attachment state (matching TaskEventForm pattern)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
@@ -232,6 +239,9 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setDataSchemaCategories([]);
     setNewCategoryText('');
     setTrackingExpanded(false);
+    setExercises([]);
+    setCompletionRule('all');
+    setCompletionThreshold(1);
 
     // Reset collapsed states
     setDomainsExpanded(false);
@@ -699,12 +709,57 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         taskData.type = 'task';
       }
 
-      console.log('[ActionEffortModal] About to call createTaskWithWeekPlan', JSON.stringify(taskData, null, 2));
-      await createTaskWithWeekPlan(taskData, timeline);
+      console.log('[ActionEffortModal] About to save', JSON.stringify(taskData, null, 2));
 
-      console.log('[ActionEffortModal] Task saved successfully, closing modal');
+      if (trackingTemplate === 'workout' && exercises.filter(e => e.name.trim()).length > 0) {
+        // Workout template with exercises — create milestone instead of regular task
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        const completionRuleJson = completionRule === 'all'
+          ? { type: 'all' }
+          : { type: 'threshold', required: completionThreshold, of: exercises.length };
+
+        const milestoneId = await createMilestone({
+          userId: user.id,
+          goalId: goal!.id,
+          name: taskData.title,
+          milestoneType: 'workout_session',
+          completionRule: completionRuleJson,
+          recurrenceRule: recurrenceRule,
+          targetDays: targetDays,
+          timelineId: timeline.id,
+          timelineType: timeline.source === 'global' ? 'global' : 'custom',
+          weekNumberStart: Math.min(...selectedWeeks),
+        });
+
+        // Add exercises in sequence
+        for (const ex of exercises) {
+          if (ex.name.trim()) {
+            await addExerciseToMilestone(user.id, milestoneId, {
+              name: ex.name.trim(),
+              muscle_group: ex.muscle_group || null,
+              exercise_type: ex.exercise_type,
+              target_sets: ex.target_sets,
+              target_reps: ex.target_reps,
+              target_value: ex.target_value,
+              unit: ex.unit,
+              sort_order: ex.sort_order,
+            });
+          }
+        }
+      } else {
+        // Normal task creation for all other templates
+        await createTaskWithWeekPlan(taskData, timeline);
+      }
+
+      console.log('[ActionEffortModal] Save successful, closing modal');
       onClose();
-      Alert.alert('Success', `Action ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
+      Alert.alert('Success', trackingTemplate === 'workout' && exercises.filter(e => e.name.trim()).length > 0
+        ? 'Workout session created successfully'
+        : `Action ${mode === 'edit' ? 'updated' : 'created'} successfully!`
+      );
     } catch (error) {
       console.error('Error saving action:', error);
       Alert.alert('Error', (error as Error).message || 'Failed to save action.');
@@ -1076,10 +1131,91 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                         })}
                       </View>
 
-                      {/* Category configuration - shown when template has a categoryField or is checklist */}
-                      {trackingTemplate && (
+                      {trackingTemplate === 'workout' ? (
+                        // Exercise builder replaces category config for workout template
+                        <View style={styles.exerciseBuilderContainer}>
+                          {/* Completion rule */}
+                          <Text style={styles.fieldLabel}>COUNTS AS DONE WHEN</Text>
+                          <View style={styles.completionRuleRow}>
+                            <TouchableOpacity
+                              style={[styles.completionChip, completionRule === 'all' && styles.completionChipActive]}
+                              onPress={() => setCompletionRule('all')}
+                            >
+                              <Text style={[styles.completionChipText, completionRule === 'all' && styles.completionChipTextActive]}>
+                                All exercises
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.completionChip, completionRule === 'threshold' && styles.completionChipActive]}
+                              onPress={() => setCompletionRule('threshold')}
+                            >
+                              <Text style={[styles.completionChipText, completionRule === 'threshold' && styles.completionChipTextActive]}>
+                                Any N of {exercises.length || '—'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          {completionRule === 'threshold' && (
+                            <View style={styles.thresholdStepper}>
+                              <TouchableOpacity
+                                style={styles.stepperButton}
+                                onPress={() => setCompletionThreshold(prev => Math.max(1, prev - 1))}
+                                disabled={completionThreshold <= 1}
+                              >
+                                <Text style={styles.stepperButtonText}>−</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.stepperValue}>{completionThreshold}</Text>
+                              <TouchableOpacity
+                                style={styles.stepperButton}
+                                onPress={() => setCompletionThreshold(prev => Math.min(Math.max(exercises.length, 1), prev + 1))}
+                                disabled={completionThreshold >= Math.max(exercises.length, 1)}
+                              >
+                                <Text style={styles.stepperButtonText}>+</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.stepperLabel}>of {exercises.length || '—'} exercises</Text>
+                            </View>
+                          )}
+
+                          {/* Exercise list */}
+                          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>EXERCISES</Text>
+                          {exercises.map((ex, i) => (
+                            <ExerciseFormRow
+                              key={i}
+                              index={i}
+                              exercise={ex}
+                              onChange={(index, updated) => {
+                                setExercises(prev => prev.map((e, j) => j === index ? updated : e));
+                              }}
+                              onDelete={(index) => {
+                                setExercises(prev =>
+                                  prev.filter((_, j) => j !== index).map((e, j) => ({ ...e, sort_order: j }))
+                                );
+                              }}
+                            />
+                          ))}
+
+                          <TouchableOpacity
+                            style={styles.addExerciseButton}
+                            onPress={() => setExercises(prev => [...prev, {
+                              name: '',
+                              muscle_group: '',
+                              exercise_type: 'reps',
+                              target_sets: null,
+                              target_reps: null,
+                              target_value: null,
+                              unit: null,
+                              sort_order: prev.length,
+                            }])}
+                            activeOpacity={0.7}
+                          >
+                            <PlusIcon size={16} color="#6366f1" />
+                            <Text style={styles.addExerciseText}>Add Exercise</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : trackingTemplate && (
                         TEMPLATE_CONFIGS[trackingTemplate].categoryField || trackingTemplate === 'checklist'
-                      ) && (
+                      ) ? (
+                        // Original category config for all other templates
                         <View style={styles.categoryConfig}>
                           <Text style={styles.categoryConfigLabel}>
                             {trackingTemplate === 'checklist' ? 'Checklist Items' : 'Categories'}
@@ -1118,8 +1254,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                               placeholder={
                                 trackingTemplate === 'checklist'
                                   ? 'e.g., Warm-up'
-                                  : trackingTemplate === 'workout'
-                                  ? 'e.g., Legs'
                                   : trackingTemplate === 'financial'
                                   ? 'e.g., Savings'
                                   : 'Add category...'
@@ -1152,7 +1286,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                             </TouchableOpacity>
                           </View>
                         </View>
-                      )}
+                      ) : null}
                     </View>
                   )}
                 </View>
@@ -1970,6 +2104,86 @@ const styles = StyleSheet.create({
   },
   categoryAddButtonDisabled: {
     backgroundColor: '#e5e7eb',
+  },
+  exerciseBuilderContainer: {
+    marginTop: 8,
+    gap: 10,
+  },
+  completionRuleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  completionChip: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  completionChipActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  completionChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  completionChipTextActive: {
+    color: '#ffffff',
+  },
+  thresholdStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 12,
+  },
+  stepperButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepperButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  stepperValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+    minWidth: 30,
+    textAlign: 'center',
+  },
+  stepperLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  addExerciseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    borderStyle: 'dashed',
+  },
+  addExerciseText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6366f1',
   },
 });
 
