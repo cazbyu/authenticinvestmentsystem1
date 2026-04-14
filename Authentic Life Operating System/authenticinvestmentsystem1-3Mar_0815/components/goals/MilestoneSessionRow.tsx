@@ -1,5 +1,5 @@
 // components/goals/MilestoneSessionRow.tsx
-import React, { memo, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { memo, useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Dumbbell } from 'lucide-react-native';
 import { formatLocalDate } from '@/lib/dateUtils';
@@ -47,66 +47,60 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
 
   return (
     <View style={styles.container}>
-      {/* Header row */}
-      <View style={styles.header}>
+      {/* Row 1: Badge + Name + Edit */}
+      <View style={styles.headerRow}>
         <View style={styles.titleContainer}>
           <View style={styles.sessionBadge}>
             <Dumbbell size={10} color="#ffffff" />
-            <Text style={styles.sessionBadgeText}>Session</Text>
+            <Text style={styles.sessionBadgeText}>SESSION</Text>
           </View>
-          <Text style={styles.title} numberOfLines={1}>
-            {milestone.milestone_name}
-          </Text>
+          <Text style={styles.title} numberOfLines={1}>{milestone.milestone_name}</Text>
         </View>
-        <View style={styles.headerRight}>
-          <Text style={styles.pctText}>{Math.round(progressPct)}%</Text>
-          <Text style={styles.countText}>{completedCount}/{targetDays}</Text>
-          {onEdit && (
-            <TouchableOpacity onPress={onEdit} activeOpacity={0.7}>
-              <Text style={styles.editText}>Edit</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {onEdit && (
+          <TouchableOpacity onPress={onEdit} activeOpacity={0.7}>
+            <Text style={styles.editText}>Edit</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Progress bar */}
-      <View style={styles.progressBar}>
-        <View
-          style={[
-            styles.progressFill,
-            { width: `${progressPct}%` },
-          ]}
-        />
+      {/* Row 2: Progress bar + percentage */}
+      <View style={styles.progressRow}>
+        <View style={styles.progressBar}>
+          <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+        </View>
+        <Text style={styles.pctText}>{Math.round(progressPct)}%</Text>
       </View>
 
-      {/* Day bubbles — matches liBubble pattern from GoalDetailView */}
-      <View style={styles.dayDotsRow}>
-        {weekDays.map((day) => {
-          const isCompleted = completedDates.includes(day.date);
-          const isPast = day.date < today;
-          const isMissed = isPast && !isCompleted;
-
-          return (
-            <TouchableOpacity
-              key={day.date}
-              onPress={() => onDayPress(day.date, day.dayName)}
-              activeOpacity={0.7}
-              style={[
-                styles.dayBubble,
-                isCompleted && styles.dayBubbleCompleted,
-                isMissed && styles.dayBubbleMissed,
-              ]}
-            >
-              <Text style={[
-                styles.dayBubbleLabel,
-                isCompleted && styles.dayBubbleLabelCompleted,
-                isMissed && styles.dayBubbleLabelMissed,
-              ]}>
-                {day.dayName.slice(0, 1)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Row 3: Day bubbles + count */}
+      <View style={styles.circlesRow}>
+        <View style={styles.dayDotsRow}>
+          {weekDays.map((day) => {
+            const isCompleted = completedDates.includes(day.date);
+            const isPast = day.date < today;
+            const isMissed = isPast && !isCompleted;
+            return (
+              <TouchableOpacity
+                key={day.date}
+                onPress={() => onDayPress(day.date, day.dayName)}
+                activeOpacity={0.7}
+                style={[
+                  styles.dayBubble,
+                  isCompleted && styles.dayBubbleCompleted,
+                  isMissed && styles.dayBubbleMissed,
+                ]}
+              >
+                <Text style={[
+                  styles.dayBubbleLabel,
+                  isCompleted && styles.dayBubbleLabelCompleted,
+                  isMissed && styles.dayBubbleLabelMissed,
+                ]}>
+                  {day.dayName.slice(0, 1)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.countText}>{completedCount}/{targetDays}</Text>
       </View>
     </View>
   );
@@ -120,17 +114,17 @@ const styles = StyleSheet.create({
     borderTopColor: '#f3f4f6',
     backgroundColor: '#ffffff',
   },
-  header: {
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 6,
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
     gap: 8,
+    flex: 1,
   },
   sessionBadge: {
     flexDirection: 'row',
@@ -153,30 +147,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  pctText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  countText: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
   editText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#6366f1',
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   progressBar: {
+    flex: 1,
     height: 8,
     backgroundColor: '#f3f4f6',
     borderRadius: 4,
-    marginBottom: 8,
     overflow: 'hidden',
   },
   progressFill: {
@@ -184,11 +170,28 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#6366f1',
   },
+  pctText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    minWidth: 36,
+    textAlign: 'right',
+  },
+  circlesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   dayDotsRow: {
     flexDirection: 'row',
     gap: 6,
-    marginTop: 8,
-    paddingHorizontal: 0,
+  },
+  countText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    minWidth: 36,
+    textAlign: 'right',
   },
   dayBubble: {
     width: 30,
