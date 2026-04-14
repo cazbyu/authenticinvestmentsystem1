@@ -7,9 +7,9 @@ export type ExerciseType = 'reps' | 'timed' | 'distance';
 export type CompletionSource = 'auto' | 'manual';
 
 export interface MilestoneExercise {
-  id: string;
+  exercise_id: string;
   milestone_id: string;
-  name: string;
+  exercise_name: string;
   muscle_group: string | null;
   exercise_type: ExerciseType;
   target_sets: number | null;
@@ -244,7 +244,7 @@ export async function createMilestone(params: {
 export async function addExerciseToMilestone(
   userId: string,
   milestoneId: string,
-  exercise: Omit<MilestoneExercise, 'id' | 'milestone_id' | 'last_logged' | 'sets_completed' | 'max_reps' | 'max_value'>
+  exercise: Omit<MilestoneExercise, 'exercise_id' | 'milestone_id' | 'last_logged' | 'sets_completed' | 'max_reps' | 'max_value'>
 ): Promise<string> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase

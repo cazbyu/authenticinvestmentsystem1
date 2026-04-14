@@ -78,7 +78,7 @@ export default function MilestoneExercisePanel({
 
         // Build edit states — pre-populate from existing logs if present
         const states: ExerciseEditState[] = exList.map(ex => {
-          const existingLog = existingLogs.find(l => l.exercise_id === ex.id);
+          const existingLog = existingLogs.find(l => l.exercise_id === ex.exercise_id);
           const sets: EditableSet[] = existingLog
             ? existingLog.sets.map(s => ({
                 set_number: s.set_number,
@@ -110,7 +110,7 @@ export default function MilestoneExercisePanel({
 
   const toggleExercise = useCallback((exerciseId: string) => {
     setEditStates(prev => prev.map(es => {
-      if (es.exercise.id !== exerciseId) return es;
+      if (es.exercise.exercise_id !== exerciseId) return es;
 
       if (!es.expanded && es.sets.length === 0) {
         // Expand and add Set 1
@@ -126,7 +126,7 @@ export default function MilestoneExercisePanel({
 
   const addSet = useCallback((exerciseId: string) => {
     setEditStates(prev => prev.map(es => {
-      if (es.exercise.id !== exerciseId) return es;
+      if (es.exercise.exercise_id !== exerciseId) return es;
       const nextNum = es.sets.length > 0
         ? Math.max(...es.sets.map(s => s.set_number)) + 1
         : 1;
@@ -139,7 +139,7 @@ export default function MilestoneExercisePanel({
 
   const removeSet = useCallback((exerciseId: string, setNumber: number) => {
     setEditStates(prev => prev.map(es => {
-      if (es.exercise.id !== exerciseId) return es;
+      if (es.exercise.exercise_id !== exerciseId) return es;
       const newSets = es.sets
         .filter(s => s.set_number !== setNumber)
         .map((s, i) => ({ ...s, set_number: i + 1 })); // renumber
@@ -154,7 +154,7 @@ export default function MilestoneExercisePanel({
     value: string
   ) => {
     setEditStates(prev => prev.map(es => {
-      if (es.exercise.id !== exerciseId) return es;
+      if (es.exercise.exercise_id !== exerciseId) return es;
       return {
         ...es,
         sets: es.sets.map(s =>
@@ -172,7 +172,7 @@ export default function MilestoneExercisePanel({
       const logs: DayExerciseLog[] = editStates
         .filter(es => es.sets.length > 0)
         .map(es => ({
-          exercise_id: es.exercise.id,
+          exercise_id: es.exercise.exercise_id,
           sets: es.sets
             .filter(s => s.reps !== '' || s.weight !== '') // skip completely empty sets
             .map(s => ({
@@ -247,11 +247,11 @@ export default function MilestoneExercisePanel({
 
             {/* Exercise list */}
             {editStates.map(es => (
-              <View key={es.exercise.id} style={styles.exerciseCard}>
+              <View key={es.exercise.exercise_id} style={styles.exerciseCard}>
                 {/* Exercise header — tap to expand/collapse */}
                 <TouchableOpacity
                   style={styles.exerciseHeader}
-                  onPress={() => toggleExercise(es.exercise.id)}
+                  onPress={() => toggleExercise(es.exercise.exercise_id)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.exerciseCheckbox}>
@@ -264,7 +264,7 @@ export default function MilestoneExercisePanel({
                     )}
                   </View>
                   <View style={styles.exerciseInfo}>
-                    <Text style={styles.exerciseName}>{es.exercise.name}</Text>
+                    <Text style={styles.exerciseName}>{es.exercise.exercise_name}</Text>
                     {es.exercise.muscle_group && (
                       <Text style={styles.muscleGroup}>{es.exercise.muscle_group}</Text>
                     )}
@@ -288,7 +288,7 @@ export default function MilestoneExercisePanel({
                             <TextInput
                               style={styles.input}
                               value={set.weight}
-                              onChangeText={v => updateSet(es.exercise.id, set.set_number, 'weight', v)}
+                              onChangeText={v => updateSet(es.exercise.exercise_id, set.set_number, 'weight', v)}
                               keyboardType="decimal-pad"
                               placeholder="—"
                               placeholderTextColor="#d1d5db"
@@ -299,7 +299,7 @@ export default function MilestoneExercisePanel({
                             <TextInput
                               style={styles.input}
                               value={set.reps}
-                              onChangeText={v => updateSet(es.exercise.id, set.set_number, 'reps', v)}
+                              onChangeText={v => updateSet(es.exercise.exercise_id, set.set_number, 'reps', v)}
                               keyboardType="number-pad"
                               placeholder="—"
                               placeholderTextColor="#d1d5db"
@@ -308,7 +308,7 @@ export default function MilestoneExercisePanel({
                         </View>
                         <TouchableOpacity
                           style={styles.removeSetButton}
-                          onPress={() => removeSet(es.exercise.id, set.set_number)}
+                          onPress={() => removeSet(es.exercise.exercise_id, set.set_number)}
                         >
                           <Trash2 size={14} color="#ef4444" />
                         </TouchableOpacity>
@@ -317,7 +317,7 @@ export default function MilestoneExercisePanel({
 
                     <TouchableOpacity
                       style={styles.addSetButton}
-                      onPress={() => addSet(es.exercise.id)}
+                      onPress={() => addSet(es.exercise.exercise_id)}
                     >
                       <Plus size={14} color="#6366f1" />
                       <Text style={styles.addSetText}>Add Set</Text>
