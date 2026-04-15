@@ -50,6 +50,7 @@ export interface MilestoneSummary {
   last_completed_date: string | null;
   total_completions: number;
   completions_this_week: number;
+  target_days: number;
 }
 
 // ── Queries ──────────────────────────────────────────────────────────

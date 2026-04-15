@@ -1752,7 +1752,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
                   weekDays={days}
                   weekStart={currentWeekData.startDate}
                   weekEnd={currentWeekData.endDate}
-                  targetDays={7}
+                  targetDays={ms.target_days ?? 7}
                   onEdit={() => {
                     // Edit session - Session D
                     console.log('[GoalDetailView] Edit session tapped:', ms.milestone_id);
