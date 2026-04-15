@@ -2,6 +2,7 @@
 import React, { memo, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Trash2, GripVertical } from 'lucide-react-native';
+import { MuscleGroupPicker } from './MuscleGroupPicker';
 
 export interface ExerciseFormData {
   name: string;
@@ -85,13 +86,9 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
         </View>
         <View style={styles.muscleField}>
           <Text style={styles.inputLabel}>MUSCLE GROUP</Text>
-          <TextInput
-            style={styles.input}
-            value={exercise.muscle_group}
-            onChangeText={v => update({ muscle_group: v })}
-            placeholder="e.g. Chest"
-            placeholderTextColor="#9ca3af"
-            maxLength={60}
+          <MuscleGroupPicker
+            value={exercise.muscle_group ?? ''}
+            onChange={v => update({ muscle_group: v })}
           />
         </View>
       </View>
