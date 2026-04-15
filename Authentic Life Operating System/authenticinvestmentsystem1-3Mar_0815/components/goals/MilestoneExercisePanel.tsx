@@ -103,6 +103,7 @@ export default function MilestoneExercisePanel({
         });
 
         setEditStates(states);
+        states.forEach(s => console.log('[MilestoneExercisePanel] exercise:', s.exercise.exercise_name, 'target_sets:', s.exercise.target_sets));
       } catch (err) {
         console.error('[MilestoneExercisePanel] Load error:', err);
         Alert.alert('Error', 'Failed to load exercises.');

@@ -2302,8 +2302,12 @@ console.log('[DEBUG] completedDays array:', completedDays);
             completionRule={exercisePanelState.completionRule}
             onClose={() => setExercisePanelState(null)}
             onSaved={(completed) => {
-              if (completed && exercisePanelState?.taskId && exercisePanelState?.selectedDate) {
-                handleToggleCompletion(exercisePanelState.taskId, exercisePanelState.selectedDate, false);
+              if (exercisePanelState?.taskId && exercisePanelState?.selectedDate) {
+                handleToggleCompletion(
+                  exercisePanelState.taskId,
+                  exercisePanelState.selectedDate,
+                  !completed
+                );
               }
               setExercisePanelState(null);
               getMilestonesForGoal(goal.id)
