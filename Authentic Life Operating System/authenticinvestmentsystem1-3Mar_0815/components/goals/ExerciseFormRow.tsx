@@ -71,25 +71,30 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
         </TouchableOpacity>
       </View>
 
-      {/* Exercise name */}
-      <TextInput
-        style={styles.input}
-        value={exercise.name}
-        onChangeText={v => update({ name: v })}
-        placeholder="e.g. Bench Press"
-        placeholderTextColor="#9ca3af"
-        maxLength={80}
-      />
-
-      {/* Muscle group */}
-      <TextInput
-        style={styles.input}
-        value={exercise.muscle_group}
-        onChangeText={v => update({ muscle_group: v })}
-        placeholder="e.g. Chest, Biceps"
-        placeholderTextColor="#9ca3af"
-        maxLength={60}
-      />
+      <View style={styles.nameRow}>
+        <View style={styles.nameField}>
+          <Text style={styles.inputLabel}>EXERCISE</Text>
+          <TextInput
+            style={styles.input}
+            value={exercise.name}
+            onChangeText={v => update({ name: v })}
+            placeholder="e.g. Bench Press"
+            placeholderTextColor="#9ca3af"
+            maxLength={80}
+          />
+        </View>
+        <View style={styles.muscleField}>
+          <Text style={styles.inputLabel}>MUSCLE GROUP</Text>
+          <TextInput
+            style={styles.input}
+            value={exercise.muscle_group}
+            onChangeText={v => update({ muscle_group: v })}
+            placeholder="e.g. Chest"
+            placeholderTextColor="#9ca3af"
+            maxLength={60}
+          />
+        </View>
+      </View>
 
       {/* Type selector chips */}
       <View style={styles.typeSelector}>
@@ -122,6 +127,18 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
       {exercise.exercise_type === 'reps' && (
         <View style={styles.targetRow}>
           <View style={styles.targetInputWrapper}>
+            <Text style={styles.targetLabel}>REPS</Text>
+            <TextInput
+              style={styles.targetInput}
+              value={exercise.target_reps?.toString() ?? ''}
+              onChangeText={v => update({ target_reps: v !== '' ? parseInt(v, 10) || null : null })}
+              keyboardType="number-pad"
+              placeholder="10"
+              placeholderTextColor="#d1d5db"
+            />
+          </View>
+          <Text style={styles.targetSeparator}>×</Text>
+          <View style={styles.targetInputWrapper}>
             <Text style={styles.targetLabel}>SETS</Text>
             <TextInput
               style={styles.targetInput}
@@ -132,15 +149,15 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
               placeholderTextColor="#d1d5db"
             />
           </View>
-          <Text style={styles.targetSeparator}>×</Text>
+          <Text style={styles.targetSeparator}>@</Text>
           <View style={styles.targetInputWrapper}>
-            <Text style={styles.targetLabel}>REPS</Text>
+            <Text style={styles.targetLabel}>WEIGHT</Text>
             <TextInput
               style={styles.targetInput}
-              value={exercise.target_reps?.toString() ?? ''}
-              onChangeText={v => update({ target_reps: v !== '' ? parseInt(v, 10) || null : null })}
-              keyboardType="number-pad"
-              placeholder="10"
+              value={exercise.target_value?.toString() ?? ''}
+              onChangeText={v => update({ target_value: v !== '' ? parseFloat(v) || null : null })}
+              keyboardType="decimal-pad"
+              placeholder="lbs"
               placeholderTextColor="#d1d5db"
             />
           </View>
@@ -276,5 +293,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#9ca3af',
     marginTop: 14,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  nameField: {
+    flex: 2,
+  },
+  muscleField: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#9ca3af',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
 });
