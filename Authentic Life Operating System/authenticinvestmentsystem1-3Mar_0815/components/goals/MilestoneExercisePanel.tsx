@@ -310,7 +310,20 @@ export default function MilestoneExercisePanel({
                           </View>
                         </View>
                         <View style={styles.setRowActions}>
-                          <View style={styles.setCheckIndicator}>
+                          <TouchableOpacity
+                            style={styles.setCheckIndicator}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              const hasData = set.reps !== '' || set.weight !== '';
+                              if (hasData) {
+                                updateSet(es.exercise.exercise_id, set.set_number, 'reps', '');
+                                updateSet(es.exercise.exercise_id, set.set_number, 'weight', '');
+                              } else {
+                                updateSet(es.exercise.exercise_id, set.set_number, 'reps',
+                                  es.exercise.target_reps?.toString() ?? '1');
+                              }
+                            }}
+                          >
                             {(set.reps !== '' || set.weight !== '') ? (
                               <View style={styles.checkboxFilled}>
                                 <Check size={12} color="#ffffff" />
@@ -318,7 +331,7 @@ export default function MilestoneExercisePanel({
                             ) : (
                               <View style={styles.checkboxEmpty} />
                             )}
-                          </View>
+                          </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.removeSetButton}
                             onPress={() => removeSet(es.exercise.exercise_id, set.set_number)}
