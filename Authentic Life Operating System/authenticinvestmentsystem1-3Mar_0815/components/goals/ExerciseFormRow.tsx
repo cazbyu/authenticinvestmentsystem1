@@ -124,18 +124,6 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
       {exercise.exercise_type === 'reps' && (
         <View style={styles.targetRow}>
           <View style={styles.targetInputWrapper}>
-            <Text style={styles.targetLabel}>SETS</Text>
-            <TextInput
-              style={styles.targetInput}
-              value={exercise.target_sets?.toString() ?? ''}
-              onChangeText={v => update({ target_sets: v !== '' ? parseInt(v, 10) || null : null })}
-              keyboardType="number-pad"
-              placeholder="3"
-              placeholderTextColor="#d1d5db"
-            />
-          </View>
-          <Text style={styles.targetSeparator}>×</Text>
-          <View style={styles.targetInputWrapper}>
             <Text style={styles.targetLabel}>REPS</Text>
             <TextInput
               style={styles.targetInput}
@@ -143,6 +131,18 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
               onChangeText={v => update({ target_reps: v !== '' ? parseInt(v, 10) || null : null })}
               keyboardType="number-pad"
               placeholder="10"
+              placeholderTextColor="#d1d5db"
+            />
+          </View>
+          <Text style={styles.targetSeparator}>×</Text>
+          <View style={styles.targetInputWrapper}>
+            <Text style={styles.targetLabel}>SETS</Text>
+            <TextInput
+              style={styles.targetInput}
+              value={exercise.target_sets?.toString() ?? ''}
+              onChangeText={v => update({ target_sets: v !== '' ? parseInt(v, 10) || null : null })}
+              keyboardType="number-pad"
+              placeholder="3"
               placeholderTextColor="#d1d5db"
             />
           </View>
@@ -161,26 +161,65 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
         </View>
       )}
 
-      {(exercise.exercise_type === 'timed' || exercise.exercise_type === 'distance') && (
+      {exercise.exercise_type === 'timed' && (() => {
+        const totalSec = exercise.target_value ?? 0;
+        const hrs = Math.floor(totalSec / 3600);
+        const min = Math.floor((totalSec % 3600) / 60);
+        const sec = Math.round(totalSec % 60);
+        const updateTime = (h: number, m: number, s: number) => {
+          update({ target_value: h * 3600 + m * 60 + s, unit: 'seconds' });
+        };
+        return (
+          <View style={styles.targetRow}>
+            <View style={styles.targetInputWrapper}>
+              <Text style={styles.targetLabel}>HRS</Text>
+              <TextInput
+                style={styles.targetInput}
+                value={hrs > 0 ? hrs.toString() : ''}
+                onChangeText={v => updateTime(v !== '' ? parseInt(v, 10) || 0 : 0, min, sec)}
+                keyboardType="number-pad"
+                placeholder="0"
+                placeholderTextColor="#d1d5db"
+              />
+            </View>
+            <Text style={styles.targetSeparator}>:</Text>
+            <View style={styles.targetInputWrapper}>
+              <Text style={styles.targetLabel}>MIN</Text>
+              <TextInput
+                style={styles.targetInput}
+                value={min > 0 || hrs > 0 ? min.toString() : ''}
+                onChangeText={v => updateTime(hrs, v !== '' ? parseInt(v, 10) || 0 : 0, sec)}
+                keyboardType="number-pad"
+                placeholder="0"
+                placeholderTextColor="#d1d5db"
+              />
+            </View>
+            <Text style={styles.targetSeparator}>:</Text>
+            <View style={styles.targetInputWrapper}>
+              <Text style={styles.targetLabel}>SEC</Text>
+              <TextInput
+                style={styles.targetInput}
+                value={sec > 0 || min > 0 || hrs > 0 ? sec.toString() : ''}
+                onChangeText={v => updateTime(hrs, min, v !== '' ? parseInt(v, 10) || 0 : 0)}
+                keyboardType="number-pad"
+                placeholder="0"
+                placeholderTextColor="#d1d5db"
+              />
+            </View>
+          </View>
+        );
+      })()}
+
+      {exercise.exercise_type === 'distance' && (
         <View style={styles.targetRow}>
           <View style={styles.targetInputWrapper}>
-            <Text style={styles.targetLabel}>TARGET</Text>
+            <Text style={styles.targetLabel}>DISTANCE (miles)</Text>
             <TextInput
               style={styles.targetInput}
               value={exercise.target_value?.toString() ?? ''}
-              onChangeText={v => update({ target_value: v !== '' ? parseFloat(v) || null : null })}
+              onChangeText={v => update({ target_value: v !== '' ? parseFloat(v) || null : null, unit: 'miles' })}
               keyboardType="decimal-pad"
-              placeholder={exercise.exercise_type === 'timed' ? '30' : '5'}
-              placeholderTextColor="#d1d5db"
-            />
-          </View>
-          <View style={styles.targetInputWrapper}>
-            <Text style={styles.targetLabel}>UNIT</Text>
-            <TextInput
-              style={styles.targetInput}
-              value={exercise.unit ?? ''}
-              onChangeText={v => update({ unit: v || null })}
-              placeholder={exercise.exercise_type === 'timed' ? 'mins' : 'km / miles'}
+              placeholder="5"
               placeholderTextColor="#d1d5db"
             />
           </View>
