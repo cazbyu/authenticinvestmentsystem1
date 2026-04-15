@@ -124,18 +124,6 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
       {exercise.exercise_type === 'reps' && (
         <View style={styles.targetRow}>
           <View style={styles.targetInputWrapper}>
-            <Text style={styles.targetLabel}>REPS</Text>
-            <TextInput
-              style={styles.targetInput}
-              value={exercise.target_reps?.toString() ?? ''}
-              onChangeText={v => update({ target_reps: v !== '' ? parseInt(v, 10) || null : null })}
-              keyboardType="number-pad"
-              placeholder="10"
-              placeholderTextColor="#d1d5db"
-            />
-          </View>
-          <Text style={styles.targetSeparator}>×</Text>
-          <View style={styles.targetInputWrapper}>
             <Text style={styles.targetLabel}>SETS</Text>
             <TextInput
               style={styles.targetInput}
@@ -143,6 +131,18 @@ export const ExerciseFormRow = memo(function ExerciseFormRow({
               onChangeText={v => update({ target_sets: v !== '' ? parseInt(v, 10) || null : null })}
               keyboardType="number-pad"
               placeholder="3"
+              placeholderTextColor="#d1d5db"
+            />
+          </View>
+          <Text style={styles.targetSeparator}>×</Text>
+          <View style={styles.targetInputWrapper}>
+            <Text style={styles.targetLabel}>REPS</Text>
+            <TextInput
+              style={styles.targetInput}
+              value={exercise.target_reps?.toString() ?? ''}
+              onChangeText={v => update({ target_reps: v !== '' ? parseInt(v, 10) || null : null })}
+              keyboardType="number-pad"
+              placeholder="10"
               placeholderTextColor="#d1d5db"
             />
           </View>
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   targetInputWrapper: {
-    flex: 1,
+    width: 80,
   },
   targetLabel: {
     fontSize: 9,
