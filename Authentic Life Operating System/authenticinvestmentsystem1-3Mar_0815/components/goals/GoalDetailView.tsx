@@ -1424,11 +1424,9 @@ const scheduledDays = hasSpecificDays
                   onPress={() => isScheduled && handleToggleDay(action.id, index)}
                   disabled={!isScheduled}
                 >
-                  <Text style={[styles.liDayLabel, { color: colors.textSecondary }]}>{label}</Text>
                   <View style={[
                     styles.liBubble,
                     { borderColor: colors.border },
-                    hasSpecificDays && isScheduled && !isCompleted && styles.liBubbleScheduled,
                     isCompleted && [styles.liBubbleCompleted, { backgroundColor: colors.primary, borderColor: colors.primary }],
                     !isScheduled && [styles.liBubbleDisabled, { backgroundColor: colors.border + '40' }],
                   ]}>
@@ -1538,30 +1536,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
 
             return (
               <View key={index} style={styles.liDayColumn}>
-                {/* Day label — tappable for activity log when tracking is configured */}
-                {hasTracking ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      const dateStr = getDateForDayIndex(index);
-                      setActivityLogState({
-                        visible: true,
-                        taskId: action.id,
-                        taskTitle: action.title,
-                        date: dateStr,
-                        templateType: action.tracking_template as string,
-                        dataSchema: action.data_schema || {},
-                      });
-                    }}
-                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                  >
-                    <Text style={[styles.liDayLabel, styles.liDayLabelTappable]}>{label}</Text>
-                    <View style={styles.liDayLabelIndicator} />
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={[styles.liDayLabel, { color: colors.text }]}>{label}</Text>
-                )}
-
-                {/* Day dot/bubble — toggles completion (unchanged) */}
+                {/* Day dot/bubble — toggles completion */}
                 <TouchableOpacity
                   onPress={() => isAvailable && handleToggleDayForWeek(action.id, index)}
                   disabled={!isAvailable}
@@ -1571,7 +1546,6 @@ console.log('[DEBUG] completedDays array:', completedDays);
                     styles.liBubble,
                     isCompleted && styles.liBubbleCompleted,
                     isMissed && styles.liBubbleMissed,
-                    hasSpecificDays && isAvailable && !isCompleted && !isMissed && styles.liBubbleScheduled,
                     !isAvailable && styles.liBubbleDisabled,
                   ]}>
                     <Text style={[
