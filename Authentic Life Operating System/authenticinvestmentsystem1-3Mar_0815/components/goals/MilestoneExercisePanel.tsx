@@ -4,7 +4,7 @@ import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   ScrollView, TextInput, ActivityIndicator, Alert,
 } from 'react-native';
-import { X, Plus, Trash2, Dumbbell, Check } from 'lucide-react-native';
+import { X, Plus, Trash2, Dumbbell, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import {
   getExercisesForMilestone,
@@ -86,11 +86,18 @@ export default function MilestoneExercisePanel({
                 weight: s.value?.toString() ?? '',
                 notes: s.notes ?? '',
               }))
-            : [];
+            : (ex.target_sets && ex.target_sets > 0)
+              ? Array.from({ length: ex.target_sets }, (_, i) => ({
+                  set_number: i + 1,
+                  reps: ex.target_reps?.toString() ?? '',
+                  weight: ex.target_value?.toString() ?? '',
+                  notes: '',
+                }))
+              : [];
 
           return {
             exercise: ex,
-            expanded: sets.length > 0,
+            expanded: sets.length > 0 || (existingLog != null),
             sets,
           };
         });
@@ -254,15 +261,6 @@ export default function MilestoneExercisePanel({
                   onPress={() => toggleExercise(es.exercise.exercise_id)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.exerciseCheckbox}>
-                    {es.sets.some(s => s.reps !== '' || s.weight !== '') ? (
-                      <View style={styles.checkboxFilled}>
-                        <Check size={12} color="#ffffff" />
-                      </View>
-                    ) : (
-                      <View style={styles.checkboxEmpty} />
-                    )}
-                  </View>
                   <View style={styles.exerciseInfo}>
                     <Text style={styles.exerciseName}>{es.exercise.exercise_name}</Text>
                     {es.exercise.muscle_group && (
@@ -274,10 +272,15 @@ export default function MilestoneExercisePanel({
                       {es.exercise.target_sets}×{es.exercise.target_reps}
                     </Text>
                   )}
+                  {es.expanded ? (
+                    <ChevronUp size={16} color="#9ca3af" />
+                  ) : (
+                    <ChevronDown size={16} color="#9ca3af" />
+                  )}
                 </TouchableOpacity>
 
-                {/* Sets — shown when expanded */}
-                {es.expanded && (
+                {/* Sets — shown when expanded (only for exercises with target_sets) */}
+                {es.expanded && (es.exercise.target_sets ?? 0) > 0 && (
                   <View style={styles.setsContainer}>
                     {es.sets.map(set => (
                       <View key={set.set_number} style={styles.setRow}>
@@ -306,12 +309,23 @@ export default function MilestoneExercisePanel({
                             />
                           </View>
                         </View>
-                        <TouchableOpacity
-                          style={styles.removeSetButton}
-                          onPress={() => removeSet(es.exercise.exercise_id, set.set_number)}
-                        >
-                          <Trash2 size={14} color="#ef4444" />
-                        </TouchableOpacity>
+                        <View style={styles.setRowActions}>
+                          <View style={styles.setCheckIndicator}>
+                            {(set.reps !== '' || set.weight !== '') ? (
+                              <View style={styles.checkboxFilled}>
+                                <Check size={12} color="#ffffff" />
+                              </View>
+                            ) : (
+                              <View style={styles.checkboxEmpty} />
+                            )}
+                          </View>
+                          <TouchableOpacity
+                            style={styles.removeSetButton}
+                            onPress={() => removeSet(es.exercise.exercise_id, set.set_number)}
+                          >
+                            <Trash2 size={14} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     ))}
 
@@ -321,6 +335,39 @@ export default function MilestoneExercisePanel({
                     >
                       <Plus size={14} color="#6366f1" />
                       <Text style={styles.addSetText}>Add Set</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* No-sets exercise — single completion row */}
+                {es.expanded && !(es.exercise.target_sets ?? 0) && (
+                  <View style={styles.setsContainer}>
+                    <TouchableOpacity
+                      style={styles.noSetsRow}
+                      onPress={() => {
+                        const hasData = es.sets.length > 0 && (es.sets[0].reps !== '' || es.sets[0].weight !== '');
+                        if (hasData) {
+                          setEditStates(prev => prev.map(s =>
+                            s.exercise.exercise_id === es.exercise.exercise_id
+                              ? { ...s, sets: [] }
+                              : s
+                          ));
+                        } else {
+                          setEditStates(prev => prev.map(s =>
+                            s.exercise.exercise_id === es.exercise.exercise_id
+                              ? { ...s, sets: [{ set_number: 1, reps: '1', weight: '', notes: '' }] }
+                              : s
+                          ));
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.noSetsLabel}>Mark complete</Text>
+                      <View style={es.sets.length > 0 && (es.sets[0]?.reps !== '' || es.sets[0]?.weight !== '') ? styles.checkboxFilled : styles.checkboxEmpty}>
+                        {es.sets.length > 0 && (es.sets[0]?.reps !== '' || es.sets[0]?.weight !== '') && (
+                          <Check size={12} color="#ffffff" />
+                        )}
+                      </View>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -537,8 +584,30 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     textAlign: 'center',
   },
+  setRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  setCheckIndicator: {
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   removeSetButton: {
     padding: 6,
+  },
+  noSetsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  noSetsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
   },
   addSetButton: {
     flexDirection: 'row',

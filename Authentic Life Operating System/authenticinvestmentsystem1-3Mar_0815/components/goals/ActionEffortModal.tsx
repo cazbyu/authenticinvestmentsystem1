@@ -137,9 +137,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
   // Exercise builder state (workout template)
   const [exercises, setExercises] = useState<ExerciseFormData[]>([]);
-  const [completionRule, setCompletionRule] = useState<'all' | 'threshold'>('all');
-  const [completionThreshold, setCompletionThreshold] = useState<number>(1);
-
   // Attachment state (matching TaskEventForm pattern)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
@@ -240,8 +237,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setNewCategoryText('');
     setTrackingExpanded(false);
     setExercises([]);
-    setCompletionRule('all');
-    setCompletionThreshold(1);
 
     // Reset collapsed states
     setDomainsExpanded(false);
@@ -717,9 +712,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not authenticated');
 
-        const completionRuleJson = completionRule === 'all'
-          ? { type: 'all' }
-          : { type: 'threshold', required: completionThreshold, of: exercises.length };
+        const completionRuleJson = { type: 'all' };
 
         const milestoneId = await createMilestone({
           userId: user.id,
@@ -1134,48 +1127,6 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                       {trackingTemplate === 'workout' ? (
                         // Exercise builder replaces category config for workout template
                         <View style={styles.exerciseBuilderContainer}>
-                          {/* Completion rule */}
-                          <Text style={styles.fieldLabel}>COUNTS AS DONE WHEN</Text>
-                          <View style={styles.completionRuleRow}>
-                            <TouchableOpacity
-                              style={[styles.completionChip, completionRule === 'all' && styles.completionChipActive]}
-                              onPress={() => setCompletionRule('all')}
-                            >
-                              <Text style={[styles.completionChipText, completionRule === 'all' && styles.completionChipTextActive]}>
-                                All exercises
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.completionChip, completionRule === 'threshold' && styles.completionChipActive]}
-                              onPress={() => setCompletionRule('threshold')}
-                            >
-                              <Text style={[styles.completionChipText, completionRule === 'threshold' && styles.completionChipTextActive]}>
-                                Any N of {exercises.length || '—'}
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-
-                          {completionRule === 'threshold' && (
-                            <View style={styles.thresholdStepper}>
-                              <TouchableOpacity
-                                style={styles.stepperButton}
-                                onPress={() => setCompletionThreshold(prev => Math.max(1, prev - 1))}
-                                disabled={completionThreshold <= 1}
-                              >
-                                <Text style={styles.stepperButtonText}>−</Text>
-                              </TouchableOpacity>
-                              <Text style={styles.stepperValue}>{completionThreshold}</Text>
-                              <TouchableOpacity
-                                style={styles.stepperButton}
-                                onPress={() => setCompletionThreshold(prev => Math.min(Math.max(exercises.length, 1), prev + 1))}
-                                disabled={completionThreshold >= Math.max(exercises.length, 1)}
-                              >
-                                <Text style={styles.stepperButtonText}>+</Text>
-                              </TouchableOpacity>
-                              <Text style={styles.stepperLabel}>of {exercises.length || '—'} exercises</Text>
-                            </View>
-                          )}
-
                           {/* Exercise list */}
                           <Text style={[styles.fieldLabel, { marginTop: 12 }]}>EXERCISES</Text>
                           {exercises.map((ex, i) => (
@@ -2108,65 +2059,6 @@ const styles = StyleSheet.create({
   exerciseBuilderContainer: {
     marginTop: 8,
     gap: 10,
-  },
-  completionRuleRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  completionChip: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  completionChipActive: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
-  },
-  completionChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  completionChipTextActive: {
-    color: '#ffffff',
-  },
-  thresholdStepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 12,
-  },
-  stepperButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepperButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  stepperValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1f2937',
-    minWidth: 30,
-    textAlign: 'center',
-  },
-  stepperLabel: {
-    fontSize: 14,
-    color: '#6b7280',
   },
   addExerciseButton: {
     flexDirection: 'row',
