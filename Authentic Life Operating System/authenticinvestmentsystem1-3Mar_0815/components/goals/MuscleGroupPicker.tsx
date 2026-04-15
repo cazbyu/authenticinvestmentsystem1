@@ -45,14 +45,12 @@ const MUSCLE_GROUPS: MuscleGroup[] = [
 ];
 
 interface MuscleGroupPickerProps {
-  value: string;
-  onChange: (value: string) => void;
+  value: string[];
+  onChange: (value: string[]) => void;
 }
 
 export function MuscleGroupPicker({ value, onChange }: MuscleGroupPickerProps) {
   const [open, setOpen] = useState(false);
-
-  const selected = MUSCLE_GROUPS.find(mg => mg.key === value.toLowerCase());
 
   return (
     <>
@@ -61,10 +59,13 @@ export function MuscleGroupPicker({ value, onChange }: MuscleGroupPickerProps) {
         onPress={() => setOpen(true)}
         activeOpacity={0.7}
       >
-        {selected ? (
+        {value.length > 0 ? (
           <View style={styles.triggerContent}>
-            <selected.Icon width={28} height={28} />
-            <Text style={styles.triggerLabel}>{selected.label}</Text>
+            {value.map(key => {
+              const mg = MUSCLE_GROUPS.find(m => m.key === key);
+              if (!mg) return null;
+              return <mg.Icon key={key} width={28} height={28} />;
+            })}
           </View>
         ) : (
           <Text style={styles.triggerPlaceholder}>Select</Text>
@@ -92,18 +93,21 @@ export function MuscleGroupPicker({ value, onChange }: MuscleGroupPickerProps) {
                 key={mg.key}
                 style={[
                   styles.option,
-                  mg.key === value.toLowerCase() && styles.optionActive,
+                  value.includes(mg.key) && styles.optionActive,
                 ]}
                 onPress={() => {
-                  onChange(mg.key);
-                  setOpen(false);
+                  const already = value.includes(mg.key);
+                  onChange(already
+                    ? value.filter(k => k !== mg.key)
+                    : [...value, mg.key]
+                  );
                 }}
                 activeOpacity={0.7}
               >
                 <mg.Icon width={36} height={36} />
                 <Text style={[
                   styles.optionLabel,
-                  mg.key === value.toLowerCase() && styles.optionLabelActive,
+                  value.includes(mg.key) && styles.optionLabelActive,
                 ]}>
                   {mg.label}
                 </Text>

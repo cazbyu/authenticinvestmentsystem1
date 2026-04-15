@@ -6,7 +6,7 @@ import { MuscleGroupPicker } from './MuscleGroupPicker';
 
 export interface ExerciseFormData {
   name: string;
-  muscle_group: string;
+  muscle_group: string[];
   exercise_type: 'reps' | 'timed' | 'distance';
   target_sets: number | null;
   target_reps: number | null;

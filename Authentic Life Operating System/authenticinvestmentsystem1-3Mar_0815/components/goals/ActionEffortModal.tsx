@@ -739,7 +739,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
           if (ex.name.trim()) {
             await addExerciseToMilestone(user.id, milestoneId, {
               name: ex.name.trim(),
-              muscle_group: ex.muscle_group || null,
+              muscle_group: ex.muscle_group.length > 0 ? ex.muscle_group.join(', ') : null,
               exercise_type: ex.exercise_type,
               target_sets: ex.target_sets,
               target_reps: ex.target_reps,
@@ -1198,7 +1198,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                             style={styles.addExerciseButton}
                             onPress={() => setExercises(prev => [...prev, {
                               name: '',
-                              muscle_group: '',
+                              muscle_group: [],
                               exercise_type: 'reps',
                               target_sets: null,
                               target_reps: null,
