@@ -1,4 +1,4 @@
-// services/milestoneService.ts
+// services/sessionService.ts
 import { getSupabaseClient } from '@/lib/supabase';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -6,7 +6,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 export type ExerciseType = 'reps' | 'timed' | 'distance';
 export type CompletionSource = 'auto' | 'manual';
 
-export interface MilestoneExercise {
+export interface SessionExercise {
   exercise_id: string;
   milestone_id: string;
   exercise_name: string;
@@ -17,7 +17,7 @@ export interface MilestoneExercise {
   target_value: number | null;
   unit: string | null;
   sort_order: number;
-  // from v_exercise_progress:
+  // from v_step_progress:
   last_logged: string | null;
   sets_completed: number | null;
   max_reps: number | null;
@@ -37,7 +37,7 @@ export interface DayExerciseLog {
   sets: ExerciseSet[];
 }
 
-export interface MilestoneSummary {
+export interface SessionSummary {
   milestone_id: string;
   user_id: string;
   goal_id: string | null;
@@ -55,12 +55,12 @@ export interface MilestoneSummary {
 
 // ── Queries ──────────────────────────────────────────────────────────
 
-export async function getMilestonesForGoal(
+export async function getSessionsForGoal(
   goalId: string
-): Promise<MilestoneSummary[]> {
+): Promise<SessionSummary[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
-    .from('v_milestone_summary')
+    .from('v_session_summary')
     .select('*')
     .eq('goal_id', goalId)
     .order('sort_order');
@@ -68,12 +68,12 @@ export async function getMilestonesForGoal(
   return data ?? [];
 }
 
-export async function getExercisesForMilestone(
+export async function getExercisesForSession(
   milestoneId: string
-): Promise<MilestoneExercise[]> {
+): Promise<SessionExercise[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
-    .from('v_exercise_progress')
+    .from('v_step_progress')
     .select('*')
     .eq('milestone_id', milestoneId)
     .order('sort_order');
@@ -88,7 +88,7 @@ export async function getExerciseLogsForDate(
   const supabase = getSupabaseClient();
 
   const { data: milestoneLog } = await supabase
-    .from('0008-ap-gl-milestone-log')
+    .from('0008-ap-gl-session-log')
     .select('id')
     .eq('milestone_id', milestoneId)
     .eq('completed_date', logDate)
@@ -97,7 +97,7 @@ export async function getExerciseLogsForDate(
   if (!milestoneLog) return [];
 
   const { data, error } = await supabase
-    .from('0008-ap-gl-exercise-log')
+    .from('0008-ap-gl-step-log')
     .select('exercise_id, set_number, reps_completed, value, unit, notes')
     .eq('milestone_log_id', milestoneLog.id)
     .order('exercise_id')
@@ -139,10 +139,10 @@ export async function saveExerciseLogs(
 
   const exercisesLogged = logs.filter(l => l.sets.length > 0).length;
 
-  // Upsert milestone-log row for this date
+  // Upsert session-log row for this date
   // onConflict uses the UNIQUE(milestone_id, completed_date) constraint
   const { data: mlData, error: mlError } = await supabase
-    .from('0008-ap-gl-milestone-log')
+    .from('0008-ap-gl-session-log')
     .upsert({
       user_id: userId,
       milestone_id: milestoneId,
@@ -160,7 +160,7 @@ export async function saveExerciseLogs(
 
   // Delete existing exercise logs then reinsert (clean replace for set-level data)
   await supabase
-    .from('0008-ap-gl-exercise-log')
+    .from('0008-ap-gl-step-log')
     .delete()
     .eq('milestone_log_id', milestoneLogId);
 
@@ -181,7 +181,7 @@ export async function saveExerciseLogs(
 
   if (insertRows.length > 0) {
     const { error: elError } = await supabase
-      .from('0008-ap-gl-exercise-log')
+      .from('0008-ap-gl-step-log')
       .insert(insertRows);
     if (elError) throw elError;
   }
@@ -209,8 +209,8 @@ function evaluateCompletionRule(
   return exercisesCompleted > 0;
 }
 
-// Create a new milestone via the Postgres function
-export async function createMilestone(params: {
+// Create a new session via the Postgres function
+export async function createSession(params: {
   userId: string;
   goalId: string;
   name: string;
@@ -224,7 +224,7 @@ export async function createMilestone(params: {
   sortOrder?: number;
 }): Promise<string> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.rpc('create_milestone', {
+  const { data, error } = await supabase.rpc('create_session', {
     p_user_id: params.userId,
     p_goal_id: params.goalId,
     p_name: params.name,
@@ -241,15 +241,15 @@ export async function createMilestone(params: {
   return data as string;
 }
 
-// Add an exercise to a milestone
-export async function addExerciseToMilestone(
+// Add an exercise to a session
+export async function addExerciseToSession(
   userId: string,
   milestoneId: string,
-  exercise: Omit<MilestoneExercise, 'exercise_id' | 'milestone_id' | 'last_logged' | 'sets_completed' | 'max_reps' | 'max_value'>
+  exercise: Omit<SessionExercise, 'exercise_id' | 'milestone_id' | 'last_logged' | 'sets_completed' | 'max_reps' | 'max_value'>
 ): Promise<string> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
-    .from('0008-ap-gl-milestone-exercises')
+    .from('0008-ap-gl-session-steps')
     .insert({ user_id: userId, milestone_id: milestoneId, ...exercise })
     .select('id')
     .single();
@@ -257,15 +257,15 @@ export async function addExerciseToMilestone(
   return data.id;
 }
 
-// Get milestone completion dates for a specific week range
-export async function getMilestoneCompletionsForWeek(
+// Get session completion dates for a specific week range
+export async function getSessionCompletionsForWeek(
   milestoneId: string,
   weekStart: string,
   weekEnd: string
 ): Promise<string[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
-    .from('0008-ap-gl-milestone-log')
+    .from('0008-ap-gl-session-log')
     .select('completed_date')
     .eq('milestone_id', milestoneId)
     .gte('completed_date', weekStart)
