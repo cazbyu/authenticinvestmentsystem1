@@ -20,7 +20,7 @@ import { Timeline } from '@/hooks/useGoals';
 import { TEMPLATE_TYPES, TEMPLATE_CONFIGS, TemplateType } from '@/lib/activityTemplates';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
 import { ExerciseFormRow, ExerciseFormData } from '@/components/goals/ExerciseFormRow';
-import { createMilestone, addExerciseToMilestone } from '@/services/milestoneService';
+import { createSession, addExerciseToSession } from '@/services/sessionService';
 import {
   getDefaultStartTime,
   getDefaultEndTime,
@@ -714,7 +714,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
         const completionRuleJson = { type: 'all' };
 
-        const milestoneId = await createMilestone({
+        const milestoneId = await createSession({
           userId: user.id,
           goalId: goal!.id,
           name: taskData.title,
@@ -730,7 +730,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         // Add exercises in sequence
         for (const ex of exercises) {
           if (ex.name.trim()) {
-            await addExerciseToMilestone(user.id, milestoneId, {
+            await addExerciseToSession(user.id, milestoneId, {
               name: ex.name.trim(),
               muscle_group: ex.muscle_group.length > 0 ? ex.muscle_group.join(', ') : null,
               exercise_type: ex.exercise_type,
