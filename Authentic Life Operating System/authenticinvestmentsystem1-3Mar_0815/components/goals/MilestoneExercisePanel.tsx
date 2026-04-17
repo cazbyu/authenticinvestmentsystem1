@@ -288,23 +288,23 @@ export default function MilestoneExercisePanel({
                         <Text style={styles.setLabel}>Set {set.set_number}</Text>
                         <View style={styles.inputGroup}>
                           <View style={styles.inputWrapper}>
-                            <Text style={styles.inputLabel}>WEIGHT</Text>
-                            <TextInput
-                              style={styles.input}
-                              value={set.weight}
-                              onChangeText={v => updateSet(es.exercise.exercise_id, set.set_number, 'weight', v)}
-                              keyboardType="decimal-pad"
-                              placeholder="—"
-                              placeholderTextColor="#d1d5db"
-                            />
-                          </View>
-                          <View style={styles.inputWrapper}>
                             <Text style={styles.inputLabel}>REPS</Text>
                             <TextInput
                               style={styles.input}
                               value={set.reps}
                               onChangeText={v => updateSet(es.exercise.exercise_id, set.set_number, 'reps', v)}
                               keyboardType="number-pad"
+                              placeholder="—"
+                              placeholderTextColor="#d1d5db"
+                            />
+                          </View>
+                          <View style={styles.inputWrapper}>
+                            <Text style={styles.inputLabel}>WEIGHT</Text>
+                            <TextInput
+                              style={styles.input}
+                              value={set.weight}
+                              onChangeText={v => updateSet(es.exercise.exercise_id, set.set_number, 'weight', v)}
+                              keyboardType="decimal-pad"
                               placeholder="—"
                               placeholderTextColor="#d1d5db"
                             />

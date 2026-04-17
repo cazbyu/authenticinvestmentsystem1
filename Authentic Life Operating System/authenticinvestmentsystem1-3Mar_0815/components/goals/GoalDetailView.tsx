@@ -2155,11 +2155,49 @@ console.log('[DEBUG] completedDays array:', completedDays);
     createTaskWithWeekPlan={createTaskWithWeekPlan}
     onDelete={async (actionId: string) => {
       const supabase = getSupabaseClient();
+
+      // Find any milestones linked to this task (shadow task for workout session)
+      const { data: linkedMilestones } = await supabase
+        .from('0008-ap-gl-milestones')
+        .select('id')
+        .eq('task_id', actionId);
+
+      const milestoneIds = (linkedMilestones ?? []).map(m => m.id);
+
+      if (milestoneIds.length > 0) {
+        // Hard delete milestone logs first (FK → milestones)
+        const { error: logErr } = await supabase
+          .from('0008-ap-gl-milestone-log')
+          .delete()
+          .in('milestone_id', milestoneIds);
+        if (logErr) throw logErr;
+
+        // Hard delete milestone exercises (FK → milestones)
+        const { error: exErr } = await supabase
+          .from('0008-ap-gl-milestone-exercises')
+          .delete()
+          .in('milestone_id', milestoneIds);
+        if (exErr) throw exErr;
+
+        // Hard delete milestones themselves
+        const { error: msErr } = await supabase
+          .from('0008-ap-gl-milestones')
+          .delete()
+          .in('id', milestoneIds);
+        if (msErr) throw msErr;
+      }
+
+      // Soft delete the task last
       const { error } = await supabase
         .from('0008-ap-tasks')
         .update({ deleted_at: toLocalISOString(new Date()) })
         .eq('id', actionId);
       if (error) throw error;
+
+      // Refresh milestones list so UI reflects the cascade
+      getMilestonesForGoal(goal.id)
+        .then(setMilestones)
+        .catch(err => console.error('[GoalDetailView] Milestone refresh after delete:', err));
     }}
     initialData={{
       id: editingAction.id,
