@@ -761,33 +761,36 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!initialData?.id || !onDelete) return;
 
-    Alert.alert(
-      'Delete Action',
-      'Are you sure you want to delete this action? This will remove all associated data and cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setSaving(true);
-              await onDelete(initialData.id);
-              Alert.alert('Success', 'Action deleted successfully!');
-              onClose();
-            } catch (error) {
-              console.error('Error deleting action:', error);
-              Alert.alert('Error', (error as Error).message || 'Failed to delete action.');
-            } finally {
-              setSaving(false);
-            }
-          }
-        }
-      ]
-    );
+    // Use window.confirm on web, Alert on native
+    const confirmed = typeof window !== 'undefined' && window.confirm
+      ? window.confirm('Delete this action? This will remove all associated data and cannot be undone.')
+      : await new Promise<boolean>(resolve => {
+          Alert.alert(
+            'Delete Action',
+            'Are you sure you want to delete this action? This will remove all associated data and cannot be undone.',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    try {
+      setSaving(true);
+      await onDelete(initialData.id);
+      Alert.alert('Success', 'Action deleted successfully!');
+      onClose();
+    } catch (err) {
+      console.error('[ActionEffortModal] Delete error:', err);
+      Alert.alert('Error', 'Could not delete action. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getRecurrenceLabel = (type: string) => {
