@@ -29,7 +29,7 @@ import {
 import { X, Plus, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { Timeline, TwelveWeekGoal } from '@/hooks/useGoals';
 import { getSupabaseClient } from '@/lib/supabase';
-import { createMilestone, addExerciseToMilestone } from '@/services/milestoneService';
+import { createSession, addExerciseToSession } from '@/services/sessionService';
 import { ExerciseFormRow, ExerciseFormData } from './ExerciseFormRow';
 
 interface CreateMilestoneModalProps {
@@ -208,7 +208,7 @@ const CreateMilestoneModal: React.FC<CreateMilestoneModalProps> = ({
         ? { type: 'all' }
         : { type: 'threshold', required: completionThreshold, of: exercises.length };
 
-      const milestoneId = await createMilestone({
+      const milestoneId = await createSession({
         userId: user.id,
         goalId: goal.id,
         name: sessionName.trim(),
@@ -224,7 +224,7 @@ const CreateMilestoneModal: React.FC<CreateMilestoneModalProps> = ({
       // Add exercises in sequence
       for (const ex of exercises) {
         if (ex.name.trim()) {
-          await addExerciseToMilestone(user.id, milestoneId, {
+          await addExerciseToSession(user.id, milestoneId, {
             name: ex.name.trim(),
             muscle_group: ex.muscle_group || null,
             exercise_type: ex.exercise_type,
