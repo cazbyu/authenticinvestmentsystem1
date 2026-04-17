@@ -1,4 +1,17 @@
 // components/goals/CreateMilestoneModal.tsx
+// ────────────────────────────────────────────────────────────────
+// DEPRECATED 2026-04-17 — Scheduled for removal in Phase B4.
+//
+// This component is a legacy surface from before the unified
+// "Add Action" flow was designed. In the Phase B4 design, session
+// creation happens inline within the standard action-creation form,
+// not as a separate modal. The "Add Session" button that opens this
+// modal is currently hidden/disabled in production.
+//
+// Do not extend this component. Do not rename it. Its naming
+// mismatch with the Phase B session rename (B1/B2) is intentional
+// technical debt documented during B2.5.
+// ────────────────────────────────────────────────────────────────
 import React, { useState, useCallback } from 'react';
 import {
   View,
