@@ -5,6 +5,11 @@ import { getSupabaseClient } from './supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/userinfo.email',
+].join(' ');
+
 export async function signInWithGoogle() {
   const supabase = getSupabaseClient();
 
@@ -19,6 +24,11 @@ export async function signInWithGoogle() {
     options: {
       redirectTo,
       skipBrowserRedirect: Platform.OS !== 'web',
+      scopes: GOOGLE_SCOPES,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
     },
   });
 
@@ -66,6 +76,11 @@ export async function linkGoogleAccount() {
     options: {
       redirectTo,
       skipBrowserRedirect: Platform.OS !== 'web',
+      scopes: GOOGLE_SCOPES,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
     },
   });
 

@@ -597,50 +597,63 @@ export default function SettingsScreen() {
 };
     
   const disconnectGoogle = async () => {
-    Alert.alert(
-      'Disconnect Google Calendar?',
-      'This will remove all synced events from your calendar.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const supabase = getSupabaseClient();
-              const { data: { user } } = await supabase.auth.getUser();
-              if (!user) return;
+    const doDisconnect = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-              // Delete all Google Calendar events
-              await supabase
-                .from('0008-ap-tasks')
-                .delete()
-                .eq('user_id', user.id)
-                .eq('external_source', 'google');
+        // Delete all Google Calendar events from 0008-ap-commitments
+        await supabase
+          .from('0008-ap-commitments')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('external_source', 'google');
 
-              // Disconnect the calendar connection
-              const GoogleCalendarSync = await import('../lib/GoogleCalendarSync');
-              const { disconnectGoogleCalendar } = GoogleCalendarSync;
-              const result = await disconnectGoogleCalendar(user.id);
-              
-              if (result.success) {
-                setGoogleAccessToken(null);
-                setSyncEnabled(false);
-                Alert.alert('Success', 'Disconnected from Google Calendar');
-                eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
-              } else {
-                Alert.alert('Error', result.error || 'Failed to disconnect');
-              }
-            } catch (error) {
-              Alert.alert('Error', (error as Error).message);
-            }
-          },
-        },
-      ]
-    );
+        // Disconnect the calendar connection
+        const GoogleCalendarSync = await import('../lib/GoogleCalendarSync');
+        const { disconnectGoogleCalendar } = GoogleCalendarSync;
+        const result = await disconnectGoogleCalendar(user.id);
+
+        if (result.success) {
+          setGoogleAccessToken(null);
+          setSyncEnabled(false);
+          if (Platform.OS === 'web') {
+            window.alert('Disconnected from Google Calendar');
+          } else {
+            Alert.alert('Success', 'Disconnected from Google Calendar');
+          }
+          eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
+        } else {
+          if (Platform.OS === 'web') {
+            window.alert(result.error || 'Failed to disconnect');
+          } else {
+            Alert.alert('Error', result.error || 'Failed to disconnect');
+          }
+        }
+      } catch (error) {
+        if (Platform.OS === 'web') {
+          window.alert((error as Error).message);
+        } else {
+          Alert.alert('Error', (error as Error).message);
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Disconnect Google Calendar?\n\nThis will remove all synced Google events from your calendar.')) {
+        await doDisconnect();
+      }
+    } else {
+      Alert.alert(
+        'Disconnect Google Calendar?',
+        'This will remove all synced Google events from your calendar.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Disconnect', style: 'destructive', onPress: doDisconnect },
+        ]
+      );
+    }
   };
 
   const convertTo12Hour = (time24: string): string => {
@@ -1440,7 +1453,7 @@ const { syncGoogleCalendarEvents } = GoogleCalendarSync;
         </View>
 
         {/* Calendar Selection Section */}
-        <CalendarSelectionSection />
+        <CalendarSelectionSection key={googleAccessToken ?? 'disconnected'} />
 
         {/* Notifications Section */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
