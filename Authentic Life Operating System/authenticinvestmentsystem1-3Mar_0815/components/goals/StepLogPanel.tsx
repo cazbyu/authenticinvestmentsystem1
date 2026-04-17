@@ -1,4 +1,4 @@
-// components/goals/MilestoneExercisePanel.tsx
+// components/goals/StepLogPanel.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
@@ -7,15 +7,15 @@ import {
 import { X, Plus, Trash2, Dumbbell, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import {
-  getExercisesForMilestone,
+  getExercisesForSession,
   getExerciseLogsForDate,
   saveExerciseLogs,
-  MilestoneExercise,
+  SessionExercise,
   DayExerciseLog,
   ExerciseSet,
-} from '@/services/milestoneService';
+} from '@/services/sessionService';
 
-interface MilestoneExercisePanelProps {
+interface StepLogPanelProps {
   milestoneId: string;
   taskId: string;
   milestoneName: string;
@@ -28,7 +28,7 @@ interface MilestoneExercisePanelProps {
 
 // Local state for one exercise's editable sets
 interface ExerciseEditState {
-  exercise: MilestoneExercise;
+  exercise: SessionExercise;
   expanded: boolean;
   sets: EditableSet[];
 }
@@ -40,7 +40,7 @@ interface EditableSet {
   notes: string;
 }
 
-export default function MilestoneExercisePanel({
+export default function StepLogPanel({
   milestoneId,
   taskId,
   milestoneName,
@@ -49,8 +49,8 @@ export default function MilestoneExercisePanel({
   completionRule,
   onClose,
   onSaved,
-}: MilestoneExercisePanelProps) {
-  const [exercises, setExercises] = useState<MilestoneExercise[]>([]);
+}: StepLogPanelProps) {
+  const [exercises, setExercises] = useState<SessionExercise[]>([]);
   const [editStates, setEditStates] = useState<ExerciseEditState[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,7 +69,7 @@ export default function MilestoneExercisePanel({
     async function load() {
       try {
         const [exList, existingLogs] = await Promise.all([
-          getExercisesForMilestone(milestoneId),
+          getExercisesForSession(milestoneId),
           getExerciseLogsForDate(milestoneId, selectedDate),
         ]);
 
@@ -103,9 +103,9 @@ export default function MilestoneExercisePanel({
         });
 
         setEditStates(states);
-        states.forEach(s => console.log('[MilestoneExercisePanel] exercise:', s.exercise.exercise_name, 'target_sets:', s.exercise.target_sets));
+        states.forEach(s => console.log('[StepLogPanel] exercise:', s.exercise.exercise_name, 'target_sets:', s.exercise.target_sets));
       } catch (err) {
-        console.error('[MilestoneExercisePanel] Load error:', err);
+        console.error('[StepLogPanel] Load error:', err);
         Alert.alert('Error', 'Failed to load exercises.');
       } finally {
         if (!cancelled) setLoading(false);
@@ -205,7 +205,7 @@ export default function MilestoneExercisePanel({
 
       onSaved(completed);
     } catch (err) {
-      console.error('[MilestoneExercisePanel] Save error:', err);
+      console.error('[StepLogPanel] Save error:', err);
       Alert.alert('Error', 'Failed to save exercise logs.');
     } finally {
       setSaving(false);
