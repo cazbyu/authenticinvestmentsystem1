@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 
 const ActivityLogModal = React.lazy(() => import('./ActivityLogModal'));
-const MilestoneExercisePanel = React.lazy(() => import('./MilestoneExercisePanel'));
+const StepLogPanel = React.lazy(() => import('./StepLogPanel'));
 import { Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare, Calendar as CalendarIcon, Check } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
@@ -26,8 +26,8 @@ import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/
 import { fetchGoalActionsForWeek, TaskWithLogs } from '@/hooks/fetchGoalActionsForWeek';
 import { useGoals, Timeline } from '@/hooks/useGoals';
 import { GoalJournalView } from './GoalJournalView';
-import { MilestoneSessionRow } from './MilestoneSessionRow';
-import { getMilestonesForGoal, MilestoneSummary } from '@/services/milestoneService';
+import { SessionRow } from './SessionRow';
+import { getSessionsForGoal, SessionSummary } from '@/services/sessionService';
 
 
 
@@ -104,7 +104,7 @@ export function GoalDetailView({
   // ActionEffortModal state
   const [showActionEffortModal, setShowActionEffortModal] = useState(false);
   const [editingAction, setEditingAction] = useState<TaskWithLogs | null>(null);
-  const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [milestones, setMilestones] = useState<SessionSummary[]>([]);
 
   const [exercisePanelState, setExercisePanelState] = useState<{
     milestoneId: string;
@@ -132,15 +132,15 @@ export function GoalDetailView({
   // Get createTaskWithWeekPlan from useGoals hook
   const { createTaskWithWeekPlan } = useGoals();
 
-  // Fetch milestones for this goal
+  // Fetch sessions for this goal
   useEffect(() => {
     if (!goal?.id) return;
-    getMilestonesForGoal(goal.id)
+    getSessionsForGoal(goal.id)
       .then(data => {
-        console.log('[GoalDetailView] Milestones fetched:', goal.id, JSON.stringify(data));
+        console.log('[GoalDetailView] Sessions fetched:', goal.id, JSON.stringify(data));
         setMilestones(data);
       })
-      .catch(err => console.error('[GoalDetailView] Milestone fetch error:', err));
+      .catch(err => console.error('[GoalDetailView] Session fetch error:', err));
   }, [goal?.id]);
 
   // Ideas tab state
@@ -1720,7 +1720,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
                 });
               }
               return (
-                <MilestoneSessionRow
+                <SessionRow
                   key={ms.milestone_id}
                   milestone={ms}
                   weekDays={days}
@@ -2157,33 +2157,33 @@ console.log('[DEBUG] completedDays array:', completedDays);
       console.log('[Delete] Starting delete for task:', actionId);
       const supabase = getSupabaseClient();
 
-      const { data: linkedMilestones, error: queryErr } = await supabase
-        .from('0008-ap-gl-milestones')
+      const { data: linkedSessions, error: queryErr } = await supabase
+        .from('0008-ap-gl-sessions')
         .select('id')
         .eq('task_id', actionId);
 
-      console.log('[Delete] Linked milestones:', linkedMilestones, 'Query error:', queryErr);
+      console.log('[Delete] Linked sessions:', linkedSessions, 'Query error:', queryErr);
 
-      const milestoneIds = (linkedMilestones ?? []).map(m => m.id);
+      const sessionIds = (linkedSessions ?? []).map(m => m.id);
 
-      if (milestoneIds.length > 0) {
+      if (sessionIds.length > 0) {
         const { error: logErr } = await supabase
-          .from('0008-ap-gl-milestone-log')
+          .from('0008-ap-gl-session-log')
           .delete()
-          .in('milestone_id', milestoneIds);
+          .in('milestone_id', sessionIds);
         console.log('[Delete] Log delete error:', logErr);
 
         const { error: exErr } = await supabase
-          .from('0008-ap-gl-milestone-exercises')
+          .from('0008-ap-gl-session-steps')
           .delete()
-          .in('milestone_id', milestoneIds);
+          .in('milestone_id', sessionIds);
         console.log('[Delete] Exercise delete error:', exErr);
 
         const { error: msErr } = await supabase
-          .from('0008-ap-gl-milestones')
+          .from('0008-ap-gl-sessions')
           .delete()
-          .in('id', milestoneIds);
-        console.log('[Delete] Milestone delete error:', msErr);
+          .in('id', sessionIds);
+        console.log('[Delete] Session delete error:', msErr);
       }
 
       const { error } = await supabase
@@ -2192,9 +2192,9 @@ console.log('[DEBUG] completedDays array:', completedDays);
         .eq('id', actionId);
       console.log('[Delete] Task soft delete error:', error);
 
-      getMilestonesForGoal(goal.id)
+      getSessionsForGoal(goal.id)
         .then(setMilestones)
-        .catch(err => console.error('[GoalDetailView] Milestone refresh after delete:', err));
+        .catch(err => console.error('[GoalDetailView] Session refresh after delete:', err));
     }}
     initialData={{
       id: editingAction.id,
@@ -2328,7 +2328,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
       )}
       {exercisePanelState && (
         <Suspense fallback={null}>
-          <MilestoneExercisePanel
+          <StepLogPanel
             milestoneId={exercisePanelState.milestoneId}
             taskId={exercisePanelState.taskId}
             milestoneName={exercisePanelState.milestoneName}
@@ -2345,9 +2345,9 @@ console.log('[DEBUG] completedDays array:', completedDays);
                 );
               }
               setExercisePanelState(null);
-              getMilestonesForGoal(goal.id)
+              getSessionsForGoal(goal.id)
                 .then(setMilestones)
-                .catch(err => console.error('[GoalDetailView] Milestone refresh error:', err));
+                .catch(err => console.error('[GoalDetailView] Session refresh error:', err));
             }}
           />
         </Suspense>
