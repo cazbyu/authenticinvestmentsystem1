@@ -1,12 +1,12 @@
-// components/goals/MilestoneSessionRow.tsx
+// components/goals/SessionRow.tsx
 import React, { memo, useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Dumbbell } from 'lucide-react-native';
 import { formatLocalDate } from '@/lib/dateUtils';
-import { getMilestoneCompletionsForWeek, MilestoneSummary } from '@/services/milestoneService';
+import { getSessionCompletionsForWeek, SessionSummary } from '@/services/sessionService';
 
-interface MilestoneSessionRowProps {
-  milestone: MilestoneSummary;
+interface SessionRowProps {
+  milestone: SessionSummary;
   weekDays: Array<{ date: string; dayName: string; dayOfWeek: number }>;
   weekStart: string;
   weekEnd: string;
@@ -15,7 +15,7 @@ interface MilestoneSessionRowProps {
   onEdit?: () => void;
 }
 
-export const MilestoneSessionRow = memo(function MilestoneSessionRow({
+export const SessionRow = memo(function SessionRow({
   milestone,
   weekDays,
   weekStart,
@@ -23,18 +23,18 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
   onDayPress,
   targetDays,
   onEdit,
-}: MilestoneSessionRowProps) {
+}: SessionRowProps) {
   const [completedDates, setCompletedDates] = useState<string[]>([]);
   const today = formatLocalDate(new Date());
 
   useEffect(() => {
     let cancelled = false;
-    getMilestoneCompletionsForWeek(milestone.milestone_id, weekStart, weekEnd)
+    getSessionCompletionsForWeek(milestone.milestone_id, weekStart, weekEnd)
       .then(dates => {
         if (!cancelled) setCompletedDates(dates);
       })
       .catch(err => {
-        console.error('[MilestoneSessionRow] Error fetching completions:', err);
+        console.error('[SessionRow] Error fetching completions:', err);
       });
     return () => { cancelled = true; };
   }, [milestone.milestone_id, weekStart, weekEnd]);
