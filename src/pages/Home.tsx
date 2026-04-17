@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Crown, Brain, Calculator, Users, MonitorPlay, Megaphone, BarChart3, HeartHandshake, Users2, ScrollText } from 'lucide-react';
 import { useStore } from '../store';
 import { StaffCalendar } from '../components/StaffCalendar';
+import { DailyCommitments } from '../components/DailyCommitments';
 import { SubCircle } from '../components/SubCircle';
 
 // Map of role icons
@@ -172,6 +173,9 @@ export function Home() {
         </div>
         <StaffCalendar />
       </div>
+
+      {/* Today's Commitments (Google Calendar events) */}
+      <DailyCommitments />
     </div>
   );
 }
