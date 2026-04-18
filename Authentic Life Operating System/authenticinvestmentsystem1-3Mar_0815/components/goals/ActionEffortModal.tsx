@@ -906,6 +906,47 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
   if (!goal) return null;
 
+  const isPattern2Edit = mode === 'edit' && !!initialData?.milestone_id;
+
+  const exercisesBlock = (
+    <View style={styles.exerciseBuilderContainer}>
+      <Text style={[styles.fieldLabel, { marginTop: 12 }]}>EXERCISES</Text>
+      {exercises.map((ex, i) => (
+        <ExerciseFormRow
+          key={i}
+          index={i}
+          exercise={ex}
+          onChange={(index, updated) => {
+            setExercises(prev => prev.map((e, j) => j === index ? updated : e));
+          }}
+          onDelete={(index) => {
+            setExercises(prev =>
+              prev.filter((_, j) => j !== index).map((e, j) => ({ ...e, sort_order: j }))
+            );
+          }}
+        />
+      ))}
+
+      <TouchableOpacity
+        style={styles.addExerciseButton}
+        onPress={() => setExercises(prev => [...prev, {
+          name: '',
+          muscle_group: [],
+          exercise_type: 'reps',
+          target_sets: null,
+          target_reps: null,
+          target_value: null,
+          unit: null,
+          sort_order: prev.length,
+        }])}
+        activeOpacity={0.7}
+      >
+        <PlusIcon size={16} color="#6366f1" />
+        <Text style={styles.addExerciseText}>Add Exercise</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
@@ -1144,8 +1185,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                 </View>
               )}
 
-              {/* Detail Tracking Template - Hidden in Quick Add Mode */}
-              {!quickAddMode && (
+              {/* Detail Tracking Template - Hidden in Quick Add Mode and Pattern 2 Edit */}
+              {!quickAddMode && !isPattern2Edit && (
                 <View style={styles.collapsibleSection}>
                   <TouchableOpacity
                     style={styles.collapsibleHeader}
@@ -1215,44 +1256,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                       </View>
 
                       {trackingTemplate === 'workout' ? (
-                        // Exercise builder replaces category config for workout template
-                        <View style={styles.exerciseBuilderContainer}>
-                          {/* Exercise list */}
-                          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>EXERCISES</Text>
-                          {exercises.map((ex, i) => (
-                            <ExerciseFormRow
-                              key={i}
-                              index={i}
-                              exercise={ex}
-                              onChange={(index, updated) => {
-                                setExercises(prev => prev.map((e, j) => j === index ? updated : e));
-                              }}
-                              onDelete={(index) => {
-                                setExercises(prev =>
-                                  prev.filter((_, j) => j !== index).map((e, j) => ({ ...e, sort_order: j }))
-                                );
-                              }}
-                            />
-                          ))}
-
-                          <TouchableOpacity
-                            style={styles.addExerciseButton}
-                            onPress={() => setExercises(prev => [...prev, {
-                              name: '',
-                              muscle_group: [],
-                              exercise_type: 'reps',
-                              target_sets: null,
-                              target_reps: null,
-                              target_value: null,
-                              unit: null,
-                              sort_order: prev.length,
-                            }])}
-                            activeOpacity={0.7}
-                          >
-                            <PlusIcon size={16} color="#6366f1" />
-                            <Text style={styles.addExerciseText}>Add Exercise</Text>
-                          </TouchableOpacity>
-                        </View>
+                        exercisesBlock
                       ) : trackingTemplate && (
                         TEMPLATE_CONFIGS[trackingTemplate].categoryField || trackingTemplate === 'checklist'
                       ) ? (
@@ -1332,6 +1336,9 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                   )}
                 </View>
               )}
+
+              {/* Pattern 2 edit: exercises shown directly (Detail Tracking picker hidden) */}
+              {isPattern2Edit && exercisesBlock}
 
               {/* Wellness Zones - Hidden in Quick Add Mode */}
               {!quickAddMode && (
