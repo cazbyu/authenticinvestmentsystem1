@@ -20,7 +20,7 @@ import { Timeline } from '@/hooks/useGoals';
 import { TEMPLATE_TYPES, TEMPLATE_CONFIGS, TemplateType } from '@/lib/activityTemplates';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
 import { ExerciseFormRow, ExerciseFormData } from '@/components/goals/ExerciseFormRow';
-import { createSession, addExerciseToSession, getExercisesForSession, SessionExercise } from '@/services/sessionService';
+import { createSession, addExerciseToSession, getExercisesForSession, updateSession, updateExercise, removeExerciseFromSession, SessionExercise } from '@/services/sessionService';
 import {
   getDefaultStartTime,
   getDefaultEndTime,
@@ -97,6 +97,19 @@ interface ActionEffortModalProps {
   };
 }
 
+// Translate a form-side exercise row to the DB-side write shape.
+// (muscle_group string[] → comma-joined string, name trimmed)
+const formRowToDbShape = (ex: ExerciseFormData) => ({
+  name: ex.name.trim(),
+  muscle_group: ex.muscle_group.length > 0 ? ex.muscle_group.join(', ') : null,
+  exercise_type: ex.exercise_type,
+  target_sets: ex.target_sets,
+  target_reps: ex.target_reps,
+  target_value: ex.target_value,
+  unit: ex.unit,
+  sort_order: ex.sort_order,
+});
+
 const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   visible,
   onClose,
@@ -140,6 +153,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
   // Exercise builder state (workout template)
   const [exercises, setExercises] = useState<ExerciseFormData[]>([]);
+  const [isLoadingExercises, setIsLoadingExercises] = useState(false);
+  const [originalExerciseIds, setOriginalExerciseIds] = useState<string[]>([]);
   // Attachment state (matching TaskEventForm pattern)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
@@ -240,6 +255,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setNewCategoryText('');
     setTrackingExpanded(false);
     setExercises([]);
+    setOriginalExerciseIds([]);
 
     // Reset collapsed states
     setDomainsExpanded(false);
@@ -296,6 +312,10 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
   const loadInitialData = async () => {
     if (!initialData) return;
+
+    // Reset exercise state — repopulated only if this is a Pattern 2 edit
+    setExercises([]);
+    setOriginalExerciseIds([]);
 
     console.log('[ActionEffortModal] Loading initial data:', initialData);
 
@@ -397,9 +417,11 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
     // Hydrate exercises from the linked session (Pattern 2 only)
     if (initialData.milestone_id) {
+      setIsLoadingExercises(true);
       try {
         const loadedExercises = await getExercisesForSession(initialData.milestone_id);
         setExercises(loadedExercises.map((ex: SessionExercise) => ({
+          exercise_id: ex.exercise_id,
           name: ex.exercise_name,
           muscle_group: ex.muscle_group
             ? ex.muscle_group.split(/,\s*/).filter(s => s.length > 0)
@@ -411,9 +433,12 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
           unit: ex.unit,
           sort_order: ex.sort_order,
         })));
+        setOriginalExerciseIds(loadedExercises.map(ex => ex.exercise_id));
       } catch (err) {
         console.error('[ActionEffortModal] Failed to load session exercises:', err);
         // Non-fatal. Form remains usable with empty exercises.
+      } finally {
+        setIsLoadingExercises(false);
       }
     }
   };
@@ -731,6 +756,52 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
       console.log('[ActionEffortModal] About to save', JSON.stringify(taskData, null, 2));
 
+      // Pattern 2 edit — diff-based save against existing session
+      if (mode === 'edit' && initialData?.milestone_id && exercises.length > 0) {
+        const milestoneId = initialData.milestone_id;
+
+        // 1. Update session metadata
+        await updateSession(milestoneId, {
+          name: taskData.title,
+          recurrence_rule: recurrenceRule,
+          target_days: targetDays,
+        });
+
+        // 2. Update the shadow task (title, recurrence, joins, week plan)
+        await createTaskWithWeekPlan(taskData, timeline);
+
+        // 3. Diff exercises against the load-time snapshot
+        const formExerciseIds = new Set(
+          exercises.filter(ex => ex.exercise_id).map(ex => ex.exercise_id!)
+        );
+        const toInsert = exercises.filter(ex => !ex.exercise_id);
+        const toUpdate = exercises.filter(ex => ex.exercise_id);
+        const toDelete = originalExerciseIds.filter(id => !formExerciseIds.has(id));
+
+        // 4. Apply diff — INSERT → UPDATE → DELETE order keeps user-added
+        // work safe if any later step throws.
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        for (const ex of toInsert) {
+          await addExerciseToSession(user.id, milestoneId, formRowToDbShape(ex));
+        }
+        for (const ex of toUpdate) {
+          await updateExercise(ex.exercise_id!, formRowToDbShape(ex));
+        }
+        for (const id of toDelete) {
+          await removeExerciseFromSession(id);
+        }
+
+        console.log('[ActionEffortModal] Pattern 2 edit complete', {
+          updated: toUpdate.length, inserted: toInsert.length, deleted: toDelete.length,
+        });
+        onClose();
+        Alert.alert('Success', 'Workout session updated successfully');
+        return;
+      }
+
       if (trackingTemplate === 'workout' && exercises.filter(e => e.name.trim()).length > 0) {
         // Workout template with exercises — create milestone instead of regular task
         const supabase = getSupabaseClient();
@@ -755,16 +826,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         // Add exercises in sequence
         for (const ex of exercises) {
           if (ex.name.trim()) {
-            await addExerciseToSession(user.id, milestoneId, {
-              name: ex.name.trim(),
-              muscle_group: ex.muscle_group.length > 0 ? ex.muscle_group.join(', ') : null,
-              exercise_type: ex.exercise_type,
-              target_sets: ex.target_sets,
-              target_reps: ex.target_reps,
-              target_value: ex.target_value,
-              unit: ex.unit,
-              sort_order: ex.sort_order,
-            });
+            await addExerciseToSession(user.id, milestoneId, formRowToDbShape(ex));
           }
         }
       } else {
@@ -1521,11 +1583,11 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
           <TouchableOpacity
             style={[
               styles.saveButton,
-              (!title.trim() || selectedWeeks.length === 0 || saving) && styles.saveButtonDisabled,
+              (!title.trim() || selectedWeeks.length === 0 || saving || isLoadingExercises) && styles.saveButtonDisabled,
               mode === 'edit' && onDelete && styles.saveButtonWithDelete
             ]}
             onPress={handleSave}
-            disabled={!title.trim() || selectedWeeks.length === 0 || (recurrenceType === 'custom' && selectedCustomDays.length === 0) || saving}
+            disabled={!title.trim() || selectedWeeks.length === 0 || (recurrenceType === 'custom' && selectedCustomDays.length === 0) || saving || isLoadingExercises}
           >
             {saving ? (
               <ActivityIndicator size="small" color="#ffffff" />
