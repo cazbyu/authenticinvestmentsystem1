@@ -257,6 +257,59 @@ export async function addExerciseToSession(
   return data.id;
 }
 
+// Update session metadata (name, recurrence, target_days)
+export async function updateSession(
+  milestoneId: string,
+  params: {
+    name?: string;
+    recurrence_rule?: string;
+    target_days?: number;
+  }
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('0008-ap-gl-sessions')
+    .update(params)
+    .eq('id', milestoneId);
+  if (error) throw error;
+}
+
+// Update a single exercise row on a session
+export async function updateExercise(
+  exerciseId: string,
+  params: {
+    name?: string;
+    muscle_group?: string | null;
+    exercise_type?: ExerciseType;
+    target_sets?: number | null;
+    target_reps?: number | null;
+    target_value?: number | null;
+    unit?: string | null;
+    sort_order?: number;
+  }
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('0008-ap-gl-session-steps')
+    .update(params)
+    .eq('id', exerciseId);
+  if (error) throw error;
+}
+
+// Remove an exercise from a session. The FK from 0008-ap-gl-step-log
+// to this row has ON DELETE CASCADE, so any completion history for
+// the removed exercise is intentionally deleted along with it.
+export async function removeExerciseFromSession(
+  exerciseId: string
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('0008-ap-gl-session-steps')
+    .delete()
+    .eq('id', exerciseId);
+  if (error) throw error;
+}
+
 // Get session completion dates for a specific week range
 export async function getSessionCompletionsForWeek(
   milestoneId: string,
