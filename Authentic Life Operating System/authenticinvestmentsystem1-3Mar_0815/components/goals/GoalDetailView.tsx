@@ -2204,6 +2204,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
       weeklyTarget: editingAction.weeklyTarget,
       tracking_template: editingAction.tracking_template,
       data_schema: editingAction.data_schema,
+      milestone_id: milestones.find(ms => ms.task_id === editingAction.id)?.milestone_id ?? null,
     }}
     mode="edit"
   />

@@ -20,7 +20,7 @@ import { Timeline } from '@/hooks/useGoals';
 import { TEMPLATE_TYPES, TEMPLATE_CONFIGS, TemplateType } from '@/lib/activityTemplates';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
 import { ExerciseFormRow, ExerciseFormData } from '@/components/goals/ExerciseFormRow';
-import { createSession, addExerciseToSession } from '@/services/sessionService';
+import { createSession, addExerciseToSession, getExercisesForSession, SessionExercise } from '@/services/sessionService';
 import {
   getDefaultStartTime,
   getDefaultEndTime,
@@ -83,7 +83,10 @@ interface ActionEffortModalProps {
   timeline: Timeline | null;
   createTaskWithWeekPlan: (taskData: any, timeline: Timeline) => Promise<any>;
   onDelete?: (actionId: string) => Promise<void>;
-  initialData?: any;
+  initialData?: {
+    milestone_id?: string | null;
+    [key: string]: any;
+  };
   mode?: 'create' | 'edit';
   // Quick Add mode props (for Weekly Alignment)
   quickAddMode?: boolean;
@@ -291,7 +294,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     }
   };
 
-  const loadInitialData = () => {
+  const loadInitialData = async () => {
     if (!initialData) return;
 
     console.log('[ActionEffortModal] Loading initial data:', initialData);
@@ -391,6 +394,28 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
     const weeks = initialData.selectedWeeks || [];
     setSelectedWeeks(weeks);
+
+    // Hydrate exercises from the linked session (Pattern 2 only)
+    if (initialData.milestone_id) {
+      try {
+        const loadedExercises = await getExercisesForSession(initialData.milestone_id);
+        setExercises(loadedExercises.map((ex: SessionExercise) => ({
+          name: ex.exercise_name,
+          muscle_group: ex.muscle_group
+            ? ex.muscle_group.split(/,\s*/).filter(s => s.length > 0)
+            : [],
+          exercise_type: ex.exercise_type,
+          target_sets: ex.target_sets,
+          target_reps: ex.target_reps,
+          target_value: ex.target_value,
+          unit: ex.unit,
+          sort_order: ex.sort_order,
+        })));
+      } catch (err) {
+        console.error('[ActionEffortModal] Failed to load session exercises:', err);
+        // Non-fatal. Form remains usable with empty exercises.
+      }
+    }
   };
 
   // Attachment handlers (matching TaskEventForm pattern)
