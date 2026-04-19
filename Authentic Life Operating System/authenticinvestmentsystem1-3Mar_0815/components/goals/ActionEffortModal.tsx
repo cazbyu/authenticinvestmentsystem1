@@ -20,7 +20,7 @@ import { Timeline } from '@/hooks/useGoals';
 import { TEMPLATE_TYPES, TEMPLATE_CONFIGS, TemplateType } from '@/lib/activityTemplates';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
 import { ExerciseFormRow, ExerciseFormData } from '@/components/goals/ExerciseFormRow';
-import { createSession, addExerciseToSession, getExercisesForSession, updateSession, updateExercise, removeExerciseFromSession, SessionExercise } from '@/services/sessionService';
+import { createSession, addExerciseToSession, getExercisesForSession, updateSession, updateExercise, removeExerciseFromSession, deleteSession, convertTaskToSession, revertSessionToTask, SessionExercise } from '@/services/sessionService';
 import {
   getDefaultStartTime,
   getDefaultEndTime,
@@ -755,6 +755,112 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       }
 
       console.log('[ActionEffortModal] About to save', JSON.stringify(taskData, null, 2));
+
+      // P1→P2 conversion: editing a Pattern 1 action with exercises newly added
+      if (mode === 'edit' && !initialData?.milestone_id &&
+          trackingTemplate === 'workout' &&
+          exercises.filter(e => e.name.trim()).length > 0) {
+
+        // Confirmation dialog (web/native split matching handleDelete pattern)
+        const confirmed = typeof window !== 'undefined' && window.confirm
+          ? window.confirm(
+              'Convert to full session?\n\n' +
+              'Adding exercises will convert this from a simple daily indicator into a workout session with individual exercise tracking. You can convert back by removing the exercises.'
+            )
+          : await new Promise<boolean>(resolve => {
+              Alert.alert(
+                'Convert to full session?',
+                'Adding exercises will convert this from a simple daily indicator into a workout session with individual exercise tracking. You can convert back by removing the exercises.',
+                [
+                  { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                  { text: 'Convert', onPress: () => resolve(true) },
+                ]
+              );
+            });
+
+        if (!confirmed) return;
+
+        // Re-entry guard: clean up orphan session from a prior failed conversion
+        const supabase = getSupabaseClient();
+        const { data: orphanSession } = await supabase
+          .from('0008-ap-gl-sessions')
+          .select('id')
+          .eq('task_id', initialData.id)
+          .maybeSingle();
+        if (orphanSession) {
+          console.warn('[ActionEffortModal] Re-entry: cleaning up orphan session from prior failed P1→P2 attempt', orphanSession.id);
+          await deleteSession(orphanSession.id);
+        }
+
+        // 1. Update task metadata + week-plan + joins (edit mode)
+        await createTaskWithWeekPlan(taskData, timeline);
+
+        // 2. Create session + flip task_type to 'milestone' + back-link
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        const milestoneId = await convertTaskToSession(user.id, initialData.id, {
+          goalId: goal!.id,
+          name: taskData.title,
+          milestoneType: 'workout_session',
+          completionRule: { type: 'all' },
+        });
+
+        // 3. Insert exercises
+        for (const ex of exercises.filter(e => e.name.trim())) {
+          await addExerciseToSession(user.id, milestoneId, formRowToDbShape(ex));
+        }
+
+        console.log('[ActionEffortModal] P1→P2 conversion complete', {
+          taskId: initialData.id, milestoneId, exercises: exercises.length,
+        });
+        onClose();
+        Alert.alert('Success', 'Converted to workout session');
+        return;
+      }
+
+      // P2→P1 conversion: editing a Pattern 2 action, user removed all exercises
+      if (mode === 'edit' && initialData?.milestone_id &&
+          exercises.filter(e => e.name.trim()).length === 0) {
+
+        const removedCount = originalExerciseIds.length;
+
+        // Confirmation dialog (web/native split matching handleDelete pattern)
+        const confirmed = typeof window !== 'undefined' && window.confirm
+          ? window.confirm(
+              'Remove all exercises?\n\n' +
+              `This will permanently delete ${removedCount} exercises and their recorded history. The task, its schedule, and daily completion will be preserved.`
+            )
+          : await new Promise<boolean>(resolve => {
+              Alert.alert(
+                'Remove all exercises?',
+                `This will permanently delete ${removedCount} exercises and their recorded history. The task, its schedule, and daily completion will be preserved.`,
+                [
+                  { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                  { text: 'Remove', style: 'destructive', onPress: () => resolve(true) },
+                ]
+              );
+            });
+
+        if (!confirmed) return;
+
+        // 1. Delete the session (cascade removes exercises + step-log + session-log;
+        //    task.milestone_id auto-nulls via SET NULL)
+        await deleteSession(initialData.milestone_id);
+
+        // 2. Update task metadata + week-plan + joins (edit mode)
+        await createTaskWithWeekPlan(taskData, timeline);
+
+        // 3. Flip task_type back to 'standard', restore tracking_template='workout'
+        await revertSessionToTask(initialData.id, { trackingTemplate: 'workout' });
+
+        console.log('[ActionEffortModal] P2→P1 conversion complete', {
+          taskId: initialData.id, removedExercises: removedCount,
+        });
+        onClose();
+        Alert.alert('Success', 'Converted to simple daily indicator');
+        return;
+      }
 
       // Pattern 2 edit — diff-based save against existing session
       if (mode === 'edit' && initialData?.milestone_id && exercises.length > 0) {
