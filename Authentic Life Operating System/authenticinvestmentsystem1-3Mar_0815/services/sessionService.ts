@@ -257,13 +257,13 @@ export async function addExerciseToSession(
   return data.id;
 }
 
-// Update session metadata (name, recurrence, target_days)
+// Update session metadata (name). Recurrence and target_days live
+// on the linked task row, not on sessions — they're updated via
+// createTaskWithWeekPlan at the caller.
 export async function updateSession(
   milestoneId: string,
   params: {
     name?: string;
-    recurrence_rule?: string;
-    target_days?: number;
   }
 ): Promise<void> {
   const supabase = getSupabaseClient();

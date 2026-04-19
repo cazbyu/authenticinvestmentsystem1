@@ -866,11 +866,10 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
       if (mode === 'edit' && initialData?.milestone_id && exercises.length > 0) {
         const milestoneId = initialData.milestone_id;
 
-        // 1. Update session metadata
+        // 1. Update session metadata (name only — recurrence_rule and
+        //    target_days live on the task row, updated in step 2 below)
         await updateSession(milestoneId, {
           name: taskData.title,
-          recurrence_rule: recurrenceRule,
-          target_days: targetDays,
         });
 
         // 2. Update the shadow task (title, recurrence, joins, week plan)
