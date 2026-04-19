@@ -1707,9 +1707,18 @@ console.log('[DEBUG] completedDays array:', completedDays);
               SESSIONS
             </Text>
             {milestones.map(ms => {
-              // Generate weekDays from currentWeekData
+              // Use the DISPLAYED week (tracked by displayedWeekNumber), not
+              // today's real-world week from the component-level currentWeekData
+              // useMemo. The useMemo ignores navigation state, so without this
+              // lookup users viewing a past/future week would see session
+              // circles for today's week and clicks would open StepLogPanel
+              // for the wrong date.
+              const displayedWeek = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
+              if (!displayedWeek) return null;
+
+              // Generate weekDays from the displayed week
               const days = [];
-              const start = parseLocalDate(currentWeekData.startDate);
+              const start = parseLocalDate(displayedWeek.start_date);
               for (let i = 0; i < 7; i++) {
                 const day = new Date(start);
                 day.setDate(start.getDate() + i);
@@ -1724,8 +1733,8 @@ console.log('[DEBUG] completedDays array:', completedDays);
                   key={ms.milestone_id}
                   milestone={ms}
                   weekDays={days}
-                  weekStart={currentWeekData.startDate}
-                  weekEnd={currentWeekData.endDate}
+                  weekStart={displayedWeek.start_date}
+                  weekEnd={displayedWeek.end_date}
                   targetDays={ms.target_days ?? 7}
                   onEdit={() => {
                     const shadowTask = weekFilteredActions.find(a => a.id === ms.task_id);
