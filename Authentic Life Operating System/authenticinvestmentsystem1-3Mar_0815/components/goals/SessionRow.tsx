@@ -95,8 +95,7 @@ export const SessionRow = memo(function SessionRow({
                 activeOpacity={0.7}
                 style={[
                   styles.dayBubble,
-                  isFull && styles.dayBubbleCompleted,
-                  isPartial && styles.dayBubblePartial,
+                  (isFull || isPartial) && styles.dayBubbleCompleted,
                   isMissed && styles.dayBubbleMissed,
                 ]}
               >
@@ -219,9 +218,6 @@ const styles = StyleSheet.create({
   },
   dayBubbleCompleted: {
     backgroundColor: '#dcfce7',
-    borderColor: '#22c55e',
-  },
-  dayBubblePartial: {
     borderColor: '#22c55e',
   },
   dayBubbleMissed: {
