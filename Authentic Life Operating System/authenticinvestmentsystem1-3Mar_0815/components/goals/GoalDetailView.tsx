@@ -141,7 +141,7 @@ export function GoalDetailView({
         setMilestones(data);
       })
       .catch(err => console.error('[GoalDetailView] Session fetch error:', err));
-  }, [goal?.id]);
+  }, [goal?.id, refreshTrigger]);
 
   // Ideas tab state
   const [ideas, setIdeas] = useState<DepositIdea[]>([]);
