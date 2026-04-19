@@ -310,6 +310,97 @@ export async function removeExerciseFromSession(
   if (error) throw error;
 }
 
+// Delete a session row. Cascades (DB-level ON DELETE CASCADE) clean up:
+//   - 0008-ap-gl-session-log (via milestone_id FK)
+//   - 0008-ap-gl-session-steps (via milestone_id FK)
+//   - 0008-ap-gl-step-log (transitively via both of the above)
+// Also: 0008-ap-tasks.milestone_id auto-nulls via ON DELETE SET NULL.
+export async function deleteSession(milestoneId: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('0008-ap-gl-sessions')
+    .delete()
+    .eq('id', milestoneId);
+  if (error) throw error;
+}
+
+// Convert a Pattern 1 task into a Pattern 2 session by:
+//   1. Inserting a new session row linked to the existing task
+//   2. Flipping the task's task_type to 'milestone', clearing
+//      tracking_template, and back-linking to the new session
+// The caller is responsible for task metadata + week-plan
+// (via createTaskWithWeekPlan) and exercise inserts.
+//
+// Two-call operation without atomic guarantee. If the session INSERT
+// succeeds but the task UPDATE fails, the task retains
+// task_type='standard' with an orphan session row pointing at it.
+// Caller should guard against re-entry by checking for an existing
+// linked session before calling. See handleSave P1→P2 branch.
+export async function convertTaskToSession(
+  userId: string,
+  taskId: string,
+  params: {
+    goalId: string;
+    name: string;
+    milestoneType: string;
+    completionRule: object;
+  }
+): Promise<string> {
+  const supabase = getSupabaseClient();
+
+  // Insert session row linked to the existing task
+  const { data: session, error: sessErr } = await supabase
+    .from('0008-ap-gl-sessions')
+    .insert({
+      user_id: userId,
+      goal_id: params.goalId,
+      task_id: taskId,
+      name: params.name,
+      milestone_type: params.milestoneType,
+      completion_rule: params.completionRule,
+    })
+    .select('id')
+    .single();
+  if (sessErr) throw sessErr;
+
+  // Flip task: task_type='milestone', clear tracking_template, back-link
+  const { error: flipErr } = await supabase
+    .from('0008-ap-tasks')
+    .update({
+      task_type: 'milestone',
+      tracking_template: null,
+      milestone_id: session.id,
+    })
+    .eq('id', taskId);
+  if (flipErr) throw flipErr;
+
+  return session.id;
+}
+
+// Revert a Pattern 2 task back to Pattern 1 after its session has
+// been deleted. Flips task_type back to 'standard' and restores the
+// caller-chosen tracking_template (typically 'workout' to preserve
+// the user's original Detail Tracking intent).
+// Note: 0008-ap-tasks.milestone_id is NOT updated here — it is
+// auto-nulled by the ON DELETE SET NULL cascade when deleteSession
+// removed the session row.
+export async function revertSessionToTask(
+  taskId: string,
+  params: {
+    trackingTemplate: string | null;
+  }
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('0008-ap-tasks')
+    .update({
+      task_type: 'standard',
+      tracking_template: params.trackingTemplate,
+    })
+    .eq('id', taskId);
+  if (error) throw error;
+}
+
 // Get session completion dates for a specific week range
 export async function getSessionCompletionsForWeek(
   milestoneId: string,
