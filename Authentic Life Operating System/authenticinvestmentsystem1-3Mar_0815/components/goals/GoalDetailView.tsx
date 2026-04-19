@@ -1732,14 +1732,56 @@ console.log('[DEBUG] completedDays array:', completedDays);
                     if (shadowTask) {
                       handleEditAction(shadowTask);
                     } else {
-                      getSupabaseClient()
-                        .from('0008-ap-tasks')
-                        .select('*')
-                        .eq('id', ms.task_id)
-                        .single()
-                        .then(({ data }) => {
-                          if (data) handleEditAction(data as TaskWithLogs);
-                        });
+                      // Pattern 2 fallback: shadow tasks (task_type='milestone') are
+                      // excluded from v_goal_detail_week_actions, so we orchestrate
+                      // the data the view would have supplied — task row + week-plan
+                      // rows + association joins.
+                      (async () => {
+                        const supabase = getSupabaseClient();
+
+                        const [taskRes, weekPlanRes, rolesJoinRes, domainsJoinRes, krJoinRes] = await Promise.all([
+                          supabase.from('0008-ap-tasks').select('*').eq('id', ms.task_id).single(),
+                          supabase.from('0008-ap-task-week-plan').select('week_number, target_days').eq('task_id', ms.task_id).is('deleted_at', null).order('week_number'),
+                          supabase.from('0008-ap-universal-roles-join').select('role_id').eq('parent_id', ms.task_id).eq('parent_type', 'task'),
+                          supabase.from('0008-ap-universal-domains-join').select('domain_id').eq('parent_id', ms.task_id).eq('parent_type', 'task'),
+                          supabase.from('0008-ap-universal-key-relationships-join').select('key_relationship_id').eq('parent_id', ms.task_id).eq('parent_type', 'task'),
+                        ]);
+
+                        if (taskRes.error || !taskRes.data) {
+                          console.error('[GoalDetailView] Pattern 2 edit: task fetch failed:', taskRes.error);
+                          return;
+                        }
+
+                        const roleIds = (rolesJoinRes.data ?? []).map((r: any) => r.role_id);
+                        const domainIds = (domainsJoinRes.data ?? []).map((d: any) => d.domain_id);
+                        const krIds = (krJoinRes.data ?? []).map((kr: any) => kr.key_relationship_id);
+
+                        const [rolesRes, domainsRes, krsRes] = await Promise.all([
+                          roleIds.length > 0
+                            ? supabase.from('0008-ap-roles').select('id, label, color').in('id', roleIds)
+                            : Promise.resolve({ data: [] as any[], error: null }),
+                          domainIds.length > 0
+                            ? supabase.from('0008-ap-domains').select('id, name').in('id', domainIds)
+                            : Promise.resolve({ data: [] as any[], error: null }),
+                          krIds.length > 0
+                            ? supabase.from('0008-ap-key-relationships').select('id, name').in('id', krIds)
+                            : Promise.resolve({ data: [] as any[], error: null }),
+                        ]);
+
+                        const weekPlans = weekPlanRes.data ?? [];
+                        const augmented = {
+                          ...taskRes.data,
+                          selectedWeeks: weekPlans.map(wp => wp.week_number).sort((a, b) => a - b),
+                          weeklyTarget: weekPlans[0]?.target_days ?? 0,
+                          weeklyActual: 0,
+                          logs: [],
+                          roles: rolesRes.data ?? [],
+                          domains: domainsRes.data ?? [],
+                          keyRelationships: krsRes.data ?? [],
+                        };
+
+                        handleEditAction(augmented as TaskWithLogs);
+                      })();
                     }
                   }}
                   onDayPress={(date, dayLabel) => {
