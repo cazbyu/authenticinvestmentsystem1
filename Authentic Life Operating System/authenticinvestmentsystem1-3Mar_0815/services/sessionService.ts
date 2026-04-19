@@ -401,19 +401,28 @@ export async function revertSessionToTask(
   if (error) throw error;
 }
 
-// Get session completion dates for a specific week range
+export interface SessionDayCompletion {
+  completed_date: string;
+  exercises_completed: number;
+  exercises_total: number;
+}
+
+// Get per-day completion snapshots for a session across a week range.
+// Used by SessionRow to render fractional day circles
+// (exercises_completed / exercises_total) rather than binary complete/
+// incomplete.
 export async function getSessionCompletionsForWeek(
   milestoneId: string,
   weekStart: string,
   weekEnd: string
-): Promise<string[]> {
+): Promise<SessionDayCompletion[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('0008-ap-gl-session-log')
-    .select('completed_date')
+    .select('completed_date, exercises_completed, exercises_total')
     .eq('milestone_id', milestoneId)
     .gte('completed_date', weekStart)
     .lte('completed_date', weekEnd);
   if (error) throw error;
-  return (data ?? []).map(row => row.completed_date);
+  return data ?? [];
 }
