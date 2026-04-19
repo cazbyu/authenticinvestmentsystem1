@@ -9,7 +9,6 @@ import { SessionRow } from './SessionRow';
 import { getSessionsForGoal, SessionSummary } from '@/services/sessionService';
 
 const StepLogPanel = lazy(() => import('./StepLogPanel'));
-const CreateMilestoneModal = lazy(() => import('./CreateMilestoneModal'));
 
 interface WeekData {
   weekNumber: number;
@@ -94,8 +93,6 @@ export const GoalProgressCard = memo(function GoalProgressCard({
     selectedDayLabel: string;
     completionRule: { type: string; required?: number; of?: number };
   } | null>(null);
-
-  const [showCreateMilestone, setShowCreateMilestone] = useState(false);
 
   // Fetch sessions for this goal on mount / when goal changes
   useEffect(() => {
@@ -482,7 +479,7 @@ export const GoalProgressCard = memo(function GoalProgressCard({
           </View>
         )}
 
-        {/* Sessions + Add Session button */}
+        {/* Sessions */}
         {expanded && week && (
           <View style={styles.weekActionsSection}>
             {milestones.map(ms => {
@@ -512,19 +509,6 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                 />
               );
             })}
-
-            {/* Add Session button */}
-            <TouchableOpacity
-              style={styles.addSessionButton}
-              onPress={() => {
-                if (!timeline) return;
-                setShowCreateMilestone(true);
-              }}
-              activeOpacity={0.7}
-            >
-              <Plus size={14} color="#6366f1" />
-              <Text style={styles.addSessionText}>Add Session</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -549,26 +533,6 @@ export const GoalProgressCard = memo(function GoalProgressCard({
               </View>
             )}
           </View>
-        )}
-        {/* Create Milestone Modal */}
-        {showCreateMilestone && timeline && (
-          <Suspense fallback={null}>
-            <CreateMilestoneModal
-              visible={showCreateMilestone}
-              onClose={() => setShowCreateMilestone(false)}
-              onCreated={() => {
-                setShowCreateMilestone(false);
-                // Refresh sessions list
-                getSessionsForGoal(goal.id)
-                  .then(setMilestones)
-                  .catch(err => console.error('[GoalProgressCard] Session refresh error:', err));
-                onRefresh?.();
-              }}
-              goal={goal}
-              timeline={timeline}
-              currentWeekNumber={currentWeekNumber ?? 1}
-            />
-          </Suspense>
         )}
         {/* Step Log Panel */}
         {exercisePanelState && (
@@ -933,23 +897,5 @@ const styles = StyleSheet.create({
   goalTotalScoreText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  addSessionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 8,
-    backgroundColor: '#f5f3ff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    alignSelf: 'flex-start',
-  },
-  addSessionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6366f1',
   },
 });
