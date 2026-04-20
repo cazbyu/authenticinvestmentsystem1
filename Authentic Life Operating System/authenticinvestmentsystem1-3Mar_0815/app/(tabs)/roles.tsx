@@ -35,7 +35,7 @@ import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { RoleBankHub } from '@/components/roles/RoleBankHub';
 import { KRTile } from '@/components/common/KRTile';
 import { VisionBlock } from '@/components/common/VisionBlock';
-import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR } from '@/lib/roleStatistics';
+import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR, fetchRoleLinkedGoalIds } from '@/lib/roleStatistics';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -158,22 +158,32 @@ const { headerColor } = useHeaderColor();
   const [goalProgress, setGoalProgress] = useState<Record<string, GoalProgressData>>({});
   const [loadingGoalProgress, setLoadingGoalProgress] = useState(false);
 
-  const roleLinkedGoalIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const task of tasks) {
-      if (Array.isArray(task.goals)) {
-        for (const g of task.goals) {
-          if (g?.id) ids.add(g.id);
-        }
-      }
-    }
-    return ids;
-  }, [tasks]);
+  const [roleLinkedGoalIds, setRoleLinkedGoalIds] = useState<Set<string>>(new Set());
 
   const roleLinkedTwelveWeekGoals = useMemo(
     () => twelveWeekGoals.filter(g => roleLinkedGoalIds.has(g.id)),
     [twelveWeekGoals, roleLinkedGoalIds],
   );
+
+  useEffect(() => {
+    if (!selectedRole) {
+      setRoleLinkedGoalIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const ids = await fetchRoleLinkedGoalIds(supabase, user.id, selectedRole.id);
+        if (!cancelled) setRoleLinkedGoalIds(ids);
+      } catch (e) {
+        console.error('fetchRoleLinkedGoalIds error:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedRole?.id]);
 
   // Memoize scope objects for JournalView and AnalyticsView to prevent unnecessary re-fetches
   const journalScope = useMemo(() => {

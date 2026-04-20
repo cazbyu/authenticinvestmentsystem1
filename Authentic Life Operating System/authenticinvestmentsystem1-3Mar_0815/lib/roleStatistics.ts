@@ -612,3 +612,36 @@ export async function getLastActivityPerKR(
     return new Map();
   }
 }
+
+export async function fetchRoleLinkedGoalIds(
+  supabase: SupabaseClient,
+  userId: string,
+  roleId: string,
+): Promise<Set<string>> {
+  try {
+    const { data: roleTaskLinks, error: roleError } = await supabase
+      .from('0008-ap-universal-roles-join')
+      .select('parent_id')
+      .eq('user_id', userId)
+      .eq('role_id', roleId)
+      .eq('parent_type', 'task');
+
+    if (roleError) throw roleError;
+    if (!roleTaskLinks?.length) return new Set();
+
+    const taskIds = roleTaskLinks.map(r => r.parent_id);
+
+    const { data: goalLinks, error: goalError } = await supabase
+      .from('0008-ap-universal-goals-join')
+      .select('goal_id')
+      .eq('user_id', userId)
+      .eq('parent_type', 'task')
+      .in('parent_id', taskIds);
+
+    if (goalError) throw goalError;
+    return new Set(goalLinks?.map(g => g.goal_id).filter(Boolean) ?? []);
+  } catch (error) {
+    console.error('Error fetching role-linked goal IDs:', error);
+    return new Set();
+  }
+}
