@@ -158,7 +158,7 @@ export function TrackerDetailView({
       const sum = values.reduce((a, b) => a + b, 0);
       return {
         kind: 'numeric' as const,
-        avg: sum / values.length,
+        avg: Math.round((sum / values.length) * 10) / 10,
         min: Math.min(...values),
         max: Math.max(...values),
         count: values.length,

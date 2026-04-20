@@ -245,14 +245,7 @@ export function LogEntryForm({
     try {
       const supabase = getSupabaseClient();
 
-      const payload: Record<string, any> = {
-        user_id: userId,
-        exercise_id: stepId,
-        milestone_log_id: null,
-        log_date: selectedDate,
-        unit: instance.unit_label,
-        notes: note.trim() || null,
-      };
+      const valueColumns: Record<string, any> = {};
 
       switch (instance.measurement_type) {
         case 'number':
@@ -260,40 +253,78 @@ export function LogEntryForm({
         case 'percentage':
         case 'distance':
         case 'hours':
-          payload.value_number = Number(primaryValue);
+          valueColumns.value_number = Number(primaryValue);
           break;
         case 'duration': {
           const mins = Number(durationMinutes) || 0;
           const secs = Number(durationSeconds) || 0;
-          payload.value_number = mins * 60 + secs;
+          valueColumns.value_number = mins * 60 + secs;
           break;
         }
         case 'rating':
-          payload.value_number = ratingValue;
+          valueColumns.value_number = ratingValue;
           break;
         case 'boolean':
-          payload.value_boolean = booleanValue;
+          valueColumns.value_boolean = booleanValue;
           break;
         case 'text':
-          payload.value_text = primaryValue.trim();
+          valueColumns.value_text = primaryValue.trim();
           break;
         case 'time_of_day':
-          payload.value_text =
+          valueColumns.value_text =
             `${timeHours.padStart(2, '0')}:${timeMinutes.padStart(2, '0')}`;
           break;
         case 'coordinates':
-          payload.value_lat = coords?.lat;
-          payload.value_lng = coords?.lng;
+          valueColumns.value_lat = coords?.lat;
+          valueColumns.value_lng = coords?.lng;
           break;
       }
 
-      const { data: logRow, error: logErr } = await supabase
-        .from('0008-ap-gl-step-log')
-        .insert(payload)
-        .select()
-        .single();
-      if (logErr) throw logErr;
-      const stepLogId = logRow.id;
+      const notesTrimmed = note.trim() || null;
+
+      let stepLogId: string;
+      let existingLogId: string | null = null;
+
+      if (!instance.allow_multiple_logs_per_day) {
+        const { data: existing, error: findErr } = await supabase
+          .from('0008-ap-gl-step-log')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('exercise_id', stepId)
+          .eq('log_date', selectedDate)
+          .maybeSingle();
+        if (findErr) throw findErr;
+        existingLogId = existing?.id ?? null;
+      }
+
+      if (existingLogId) {
+        const { error: updErr } = await supabase
+          .from('0008-ap-gl-step-log')
+          .update({
+            ...valueColumns,
+            notes: notesTrimmed,
+          })
+          .eq('id', existingLogId);
+        if (updErr) throw updErr;
+        stepLogId = existingLogId;
+      } else {
+        const insertPayload = {
+          user_id: userId,
+          exercise_id: stepId,
+          milestone_log_id: null,
+          log_date: selectedDate,
+          unit: instance.unit_label,
+          notes: notesTrimmed,
+          ...valueColumns,
+        };
+        const { data: inserted, error: insErr } = await supabase
+          .from('0008-ap-gl-step-log')
+          .insert(insertPayload)
+          .select('id')
+          .single();
+        if (insErr) throw insErr;
+        stepLogId = inserted.id;
+      }
 
       const joins: Array<Promise<any>> = [];
       if (selectedRoleIds.length > 0) {
