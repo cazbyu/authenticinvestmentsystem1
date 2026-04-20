@@ -888,7 +888,8 @@ export function LogEntryForm({
 
         <DateTimePickerModal
           visible={showDatePicker}
-          mode="task"
+          mode="historical"
+          title="Pick a date"
           initialDate={parseLocalDate(selectedDate)}
           onConfirm={(newDate) => {
             setSelectedDate(formatLocalDate(newDate));

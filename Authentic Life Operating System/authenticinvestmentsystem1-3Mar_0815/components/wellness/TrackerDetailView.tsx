@@ -12,7 +12,7 @@ import {
 import { X, Plus } from 'lucide-react-native';
 
 import { getSupabaseClient } from '@/lib/supabase';
-import { formatLocalDate } from '@/lib/dateUtils';
+import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { formatTrackerValue, TrackerInstance } from './TrackerCard';
 import { LogEntryForm } from './LogEntryForm';
 import { TrendLineChart } from './TrendLineChart';
@@ -84,7 +84,7 @@ function pickLogValue(log: StepLogRow, measurementType: string): number | string
 }
 
 function formatShortDate(iso: string): string {
-  const d = new Date(iso);
+  const d = parseLocalDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }

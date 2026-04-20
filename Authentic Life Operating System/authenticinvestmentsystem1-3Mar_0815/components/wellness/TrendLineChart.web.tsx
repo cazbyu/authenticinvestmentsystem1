@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native';
 import Svg, { Path, Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
+import { parseLocalDate } from '@/lib/dateUtils';
 
 export interface TrendLineChartProps {
   data: { date: string; value: number }[];
@@ -16,7 +17,7 @@ const PAD_TOP = 16;
 const PAD_BOTTOM = 28;
 
 function formatShortDate(iso: string): string {
-  const d = new Date(iso);
+  const d = parseLocalDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
