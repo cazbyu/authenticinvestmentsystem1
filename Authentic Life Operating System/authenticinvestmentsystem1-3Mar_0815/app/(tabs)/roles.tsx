@@ -33,7 +33,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { RoleBankHub } from '@/components/roles/RoleBankHub';
-import { getRoleStatistics, RoleStatistics, getLastActivityPerRole } from '@/lib/roleStatistics';
+import { KRTile } from '@/components/common/KRTile';
+import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR } from '@/lib/roleStatistics';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -45,6 +46,8 @@ interface Role {
   image_path?: string;
   color?: string;
   icon?: string;
+  vision_statement?: string | null;
+  power_question_answer?: string | null;
 }
 
 interface KeyRelationship {
@@ -125,6 +128,7 @@ const { headerColor } = useHeaderColor();
   const [roleStatistics, setRoleStatistics] = useState<Record<string, RoleStatistics>>({});
   const [loadingStatistics, setLoadingStatistics] = useState(false);
   const [lastActivityMap, setLastActivityMap] = useState<Map<string, string | null>>(new Map());
+  const [krLastActivityMap, setKrLastActivityMap] = useState<Map<string, string | null>>(new Map());
 
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
@@ -311,6 +315,27 @@ const { headerColor } = useHeaderColor();
       console.error('Error fetching role last-activity map:', error);
     }
   }, []);
+
+  const updateRoleField = useCallback(async (
+    roleId: string,
+    fields: Partial<Pick<Role, 'vision_statement' | 'power_question_answer'>>
+  ) => {
+    try {
+      const supabase = getSupabaseClient();
+      await supabase
+        .from('0008-ap-roles')
+        .update({ ...fields, updated_at: toLocalISOString(new Date()) })
+        .eq('id', roleId);
+      setRoles(prev => prev.map(r =>
+        r.id === roleId ? { ...r, ...fields } : r
+      ));
+      if (selectedRole?.id === roleId) {
+        setSelectedRole(prev => prev ? { ...prev, ...fields } : prev);
+      }
+    } catch (error) {
+      console.error('Error updating role field:', error);
+    }
+  }, [selectedRole]);
 
   const fetchKeyRelationships = useCallback(async (roleId: string) => {
     setKRLoading(true);
