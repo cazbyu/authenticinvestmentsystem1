@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -18,6 +19,7 @@ export interface KRTileProps {
   name: string;
   relationshipType: string;
   lastInteractionDate: string | null;
+  imageUri?: string | null;
   onPress: () => void;
 }
 
@@ -62,6 +64,7 @@ export function KRTile({
   name,
   relationshipType,
   lastInteractionDate,
+  imageUri,
   onPress,
 }: KRTileProps) {
   const avatarColor = pickAvatarColor(name);
@@ -77,9 +80,13 @@ export function KRTile({
         pressed && { borderColor: '#1e3a5f', borderWidth: 1.5 },
       ]}
     >
-      <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-        <Text style={styles.avatarText}>{initials}</Text>
-      </View>
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={styles.avatar} />
+      ) : (
+        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+          <Text style={styles.avatarText}>{initials}</Text>
+        </View>
+      )}
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>
           {name}

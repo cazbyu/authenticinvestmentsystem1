@@ -1630,6 +1630,7 @@ const { headerColor } = useHeaderColor();
       // Role view
       return (
         <View style={styles.content} pointerEvents="box-none">
+          <ScrollView contentContainerStyle={styles.detailScroll}>
 
           {/* Vision + Power Question — Role Landing additions */}
           {activeView === 'deposits' && selectedRole && (
@@ -1725,7 +1726,7 @@ const { headerColor } = useHeaderColor();
               )}
             </View>
           )}
-          <ScrollView style={styles.taskList}>
+          <View style={styles.taskList}>
             {activeView === 'journal' ? (
               journalScope && (
                 <JournalView
@@ -1783,7 +1784,7 @@ const { headerColor } = useHeaderColor();
                 <Text style={styles.emptyText}>Feature coming soon!</Text>
               </View>
             )}
-          </ScrollView>
+          </View>
 
           {/* Key Relationships — upgraded to KRTile */}
           {selectedRole && (
@@ -1819,12 +1820,14 @@ const { headerColor } = useHeaderColor();
                     name={kr.name}
                     relationshipType={kr.description || 'Key relationship'}
                     lastInteractionDate={krLastActivityMap.get(kr.id) ?? null}
+                    imageUri={krImageUrls[kr.id] ?? null}
                     onPress={() => setSelectedKR(kr)}
                   />
                 ))
               )}
             </View>
           )}
+          </ScrollView>
         </View>
       );
     }
@@ -2182,8 +2185,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   taskList: {
-    flex: 1,
     padding: 16,
+  },
+  detailScroll: {
+    paddingBottom: 24,
   },
   keyRelationshipsSection: {
     backgroundColor: '#ffffff',
