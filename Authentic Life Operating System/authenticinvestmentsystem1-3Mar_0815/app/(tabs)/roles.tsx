@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { toLocalISOString } from '@/lib/dateUtils';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, Platform, useWindowDimensions, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
@@ -34,6 +34,7 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { RoleBankHub } from '@/components/roles/RoleBankHub';
 import { KRTile } from '@/components/common/KRTile';
+import { VisionBlock } from '@/components/common/VisionBlock';
 import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR } from '@/lib/roleStatistics';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
@@ -361,6 +362,8 @@ const { headerColor } = useHeaderColor();
       if (error) throw error;
       setKeyRelationships(data || []);
       setSelectedKR(null);
+      const krMap = await getLastActivityPerKR(supabase, user.id);
+      setKrLastActivityMap(krMap);
     } catch (error) {
       console.error('Error fetching key relationships:', error);
       setKeyRelationships([]);
@@ -1628,6 +1631,60 @@ const { headerColor } = useHeaderColor();
       return (
         <View style={styles.content} pointerEvents="box-none">
 
+          {/* Vision + Power Question — Role Landing additions */}
+          {activeView === 'deposits' && selectedRole && (
+            <View style={styles.roleLandingSection}>
+              <VisionBlock
+                label="Role Vision"
+                value={selectedRole.vision_statement ?? null}
+                onSave={(text) =>
+                  updateRoleField(selectedRole.id, { vision_statement: text })
+                }
+                accentColor={selectedRole.color || '#7c3aed'}
+                placeholder="What does thriving in this role look like?"
+              />
+              <View style={styles.powerQuestionBlock}>
+                <Text style={styles.powerQuestionLabel}>POWER QUESTION</Text>
+                <Text style={styles.powerQuestionPrompt}>
+                  Who do I want to become as a {selectedRole.label}?
+                </Text>
+                <VisionBlock
+                  label="My Answer"
+                  value={selectedRole.power_question_answer ?? null}
+                  onSave={(text) =>
+                    updateRoleField(selectedRole.id, { power_question_answer: text })
+                  }
+                  accentColor={selectedRole.color || '#7c3aed'}
+                  placeholder="Tap to reflect on this question..."
+                />
+              </View>
+              <View style={styles.statsRow}>
+                <View style={styles.statChip}>
+                  <Text style={styles.statChipNumber}>
+                    {keyRelationships.filter(kr => kr.role_id === selectedRole.id).length}
+                  </Text>
+                  <Text style={styles.statChipLabel}>Relationships</Text>
+                </View>
+                <View style={styles.statChip}>
+                  <Text style={styles.statChipNumber}>
+                    {tasks.filter(t => {
+                      if (!t.due_date) return false;
+                      const due = new Date(t.due_date);
+                      const now = new Date();
+                      const weekEnd = new Date(now);
+                      weekEnd.setDate(now.getDate() + 7);
+                      return due <= weekEnd && t.status !== 'completed';
+                    }).length}
+                  </Text>
+                  <Text style={styles.statChipLabel}>Due this week</Text>
+                </View>
+                <View style={styles.statChip}>
+                  <Text style={styles.statChipNumber}>{depositIdeas.length}</Text>
+                  <Text style={styles.statChipLabel}>Ideas</Text>
+                </View>
+              </View>
+            </View>
+          )}
           {/* 12-Week Goals Strip - Only show when data is stable */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && fetchState === 'complete' && (
             <View style={styles.goalsStrip}>
@@ -1728,80 +1785,46 @@ const { headerColor } = useHeaderColor();
             )}
           </ScrollView>
 
-          {/* Key Relationships Section - Always visible when a role is selected */}
-          <View style={styles.keyRelationshipsSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Key Relationships</Text>
-              <TouchableOpacity
-                style={styles.addKRButton}
-                onPress={() => handleAddKR(selectedRole.id)}
-                disabled={krLoading}
-              >
-                <Plus size={14} color="#0078d4" />
-                <Text style={styles.addKRButtonText}>KR</Text>
-              </TouchableOpacity>
+          {/* Key Relationships — upgraded to KRTile */}
+          {selectedRole && (
+            <View style={styles.krSection}>
+              <View style={styles.krSectionHeader}>
+                <Text style={styles.krSectionTitle}>KEY RELATIONSHIPS</Text>
+                <View style={styles.krSectionHeaderRight}>
+                  <TouchableOpacity
+                    style={styles.addKRButton}
+                    onPress={() => handleAddKR(selectedRole.id)}
+                    disabled={krLoading}
+                  >
+                    <Plus size={14} color="#0078d4" />
+                    <Text style={styles.addKRButtonText}>KR</Text>
+                  </TouchableOpacity>
+                  <Pressable onPress={() => setActiveMainTab('keyrelationships')}>
+                    <Text style={styles.krSeeAll}>See all</Text>
+                  </Pressable>
+                </View>
+              </View>
+              {krLoading ? (
+                <View style={styles.krLoadingContainer}>
+                  <Text style={styles.krLoadingText}>Loading key relationships...</Text>
+                </View>
+              ) : keyRelationships.filter(kr => kr.role_id === selectedRole.id).length === 0 ? (
+                <View style={styles.emptyKRContainer}>
+                  <Text style={styles.emptyKRText}>No key relationships yet</Text>
+                </View>
+              ) : (
+                keyRelationships.filter(kr => kr.role_id === selectedRole.id).map(kr => (
+                  <KRTile
+                    key={kr.id}
+                    name={kr.name}
+                    relationshipType={kr.description || 'Key relationship'}
+                    lastInteractionDate={krLastActivityMap.get(kr.id) ?? null}
+                    onPress={() => setSelectedKR(kr)}
+                  />
+                ))
+              )}
             </View>
-            {krLoading ? (
-              <View style={styles.krLoadingContainer}>
-                <Text style={styles.krLoadingText}>Loading key relationships...</Text>
-              </View>
-            ) : keyRelationships.filter(kr => kr.role_id === selectedRole.id).length === 0 ? (
-              <View style={styles.emptyKRContainer}>
-                <Text style={styles.emptyKRText}>No key relationships yet</Text>
-              </View>
-            ) : (
-              <View style={styles.krScrollWrapper}>
-                <TouchableOpacity
-                  style={styles.krScrollArrow}
-                  onPress={() => {
-                    const newOffset = Math.max(0, krScrollOffset - 200);
-                    krScrollRef.current?.scrollTo({ x: newOffset, animated: true });
-                  }}
-                >
-                  <ChevronLeft size={18} color="#6b7280" />
-                </TouchableOpacity>
-                <ScrollView
-                  ref={krScrollRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.krScrollContent}
-                  onScroll={(e) => setKrScrollOffset(e.nativeEvent.contentOffset.x)}
-                  scrollEventThrottle={16}
-                >
-                  {keyRelationships.filter(kr => kr.role_id === selectedRole.id).map(kr => (
-                    <TouchableOpacity
-                      key={kr.id}
-                      style={styles.krCircleItem}
-                      onPress={() => setSelectedKR(kr)}
-                    >
-                      {kr.image_path && krImageUrls[kr.id] ? (
-                        <Image
-                          source={{ uri: krImageUrls[kr.id] || undefined }}
-                          style={styles.krCircleImg}
-                          onError={(error) => {
-                            console.error('[RoleBank] Failed to load KR image:', kr.image_path, error.nativeEvent.error);
-                          }}
-                        />
-                      ) : (
-                        <View style={styles.krCircleImgPlaceholder}>
-                          <Users size={22} color="#9ca3af" />
-                        </View>
-                      )}
-                      <Text style={styles.krCircleLabel} numberOfLines={1}>{kr.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <TouchableOpacity
-                  style={styles.krScrollArrow}
-                  onPress={() => {
-                    krScrollRef.current?.scrollTo({ x: krScrollOffset + 200, animated: true });
-                  }}
-                >
-                  <ChevronRight size={18} color="#6b7280" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+          )}
         </View>
       );
     }
@@ -2620,5 +2643,75 @@ const styles = StyleSheet.create({
   },
   roleBankTabTextActive: {
     color: '#ffffff',
+  },
+  roleLandingSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 12,
+  },
+  powerQuestionBlock: {
+    gap: 6,
+  },
+  powerQuestionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#6b7280',
+  },
+  powerQuestionPrompt: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#374151',
+    lineHeight: 20,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statChip: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statChipNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  statChipLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  krSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 8,
+  },
+  krSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  krSectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  krSectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#6b7280',
+  },
+  krSeeAll: {
+    fontSize: 13,
+    color: '#7c3aed',
+    fontWeight: '500',
   },
 });
