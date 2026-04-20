@@ -133,7 +133,7 @@ export function RoleBankHub({
                     <RoleIcon
                       name={role.icon || role.label}
                       color="#ffffff"
-                      size={28}
+                      size={22}
                     />
                   </View>
                   <View
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     width: '31.5%',
-    aspectRatio: 1,
+    height: 110,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -251,13 +251,13 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     position: 'relative',
-    width: 56,
-    height: 56,
+    width: 44,
+    height: 44,
   },
   iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   addTile: {
     width: '31.5%',
-    aspectRatio: 1,
+    height: 110,
     borderRadius: 8,
     borderWidth: 1,
     borderStyle: 'dashed',
