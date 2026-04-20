@@ -158,6 +158,23 @@ const { headerColor } = useHeaderColor();
   const [goalProgress, setGoalProgress] = useState<Record<string, GoalProgressData>>({});
   const [loadingGoalProgress, setLoadingGoalProgress] = useState(false);
 
+  const roleLinkedGoalIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const task of tasks) {
+      if (Array.isArray(task.goals)) {
+        for (const g of task.goals) {
+          if (g?.id) ids.add(g.id);
+        }
+      }
+    }
+    return ids;
+  }, [tasks]);
+
+  const roleLinkedTwelveWeekGoals = useMemo(
+    () => twelveWeekGoals.filter(g => roleLinkedGoalIds.has(g.id)),
+    [twelveWeekGoals, roleLinkedGoalIds],
+  );
+
   // Memoize scope objects for JournalView and AnalyticsView to prevent unnecessary re-fetches
   const journalScope = useMemo(() => {
     if (!selectedRole) return null;
@@ -1687,7 +1704,7 @@ const { headerColor } = useHeaderColor();
             </View>
           )}
           {/* 12-Week Goals Strip - Only show when data is stable */}
-          {activeView === 'deposits' && twelveWeekGoals.length > 0 && fetchState === 'complete' && (
+          {activeView === 'deposits' && roleLinkedTwelveWeekGoals.length > 0 && fetchState === 'complete' && (
             <View style={styles.goalsStrip}>
               <Text style={styles.goalsStripTitle}>12-Week Goals</Text>
               {loadingGoalProgress ? (
@@ -1697,7 +1714,7 @@ const { headerColor } = useHeaderColor();
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.goalsStripContent}>
-                    {twelveWeekGoals.map(goal => {
+                    {roleLinkedTwelveWeekGoals.map(goal => {
                       const progress = goalProgress[goal.id];
                       if (!progress) return null;
 
