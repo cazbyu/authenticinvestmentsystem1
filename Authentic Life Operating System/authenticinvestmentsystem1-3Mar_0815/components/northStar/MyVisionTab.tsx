@@ -6,24 +6,22 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  Platform,
   Alert,
 } from 'react-native';
 import {
-  FileText,
-  TrendingUp,
   Target,
   ChevronRight,
   ChevronDown,
   Plus,
-  Edit3,
   X,
-  Check,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
+import { VisionBlock } from '@/components/common/VisionBlock';
+import { toLocalISOString } from '@/lib/dateUtils';
 
-// Types
 interface OneYearGoal {
   id: string;
   title: string;
@@ -48,29 +46,33 @@ interface NorthStarData {
   mission_statement: string | null;
   five_year_vision: string | null;
   life_motto: string | null;
-  core_values: string[];
+}
+
+interface UserValue {
+  id: string;
+  value_word: string;
+  sort_order: number | null;
 }
 
 interface MyVisionTabProps {
   onRefresh?: () => void;
 }
 
+const MAX_VALUES = 7;
+const NORTH_STAR_ACCENT = '#8b0000';
+
 export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
   const router = useRouter();
   const { colors } = useTheme();
 
-  // State
   const [loading, setLoading] = useState(true);
   const [northStarData, setNorthStarData] = useState<NorthStarData | null>(null);
   const [oneYearGoals, setOneYearGoals] = useState<OneYearGoal[]>([]);
   const [expandedGoals, setExpandedGoals] = useState<Set<string>>(new Set());
+  const [userValues, setUserValues] = useState<UserValue[]>([]);
+  const [valueInput, setValueInput] = useState('');
+  const [addingValue, setAddingValue] = useState(false);
 
-  // Inline edit state
-  const [editingField, setEditingField] = useState<'mission' | 'vision' | null>(null);
-  const [editText, setEditText] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  // Fetch North Star data (Mission, Vision, Values)
   const fetchNorthStarData = useCallback(async () => {
     try {
       const supabase = getSupabaseClient();
@@ -79,7 +81,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
       const { data, error } = await supabase
         .from('0008-ap-north-star')
-        .select('mission_statement, 5yr_vision, life_motto, core_values')
+        .select('mission_statement, 5yr_vision, life_motto')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -93,7 +95,12 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
           mission_statement: data.mission_statement,
           five_year_vision: data['5yr_vision'],
           life_motto: data.life_motto,
-          core_values: data.core_values || [],
+        });
+      } else {
+        setNorthStarData({
+          mission_statement: null,
+          five_year_vision: null,
+          life_motto: null,
         });
       }
     } catch (err) {
@@ -101,14 +108,36 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     }
   }, []);
 
-  // Fetch 1-Year Goals with nested campaigns
+  const fetchUserValues = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('0008-ap-user-values')
+        .select('id, value_word, sort_order')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching user values:', error);
+        return;
+      }
+
+      setUserValues(data || []);
+    } catch (err) {
+      console.error('Error in fetchUserValues:', err);
+    }
+  }, []);
+
   const fetchOneYearGoals = useCallback(async () => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch 1-Year Goals
       const { data: goalsData, error: goalsError } = await supabase
         .from('0008-ap-goals-1y')
         .select('id, title, description, status, year_target_date, priority')
@@ -123,10 +152,8 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
 
       const goals = goalsData || [];
 
-      // For each goal, fetch linked 12-Week and Custom campaigns
       const goalsWithCampaigns = await Promise.all(
         goals.map(async (goal) => {
-          // Fetch 12-Week campaigns
           const { data: twelveCampaigns } = await supabase
             .from('0008-ap-goals-12wk')
             .select('id, title, status, progress, start_date, end_date')
@@ -134,7 +161,6 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             .eq('parent_goal_type', '1y')
             .order('start_date', { ascending: false });
 
-          // Fetch Custom campaigns (if parent linking exists)
           const { data: customCampaigns } = await supabase
             .from('0008-ap-goals-custom')
             .select('id, title, status, progress, start_date, end_date')
@@ -147,10 +173,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             ...(customCampaigns || []).map(c => ({ ...c, goal_type: 'custom' as const })),
           ];
 
-          return {
-            ...goal,
-            campaigns,
-          };
+          return { ...goal, campaigns };
         })
       );
 
@@ -160,17 +183,19 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     }
   }, []);
 
-  // Initial load
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchNorthStarData(), fetchOneYearGoals()]);
+      await Promise.all([
+        fetchNorthStarData(),
+        fetchOneYearGoals(),
+        fetchUserValues(),
+      ]);
       setLoading(false);
     };
     loadData();
-  }, [fetchNorthStarData, fetchOneYearGoals]);
+  }, [fetchNorthStarData, fetchOneYearGoals, fetchUserValues]);
 
-  // Toggle goal expansion
   const toggleGoalExpansion = useCallback((goalId: string) => {
     setExpandedGoals(prev => {
       const next = new Set(prev);
@@ -183,37 +208,12 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     });
   }, []);
 
-  // Inline edit handlers
-  const handleEditMission = useCallback(() => {
-    setEditText(northStarData?.mission_statement?.trim() || '');
-    setEditingField('mission');
-  }, [northStarData]);
-
-  const handleEditVision = useCallback(() => {
-    setEditText(northStarData?.five_year_vision?.trim() || '');
-    setEditingField('vision');
-  }, [northStarData]);
-
-  const handleCancelEdit = useCallback(() => {
-    setEditingField(null);
-    setEditText('');
-  }, []);
-
-  const handleSaveEdit = useCallback(async () => {
-    if (!editingField || !editText.trim()) return;
-    setSavingEdit(true);
+  const saveNorthStarField = useCallback(async (field: string, value: string) => {
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('[MyVisionTab] No user found for save');
-        return;
-      }
+      if (!user) return;
 
-      const fieldName = editingField === 'vision' ? '5yr_vision' : 'mission_statement';
-      const trimmedText = editText.trim();
-
-      // First check if a row exists for this user
       const { data: existing } = await supabase
         .from('0008-ap-north-star')
         .select('user_id')
@@ -221,48 +221,95 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
         .maybeSingle();
 
       if (existing) {
-        // Row exists — UPDATE only the edited field (preserves other columns)
-        const { error: updateError } = await supabase
+        await supabase
           .from('0008-ap-north-star')
           .update({
-            [fieldName]: trimmedText,
-            updated_at: new Date().toISOString(),
+            [field]: value,
+            updated_at: toLocalISOString(new Date()),
           })
           .eq('user_id', user.id);
-
-        if (updateError) {
-          console.error('[MyVisionTab] Update error:', updateError);
-          Alert.alert('Error', `Failed to update: ${updateError.message}`);
-          return;
-        }
       } else {
-        // No row yet — INSERT with just this field
-        const { error: insertError } = await supabase
+        await supabase
           .from('0008-ap-north-star')
           .insert({
             user_id: user.id,
-            [fieldName]: trimmedText,
-            updated_at: new Date().toISOString(),
+            [field]: value,
+            updated_at: toLocalISOString(new Date()),
           });
-
-        if (insertError) {
-          console.error('[MyVisionTab] Insert error:', insertError);
-          Alert.alert('Error', `Failed to save: ${insertError.message}`);
-          return;
-        }
       }
 
-      // Refresh data
       await fetchNorthStarData();
-      setEditingField(null);
-      setEditText('');
     } catch (error) {
-      console.error('[MyVisionTab] Error saving edit:', error);
-      Alert.alert('Error', 'Failed to save. Please try again.');
-    } finally {
-      setSavingEdit(false);
+      console.error('Error saving north star field:', error);
     }
-  }, [editingField, editText, fetchNorthStarData]);
+  }, [fetchNorthStarData]);
+
+  const handleAddValue = useCallback(async () => {
+    const trimmed = valueInput.trim();
+    if (!trimmed) return;
+    if (userValues.length >= MAX_VALUES) return;
+
+    setAddingValue(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const nextSortOrder = userValues.length > 0
+        ? Math.max(...userValues.map(v => v.sort_order ?? 0)) + 1
+        : 1;
+
+      const { error } = await supabase
+        .from('0008-ap-user-values')
+        .insert({
+          user_id: user.id,
+          value_word: trimmed,
+          sort_order: nextSortOrder,
+          is_active: true,
+        });
+
+      if (error) {
+        console.error('Error adding user value:', error);
+        Alert.alert('Error', 'Failed to add value. Please try again.');
+        return;
+      }
+
+      setValueInput('');
+      await fetchUserValues();
+    } catch (err) {
+      console.error('Error in handleAddValue:', err);
+    } finally {
+      setAddingValue(false);
+    }
+  }, [valueInput, userValues, fetchUserValues]);
+
+  const handleDeleteValue = useCallback(async (value: UserValue) => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Remove "${value.value_word}" from core values?`)
+      : true;
+    if (!confirmed) return;
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('0008-ap-user-values')
+        .update({ is_active: false })
+        .eq('id', value.id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error deleting user value:', error);
+        return;
+      }
+
+      await fetchUserValues();
+    } catch (err) {
+      console.error('Error in handleDeleteValue:', err);
+    }
+  }, [fetchUserValues]);
 
   const handleManageGoals = useCallback(() => {
     router.push('/(tabs)/goals');
@@ -272,186 +319,105 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
     router.push('/(tabs)/goals');
   }, [router]);
 
-  // Get status color
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed':
-        return '#16a34a';
-      case 'active':
-        return '#0078d4';
-      case 'paused':
-        return '#f59e0b';
-      default:
-        return '#6b7280';
+      case 'completed': return '#16a34a';
+      case 'active': return '#0078d4';
+      case 'paused': return '#f59e0b';
+      default: return '#6b7280';
     }
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#B91C1C" />
+        <ActivityIndicator size="large" color={NORTH_STAR_ACCENT} />
       </View>
     );
   }
 
-  const hasMission = northStarData?.mission_statement?.trim();
-  const hasVision = northStarData?.five_year_vision?.trim();
-
   return (
     <View style={styles.container}>
-      {/* Mission Statement Card */}
+      {/* Mission Statement */}
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <FileText size={20} color="#0078d4" />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              Mission Statement
-            </Text>
-          </View>
-          {editingField !== 'mission' && (
-            <TouchableOpacity
-              onPress={handleEditMission}
-              style={[styles.editButton, { backgroundColor: colors.background }]}
-            >
-              <Edit3 size={14} color={colors.textSecondary} />
-              <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
-                Edit
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {editingField === 'mission' ? (
-          <View style={styles.inlineEditContainer}>
-            <TextInput
-              style={[styles.inlineEditInput, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
-              value={editText}
-              onChangeText={setEditText}
-              placeholder="My mission is to..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              autoFocus
-            />
-            <View style={styles.inlineEditButtons}>
-              <TouchableOpacity style={[styles.inlineEditCancel, { borderColor: colors.border }]} onPress={handleCancelEdit}>
-                <X size={16} color={colors.textSecondary} />
-                <Text style={[styles.inlineEditCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.inlineEditSave, { backgroundColor: '#0078d4', opacity: editText.trim() ? 1 : 0.5 }]}
-                onPress={handleSaveEdit}
-                disabled={!editText.trim() || savingEdit}
-              >
-                {savingEdit ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Check size={16} color="#FFFFFF" />
-                    <Text style={styles.inlineEditSaveText}>Save</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : hasMission ? (
-          <Text
-            style={[styles.cardContent, { color: colors.text }]}
-            numberOfLines={6}
-          >
-            {northStarData.mission_statement}
-          </Text>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-              Define your personal mission statement — your core purpose, values, and the impact you want to make.
-            </Text>
-            <TouchableOpacity
-              onPress={handleEditMission}
-              style={styles.getStartedButton}
-            >
-              <Text style={styles.getStartedButtonText}>Get Started</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <VisionBlock
+          label="Mission Statement"
+          value={northStarData?.mission_statement ?? null}
+          onSave={(text) => saveNorthStarField('mission_statement', text)}
+          accentColor={NORTH_STAR_ACCENT}
+          placeholder="What is your life's mission?"
+        />
       </View>
 
-      {/* 5-Year Vision Card */}
+      {/* 5-Year Vision */}
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <TrendingUp size={20} color="#16a34a" />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              5-Year Vision
-            </Text>
-          </View>
-          {editingField !== 'vision' && (
-            <TouchableOpacity
-              onPress={handleEditVision}
-              style={[styles.editButton, { backgroundColor: colors.background }]}
-            >
-              <Edit3 size={14} color={colors.textSecondary} />
-              <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
-                Edit
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <VisionBlock
+          label="5-Year Vision"
+          value={northStarData?.five_year_vision ?? null}
+          onSave={(text) => saveNorthStarField('5yr_vision', text)}
+          accentColor={NORTH_STAR_ACCENT}
+          placeholder="Where will you be in 5 years?"
+        />
+      </View>
 
-        {editingField === 'vision' ? (
-          <View style={styles.inlineEditContainer}>
-            <TextInput
-              style={[styles.inlineEditInput, { color: colors.text, backgroundColor: colors.background, borderColor: colors.border }]}
-              value={editText}
-              onChangeText={setEditText}
-              placeholder="In 5 years, I envision..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              autoFocus
-            />
-            <View style={styles.inlineEditButtons}>
-              <TouchableOpacity style={[styles.inlineEditCancel, { borderColor: colors.border }]} onPress={handleCancelEdit}>
-                <X size={16} color={colors.textSecondary} />
-                <Text style={[styles.inlineEditCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.inlineEditSave, { backgroundColor: '#16a34a', opacity: editText.trim() ? 1 : 0.5 }]}
-                onPress={handleSaveEdit}
-                disabled={!editText.trim() || savingEdit}
-              >
-                {savingEdit ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Check size={16} color="#FFFFFF" />
-                    <Text style={styles.inlineEditSaveText}>Save</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : hasVision ? (
-          <Text
-            style={[styles.cardContent, { color: colors.text }]}
-            numberOfLines={6}
-          >
-            {northStarData.five_year_vision}
-          </Text>
+      {/* Life Motto */}
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <VisionBlock
+          label="Life Motto"
+          value={northStarData?.life_motto ?? null}
+          onSave={(text) => saveNorthStarField('life_motto', text)}
+          accentColor={NORTH_STAR_ACCENT}
+          placeholder="The phrase that anchors your life..."
+        />
+      </View>
+
+      {/* Core Values */}
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <Text style={styles.valuesHeader}>CORE VALUES</Text>
+        {userValues.length === 0 ? (
+          <Text style={styles.valuesEmpty}>Add your core values</Text>
         ) : (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-              Paint a vivid picture of where you want to be in 5 years across personal growth, career, relationships, and lifestyle.
-            </Text>
+          <View style={styles.valueChipsRow}>
+            {userValues.map(v => (
+              <View key={v.id} style={styles.valueChip}>
+                <Text style={styles.valueChipText}>{v.value_word}</Text>
+                <TouchableOpacity
+                  onPress={() => handleDeleteValue(v)}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  style={styles.valueChipRemove}
+                >
+                  <X size={12} color={NORTH_STAR_ACCENT} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+        {userValues.length < MAX_VALUES ? (
+          <View style={styles.valueAddRow}>
+            <TextInput
+              value={valueInput}
+              onChangeText={setValueInput}
+              placeholder="Add a core value..."
+              placeholderTextColor="#9ca3af"
+              style={styles.valueAddInput}
+              onSubmitEditing={handleAddValue}
+              returnKeyType="done"
+              maxLength={32}
+              editable={!addingValue}
+            />
             <TouchableOpacity
-              onPress={handleEditVision}
-              style={styles.getStartedButton}
+              onPress={handleAddValue}
+              disabled={!valueInput.trim() || addingValue}
+              style={[
+                styles.valueAddButton,
+                (!valueInput.trim() || addingValue) && { opacity: 0.5 },
+              ]}
             >
-              <Text style={styles.getStartedButtonText}>Get Started</Text>
+              <Text style={styles.valueAddButtonText}>Add</Text>
             </TouchableOpacity>
           </View>
+        ) : (
+          <Text style={styles.valueCapText}>7 of 7 values added</Text>
         )}
       </View>
 
@@ -460,24 +426,17 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <Target size={20} color="#8b5cf6" />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              1-Year Goals
-            </Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>1-Year Goals</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity
-              onPress={handleAddGoal}
-              style={styles.addButton}
-            >
+            <TouchableOpacity onPress={handleAddGoal} style={styles.addButton}>
               <Plus size={16} color="#ffffff" />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleManageGoals}
               style={[styles.editButton, { backgroundColor: colors.background }]}
             >
-              <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
-                Manage
-              </Text>
+              <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>Manage</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -499,31 +458,21 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                     <View style={styles.goalNumber}>
                       <Text style={styles.goalNumberText}>{index + 1}</Text>
                     </View>
-
                     <View style={styles.goalInfo}>
-                      <Text
-                        style={[styles.goalTitle, { color: colors.text }]}
-                        numberOfLines={2}
-                      >
+                      <Text style={[styles.goalTitle, { color: colors.text }]} numberOfLines={2}>
                         {goal.title}
                       </Text>
-
                       {hasCampaigns && (
                         <Text style={[styles.campaignCount, { color: colors.textSecondary }]}>
                           {completedCampaigns}/{goal.campaigns.length} campaigns
                         </Text>
                       )}
-
                       {goal.year_target_date && (
                         <Text style={[styles.targetDate, { color: colors.textSecondary }]}>
-                          Target: {new Date(goal.year_target_date).toLocaleDateString('en-US', {
-                            month: 'short',
-                            year: 'numeric'
-                          })}
+                          Target: {new Date(goal.year_target_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                         </Text>
                       )}
                     </View>
-
                     {hasCampaigns && (
                       <View style={styles.expandIcon}>
                         {isExpanded ? (
@@ -535,62 +484,40 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
                     )}
                   </TouchableOpacity>
 
-                  {/* Expanded Campaigns */}
                   {isExpanded && hasCampaigns && (
                     <View style={styles.campaignsContainer}>
                       {goal.campaigns.map((campaign) => (
                         <View
                           key={campaign.id}
-                          style={[
-                            styles.campaignItem,
-                            { backgroundColor: colors.background }
-                          ]}
+                          style={[styles.campaignItem, { backgroundColor: colors.background }]}
                         >
                           <View
                             style={[
                               styles.campaignTypeBadge,
-                              {
-                                backgroundColor: campaign.goal_type === '12wk'
-                                  ? '#dbeafe'
-                                  : '#fef3c7'
-                              }
+                              { backgroundColor: campaign.goal_type === '12wk' ? '#dbeafe' : '#fef3c7' },
                             ]}
                           >
                             <Text
                               style={[
                                 styles.campaignTypeText,
-                                {
-                                  color: campaign.goal_type === '12wk'
-                                    ? '#1e40af'
-                                    : '#92400e'
-                                }
+                                { color: campaign.goal_type === '12wk' ? '#1e40af' : '#92400e' },
                               ]}
                             >
                               {campaign.goal_type === '12wk' ? '12-Week' : 'Custom'}
                             </Text>
                           </View>
-
-                          <Text
-                            style={[styles.campaignTitle, { color: colors.text }]}
-                            numberOfLines={1}
-                          >
+                          <Text style={[styles.campaignTitle, { color: colors.text }]} numberOfLines={1}>
                             {campaign.title}
                           </Text>
-
                           <View style={styles.campaignProgress}>
-                            <View
-                              style={[
-                                styles.progressBar,
-                                { backgroundColor: colors.border }
-                              ]}
-                            >
+                            <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
                               <View
                                 style={[
                                   styles.progressFill,
                                   {
                                     width: `${campaign.progress || 0}%`,
-                                    backgroundColor: getStatusColor(campaign.status)
-                                  }
+                                    backgroundColor: getStatusColor(campaign.status),
+                                  },
                                 ]}
                               />
                             </View>
@@ -611,10 +538,7 @@ export function MyVisionTab({ onRefresh }: MyVisionTabProps) {
             <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
               Set your top goals for the year that bridge your 5-year vision to daily actions.
             </Text>
-            <TouchableOpacity
-              onPress={handleAddGoal}
-              style={styles.getStartedButton}
-            >
+            <TouchableOpacity onPress={handleAddGoal} style={styles.getStartedButton}>
               <Text style={styles.getStartedButtonText}>Add Your First Goal</Text>
             </TouchableOpacity>
           </View>
@@ -636,7 +560,6 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
 
-  // Card Styles
   card: {
     borderRadius: 12,
     padding: 16,
@@ -684,12 +607,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#8b5cf6',
   },
-  cardContent: {
-    fontSize: 14,
-    lineHeight: 22,
-  },
 
-  // Empty State
   emptyState: {
     padding: 16,
     alignItems: 'center',
@@ -712,7 +630,78 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
 
-  // Goals List
+  valuesHeader: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#8b0000',
+    marginBottom: 10,
+  },
+  valuesEmpty: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#9ca3af',
+    marginBottom: 12,
+  },
+  valueChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  valueChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#8b0000',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#ffffff',
+  },
+  valueChipText: {
+    fontSize: 13,
+    color: '#8b0000',
+    fontWeight: '500',
+  },
+  valueChipRemove: {
+    padding: 2,
+  },
+  valueAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  valueAddInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 13,
+    color: '#1f2937',
+  },
+  valueAddButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#8b0000',
+    backgroundColor: '#ffffff',
+  },
+  valueAddButtonText: {
+    fontSize: 13,
+    color: '#8b0000',
+    fontWeight: '600',
+  },
+  valueCapText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
+
   goalsList: {
     gap: 12,
   },
@@ -758,7 +747,6 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
-  // Campaigns
   campaignsContainer: {
     marginLeft: 40,
     marginTop: 8,
@@ -803,49 +791,5 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     width: 36,
     textAlign: 'right',
-  },
-  // Inline edit styles
-  inlineEditContainer: {
-    gap: 12,
-  },
-  inlineEditInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    minHeight: 100,
-    lineHeight: 22,
-  },
-  inlineEditButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  inlineEditCancel: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  inlineEditCancelText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  inlineEditSave: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  inlineEditSaveText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
 });
