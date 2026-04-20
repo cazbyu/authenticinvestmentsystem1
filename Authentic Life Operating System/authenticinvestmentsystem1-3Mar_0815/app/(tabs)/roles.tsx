@@ -32,8 +32,8 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
-import { RoleCard } from '@/components/roles/RoleCard';
-import { getRoleStatistics, RoleStatistics } from '@/lib/roleStatistics';
+import { RoleBankHub } from '@/components/roles/RoleBankHub';
+import { getRoleStatistics, RoleStatistics, getLastActivityPerRole } from '@/lib/roleStatistics';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -124,6 +124,7 @@ const { headerColor } = useHeaderColor();
   const [roleStatsPeriod, setRoleStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [roleStatistics, setRoleStatistics] = useState<Record<string, RoleStatistics>>({});
   const [loadingStatistics, setLoadingStatistics] = useState(false);
+  const [lastActivityMap, setLastActivityMap] = useState<Map<string, string | null>>(new Map());
 
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
@@ -298,6 +299,18 @@ const { headerColor } = useHeaderColor();
       Alert.alert('Error', (error as Error).message);
     }
   };
+
+  const fetchLastActivity = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const map = await getLastActivityPerRole(supabase, user.id);
+      setLastActivityMap(map);
+    } catch (error) {
+      console.error('Error fetching role last-activity map:', error);
+    }
+  }, []);
 
   const fetchKeyRelationships = useCallback(async (roleId: string) => {
     setKRLoading(true);
@@ -797,6 +810,7 @@ const { headerColor } = useHeaderColor();
   const hideManageRolesView = useCallback(() => {
     setActiveMainTab('roles');
     fetchRoles(); // Refresh roles after managing them
+    fetchLastActivity();
   }, []);
 
   useEffect(() => {
@@ -813,6 +827,7 @@ const { headerColor } = useHeaderColor();
 
     loadUserId();
     fetchRoles();
+    fetchLastActivity();
 
     // Listen for task creation events from other components
     const handleTaskEvent = () => {
@@ -823,6 +838,7 @@ const { headerColor } = useHeaderColor();
       if (selectedKR) {
         fetchKRTasks(selectedKR.id, krView);
       }
+      fetchLastActivity();
     };
 
     eventBus.on(EVENTS.TASK_CREATED, handleTaskEvent);
@@ -841,7 +857,7 @@ const { headerColor } = useHeaderColor();
       eventBus.off(EVENTS.TASK_UPDATED, handleTaskEvent);
       eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
     };
-  }, [registerResetHandler, unregisterResetHandler, resetToMain, selectedRole, selectedKR, activeView, krView]);
+  }, [registerResetHandler, unregisterResetHandler, resetToMain, selectedRole, selectedKR, activeView, krView, fetchLastActivity]);
 
   useEffect(() => {
     if (selectedRole && !isLoadingRole && !fetchInProgressRef.current) {
@@ -1241,12 +1257,14 @@ const { headerColor } = useHeaderColor();
 
   const handleRoleUpdate = () => {
     fetchRoles();
+    fetchLastActivity();
     setEditRoleVisible(false);
     setEditingRole(null);
   };
 
   const handleManageRolesUpdate = () => {
     fetchRoles();
+    fetchLastActivity();
   };
 
   const handleKRUpdate = () => {
@@ -1768,31 +1786,13 @@ const { headerColor } = useHeaderColor();
       <View style={styles.content} pointerEvents="box-none">
         {activeMainTab === 'roles' && (
           <ScrollView style={styles.rolesList}>
-            {/* Roles Grid */}
-            {roles.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No active roles found</Text>
-                <TouchableOpacity
-                  style={styles.manageButton}
-                  onPress={() => setManageRolesVisible(true)}
-                >
-                  <Text style={styles.manageButtonText}>Manage Roles</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.rolesGrid}>
-                {roles.map(role => {
-                  return (
-                    <RoleCard
-                      key={role.id}
-                      role={role}
-                      onPress={handleRolePress}
-                      imageUrl={roleImageUrls[role.id]}
-                    />
-                  );
-                })}
-              </View>
-            )}
+            <RoleBankHub
+              roles={roles}
+              lastActivityMap={lastActivityMap}
+              onRolePress={handleRolePress}
+              onAddRolePress={() => setManageRolesVisible(true)}
+              accentColor="#7c3aed"
+            />
           </ScrollView>
         )}
 
