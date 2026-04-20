@@ -11,8 +11,8 @@ import {
 import { getSupabaseClient } from '@/lib/supabase';
 import { formatLocalDate } from '@/lib/dateUtils';
 import { TrackerCard, TrackerInstance } from './TrackerCard';
-import { LogEntryForm } from './LogEntryForm';
 import { AddTrackerModal } from './AddTrackerModal';
+import { TrackerDetailView } from './TrackerDetailView';
 
 /**
  * PhysicalToolshed — Minimalist Executive design system
@@ -74,7 +74,7 @@ export function PhysicalToolshed({
   const [loading, setLoading] = useState(false);
 
   const [showAddTracker, setShowAddTracker] = useState(false);
-  const [activeLogEntry, setActiveLogEntry] = useState<{
+  const [activeDetailView, setActiveDetailView] = useState<{
     instance: PhysicalInstanceRow;
     stepId: string;
   } | null>(null);
@@ -208,7 +208,7 @@ export function PhysicalToolshed({
         Alert.alert('Error', 'Could not find tracker step. Please refresh.');
         return;
       }
-      setActiveLogEntry({ instance, stepId });
+      setActiveDetailView({ instance, stepId });
     },
     [stepIdMap],
   );
@@ -265,16 +265,16 @@ export function PhysicalToolshed({
         accentColor={accentColor}
       />
 
-      {activeLogEntry && userId && (
-        <LogEntryForm
-          visible={!!activeLogEntry}
-          onClose={() => setActiveLogEntry(null)}
-          instance={activeLogEntry.instance}
-          sessionId={activeLogEntry.instance.session_id}
-          stepId={activeLogEntry.stepId}
+      {activeDetailView && userId && (
+        <TrackerDetailView
+          visible={!!activeDetailView}
+          onClose={() => setActiveDetailView(null)}
+          instance={activeDetailView.instance}
+          stepId={activeDetailView.stepId}
           userId={userId}
           defaultDomainId={domainId}
-          onSaved={handleLogSaved}
+          onLogSaved={handleLogSaved}
+          accentColor={accentColor}
         />
       )}
     </View>
