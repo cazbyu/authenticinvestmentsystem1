@@ -140,13 +140,30 @@ export function TrackerDetailView({
 
   const chartData = useMemo(() => {
     if (!isNumeric) return [];
-    return logs
-      .filter(l => l.value_number !== null && l.value_number !== undefined)
-      .map(l => ({
-        date: l.log_date,
-        value: l.value_number as number,
-      }));
-  }, [logs, isNumeric]);
+    const numericLogs = logs.filter(
+      l => l.value_number !== null && l.value_number !== undefined,
+    );
+
+    if (instance.allow_multiple_logs_per_day) {
+      // Cumulative: group by log_date, sum value_number per day
+      const byDay = new Map<string, number>();
+      for (const l of numericLogs) {
+        byDay.set(
+          l.log_date,
+          (byDay.get(l.log_date) ?? 0) + (l.value_number as number),
+        );
+      }
+      return Array.from(byDay.entries())
+        .map(([date, value]) => ({ date, value }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    // Snapshot: one chart point per log
+    return numericLogs.map(l => ({
+      date: l.log_date,
+      value: l.value_number as number,
+    }));
+  }, [logs, isNumeric, instance.allow_multiple_logs_per_day]);
 
   const stats = useMemo(() => {
     if (logs.length === 0) return null;
@@ -155,6 +172,30 @@ export function TrackerDetailView({
         .map(l => l.value_number)
         .filter((v): v is number => v !== null && v !== undefined);
       if (values.length === 0) return null;
+
+      if (instance.allow_multiple_logs_per_day) {
+        // Cumulative: stats over daily totals
+        const byDay = new Map<string, number>();
+        for (const l of logs) {
+          if (l.value_number === null || l.value_number === undefined) continue;
+          byDay.set(
+            l.log_date,
+            (byDay.get(l.log_date) ?? 0) + (l.value_number as number),
+          );
+        }
+        const dailyTotals = Array.from(byDay.values());
+        if (dailyTotals.length === 0) return null;
+        const sum = dailyTotals.reduce((a, b) => a + b, 0);
+        return {
+          kind: 'numeric' as const,
+          avg: Math.round((sum / dailyTotals.length) * 10) / 10,
+          min: Math.min(...dailyTotals),
+          max: Math.max(...dailyTotals),
+          count: dailyTotals.length,
+        };
+      }
+
+      // Snapshot: stats over individual logs
       const sum = values.reduce((a, b) => a + b, 0);
       return {
         kind: 'numeric' as const,
@@ -174,7 +215,7 @@ export function TrackerDetailView({
       return { kind: 'boolean' as const, yes, no, count: yes + no };
     }
     return { kind: 'count' as const, count: logs.length };
-  }, [logs, isNumeric, instance.measurement_type]);
+  }, [logs, isNumeric, instance.measurement_type, instance.allow_multiple_logs_per_day]);
 
   const entriesDesc = useMemo(() => [...logs].reverse(), [logs]);
 
@@ -285,7 +326,10 @@ export function TrackerDetailView({
                       />
                       <StatTile label="MIN" valueText={formatValueForDisplay(stats.min)} />
                       <StatTile label="MAX" valueText={formatValueForDisplay(stats.max)} />
-                      <StatTile label="COUNT" valueText={String(stats.count)} />
+                      <StatTile
+                        label={instance.allow_multiple_logs_per_day ? 'DAYS' : 'COUNT'}
+                        valueText={String(stats.count)}
+                      />
                     </>
                   )}
                   {stats.kind === 'boolean' && (
