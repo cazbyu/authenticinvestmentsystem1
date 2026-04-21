@@ -5,12 +5,9 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
-  TouchableOpacity,
 } from 'react-native';
-import { ChevronLeft, Heart, MoreVertical } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { Heart } from 'lucide-react-native';
 
-import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { WellnessIcon } from '@/components/icons/WellnessIcon';
 import { StatusPip } from '@/components/common/StatusPip';
 import { getDomainColor } from '@/constants/wellnessColors';
@@ -18,9 +15,9 @@ import { getZoneTagline } from '@/constants/wellnessZoneCopy';
 
 /**
  * WellnessHubPage — Minimalist Executive design system
- * Redesigned 8-zone wellness hub per SS2 mockup. Slice 2a = shell
- * only: static placeholders for counts + balance bar. Real data
- * integration lands in Slice 2b; balance visualization in 2c.
+ * Content component for the redesigned 8-zone wellness hub per SS2.
+ * Mounted below UniversalHeader in app/(tabs)/wellness.tsx.
+ * Slice 2a = shell; Slice 2b wires real data; 2c builds balance viz.
  */
 
 interface Domain {
@@ -33,19 +30,9 @@ interface Domain {
 export interface WellnessHubPageProps {
   domains: Domain[];
   onZoneTap: (domain: Domain) => void;
-  onOpenSettings?: () => void;
 }
 
-const HUB_GREEN = '#2d9040';
-
-export function WellnessHubPage({
-  domains,
-  onZoneTap,
-  onOpenSettings,
-}: WellnessHubPageProps) {
-  const router = useRouter();
-  const { authenticScore } = useAuthenticScore();
-
+export function WellnessHubPage({ domains, onZoneTap }: WellnessHubPageProps) {
   // 2a: no real data — these wire up in Slice 2b
   const showNeedsAttention = false;
   const activeCount: number | null = null;
@@ -53,87 +40,58 @@ export function WellnessHubPage({
   const asleepCount: number | null = null;
 
   return (
-    <View style={styles.root}>
-      {/* HUB HEADER */}
-      <View style={[styles.header, { backgroundColor: HUB_GREEN }]}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={10}
-          style={styles.backButton}
-        >
-          <ChevronLeft size={24} color="#ffffff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Wellness</Text>
-        <View style={styles.headerRight}>
-          <Text style={styles.scoreLabel}>AUTHENTIC SCORE</Text>
-          <Text style={styles.scoreValue}>
-            {authenticScore.toLocaleString()}
+    <ScrollView
+      style={styles.body}
+      contentContainerStyle={styles.bodyContent}
+    >
+      {/* OVERVIEW CARD */}
+      <View style={styles.overviewCard}>
+        <View style={styles.overviewTop}>
+          <View style={styles.heartCircle}>
+            <Heart size={18} color="#ffffff" fill="#ffffff" />
+          </View>
+          <Text style={styles.overviewTitle}>
+            Your eight wellness zones
           </Text>
         </View>
-        {onOpenSettings && (
-          <TouchableOpacity
-            onPress={onOpenSettings}
-            hitSlop={10}
-            style={styles.kebabButton}
-          >
-            <MoreVertical size={20} color="#ffffff" />
-          </TouchableOpacity>
-        )}
+        <Text style={styles.overviewDesc}>
+          Where you deposit energy across the whole life. Green means you're active. Amber means it's been a while. Red means this zone is asking for attention.
+        </Text>
+        <View style={styles.statsRow}>
+          <StatTile value={activeCount} label="Active" />
+          <StatTile value={quietCount} label="Quiet" />
+          <StatTile value={asleepCount} label="Asleep" />
+        </View>
       </View>
 
-      <ScrollView
-        style={styles.body}
-        contentContainerStyle={styles.bodyContent}
-      >
-        {/* OVERVIEW CARD */}
-        <View style={styles.overviewCard}>
-          <View style={styles.overviewTop}>
-            <View style={[styles.heartCircle, { backgroundColor: HUB_GREEN }]}>
-              <Heart size={18} color="#ffffff" fill="#ffffff" />
-            </View>
-            <Text style={styles.overviewTitle}>
-              Your eight wellness zones
-            </Text>
-          </View>
-          <Text style={styles.overviewDesc}>
-            Where you deposit energy across the whole life. Green means you're active. Amber means it's been a while. Red means this zone is asking for attention.
+      {/* NEEDS ATTENTION — hidden until Slice 2b */}
+      {showNeedsAttention && (
+        <View style={styles.needsAttention}>
+          <Text style={styles.needsAttentionLabel}>NEEDS ATTENTION</Text>
+          <Text style={styles.needsAttentionBody}>
+            Recreational — no deposits in 18 days
           </Text>
-          <View style={styles.statsRow}>
-            <StatTile value={activeCount} label="Active" />
-            <StatTile value={quietCount} label="Quiet" />
-            <StatTile value={asleepCount} label="Asleep" />
-          </View>
         </View>
+      )}
 
-        {/* NEEDS ATTENTION — hidden until Slice 2b */}
-        {showNeedsAttention && (
-          <View style={styles.needsAttention}>
-            <Text style={styles.needsAttentionLabel}>NEEDS ATTENTION</Text>
-            <Text style={styles.needsAttentionBody}>
-              Recreational — no deposits in 18 days
-            </Text>
-          </View>
-        )}
+      {/* ALL ZONES */}
+      <Text style={styles.sectionHeader}>ALL ZONES</Text>
+      <View style={styles.grid}>
+        {domains.map(domain => (
+          <ZoneCard
+            key={domain.id}
+            domain={domain}
+            onPress={() => onZoneTap(domain)}
+          />
+        ))}
+      </View>
 
-        {/* ALL ZONES */}
-        <Text style={styles.sectionHeader}>ALL ZONES</Text>
-        <View style={styles.grid}>
-          {domains.map(domain => (
-            <ZoneCard
-              key={domain.id}
-              domain={domain}
-              onPress={() => onZoneTap(domain)}
-            />
-          ))}
-        </View>
-
-        {/* 7-DAY BALANCE — placeholder, visualized in Slice 2c */}
-        <Text style={[styles.sectionHeader, styles.balanceHeader]}>
-          7-DAY BALANCE
-        </Text>
-        <View style={styles.balancePlaceholder} />
-      </ScrollView>
-    </View>
+      {/* 7-DAY BALANCE — placeholder, visualized in Slice 2c */}
+      <Text style={[styles.sectionHeader, styles.balanceHeader]}>
+        7-DAY BALANCE
+      </Text>
+      <View style={styles.balancePlaceholder} />
+    </ScrollView>
   );
 }
 
@@ -184,36 +142,6 @@ function ZoneCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  backButton: { padding: 2 },
-  kebabButton: { padding: 2, marginLeft: 4 },
-  headerTitle: {
-    color: '#ffffff',
-    fontSize: 19,
-    fontWeight: '700',
-    flex: 1,
-  },
-  headerRight: { alignItems: 'flex-end' },
-  scoreLabel: {
-    color: 'rgba(255, 255, 255, 0.75)',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  scoreValue: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 1,
-  },
-
   body: { flex: 1 },
   bodyContent: { padding: 16, gap: 16 },
 
@@ -234,6 +162,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
+    backgroundColor: '#16a34a',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspens
 import { toLocalISOString } from '@/lib/dateUtils';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { SpeedDialFab } from '@/components/SpeedDialFab';
 import { ActivityConfig, ACTIVITY_CONFIGS } from '@/lib/activityConfig';
@@ -395,7 +396,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   // Reset to main Wellness Bank view when tab is pressed
   const resetToMain = useCallback(() => {
     setSelectedDomain(null);
-    setActiveMainTab('domains');
     setActiveView('deposits');
     setTasks([]);
     setDepositIdeas([]);
@@ -798,7 +798,13 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
   // Render custom header
   const renderWellnessBankHeader = () => {
-    if (!selectedDomain) return null;
+    if (!selectedDomain) {
+      return (
+        <UniversalHeader
+          onOpenSettings={() => setSettingsSidebarVisible(true)}
+        />
+      );
+    }
     // Individual domain detail header
     return (
       <View style={[styles.customHeader, { backgroundColor: getDomainColor(selectedDomain.name) }]}>
@@ -938,7 +944,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       <WellnessHubPage
         domains={domains}
         onZoneTap={setSelectedDomain}
-        onOpenSettings={() => setSettingsSidebarVisible(true)}
       />
     );
   };
