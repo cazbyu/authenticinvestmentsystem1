@@ -29,6 +29,7 @@ export interface TrackerInstance {
   goal_direction: string | null;
   is_compound: boolean;
   allow_multiple_logs_per_day: boolean;
+  goal_label: string | null;
 }
 
 export interface TrackerCardProps {

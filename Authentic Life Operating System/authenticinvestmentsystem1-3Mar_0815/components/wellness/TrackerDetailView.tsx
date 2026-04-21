@@ -37,7 +37,7 @@ export interface TrackerDetailViewProps {
 
 const WELLNESS_ACCENT = '#16a34a';
 
-type TimeWindow = '7d' | '30d' | '90d' | 'all';
+type TimeWindow = 'today' | '7d' | '30d' | '90d' | 'all';
 
 interface StepLogRow {
   id: string;
@@ -63,6 +63,7 @@ const NUMERIC_TYPES = new Set([
 
 function computeCutoffISO(window: TimeWindow): string | null {
   if (window === 'all') return null;
+  if (window === 'today') return formatLocalDate(new Date());
   const days = window === '7d' ? 7 : window === '30d' ? 30 : 90;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
@@ -99,7 +100,9 @@ export function TrackerDetailView({
   onLogSaved,
   accentColor = WELLNESS_ACCENT,
 }: TrackerDetailViewProps) {
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>('30d');
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>(() =>
+    instance.allow_multiple_logs_per_day ? 'today' : '30d'
+  );
   const [logs, setLogs] = useState<StepLogRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showLogEntry, setShowLogEntry] = useState(false);
@@ -219,6 +222,41 @@ export function TrackerDetailView({
 
   const entriesDesc = useMemo(() => [...logs].reverse(), [logs]);
 
+  const { currentValue, currentLogDate } = useMemo(() => {
+    if (!isNumeric) {
+      return {
+        currentValue: null as number | null,
+        currentLogDate: null as string | null,
+      };
+    }
+    const todayIso = formatLocalDate(new Date());
+
+    if (instance.allow_multiple_logs_per_day) {
+      const todayLogs = logs.filter(
+        l => l.log_date === todayIso &&
+             l.value_number !== null &&
+             l.value_number !== undefined,
+      );
+      if (todayLogs.length === 0) {
+        return { currentValue: null, currentLogDate: todayIso };
+      }
+      const sum = todayLogs.reduce((a, b) => a + (b.value_number as number), 0);
+      return { currentValue: sum, currentLogDate: todayIso };
+    }
+
+    const numericLogs = logs.filter(
+      l => l.value_number !== null && l.value_number !== undefined,
+    );
+    if (numericLogs.length === 0) {
+      return { currentValue: null, currentLogDate: null };
+    }
+    const latest = numericLogs[numericLogs.length - 1];
+    return {
+      currentValue: latest.value_number as number,
+      currentLogDate: latest.log_date,
+    };
+  }, [logs, isNumeric, instance.allow_multiple_logs_per_day]);
+
   const handleLogSaved = useCallback(async () => {
     await fetchLogs();
     onLogSaved?.();
@@ -251,6 +289,14 @@ export function TrackerDetailView({
         </View>
 
         <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+          {isNumeric && (
+            <HeroCard
+              instance={instance}
+              currentValue={currentValue}
+              currentLogDate={currentLogDate}
+              accentColor={accentColor}
+            />
+          )}
           <Pressable
             onPress={() => setShowLogEntry(true)}
             style={[styles.logCta, { backgroundColor: accentColor }]}
@@ -260,7 +306,9 @@ export function TrackerDetailView({
           </Pressable>
 
           <View style={styles.windowRow}>
-            {(['7d', '30d', '90d', 'all'] as TimeWindow[]).map(w => {
+            {((instance.allow_multiple_logs_per_day
+              ? ['today', '7d', '30d', '90d', 'all']
+              : ['7d', '30d', '90d', 'all']) as TimeWindow[]).map(w => {
               const active = timeWindow === w;
               return (
                 <Pressable
@@ -277,7 +325,10 @@ export function TrackerDetailView({
                       active && { color: accentColor, fontWeight: '600' },
                     ]}
                   >
-                    {w === '7d' ? '7 days' : w === '30d' ? '30 days' : w === '90d' ? '90 days' : 'All'}
+                    {w === 'today' ? 'Today' :
+                     w === '7d' ? '7 days' :
+                     w === '30d' ? '30 days' :
+                     w === '90d' ? '90 days' : 'All'}
                   </Text>
                 </Pressable>
               );
@@ -417,6 +468,196 @@ function StatTile({
   );
 }
 
+interface HeroCardProps {
+  instance: TrackerInstance & { session_id: string | null };
+  currentValue: number | null;
+  currentLogDate: string | null;
+  accentColor: string;
+}
+
+function HeroCard({
+  instance,
+  currentValue,
+  currentLogDate,
+  accentColor,
+}: HeroCardProps) {
+  const hasValue = currentValue !== null && currentValue !== undefined;
+  const hasGoal = instance.goal_value !== null && instance.goal_value !== undefined;
+  const isCumulative = instance.allow_multiple_logs_per_day;
+  const direction = instance.goal_direction ?? 'higher_is_better';
+  const hasRangeMax =
+    instance.goal_value_max !== null && instance.goal_value_max !== undefined;
+
+  const formatValue = (v: number) =>
+    formatTrackerValue(
+      v,
+      instance.measurement_type,
+      instance.unit_label,
+      instance.currency_code,
+      instance.goal_value,
+    );
+
+  let mode: 'progress' | 'lower_better' | 'range' | 'plain' = 'plain';
+  if (hasGoal) {
+    if (isCumulative) mode = 'progress';
+    else if (direction === 'lower_is_better') mode = 'lower_better';
+    else if (direction === 'target_range' && hasRangeMax) mode = 'range';
+    else mode = 'progress';
+  }
+
+  let progressNode: React.ReactNode = null;
+  if (mode === 'progress') {
+    const goal = instance.goal_value as number;
+    const current = currentValue ?? 0;
+    const pct = goal > 0 ? Math.min(100, Math.round((current / goal) * 100)) : 0;
+    const met = current >= goal && goal > 0;
+    const over = current > goal ? current - goal : 0;
+
+    progressNode = (
+      <>
+        <Text style={styles.heroValue}>
+          {formatValue(current)} of {formatValue(goal)}
+        </Text>
+        {met ? (
+          <>
+            <View style={[styles.celebrationBanner, { backgroundColor: accentColor }]}>
+              <Text style={styles.celebrationText}>Goal met ✓</Text>
+            </View>
+            {over > 0 && (
+              <Text style={styles.heroSub}>+{formatValue(over)} over goal</Text>
+            )}
+          </>
+        ) : (
+          <>
+            <View style={styles.heroProgressBar}>
+              <View
+                style={[
+                  styles.heroProgressFill,
+                  { width: `${pct}%`, backgroundColor: accentColor },
+                ]}
+              />
+            </View>
+            <Text style={styles.heroSub}>
+              {formatValue(current)} of {formatValue(goal)} ({pct}%)
+            </Text>
+          </>
+        )}
+      </>
+    );
+  }
+
+  let lowerBetterNode: React.ReactNode = null;
+  if (mode === 'lower_better') {
+    if (hasValue) {
+      const goal = instance.goal_value as number;
+      const current = currentValue as number;
+      const reached = current <= goal;
+      const distance = current - goal;
+
+      lowerBetterNode = (
+        <>
+          <Text style={styles.heroValue}>
+            {formatValue(current)}{' '}
+            <Text style={styles.heroValueMuted}>
+              → Desired: {formatValue(goal)}
+            </Text>
+          </Text>
+          {reached ? (
+            <View style={[styles.celebrationBanner, { backgroundColor: accentColor }]}>
+              <Text style={styles.celebrationText}>
+                Desired value reached ✓
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.heroSub}>
+              {formatValue(distance)} to go
+            </Text>
+          )}
+        </>
+      );
+    } else {
+      lowerBetterNode = <Text style={styles.heroSub}>No logs yet</Text>;
+    }
+  }
+
+  let rangeNode: React.ReactNode = null;
+  if (mode === 'range') {
+    if (hasValue) {
+      const rangeMin = instance.goal_value as number;
+      const rangeMax = instance.goal_value_max as number;
+      const current = currentValue as number;
+      const inRange = current >= rangeMin && current <= rangeMax;
+      const below = current < rangeMin;
+
+      rangeNode = (
+        <>
+          <Text style={styles.heroValue}>{formatValue(current)}</Text>
+          {inRange ? (
+            <View style={[styles.celebrationBanner, { backgroundColor: accentColor }]}>
+              <Text style={styles.celebrationText}>
+                In target range ({formatValue(rangeMin)}–{formatValue(rangeMax)}) ✓
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.heroSub}>
+              {below ? 'Below' : 'Above'} target range ({formatValue(rangeMin)}–{formatValue(rangeMax)})
+            </Text>
+          )}
+        </>
+      );
+    } else {
+      rangeNode = <Text style={styles.heroSub}>No logs yet</Text>;
+    }
+  }
+
+  let plainNode: React.ReactNode = null;
+  if (mode === 'plain') {
+    plainNode = (
+      <>
+        {hasValue ? (
+          <>
+            <Text style={styles.heroValue}>{formatValue(currentValue as number)}</Text>
+            {currentLogDate ? (
+              <Text style={styles.heroSub}>
+                {isCumulative ? 'today' : `Logged ${formatShortDate(currentLogDate)}`}
+              </Text>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <Text style={styles.heroValue}>—</Text>
+            <Text style={styles.heroSub}>
+              {isCumulative ? 'No logs today' : 'No logs yet'}
+            </Text>
+          </>
+        )}
+        {!isCumulative && (
+          // TODO: wire Edit Desired Value modal in D4j-polish-5
+          <Pressable onPress={() => {}} style={styles.setGoalLink}>
+            <Text style={[styles.setGoalLinkText, { color: accentColor }]}>
+              Set desired value
+            </Text>
+          </Pressable>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <View style={styles.heroContainer}>
+      {instance.goal_label ? (
+        <Text style={styles.heroGoalLabel}>
+          {instance.goal_label.toUpperCase()}
+        </Text>
+      ) : null}
+      {progressNode}
+      {lowerBetterNode}
+      {rangeNode}
+      {plainNode}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#ffffff' },
   header: {
@@ -519,5 +760,64 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+
+  heroContainer: {
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+    gap: 8,
+  },
+  heroGoalLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#6b7280',
+  },
+  heroValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1e3a5f',
+    lineHeight: 34,
+  },
+  heroValueMuted: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  heroSub: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  heroProgressBar: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  heroProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  celebrationBanner: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  celebrationText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  setGoalLink: {
+    paddingVertical: 6,
+  },
+  setGoalLinkText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
