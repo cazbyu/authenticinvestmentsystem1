@@ -645,3 +645,91 @@ export async function fetchRoleLinkedGoalIds(
     return new Set();
   }
 }
+
+export async function getLastActivityPerDomain(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Map<string, string | null>> {
+  try {
+    const { data: tasks, error: tasksError } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, completed_at')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .is('deleted_at', null)
+      .not('completed_at', 'is', null);
+
+    if (tasksError) throw tasksError;
+    if (!tasks || tasks.length === 0) return new Map();
+
+    const taskCompletedAt = new Map<string, string>();
+    for (const task of tasks) {
+      if (task.completed_at) taskCompletedAt.set(task.id, task.completed_at);
+    }
+
+    const { data: joinData, error: joinError } = await supabase
+      .from('0008-ap-universal-domains-join')
+      .select('domain_id, parent_id')
+      .eq('user_id', userId)
+      .eq('parent_type', 'task')
+      .in('parent_id', Array.from(taskCompletedAt.keys()));
+
+    if (joinError) throw joinError;
+    if (!joinData) return new Map();
+
+    const result = new Map<string, string | null>();
+    for (const row of joinData) {
+      if (!row.domain_id) continue;
+      const completedAt = taskCompletedAt.get(row.parent_id);
+      if (!completedAt) continue;
+      const existing = result.get(row.domain_id);
+      if (!existing || completedAt > existing) {
+        result.set(row.domain_id, completedAt);
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error getting last activity per domain:', error);
+    return new Map();
+  }
+}
+
+export async function getToolCountsPerDomain(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Map<string, number>> {
+  try {
+    const { data, error } = await supabase
+      .from('0008-ap-tracker-instances')
+      .select('domain_id')
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    if (error) throw error;
+
+    const result = new Map<string, number>();
+    for (const row of data ?? []) {
+      if (!row.domain_id) continue;
+      result.set(row.domain_id, (result.get(row.domain_id) ?? 0) + 1);
+    }
+    return result;
+  } catch (error) {
+    console.error('Error getting tool counts per domain:', error);
+    return new Map();
+  }
+}
+
+export function getDaysSince(isoDate: string | null | undefined): number | null {
+  if (!isoDate) return null;
+  const then = new Date(isoDate);
+  if (Number.isNaN(then.getTime())) return null;
+  return Math.floor((Date.now() - then.getTime()) / 86_400_000);
+}
+
+export function formatDaysAgo(daysSince: number | null): string | null {
+  if (daysSince === null) return null;
+  if (daysSince <= 0) return 'today';
+  if (daysSince === 1) return 'yesterday';
+  return `${daysSince} days ago`;
+}

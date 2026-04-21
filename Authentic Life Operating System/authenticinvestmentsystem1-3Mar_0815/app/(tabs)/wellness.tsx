@@ -30,7 +30,10 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { ZoneToolshed } from '@/components/wellness/ZoneToolshed';
 import { WellnessHubPage } from '@/components/wellness/WellnessHubPage';
-import { getDomainStatistics, DomainStatistics } from '@/lib/roleStatistics';
+import {
+  getLastActivityPerDomain,
+  getToolCountsPerDomain,
+} from '@/lib/roleStatistics';
 import { getDomainColor } from '@/constants/wellnessColors';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -85,10 +88,9 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const [followThroughParentType, setFollowThroughParentType] = useState<string>('');
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
 
-  // Domain Bank statistics
-  const [domainStatsPeriod, setDomainStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
-  const [domainStatistics, setDomainStatistics] = useState<Record<string, DomainStatistics>>({});
-  const [loadingStatistics, setLoadingStatistics] = useState(false);
+  // Wellness Hub zone activity + tool counts
+  const [lastDepositByDomain, setLastDepositByDomain] = useState<Map<string, string | null>>(new Map());
+  const [toolCountByDomain, setToolCountByDomain] = useState<Map<string, number>>(new Map());
 
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
@@ -501,43 +503,29 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     }
   }, [activeView, selectedDomain?.id, journalDateRange, calculatePeriodScore]);
 
-  // Fetch domain statistics when viewing main wellness bank and period changes
+  // Fetch zone activity (last deposit + tool count) for the hub view
   useEffect(() => {
-    const fetchDomainStatistics = async () => {
-      if (!selectedDomain && domains.length > 0) {
-        setLoadingStatistics(true);
-        try {
-          const supabase = getSupabaseClient();
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
+    if (!currentUserId) return;
+    if (domains.length === 0) return;
+    if (selectedDomain !== null) return;
 
-          const statsArray = await Promise.all(
-            domains.map(domain =>
-              getDomainStatistics(
-                supabase,
-                user.id,
-                domain.id,
-                domainStatsPeriod
-              ).then(stats => ({ domainId: domain.id, stats }))
-            )
-          );
-
-          const stats: Record<string, DomainStatistics> = {};
-          statsArray.forEach(({ domainId, stats: domainStats }) => {
-            stats[domainId] = domainStats;
-          });
-
-          setDomainStatistics(stats);
-        } catch (error) {
-          console.error('Error fetching domain statistics:', error);
-        } finally {
-          setLoadingStatistics(false);
-        }
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const [deposits, tools] = await Promise.all([
+          getLastActivityPerDomain(supabase, currentUserId),
+          getToolCountsPerDomain(supabase, currentUserId),
+        ]);
+        if (cancelled) return;
+        setLastDepositByDomain(deposits);
+        setToolCountByDomain(tools);
+      } catch (err) {
+        console.error('Error fetching hub activity data:', err);
       }
-    };
-
-    fetchDomainStatistics();
-  }, [domains.length, domainStatsPeriod, selectedDomain]);
+    })();
+    return () => { cancelled = true; };
+  }, [currentUserId, domains.length, selectedDomain]);
 
   const handleViewChange = useCallback((view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);
@@ -944,6 +932,8 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       <WellnessHubPage
         domains={domains}
         onZoneTap={setSelectedDomain}
+        lastDepositByDomain={lastDepositByDomain}
+        toolCountByDomain={toolCountByDomain}
       />
     );
   };
