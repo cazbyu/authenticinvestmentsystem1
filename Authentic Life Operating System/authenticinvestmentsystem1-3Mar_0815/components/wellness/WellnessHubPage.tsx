@@ -66,7 +66,7 @@ export function WellnessHubPage({
   lastDepositByDomain,
   toolCountByDomain,
 }: WellnessHubPageProps) {
-  const { counts, asleepZones, bannerText } = useMemo(() => {
+  const { counts, asleepZones } = useMemo(() => {
     const states = domains.map(d => {
       const lastAt = lastDepositByDomain.get(d.id) ?? null;
       const daysSince = getDaysSince(lastAt);
@@ -92,15 +92,7 @@ export function WellnessHubPage({
         return b.daysSince! - a.daysSince!;
       });
 
-    const bannerText = asleepZones
-      .map(s => {
-        if (s.daysSince === null) return `${s.domain.name} (never)`;
-        if (s.daysSince === 1) return `${s.domain.name} (1 day)`;
-        return `${s.domain.name} (${s.daysSince} days)`;
-      })
-      .join(' · ');
-
-    return { counts, asleepZones, bannerText };
+    return { counts, asleepZones };
   }, [domains, lastDepositByDomain]);
 
   const showNeedsAttention = asleepZones.length > 0;
@@ -134,7 +126,18 @@ export function WellnessHubPage({
       {showNeedsAttention && (
         <View style={styles.needsAttention}>
           <Text style={styles.needsAttentionLabel}>NEEDS ATTENTION</Text>
-          <Text style={styles.needsAttentionBody}>{bannerText}</Text>
+          {asleepZones.map(s => (
+            <Text
+              key={s.domain.id}
+              style={styles.needsAttentionBody}
+            >
+              {s.daysSince === null
+                ? `${s.domain.name} — never`
+                : s.daysSince === 1
+                  ? `${s.domain.name} — 1 day`
+                  : `${s.domain.name} — ${s.daysSince} days`}
+            </Text>
+          ))}
         </View>
       )}
 
