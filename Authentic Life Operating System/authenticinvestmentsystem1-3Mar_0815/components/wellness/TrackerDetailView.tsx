@@ -264,6 +264,26 @@ export function TrackerDetailView({
     onLogSaved?.();
   }, [fetchLogs, onLogSaved]);
 
+  const handleDeactivate = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    const ok = window.confirm(
+      `Remove ${instance.display_name} from your Toolshed? Your logs will be preserved.`,
+    );
+    if (!ok) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tracker-instances')
+        .update({ is_active: false })
+        .eq('id', instance.instance_id);
+      if (error) throw error;
+      onLogSaved?.();
+      onClose();
+    } catch (err) {
+      console.error('TrackerDetailView deactivate error:', err);
+    }
+  }, [instance.instance_id, instance.display_name, onLogSaved, onClose]);
+
   const formatValueForDisplay = (val: number | string | boolean | null) =>
     formatTrackerValue(
       val,
@@ -298,6 +318,7 @@ export function TrackerDetailView({
               currentLogDate={currentLogDate}
               accentColor={accentColor}
               onSetGoal={() => setShowSetGoal(true)}
+              onDeactivate={handleDeactivate}
             />
           )}
           <Pressable
@@ -485,6 +506,7 @@ interface HeroCardProps {
   currentLogDate: string | null;
   accentColor: string;
   onSetGoal: () => void;
+  onDeactivate?: () => void;
 }
 
 function HeroCard({
@@ -493,6 +515,7 @@ function HeroCard({
   currentLogDate,
   accentColor,
   onSetGoal,
+  onDeactivate,
 }: HeroCardProps) {
   const hasValue = currentValue !== null && currentValue !== undefined;
   const hasGoal = instance.goal_value !== null && instance.goal_value !== undefined;
@@ -659,11 +682,23 @@ function HeroCard({
       {lowerBetterNode}
       {rangeNode}
       {plainNode}
-      <Pressable onPress={onSetGoal} style={styles.setGoalLink}>
-        <Text style={[styles.setGoalLinkText, { color: accentColor }]}>
-          Edit goal
-        </Text>
-      </Pressable>
+      <View style={styles.heroActions}>
+        <Pressable onPress={onSetGoal} style={styles.setGoalLink}>
+          <Text style={[styles.setGoalLinkText, { color: accentColor }]}>
+            Edit goal
+          </Text>
+        </Pressable>
+        {onDeactivate && (
+          <>
+            <Text style={styles.heroActionsDivider}>·</Text>
+            <Pressable onPress={onDeactivate} style={styles.setGoalLink}>
+              <Text style={[styles.setGoalLinkText, { color: '#dc2626' }]}>
+                Deactivate this tool
+              </Text>
+            </Pressable>
+          </>
+        )}
+      </View>
     </View>
   );
 }
@@ -829,5 +864,14 @@ const styles = StyleSheet.create({
   setGoalLinkText: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  heroActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroActionsDivider: {
+    color: '#9ca3af',
+    fontSize: 13,
   },
 });
