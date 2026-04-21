@@ -87,8 +87,8 @@ export function PhysicalToolshed({
     })();
   }, []);
 
-  const loadInstancesAndSteps = useCallback(async () => {
-    if (!userId) return;
+  const loadInstancesAndSteps = useCallback(async (): Promise<PhysicalInstanceRow[]> => {
+    if (!userId) return [];
     try {
       const supabase = getSupabaseClient();
 
@@ -121,8 +121,10 @@ export function PhysicalToolshed({
       } else {
         setStepIdMap(new Map());
       }
+      return typed;
     } catch (err) {
       console.error('PhysicalToolshed instances fetch error:', err);
+      return [];
     }
   }, [userId]);
 
@@ -219,9 +221,15 @@ export function PhysicalToolshed({
   }, [loadInstancesAndSteps, loadActivity]);
 
   const handleLogSaved = useCallback(async () => {
+    const fresh = await loadInstancesAndSteps();
+    setActiveDetailView(prev => {
+      if (!prev) return prev;
+      const updated = fresh.find(i => i.instance_id === prev.instance.instance_id);
+      return updated ? { ...prev, instance: updated } : prev;
+    });
     await loadActivity();
     await loadTodayValues();
-  }, [loadActivity, loadTodayValues]);
+  }, [loadInstancesAndSteps, loadActivity, loadTodayValues]);
 
   if (loading && instances.length === 0) {
     return (

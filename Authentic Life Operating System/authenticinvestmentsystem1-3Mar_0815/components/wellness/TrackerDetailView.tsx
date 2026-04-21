@@ -16,6 +16,7 @@ import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { formatTrackerValue, TrackerInstance } from './TrackerCard';
 import { LogEntryForm } from './LogEntryForm';
 import { TrendLineChart } from './TrendLineChart';
+import { SetGoalModal } from './SetGoalModal';
 
 /**
  * TrackerDetailView — Minimalist Executive design system
@@ -106,6 +107,7 @@ export function TrackerDetailView({
   const [logs, setLogs] = useState<StepLogRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [showLogEntry, setShowLogEntry] = useState(false);
+  const [showSetGoal, setShowSetGoal] = useState(false);
 
   const isNumeric = NUMERIC_TYPES.has(instance.measurement_type);
 
@@ -295,6 +297,7 @@ export function TrackerDetailView({
               currentValue={currentValue}
               currentLogDate={currentLogDate}
               accentColor={accentColor}
+              onSetGoal={() => setShowSetGoal(true)}
             />
           )}
           <Pressable
@@ -444,6 +447,14 @@ export function TrackerDetailView({
           defaultDomainId={defaultDomainId}
           onSaved={handleLogSaved}
         />
+
+        <SetGoalModal
+          visible={showSetGoal}
+          onClose={() => setShowSetGoal(false)}
+          instance={instance}
+          onSaved={handleLogSaved}
+          accentColor={accentColor}
+        />
       </View>
     </Modal>
   );
@@ -473,6 +484,7 @@ interface HeroCardProps {
   currentValue: number | null;
   currentLogDate: string | null;
   accentColor: string;
+  onSetGoal: () => void;
 }
 
 function HeroCard({
@@ -480,6 +492,7 @@ function HeroCard({
   currentValue,
   currentLogDate,
   accentColor,
+  onSetGoal,
 }: HeroCardProps) {
   const hasValue = currentValue !== null && currentValue !== undefined;
   const hasGoal = instance.goal_value !== null && instance.goal_value !== undefined;
@@ -631,14 +644,6 @@ function HeroCard({
             </Text>
           </>
         )}
-        {!isCumulative && (
-          // TODO: wire Edit Desired Value modal in D4j-polish-5
-          <Pressable onPress={() => {}} style={styles.setGoalLink}>
-            <Text style={[styles.setGoalLinkText, { color: accentColor }]}>
-              Set desired value
-            </Text>
-          </Pressable>
-        )}
       </>
     );
   }
@@ -654,6 +659,11 @@ function HeroCard({
       {lowerBetterNode}
       {rangeNode}
       {plainNode}
+      <Pressable onPress={onSetGoal} style={styles.setGoalLink}>
+        <Text style={[styles.setGoalLinkText, { color: accentColor }]}>
+          Edit goal
+        </Text>
+      </Pressable>
     </View>
   );
 }
