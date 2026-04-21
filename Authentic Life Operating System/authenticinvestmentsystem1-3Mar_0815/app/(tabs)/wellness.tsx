@@ -503,29 +503,48 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     }
   }, [activeView, selectedDomain?.id, journalDateRange, calculatePeriodScore]);
 
-  // Fetch zone activity (last deposit + tool count) for the hub view
+  const fetchHubData = useCallback(async () => {
+    if (!currentUserId) return;
+    try {
+      const supabase = getSupabaseClient();
+      const [deposits, tools] = await Promise.all([
+        getLastActivityPerDomain(supabase, currentUserId),
+        getToolCountsPerDomain(supabase, currentUserId),
+      ]);
+      setLastDepositByDomain(deposits);
+      setToolCountByDomain(tools);
+    } catch (err) {
+      console.error('Error fetching hub activity data:', err);
+    }
+  }, [currentUserId]);
+
+  // Fetch zone activity (last deposit + tool count) for the hub view,
+  // and refetch on cross-page task/reflection/deposit-idea events.
   useEffect(() => {
     if (!currentUserId) return;
     if (domains.length === 0) return;
     if (selectedDomain !== null) return;
 
-    let cancelled = false;
-    (async () => {
-      try {
-        const supabase = getSupabaseClient();
-        const [deposits, tools] = await Promise.all([
-          getLastActivityPerDomain(supabase, currentUserId),
-          getToolCountsPerDomain(supabase, currentUserId),
-        ]);
-        if (cancelled) return;
-        setLastDepositByDomain(deposits);
-        setToolCountByDomain(tools);
-      } catch (err) {
-        console.error('Error fetching hub activity data:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [currentUserId, domains.length, selectedDomain]);
+    fetchHubData();
+
+    const events = [
+      EVENTS.TASK_CREATED,
+      EVENTS.TASK_UPDATED,
+      EVENTS.TASK_DELETED,
+      EVENTS.TASK_COMPLETED,
+      EVENTS.REFLECTION_CREATED,
+      EVENTS.REFLECTION_UPDATED,
+      EVENTS.REFLECTION_DELETED,
+      EVENTS.DEPOSIT_IDEA_CREATED,
+      EVENTS.DEPOSIT_IDEA_UPDATED,
+      EVENTS.REFRESH_ALL_TASKS,
+    ];
+    for (const evt of events) eventBus.on(evt, fetchHubData);
+
+    return () => {
+      for (const evt of events) eventBus.off(evt, fetchHubData);
+    };
+  }, [currentUserId, domains.length, selectedDomain, fetchHubData]);
 
   const handleViewChange = useCallback((view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
     setActiveView(view);

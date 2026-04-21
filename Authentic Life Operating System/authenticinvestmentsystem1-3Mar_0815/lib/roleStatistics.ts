@@ -650,47 +650,102 @@ export async function getLastActivityPerDomain(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<Map<string, string | null>> {
-  try {
-    const { data: tasks, error: tasksError } = await supabase
-      .from('0008-ap-tasks')
-      .select('id, completed_at')
-      .eq('user_id', userId)
-      .eq('status', 'completed')
-      .is('deleted_at', null)
-      .not('completed_at', 'is', null);
+  // Fan out across the four deposit-source tables. Per-source failures are
+  // logged and dropped so a single table outage doesn't nuke the whole hub.
+  const [taskMap, reflectionMap, depositIdeaMap, commitmentMap] = await Promise.all([
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-tasks',
+      'task',
+      'completed_at',
+      (q) => q
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .not('completed_at', 'is', null),
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-reflections',
+      'reflection',
+      'created_at',
+      (q) => q.eq('archived', false),
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-deposit-ideas',
+      'depositIdea',
+      'created_at',
+      (q) => q.eq('archived', false),
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-commitments',
+      'commitment',
+      'date',
+      (q) => q.lte('date', formatLocalDate(new Date())),
+    ),
+  ]);
 
-    if (tasksError) throw tasksError;
-    if (!tasks || tasks.length === 0) return new Map();
-
-    const taskCompletedAt = new Map<string, string>();
-    for (const task of tasks) {
-      if (task.completed_at) taskCompletedAt.set(task.id, task.completed_at);
+  const merged = new Map<string, string | null>();
+  for (const src of [taskMap, reflectionMap, depositIdeaMap, commitmentMap]) {
+    for (const [domainId, ts] of src) {
+      const existing = merged.get(domainId);
+      if (!existing || (ts !== null && ts > existing)) {
+        merged.set(domainId, ts);
+      }
     }
+  }
+  return merged;
+}
+
+async function fetchLastActivityForSource(
+  supabase: SupabaseClient,
+  userId: string,
+  sourceTable: string,
+  parentType: string,
+  timestampField: string,
+  applyFilter: (q: any) => any,
+): Promise<Map<string, string | null>> {
+  try {
+    let sourceQuery = supabase
+      .from(sourceTable)
+      .select(`id, ${timestampField}`)
+      .eq('user_id', userId);
+    sourceQuery = applyFilter(sourceQuery);
+
+    const { data: rows, error: rowsError } = await sourceQuery;
+    if (rowsError) throw rowsError;
+    if (!rows || rows.length === 0) return new Map();
+
+    const tsById = new Map<string, string>();
+    for (const r of rows as any[]) {
+      const ts = r[timestampField];
+      if (ts) tsById.set(r.id as string, String(ts));
+    }
+    if (tsById.size === 0) return new Map();
 
     const { data: joinData, error: joinError } = await supabase
       .from('0008-ap-universal-domains-join')
       .select('domain_id, parent_id')
       .eq('user_id', userId)
-      .eq('parent_type', 'task')
-      .in('parent_id', Array.from(taskCompletedAt.keys()));
-
+      .eq('parent_type', parentType)
+      .in('parent_id', Array.from(tsById.keys()));
     if (joinError) throw joinError;
     if (!joinData) return new Map();
 
     const result = new Map<string, string | null>();
     for (const row of joinData) {
       if (!row.domain_id) continue;
-      const completedAt = taskCompletedAt.get(row.parent_id);
-      if (!completedAt) continue;
+      const ts = tsById.get(row.parent_id);
+      if (!ts) continue;
       const existing = result.get(row.domain_id);
-      if (!existing || completedAt > existing) {
-        result.set(row.domain_id, completedAt);
+      if (!existing || ts > existing) {
+        result.set(row.domain_id, ts);
       }
     }
-
     return result;
   } catch (error) {
-    console.error('Error getting last activity per domain:', error);
+    console.error(`Error getting last activity from ${sourceTable}:`, error);
     return new Map();
   }
 }
