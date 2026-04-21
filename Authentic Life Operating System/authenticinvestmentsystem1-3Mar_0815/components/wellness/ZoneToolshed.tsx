@@ -15,19 +15,19 @@ import { AddTrackerModal } from './AddTrackerModal';
 import { TrackerDetailView } from './TrackerDetailView';
 
 /**
- * PhysicalToolshed — Minimalist Executive design system
- * Physical zone tracker grid: active instances + recency pips +
+ * ZoneToolshed — Minimalist Executive design system
+ * Zone tracker grid: active instances + recency pips +
  * today's values + Add tile + activation/logging modals.
  */
 
-export interface PhysicalToolshedProps {
+export interface ZoneToolshedProps {
   domainId: string;
   accentColor?: string;
 }
 
 const WELLNESS_ACCENT = '#16a34a';
 
-interface PhysicalInstanceRow extends TrackerInstance {
+interface TrackerInstanceRow extends TrackerInstance {
   session_id: string | null;
   user_id: string;
   library_id: string;
@@ -60,12 +60,12 @@ function pickTodayValue(
   }
 }
 
-export function PhysicalToolshed({
+export function ZoneToolshed({
   domainId,
   accentColor = WELLNESS_ACCENT,
-}: PhysicalToolshedProps) {
+}: ZoneToolshedProps) {
   const [userId, setUserId] = useState<string | null>(null);
-  const [instances, setInstances] = useState<PhysicalInstanceRow[]>([]);
+  const [instances, setInstances] = useState<TrackerInstanceRow[]>([]);
   const [activityMap, setActivityMap] = useState<Map<string, string | null>>(new Map());
   const [todayValueMap, setTodayValueMap] = useState<
     Map<string, number | string | boolean | null>
@@ -75,7 +75,7 @@ export function PhysicalToolshed({
 
   const [showAddTracker, setShowAddTracker] = useState(false);
   const [activeDetailView, setActiveDetailView] = useState<{
-    instance: PhysicalInstanceRow;
+    instance: TrackerInstanceRow;
     stepId: string;
   } | null>(null);
 
@@ -87,18 +87,19 @@ export function PhysicalToolshed({
     })();
   }, []);
 
-  const loadInstancesAndSteps = useCallback(async (): Promise<PhysicalInstanceRow[]> => {
+  const loadInstancesAndSteps = useCallback(async (): Promise<TrackerInstanceRow[]> => {
     if (!userId) return [];
     try {
       const supabase = getSupabaseClient();
 
       const { data: instanceRows, error: instanceErr } = await supabase
-        .from('v_physical_tracker_instances')
+        .from('v_tracker_instances')
         .select('*')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('domain_id', domainId);
       if (instanceErr) throw instanceErr;
 
-      const typed = (instanceRows ?? []) as PhysicalInstanceRow[];
+      const typed = (instanceRows ?? []) as TrackerInstanceRow[];
       setInstances(typed);
 
       const sessionIds = typed
@@ -123,19 +124,20 @@ export function PhysicalToolshed({
       }
       return typed;
     } catch (err) {
-      console.error('PhysicalToolshed instances fetch error:', err);
+      console.error('ZoneToolshed instances fetch error:', err);
       return [];
     }
-  }, [userId]);
+  }, [userId, domainId]);
 
   const loadActivity = useCallback(async () => {
     if (!userId) return;
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
-        .from('v_physical_tracker_activity')
+        .from('v_tracker_activity')
         .select('instance_id, last_log_date')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('domain_id', domainId);
       if (error) throw error;
       const map = new Map<string, string | null>();
       for (const row of data ?? []) {
@@ -145,9 +147,9 @@ export function PhysicalToolshed({
       }
       setActivityMap(map);
     } catch (err) {
-      console.error('PhysicalToolshed activity fetch error:', err);
+      console.error('ZoneToolshed activity fetch error:', err);
     }
-  }, [userId]);
+  }, [userId, domainId]);
 
   const loadTodayValues = useCallback(async () => {
     if (!userId) return;
@@ -161,7 +163,7 @@ export function PhysicalToolshed({
         .eq('log_date', today);
       if (error) throw error;
 
-      const stepToInstance = new Map<string, PhysicalInstanceRow>();
+      const stepToInstance = new Map<string, TrackerInstanceRow>();
       for (const instance of instances) {
         if (!instance.session_id) continue;
         const stepId = stepIdMap.get(instance.session_id);
@@ -176,7 +178,7 @@ export function PhysicalToolshed({
       }
       setTodayValueMap(map);
     } catch (err) {
-      console.error('PhysicalToolshed today-values fetch error:', err);
+      console.error('ZoneToolshed today-values fetch error:', err);
     }
   }, [userId, instances, stepIdMap]);
 
@@ -200,7 +202,7 @@ export function PhysicalToolshed({
   }, [userId, instances, stepIdMap, loadTodayValues]);
 
   const handleCardPress = useCallback(
-    (instance: PhysicalInstanceRow) => {
+    (instance: TrackerInstanceRow) => {
       if (instance.is_compound) {
         Alert.alert('Coming soon', 'Compound tracker logging is coming soon.');
         return;
