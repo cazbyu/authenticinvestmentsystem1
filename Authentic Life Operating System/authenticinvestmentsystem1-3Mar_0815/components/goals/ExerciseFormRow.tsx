@@ -5,6 +5,7 @@ import { Trash2, GripVertical } from 'lucide-react-native';
 import { MuscleGroupPicker } from './MuscleGroupPicker';
 
 export interface ExerciseFormData {
+  exercise_id?: string;
   name: string;
   muscle_group: string[];
   exercise_type: 'reps' | 'timed' | 'distance';

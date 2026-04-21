@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 
 const ActivityLogModal = React.lazy(() => import('./ActivityLogModal'));
-const MilestoneExercisePanel = React.lazy(() => import('./MilestoneExercisePanel'));
+const StepLogPanel = React.lazy(() => import('./StepLogPanel'));
 import { Target, Plus, Lightbulb, BookOpen, TrendingUp, Paperclip, X, CreditCard as Edit3, ChevronLeft, ChevronRight, Square, SquareCheck as CheckSquare, Calendar as CalendarIcon, Check } from 'lucide-react-native';
 import { UnifiedGoal } from './MyGoalsView';
 import ActionEffortModal from './ActionEffortModal';
@@ -26,8 +26,8 @@ import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/
 import { fetchGoalActionsForWeek, TaskWithLogs } from '@/hooks/fetchGoalActionsForWeek';
 import { useGoals, Timeline } from '@/hooks/useGoals';
 import { GoalJournalView } from './GoalJournalView';
-import { MilestoneSessionRow } from './MilestoneSessionRow';
-import { getMilestonesForGoal, MilestoneSummary } from '@/services/milestoneService';
+import { SessionRow } from './SessionRow';
+import { getSessionsForGoal, SessionSummary } from '@/services/sessionService';
 
 
 
@@ -104,7 +104,7 @@ export function GoalDetailView({
   // ActionEffortModal state
   const [showActionEffortModal, setShowActionEffortModal] = useState(false);
   const [editingAction, setEditingAction] = useState<TaskWithLogs | null>(null);
-  const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [milestones, setMilestones] = useState<SessionSummary[]>([]);
 
   const [exercisePanelState, setExercisePanelState] = useState<{
     milestoneId: string;
@@ -132,16 +132,16 @@ export function GoalDetailView({
   // Get createTaskWithWeekPlan from useGoals hook
   const { createTaskWithWeekPlan } = useGoals();
 
-  // Fetch milestones for this goal
+  // Fetch sessions for this goal
   useEffect(() => {
     if (!goal?.id) return;
-    getMilestonesForGoal(goal.id)
+    getSessionsForGoal(goal.id)
       .then(data => {
-        console.log('[GoalDetailView] Milestones fetched:', goal.id, JSON.stringify(data));
+        console.log('[GoalDetailView] Sessions fetched:', goal.id, JSON.stringify(data));
         setMilestones(data);
       })
-      .catch(err => console.error('[GoalDetailView] Milestone fetch error:', err));
-  }, [goal?.id]);
+      .catch(err => console.error('[GoalDetailView] Session fetch error:', err));
+  }, [goal?.id, refreshTrigger]);
 
   // Ideas tab state
   const [ideas, setIdeas] = useState<DepositIdea[]>([]);
@@ -1707,9 +1707,18 @@ console.log('[DEBUG] completedDays array:', completedDays);
               SESSIONS
             </Text>
             {milestones.map(ms => {
-              // Generate weekDays from currentWeekData
+              // Use the DISPLAYED week (tracked by displayedWeekNumber), not
+              // today's real-world week from the component-level currentWeekData
+              // useMemo. The useMemo ignores navigation state, so without this
+              // lookup users viewing a past/future week would see session
+              // circles for today's week and clicks would open StepLogPanel
+              // for the wrong date.
+              const displayedWeek = cycleWeeks.find(w => w.week_number === displayedWeekNumber);
+              if (!displayedWeek) return null;
+
+              // Generate weekDays from the displayed week
               const days = [];
-              const start = parseLocalDate(currentWeekData.startDate);
+              const start = parseLocalDate(displayedWeek.start_date);
               for (let i = 0; i < 7; i++) {
                 const day = new Date(start);
                 day.setDate(start.getDate() + i);
@@ -1720,26 +1729,68 @@ console.log('[DEBUG] completedDays array:', completedDays);
                 });
               }
               return (
-                <MilestoneSessionRow
+                <SessionRow
                   key={ms.milestone_id}
                   milestone={ms}
                   weekDays={days}
-                  weekStart={currentWeekData.startDate}
-                  weekEnd={currentWeekData.endDate}
+                  weekStart={displayedWeek.start_date}
+                  weekEnd={displayedWeek.end_date}
                   targetDays={ms.target_days ?? 7}
                   onEdit={() => {
                     const shadowTask = weekFilteredActions.find(a => a.id === ms.task_id);
                     if (shadowTask) {
                       handleEditAction(shadowTask);
                     } else {
-                      getSupabaseClient()
-                        .from('0008-ap-tasks')
-                        .select('*')
-                        .eq('id', ms.task_id)
-                        .single()
-                        .then(({ data }) => {
-                          if (data) handleEditAction(data as TaskWithLogs);
-                        });
+                      // Pattern 2 fallback: shadow tasks (task_type='milestone') are
+                      // excluded from v_goal_detail_week_actions, so we orchestrate
+                      // the data the view would have supplied — task row + week-plan
+                      // rows + association joins.
+                      (async () => {
+                        const supabase = getSupabaseClient();
+
+                        const [taskRes, weekPlanRes, rolesJoinRes, domainsJoinRes, krJoinRes] = await Promise.all([
+                          supabase.from('0008-ap-tasks').select('*').eq('id', ms.task_id).single(),
+                          supabase.from('0008-ap-task-week-plan').select('week_number, target_days').eq('task_id', ms.task_id).is('deleted_at', null).order('week_number'),
+                          supabase.from('0008-ap-universal-roles-join').select('role_id').eq('parent_id', ms.task_id).eq('parent_type', 'task'),
+                          supabase.from('0008-ap-universal-domains-join').select('domain_id').eq('parent_id', ms.task_id).eq('parent_type', 'task'),
+                          supabase.from('0008-ap-universal-key-relationships-join').select('key_relationship_id').eq('parent_id', ms.task_id).eq('parent_type', 'task'),
+                        ]);
+
+                        if (taskRes.error || !taskRes.data) {
+                          console.error('[GoalDetailView] Pattern 2 edit: task fetch failed:', taskRes.error);
+                          return;
+                        }
+
+                        const roleIds = (rolesJoinRes.data ?? []).map((r: any) => r.role_id);
+                        const domainIds = (domainsJoinRes.data ?? []).map((d: any) => d.domain_id);
+                        const krIds = (krJoinRes.data ?? []).map((kr: any) => kr.key_relationship_id);
+
+                        const [rolesRes, domainsRes, krsRes] = await Promise.all([
+                          roleIds.length > 0
+                            ? supabase.from('0008-ap-roles').select('id, label, color').in('id', roleIds)
+                            : Promise.resolve({ data: [] as any[], error: null }),
+                          domainIds.length > 0
+                            ? supabase.from('0008-ap-domains').select('id, name').in('id', domainIds)
+                            : Promise.resolve({ data: [] as any[], error: null }),
+                          krIds.length > 0
+                            ? supabase.from('0008-ap-key-relationships').select('id, name').in('id', krIds)
+                            : Promise.resolve({ data: [] as any[], error: null }),
+                        ]);
+
+                        const weekPlans = weekPlanRes.data ?? [];
+                        const augmented = {
+                          ...taskRes.data,
+                          selectedWeeks: weekPlans.map(wp => wp.week_number).sort((a, b) => a - b),
+                          weeklyTarget: weekPlans[0]?.target_days ?? 0,
+                          weeklyActual: 0,
+                          logs: [],
+                          roles: rolesRes.data ?? [],
+                          domains: domainsRes.data ?? [],
+                          keyRelationships: krsRes.data ?? [],
+                        };
+
+                        handleEditAction(augmented as TaskWithLogs);
+                      })();
                     }
                   }}
                   onDayPress={(date, dayLabel) => {
@@ -2154,50 +2205,47 @@ console.log('[DEBUG] completedDays array:', completedDays);
     timeline={timeline}
     createTaskWithWeekPlan={createTaskWithWeekPlan}
     onDelete={async (actionId: string) => {
+      console.log('[Delete] Starting delete for task:', actionId);
       const supabase = getSupabaseClient();
 
-      // Find any milestones linked to this task (shadow task for workout session)
-      const { data: linkedMilestones } = await supabase
-        .from('0008-ap-gl-milestones')
+      const { data: linkedSessions, error: queryErr } = await supabase
+        .from('0008-ap-gl-sessions')
         .select('id')
         .eq('task_id', actionId);
 
-      const milestoneIds = (linkedMilestones ?? []).map(m => m.id);
+      console.log('[Delete] Linked sessions:', linkedSessions, 'Query error:', queryErr);
 
-      if (milestoneIds.length > 0) {
-        // Hard delete milestone logs first (FK → milestones)
+      const sessionIds = (linkedSessions ?? []).map(m => m.id);
+
+      if (sessionIds.length > 0) {
         const { error: logErr } = await supabase
-          .from('0008-ap-gl-milestone-log')
+          .from('0008-ap-gl-session-log')
           .delete()
-          .in('milestone_id', milestoneIds);
-        if (logErr) throw logErr;
+          .in('milestone_id', sessionIds);
+        console.log('[Delete] Log delete error:', logErr);
 
-        // Hard delete milestone exercises (FK → milestones)
         const { error: exErr } = await supabase
-          .from('0008-ap-gl-milestone-exercises')
+          .from('0008-ap-gl-session-steps')
           .delete()
-          .in('milestone_id', milestoneIds);
-        if (exErr) throw exErr;
+          .in('milestone_id', sessionIds);
+        console.log('[Delete] Exercise delete error:', exErr);
 
-        // Hard delete milestones themselves
         const { error: msErr } = await supabase
-          .from('0008-ap-gl-milestones')
+          .from('0008-ap-gl-sessions')
           .delete()
-          .in('id', milestoneIds);
-        if (msErr) throw msErr;
+          .in('id', sessionIds);
+        console.log('[Delete] Session delete error:', msErr);
       }
 
-      // Soft delete the task last
       const { error } = await supabase
         .from('0008-ap-tasks')
         .update({ deleted_at: toLocalISOString(new Date()) })
         .eq('id', actionId);
-      if (error) throw error;
+      console.log('[Delete] Task soft delete error:', error);
 
-      // Refresh milestones list so UI reflects the cascade
-      getMilestonesForGoal(goal.id)
+      getSessionsForGoal(goal.id)
         .then(setMilestones)
-        .catch(err => console.error('[GoalDetailView] Milestone refresh after delete:', err));
+        .catch(err => console.error('[GoalDetailView] Session refresh after delete:', err));
     }}
     initialData={{
       id: editingAction.id,
@@ -2207,6 +2255,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
       weeklyTarget: editingAction.weeklyTarget,
       tracking_template: editingAction.tracking_template,
       data_schema: editingAction.data_schema,
+      milestone_id: milestones.find(ms => ms.task_id === editingAction.id)?.milestone_id ?? null,
     }}
     mode="edit"
   />
@@ -2331,7 +2380,7 @@ console.log('[DEBUG] completedDays array:', completedDays);
       )}
       {exercisePanelState && (
         <Suspense fallback={null}>
-          <MilestoneExercisePanel
+          <StepLogPanel
             milestoneId={exercisePanelState.milestoneId}
             taskId={exercisePanelState.taskId}
             milestoneName={exercisePanelState.milestoneName}
@@ -2348,9 +2397,9 @@ console.log('[DEBUG] completedDays array:', completedDays);
                 );
               }
               setExercisePanelState(null);
-              getMilestonesForGoal(goal.id)
+              getSessionsForGoal(goal.id)
                 .then(setMilestones)
-                .catch(err => console.error('[GoalDetailView] Milestone refresh error:', err));
+                .catch(err => console.error('[GoalDetailView] Session refresh error:', err));
             }}
           />
         </Suspense>

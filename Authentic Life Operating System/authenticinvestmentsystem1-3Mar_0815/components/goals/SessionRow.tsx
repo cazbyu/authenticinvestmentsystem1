@@ -1,12 +1,12 @@
-// components/goals/MilestoneSessionRow.tsx
+// components/goals/SessionRow.tsx
 import React, { memo, useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Dumbbell } from 'lucide-react-native';
 import { formatLocalDate } from '@/lib/dateUtils';
-import { getMilestoneCompletionsForWeek, MilestoneSummary } from '@/services/milestoneService';
+import { getSessionCompletionsForWeek, SessionSummary, SessionDayCompletion } from '@/services/sessionService';
 
-interface MilestoneSessionRowProps {
-  milestone: MilestoneSummary;
+interface SessionRowProps {
+  milestone: SessionSummary;
   weekDays: Array<{ date: string; dayName: string; dayOfWeek: number }>;
   weekStart: string;
   weekEnd: string;
@@ -15,7 +15,7 @@ interface MilestoneSessionRowProps {
   onEdit?: () => void;
 }
 
-export const MilestoneSessionRow = memo(function MilestoneSessionRow({
+export const SessionRow = memo(function SessionRow({
   milestone,
   weekDays,
   weekStart,
@@ -23,23 +23,28 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
   onDayPress,
   targetDays,
   onEdit,
-}: MilestoneSessionRowProps) {
-  const [completedDates, setCompletedDates] = useState<string[]>([]);
+}: SessionRowProps) {
+  const [completions, setCompletions] = useState<SessionDayCompletion[]>([]);
   const today = formatLocalDate(new Date());
 
   useEffect(() => {
     let cancelled = false;
-    getMilestoneCompletionsForWeek(milestone.milestone_id, weekStart, weekEnd)
-      .then(dates => {
-        if (!cancelled) setCompletedDates(dates);
+    getSessionCompletionsForWeek(milestone.milestone_id, weekStart, weekEnd)
+      .then(data => {
+        if (!cancelled) setCompletions(data);
       })
       .catch(err => {
-        console.error('[MilestoneSessionRow] Error fetching completions:', err);
+        console.error('[SessionRow] Error fetching completions:', err);
       });
     return () => { cancelled = true; };
   }, [milestone.milestone_id, weekStart, weekEnd]);
 
-  const completedCount = completedDates.length;
+  // Fractional sum: each day contributes exercises_completed / exercises_total,
+  // capped at 1.0 per day defensively.
+  const completedCount = completions.reduce((sum, c) => {
+    const fraction = c.exercises_total > 0 ? c.exercises_completed / c.exercises_total : 0;
+    return sum + Math.min(1, fraction);
+  }, 0);
 
   const progressPct = useMemo(() => {
     return targetDays > 0 ? Math.min(100, (completedCount / targetDays) * 100) : 0;
@@ -75,9 +80,14 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
       <View style={styles.circlesRow}>
         <View style={styles.dayDotsRow}>
           {weekDays.map((day) => {
-            const isCompleted = completedDates.includes(day.date);
+            const completion = completions.find(c => c.completed_date === day.date);
+            const percent = completion && completion.exercises_total > 0
+              ? Math.min(100, Math.round((completion.exercises_completed / completion.exercises_total) * 100))
+              : 0;
+            const isFull = percent >= 100;
+            const isPartial = percent > 0 && percent < 100;
             const isPast = day.date < today;
-            const isMissed = isPast && !isCompleted;
+            const isMissed = isPast && percent === 0;
             return (
               <TouchableOpacity
                 key={day.date}
@@ -85,22 +95,25 @@ export const MilestoneSessionRow = memo(function MilestoneSessionRow({
                 activeOpacity={0.7}
                 style={[
                   styles.dayBubble,
-                  isCompleted && styles.dayBubbleCompleted,
+                  (isFull || isPartial) && styles.dayBubbleCompleted,
                   isMissed && styles.dayBubbleMissed,
                 ]}
               >
                 <Text style={[
                   styles.dayBubbleLabel,
-                  isCompleted && styles.dayBubbleLabelCompleted,
+                  isFull && styles.dayBubbleLabelCompleted,
+                  isPartial && styles.dayBubbleLabelPartial,
                   isMissed && styles.dayBubbleLabelMissed,
                 ]}>
-                  {day.dayName.slice(0, 1)}
+                  {isPartial ? `${percent}%` : day.dayName.slice(0, 1)}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
-        <Text style={styles.countText}>{completedCount}/{targetDays}</Text>
+        <Text style={styles.countText}>
+          {completedCount % 1 === 0 ? completedCount : completedCount.toFixed(1)}/{targetDays}
+        </Text>
       </View>
     </View>
   );
@@ -218,6 +231,11 @@ const styles = StyleSheet.create({
   },
   dayBubbleLabelCompleted: {
     color: '#16a34a',
+  },
+  dayBubbleLabelPartial: {
+    color: '#16a34a',
+    fontSize: 9,
+    fontWeight: '700',
   },
   dayBubbleLabelMissed: {
     color: '#9ca3af',

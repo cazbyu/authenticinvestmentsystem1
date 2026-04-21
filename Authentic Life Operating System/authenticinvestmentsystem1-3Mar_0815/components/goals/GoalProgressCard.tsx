@@ -5,11 +5,10 @@ import { GoalProgress } from '@/hooks/useGoalProgress';
 import { parseLocalDate, formatLocalDate } from '@/lib/dateUtils';
 import { Timeline } from '@/hooks/useGoals';
 import { DayDot } from './DayDot';
-import { MilestoneSessionRow } from './MilestoneSessionRow';
-import { getMilestonesForGoal, MilestoneSummary } from '@/services/milestoneService';
+import { SessionRow } from './SessionRow';
+import { getSessionsForGoal, SessionSummary } from '@/services/sessionService';
 
-const MilestoneExercisePanel = lazy(() => import('./MilestoneExercisePanel'));
-const CreateMilestoneModal = lazy(() => import('./CreateMilestoneModal'));
+const StepLogPanel = lazy(() => import('./StepLogPanel'));
 
 interface WeekData {
   weekNumber: number;
@@ -82,7 +81,7 @@ export const GoalProgressCard = memo(function GoalProgressCard({
   const weekActions = weekActionsProp ?? [];
 
   // ── Milestone state (fetched internally, not via prop) ──
-  const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [milestones, setMilestones] = useState<SessionSummary[]>([]);
   const [milestonesLoading, setMilestonesLoading] = useState(false);
 
   // ── Exercise panel state (null = hidden, object = visible) ──
@@ -95,21 +94,19 @@ export const GoalProgressCard = memo(function GoalProgressCard({
     completionRule: { type: string; required?: number; of?: number };
   } | null>(null);
 
-  const [showCreateMilestone, setShowCreateMilestone] = useState(false);
-
-  // Fetch milestones for this goal on mount / when goal changes
+  // Fetch sessions for this goal on mount / when goal changes
   useEffect(() => {
     if (!goal?.id || compact) return;
     let cancelled = false;
     setMilestonesLoading(true);
-    getMilestonesForGoal(goal.id)
+    getSessionsForGoal(goal.id)
       .then(data => {
         if (!cancelled) {
-          console.log('[GoalProgressCard] Milestones fetched for goal:', goal.id, goal.title, 'Result:', JSON.stringify(data));
+          console.log('[GoalProgressCard] Sessions fetched for goal:', goal.id, goal.title, 'Result:', JSON.stringify(data));
           setMilestones(data);
         }
       })
-      .catch(err => console.error('[GoalProgressCard] Milestone fetch error:', err))
+      .catch(err => console.error('[GoalProgressCard] Session fetch error:', err))
       .finally(() => { if (!cancelled) setMilestonesLoading(false); });
     return () => { cancelled = true; };
   }, [goal?.id, compact]);
@@ -482,7 +479,7 @@ export const GoalProgressCard = memo(function GoalProgressCard({
           </View>
         )}
 
-        {/* Milestone sessions + Add Session button */}
+        {/* Sessions */}
         {expanded && week && (
           <View style={styles.weekActionsSection}>
             {milestones.map(ms => {
@@ -492,7 +489,7 @@ export const GoalProgressCard = memo(function GoalProgressCard({
               const targetDays = shadowAction?.weeklyTarget ?? 7;
 
               return (
-                <MilestoneSessionRow
+                <SessionRow
                   key={ms.milestone_id}
                   milestone={ms}
                   weekDays={weekDays}
@@ -512,19 +509,6 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                 />
               );
             })}
-
-            {/* Add Session button */}
-            <TouchableOpacity
-              style={styles.addSessionButton}
-              onPress={() => {
-                if (!timeline) return;
-                setShowCreateMilestone(true);
-              }}
-              activeOpacity={0.7}
-            >
-              <Plus size={14} color="#6366f1" />
-              <Text style={styles.addSessionText}>Add Session</Text>
-            </TouchableOpacity>
           </View>
         )}
 
@@ -550,30 +534,10 @@ export const GoalProgressCard = memo(function GoalProgressCard({
             )}
           </View>
         )}
-        {/* Create Milestone Modal */}
-        {showCreateMilestone && timeline && (
-          <Suspense fallback={null}>
-            <CreateMilestoneModal
-              visible={showCreateMilestone}
-              onClose={() => setShowCreateMilestone(false)}
-              onCreated={() => {
-                setShowCreateMilestone(false);
-                // Refresh milestones list
-                getMilestonesForGoal(goal.id)
-                  .then(setMilestones)
-                  .catch(err => console.error('[GoalProgressCard] Milestone refresh error:', err));
-                onRefresh?.();
-              }}
-              goal={goal}
-              timeline={timeline}
-              currentWeekNumber={currentWeekNumber ?? 1}
-            />
-          </Suspense>
-        )}
-        {/* Milestone Exercise Panel */}
+        {/* Step Log Panel */}
         {exercisePanelState && (
           <Suspense fallback={null}>
-            <MilestoneExercisePanel
+            <StepLogPanel
               milestoneId={exercisePanelState.milestoneId}
               taskId={exercisePanelState.taskId}
               milestoneName={exercisePanelState.milestoneName}
@@ -595,10 +559,10 @@ export const GoalProgressCard = memo(function GoalProgressCard({
                     console.error('[GoalProgressCard] Shadow task completion error:', err);
                   }
                 }
-                // Refresh milestones to update progress bars
-                getMilestonesForGoal(goal.id)
+                // Refresh sessions to update progress bars
+                getSessionsForGoal(goal.id)
                   .then(setMilestones)
-                  .catch(err => console.error('[GoalProgressCard] Milestone refresh error:', err));
+                  .catch(err => console.error('[GoalProgressCard] Session refresh error:', err));
               }}
             />
           </Suspense>
@@ -933,23 +897,5 @@ const styles = StyleSheet.create({
   goalTotalScoreText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  addSessionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 8,
-    backgroundColor: '#f5f3ff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    alignSelf: 'flex-start',
-  },
-  addSessionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6366f1',
   },
 });

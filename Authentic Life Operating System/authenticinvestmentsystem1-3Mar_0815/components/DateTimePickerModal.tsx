@@ -24,6 +24,9 @@ import {
 } from 'react-native';
 import { X, Calendar, Clock } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { Calendar as CalendarPicker } from 'react-native-calendars';
+import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
+import '@/lib/calendarLocale';
 
 // ── Quick-pick date helpers ─────────────────────────────────────
 
@@ -60,8 +63,10 @@ function formatTime(hour: number, minute: number): string {
 
 interface DateTimePickerModalProps {
   visible: boolean;
-  /** 'task' = date only, 'event' = date + time */
-  mode: 'task' | 'event';
+  /** 'task' = date-only stepper, 'event' = date + time stepper, 'historical' = full calendar picker */
+  mode: 'task' | 'event' | 'historical';
+  /** Optional header title. Defaults to context-appropriate text per mode. */
+  title?: string;
   /** Starting date value */
   initialDate: Date;
   /** Called when user confirms — newTime only provided for 'event' mode */
@@ -75,6 +80,7 @@ interface DateTimePickerModalProps {
 export function DateTimePickerModal({
   visible,
   mode,
+  title,
   initialDate,
   onConfirm,
   onCancel,
@@ -144,6 +150,14 @@ export function DateTimePickerModal({
     { label: 'Next week', date: nextWeek },
   ];
 
+  const resolvedTitle =
+    title ??
+    (mode === 'event'
+      ? 'Reschedule Event'
+      : mode === 'historical'
+      ? 'Pick a date'
+      : 'Reschedule Task');
+
   return (
     <Modal
       visible={visible}
@@ -161,13 +175,44 @@ export function DateTimePickerModal({
           {/* Header */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>
-              {mode === 'event' ? 'Reschedule Event' : 'Reschedule Task'}
+              {resolvedTitle}
             </Text>
             <TouchableOpacity onPress={onCancel} style={styles.closeBtn}>
               <X size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
+          {mode === 'historical' ? (
+            <View style={styles.calendarWrap}>
+              <CalendarPicker
+                current={formatLocalDate(selectedDate)}
+                markedDates={{
+                  [formatLocalDate(selectedDate)]: {
+                    selected: true,
+                    selectedColor: '#16a34a',
+                  },
+                }}
+                onDayPress={(day: { dateString: string }) => {
+                  onConfirm(parseLocalDate(day.dateString));
+                }}
+                theme={{
+                  backgroundColor: '#ffffff',
+                  calendarBackground: '#ffffff',
+                  textSectionTitleColor: '#6b7280',
+                  dayTextColor: '#1f2937',
+                  todayTextColor: '#16a34a',
+                  selectedDayBackgroundColor: '#16a34a',
+                  selectedDayTextColor: '#ffffff',
+                  monthTextColor: '#1f2937',
+                  arrowColor: '#16a34a',
+                  textDayFontSize: 14,
+                  textMonthFontSize: 15,
+                  textDayHeaderFontSize: 12,
+                }}
+              />
+            </View>
+          ) : (
+            <>
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             {/* Quick-pick chips */}
             <View style={styles.quickPickRow}>
@@ -309,6 +354,8 @@ export function DateTimePickerModal({
               <Text style={styles.confirmBtnText}>Confirm</Text>
             </TouchableOpacity>
           </View>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -331,6 +378,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     maxHeight: '70%',
+  },
+  calendarWrap: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   header: {
     flexDirection: 'row',

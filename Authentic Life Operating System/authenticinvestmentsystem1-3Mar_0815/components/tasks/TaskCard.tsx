@@ -44,6 +44,8 @@ export interface Task {
   weeklyCompletedCount?: number;
   weeklyTargetCount?: number;
   roleColor?: string;
+  calendarColor?: string;
+  calendarTextColor?: string;
 }
 
 // Props for the TaskCard component
@@ -118,18 +120,24 @@ export const TaskCard = React.forwardRef<View, TaskCardProps>(
     }
   };
   const points = calculatePoints();
+  const hasCalendarColor = !!task.calendarColor;
 
   return (
     <TouchableOpacity
       ref={ref}
-      style={[styles.taskCard, { borderLeftColor: getBorderColor(), borderColor: getBorderColor() }, isDragging && styles.draggingItem]}
+      style={[
+        styles.taskCard,
+        { borderLeftColor: getBorderColor(), borderColor: getBorderColor() },
+        isDragging && styles.draggingItem,
+        hasCalendarColor && { backgroundColor: task.calendarColor },
+      ]}
       onPress={handlePress}
       onLongPress={onLongPress}
       delayLongPress={200}
     >
         <View style={styles.taskContent}>
           <View style={styles.taskHeader}>
-            <Text style={styles.taskTitle} numberOfLines={2}>
+            <Text style={[styles.taskTitle, hasCalendarColor && { color: task.calendarTextColor }]} numberOfLines={2}>
   {task.title}
   {task.weeklyTargetCount && task.weeklyTargetCount > 0 && (
     <Text style={styles.completionCounter}> ({task.weeklyCompletedCount || 0} of {task.weeklyTargetCount})</Text>

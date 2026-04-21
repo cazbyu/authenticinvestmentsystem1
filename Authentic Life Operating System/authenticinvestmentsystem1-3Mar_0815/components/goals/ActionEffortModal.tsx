@@ -20,7 +20,7 @@ import { Timeline } from '@/hooks/useGoals';
 import { TEMPLATE_TYPES, TEMPLATE_CONFIGS, TemplateType } from '@/lib/activityTemplates';
 import { processWeeksWithAvailability, getEffectiveTargetDays, ProcessedWeek } from '@/lib/weekUtils';
 import { ExerciseFormRow, ExerciseFormData } from '@/components/goals/ExerciseFormRow';
-import { createMilestone, addExerciseToMilestone } from '@/services/milestoneService';
+import { createSession, addExerciseToSession, getExercisesForSession, updateSession, updateExercise, removeExerciseFromSession, deleteSession, convertTaskToSession, revertSessionToTask, SessionExercise } from '@/services/sessionService';
 import {
   getDefaultStartTime,
   getDefaultEndTime,
@@ -83,7 +83,10 @@ interface ActionEffortModalProps {
   timeline: Timeline | null;
   createTaskWithWeekPlan: (taskData: any, timeline: Timeline) => Promise<any>;
   onDelete?: (actionId: string) => Promise<void>;
-  initialData?: any;
+  initialData?: {
+    milestone_id?: string | null;
+    [key: string]: any;
+  };
   mode?: 'create' | 'edit';
   // Quick Add mode props (for Weekly Alignment)
   quickAddMode?: boolean;
@@ -93,6 +96,19 @@ interface ActionEffortModalProps {
     endDate: string;
   };
 }
+
+// Translate a form-side exercise row to the DB-side write shape.
+// (muscle_group string[] → comma-joined string, name trimmed)
+const formRowToDbShape = (ex: ExerciseFormData) => ({
+  name: ex.name.trim(),
+  muscle_group: ex.muscle_group.length > 0 ? ex.muscle_group.join(', ') : null,
+  exercise_type: ex.exercise_type,
+  target_sets: ex.target_sets,
+  target_reps: ex.target_reps,
+  target_value: ex.target_value,
+  unit: ex.unit,
+  sort_order: ex.sort_order,
+});
 
 const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   visible,
@@ -137,6 +153,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
   // Exercise builder state (workout template)
   const [exercises, setExercises] = useState<ExerciseFormData[]>([]);
+  const [isLoadingExercises, setIsLoadingExercises] = useState(false);
+  const [originalExerciseIds, setOriginalExerciseIds] = useState<string[]>([]);
   // Attachment state (matching TaskEventForm pattern)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
@@ -237,6 +255,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     setNewCategoryText('');
     setTrackingExpanded(false);
     setExercises([]);
+    setOriginalExerciseIds([]);
 
     // Reset collapsed states
     setDomainsExpanded(false);
@@ -291,8 +310,12 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     }
   };
 
-  const loadInitialData = () => {
+  const loadInitialData = async () => {
     if (!initialData) return;
+
+    // Reset exercise state — repopulated only if this is a Pattern 2 edit
+    setExercises([]);
+    setOriginalExerciseIds([]);
 
     console.log('[ActionEffortModal] Loading initial data:', initialData);
 
@@ -391,6 +414,33 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
     const weeks = initialData.selectedWeeks || [];
     setSelectedWeeks(weeks);
+
+    // Hydrate exercises from the linked session (Pattern 2 only)
+    if (initialData.milestone_id) {
+      setIsLoadingExercises(true);
+      try {
+        const loadedExercises = await getExercisesForSession(initialData.milestone_id);
+        setExercises(loadedExercises.map((ex: SessionExercise) => ({
+          exercise_id: ex.exercise_id,
+          name: ex.exercise_name,
+          muscle_group: ex.muscle_group
+            ? ex.muscle_group.split(/,\s*/).filter(s => s.length > 0)
+            : [],
+          exercise_type: ex.exercise_type,
+          target_sets: ex.target_sets,
+          target_reps: ex.target_reps,
+          target_value: ex.target_value,
+          unit: ex.unit,
+          sort_order: ex.sort_order,
+        })));
+        setOriginalExerciseIds(loadedExercises.map(ex => ex.exercise_id));
+      } catch (err) {
+        console.error('[ActionEffortModal] Failed to load session exercises:', err);
+        // Non-fatal. Form remains usable with empty exercises.
+      } finally {
+        setIsLoadingExercises(false);
+      }
+    }
   };
 
   // Attachment handlers (matching TaskEventForm pattern)
@@ -706,6 +756,157 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
       console.log('[ActionEffortModal] About to save', JSON.stringify(taskData, null, 2));
 
+      // P1→P2 conversion: editing a Pattern 1 action with exercises newly added
+      if (mode === 'edit' && !initialData?.milestone_id &&
+          trackingTemplate === 'workout' &&
+          exercises.filter(e => e.name.trim()).length > 0) {
+
+        // Confirmation dialog (web/native split matching handleDelete pattern)
+        const confirmed = typeof window !== 'undefined' && window.confirm
+          ? window.confirm(
+              'Convert to full session?\n\n' +
+              'Adding exercises will convert this from a simple daily indicator into a workout session with individual exercise tracking. You can convert back by removing the exercises.'
+            )
+          : await new Promise<boolean>(resolve => {
+              Alert.alert(
+                'Convert to full session?',
+                'Adding exercises will convert this from a simple daily indicator into a workout session with individual exercise tracking. You can convert back by removing the exercises.',
+                [
+                  { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                  { text: 'Convert', onPress: () => resolve(true) },
+                ]
+              );
+            });
+
+        if (!confirmed) return;
+
+        // Re-entry guard: clean up orphan session from a prior failed conversion
+        const supabase = getSupabaseClient();
+        const { data: orphanSession } = await supabase
+          .from('0008-ap-gl-sessions')
+          .select('id')
+          .eq('task_id', initialData.id)
+          .maybeSingle();
+        if (orphanSession) {
+          console.warn('[ActionEffortModal] Re-entry: cleaning up orphan session from prior failed P1→P2 attempt', orphanSession.id);
+          await deleteSession(orphanSession.id);
+        }
+
+        // 1. Update task metadata + week-plan + joins (edit mode)
+        await createTaskWithWeekPlan(taskData, timeline);
+
+        // 2. Create session + flip task_type to 'milestone' + back-link
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        const milestoneId = await convertTaskToSession(user.id, initialData.id, {
+          goalId: goal!.id,
+          name: taskData.title,
+          milestoneType: 'workout_session',
+          completionRule: { type: 'all' },
+        });
+
+        // 3. Insert exercises
+        for (const ex of exercises.filter(e => e.name.trim())) {
+          await addExerciseToSession(user.id, milestoneId, formRowToDbShape(ex));
+        }
+
+        console.log('[ActionEffortModal] P1→P2 conversion complete', {
+          taskId: initialData.id, milestoneId, exercises: exercises.length,
+        });
+        onClose();
+        Alert.alert('Success', 'Converted to workout session');
+        return;
+      }
+
+      // P2→P1 conversion: editing a Pattern 2 action, user removed all exercises
+      if (mode === 'edit' && initialData?.milestone_id &&
+          exercises.filter(e => e.name.trim()).length === 0) {
+
+        const removedCount = originalExerciseIds.length;
+
+        // Confirmation dialog (web/native split matching handleDelete pattern)
+        const confirmed = typeof window !== 'undefined' && window.confirm
+          ? window.confirm(
+              'Remove all exercises?\n\n' +
+              `This will permanently delete ${removedCount} exercises and their recorded history. The task, its schedule, and daily completion will be preserved.`
+            )
+          : await new Promise<boolean>(resolve => {
+              Alert.alert(
+                'Remove all exercises?',
+                `This will permanently delete ${removedCount} exercises and their recorded history. The task, its schedule, and daily completion will be preserved.`,
+                [
+                  { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                  { text: 'Remove', style: 'destructive', onPress: () => resolve(true) },
+                ]
+              );
+            });
+
+        if (!confirmed) return;
+
+        // 1. Delete the session (cascade removes exercises + step-log + session-log;
+        //    task.milestone_id auto-nulls via SET NULL)
+        await deleteSession(initialData.milestone_id);
+
+        // 2. Update task metadata + week-plan + joins (edit mode)
+        await createTaskWithWeekPlan(taskData, timeline);
+
+        // 3. Flip task_type back to 'standard', restore tracking_template='workout'
+        await revertSessionToTask(initialData.id, { trackingTemplate: 'workout' });
+
+        console.log('[ActionEffortModal] P2→P1 conversion complete', {
+          taskId: initialData.id, removedExercises: removedCount,
+        });
+        onClose();
+        Alert.alert('Success', 'Converted to simple daily indicator');
+        return;
+      }
+
+      // Pattern 2 edit — diff-based save against existing session
+      if (mode === 'edit' && initialData?.milestone_id && exercises.length > 0) {
+        const milestoneId = initialData.milestone_id;
+
+        // 1. Update session metadata (name only — recurrence_rule and
+        //    target_days live on the task row, updated in step 2 below)
+        await updateSession(milestoneId, {
+          name: taskData.title,
+        });
+
+        // 2. Update the shadow task (title, recurrence, joins, week plan)
+        await createTaskWithWeekPlan(taskData, timeline);
+
+        // 3. Diff exercises against the load-time snapshot
+        const formExerciseIds = new Set(
+          exercises.filter(ex => ex.exercise_id).map(ex => ex.exercise_id!)
+        );
+        const toInsert = exercises.filter(ex => !ex.exercise_id);
+        const toUpdate = exercises.filter(ex => ex.exercise_id);
+        const toDelete = originalExerciseIds.filter(id => !formExerciseIds.has(id));
+
+        // 4. Apply diff — INSERT → UPDATE → DELETE order keeps user-added
+        // work safe if any later step throws.
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        for (const ex of toInsert) {
+          await addExerciseToSession(user.id, milestoneId, formRowToDbShape(ex));
+        }
+        for (const ex of toUpdate) {
+          await updateExercise(ex.exercise_id!, formRowToDbShape(ex));
+        }
+        for (const id of toDelete) {
+          await removeExerciseFromSession(id);
+        }
+
+        console.log('[ActionEffortModal] Pattern 2 edit complete', {
+          updated: toUpdate.length, inserted: toInsert.length, deleted: toDelete.length,
+        });
+        onClose();
+        Alert.alert('Success', 'Workout session updated successfully');
+        return;
+      }
+
       if (trackingTemplate === 'workout' && exercises.filter(e => e.name.trim()).length > 0) {
         // Workout template with exercises — create milestone instead of regular task
         const supabase = getSupabaseClient();
@@ -714,7 +915,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
 
         const completionRuleJson = { type: 'all' };
 
-        const milestoneId = await createMilestone({
+        const milestoneId = await createSession({
           userId: user.id,
           goalId: goal!.id,
           name: taskData.title,
@@ -730,16 +931,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
         // Add exercises in sequence
         for (const ex of exercises) {
           if (ex.name.trim()) {
-            await addExerciseToMilestone(user.id, milestoneId, {
-              name: ex.name.trim(),
-              muscle_group: ex.muscle_group.length > 0 ? ex.muscle_group.join(', ') : null,
-              exercise_type: ex.exercise_type,
-              target_sets: ex.target_sets,
-              target_reps: ex.target_reps,
-              target_value: ex.target_value,
-              unit: ex.unit,
-              sort_order: ex.sort_order,
-            });
+            await addExerciseToSession(user.id, milestoneId, formRowToDbShape(ex));
           }
         }
       } else {
@@ -761,33 +953,36 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!initialData?.id || !onDelete) return;
 
-    Alert.alert(
-      'Delete Action',
-      'Are you sure you want to delete this action? This will remove all associated data and cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setSaving(true);
-              await onDelete(initialData.id);
-              Alert.alert('Success', 'Action deleted successfully!');
-              onClose();
-            } catch (error) {
-              console.error('Error deleting action:', error);
-              Alert.alert('Error', (error as Error).message || 'Failed to delete action.');
-            } finally {
-              setSaving(false);
-            }
-          }
-        }
-      ]
-    );
+    // Use window.confirm on web, Alert on native
+    const confirmed = typeof window !== 'undefined' && window.confirm
+      ? window.confirm('Delete this action? This will remove all associated data and cannot be undone.')
+      : await new Promise<boolean>(resolve => {
+          Alert.alert(
+            'Delete Action',
+            'Are you sure you want to delete this action? This will remove all associated data and cannot be undone.',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    try {
+      setSaving(true);
+      await onDelete(initialData.id);
+      Alert.alert('Success', 'Action deleted successfully!');
+      onClose();
+    } catch (err) {
+      console.error('[ActionEffortModal] Delete error:', err);
+      Alert.alert('Error', 'Could not delete action. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getRecurrenceLabel = (type: string) => {
@@ -815,6 +1010,47 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
   );
 
   if (!goal) return null;
+
+  const isPattern2Edit = mode === 'edit' && !!initialData?.milestone_id;
+
+  const exercisesBlock = (
+    <View style={styles.exerciseBuilderContainer}>
+      <Text style={[styles.fieldLabel, { marginTop: 12 }]}>EXERCISES</Text>
+      {exercises.map((ex, i) => (
+        <ExerciseFormRow
+          key={i}
+          index={i}
+          exercise={ex}
+          onChange={(index, updated) => {
+            setExercises(prev => prev.map((e, j) => j === index ? updated : e));
+          }}
+          onDelete={(index) => {
+            setExercises(prev =>
+              prev.filter((_, j) => j !== index).map((e, j) => ({ ...e, sort_order: j }))
+            );
+          }}
+        />
+      ))}
+
+      <TouchableOpacity
+        style={styles.addExerciseButton}
+        onPress={() => setExercises(prev => [...prev, {
+          name: '',
+          muscle_group: [],
+          exercise_type: 'reps',
+          target_sets: null,
+          target_reps: null,
+          target_value: null,
+          unit: null,
+          sort_order: prev.length,
+        }])}
+        activeOpacity={0.7}
+      >
+        <PlusIcon size={16} color="#6366f1" />
+        <Text style={styles.addExerciseText}>Add Exercise</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -1054,8 +1290,8 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                 </View>
               )}
 
-              {/* Detail Tracking Template - Hidden in Quick Add Mode */}
-              {!quickAddMode && (
+              {/* Detail Tracking Template - Hidden in Quick Add Mode and Pattern 2 Edit */}
+              {!quickAddMode && !isPattern2Edit && (
                 <View style={styles.collapsibleSection}>
                   <TouchableOpacity
                     style={styles.collapsibleHeader}
@@ -1125,44 +1361,7 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                       </View>
 
                       {trackingTemplate === 'workout' ? (
-                        // Exercise builder replaces category config for workout template
-                        <View style={styles.exerciseBuilderContainer}>
-                          {/* Exercise list */}
-                          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>EXERCISES</Text>
-                          {exercises.map((ex, i) => (
-                            <ExerciseFormRow
-                              key={i}
-                              index={i}
-                              exercise={ex}
-                              onChange={(index, updated) => {
-                                setExercises(prev => prev.map((e, j) => j === index ? updated : e));
-                              }}
-                              onDelete={(index) => {
-                                setExercises(prev =>
-                                  prev.filter((_, j) => j !== index).map((e, j) => ({ ...e, sort_order: j }))
-                                );
-                              }}
-                            />
-                          ))}
-
-                          <TouchableOpacity
-                            style={styles.addExerciseButton}
-                            onPress={() => setExercises(prev => [...prev, {
-                              name: '',
-                              muscle_group: [],
-                              exercise_type: 'reps',
-                              target_sets: null,
-                              target_reps: null,
-                              target_value: null,
-                              unit: null,
-                              sort_order: prev.length,
-                            }])}
-                            activeOpacity={0.7}
-                          >
-                            <PlusIcon size={16} color="#6366f1" />
-                            <Text style={styles.addExerciseText}>Add Exercise</Text>
-                          </TouchableOpacity>
-                        </View>
+                        exercisesBlock
                       ) : trackingTemplate && (
                         TEMPLATE_CONFIGS[trackingTemplate].categoryField || trackingTemplate === 'checklist'
                       ) ? (
@@ -1242,6 +1441,9 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
                   )}
                 </View>
               )}
+
+              {/* Pattern 2 edit: exercises shown directly (Detail Tracking picker hidden) */}
+              {isPattern2Edit && exercisesBlock}
 
               {/* Wellness Zones - Hidden in Quick Add Mode */}
               {!quickAddMode && (
@@ -1493,11 +1695,11 @@ const ActionEffortModal: React.FC<ActionEffortModalProps> = ({
           <TouchableOpacity
             style={[
               styles.saveButton,
-              (!title.trim() || selectedWeeks.length === 0 || saving) && styles.saveButtonDisabled,
+              (!title.trim() || selectedWeeks.length === 0 || saving || isLoadingExercises) && styles.saveButtonDisabled,
               mode === 'edit' && onDelete && styles.saveButtonWithDelete
             ]}
             onPress={handleSave}
-            disabled={!title.trim() || selectedWeeks.length === 0 || (recurrenceType === 'custom' && selectedCustomDays.length === 0) || saving}
+            disabled={!title.trim() || selectedWeeks.length === 0 || (recurrenceType === 'custom' && selectedCustomDays.length === 0) || saving || isLoadingExercises}
           >
             {saving ? (
               <ActivityIndicator size="small" color="#ffffff" />

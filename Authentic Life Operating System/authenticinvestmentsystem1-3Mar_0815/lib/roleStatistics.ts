@@ -514,3 +514,134 @@ export async function getDomainStatistics(
     };
   }
 }
+
+export async function getLastActivityPerRole(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Map<string, string | null>> {
+  try {
+    const { data: tasks, error: tasksError } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, completed_at')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .is('deleted_at', null)
+      .not('completed_at', 'is', null);
+
+    if (tasksError) throw tasksError;
+    if (!tasks || tasks.length === 0) return new Map();
+
+    const taskCompletedAt = new Map<string, string>();
+    for (const task of tasks) {
+      if (task.completed_at) taskCompletedAt.set(task.id, task.completed_at);
+    }
+
+    const { data: joinData, error: joinError } = await supabase
+      .from('0008-ap-universal-roles-join')
+      .select('role_id, parent_id')
+      .eq('user_id', userId)
+      .eq('parent_type', 'task')
+      .in('parent_id', Array.from(taskCompletedAt.keys()));
+
+    if (joinError) throw joinError;
+    if (!joinData) return new Map();
+
+    const result = new Map<string, string | null>();
+    for (const row of joinData) {
+      if (!row.role_id) continue;
+      const completedAt = taskCompletedAt.get(row.parent_id);
+      if (!completedAt) continue;
+      const existing = result.get(row.role_id);
+      if (!existing || completedAt > existing) {
+        result.set(row.role_id, completedAt);
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error getting last activity per role:', error);
+    return new Map();
+  }
+}
+
+export async function getLastActivityPerKR(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Map<string, string | null>> {
+  try {
+    const { data: tasks, error: tasksError } = await supabase
+      .from('0008-ap-tasks')
+      .select('id, completed_at')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .is('deleted_at', null)
+      .not('completed_at', 'is', null);
+
+    if (tasksError) throw tasksError;
+    if (!tasks || tasks.length === 0) return new Map();
+
+    const taskCompletedAt = new Map<string, string>();
+    for (const task of tasks) {
+      if (task.completed_at) taskCompletedAt.set(task.id, task.completed_at);
+    }
+
+    const { data: joinData, error: joinError } = await supabase
+      .from('0008-ap-universal-key-relationships-join')
+      .select('key_relationship_id, parent_id')
+      .eq('user_id', userId)
+      .eq('parent_type', 'task')
+      .in('parent_id', Array.from(taskCompletedAt.keys()));
+
+    if (joinError) throw joinError;
+    if (!joinData) return new Map();
+
+    const result = new Map<string, string | null>();
+    for (const row of joinData) {
+      if (!row.key_relationship_id) continue;
+      const completedAt = taskCompletedAt.get(row.parent_id);
+      if (!completedAt) continue;
+      const existing = result.get(row.key_relationship_id);
+      if (!existing || completedAt > existing) {
+        result.set(row.key_relationship_id, completedAt);
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error getting last activity per key relationship:', error);
+    return new Map();
+  }
+}
+
+export async function fetchRoleLinkedGoalIds(
+  supabase: SupabaseClient,
+  userId: string,
+  roleId: string,
+): Promise<Set<string>> {
+  try {
+    const { data: roleTaskLinks, error: roleError } = await supabase
+      .from('0008-ap-universal-roles-join')
+      .select('parent_id')
+      .eq('user_id', userId)
+      .eq('role_id', roleId)
+      .eq('parent_type', 'task');
+
+    if (roleError) throw roleError;
+    if (!roleTaskLinks?.length) return new Set();
+
+    const taskIds = roleTaskLinks.map(r => r.parent_id);
+
+    const { data: goalLinks, error: goalError } = await supabase
+      .from('0008-ap-universal-goals-join')
+      .select('goal_id')
+      .eq('user_id', userId)
+      .eq('parent_type', 'task')
+      .in('parent_id', taskIds);
+
+    if (goalError) throw goalError;
+    return new Set(goalLinks?.map(g => g.goal_id).filter(Boolean) ?? []);
+  } catch (error) {
+    console.error('Error fetching role-linked goal IDs:', error);
+    return new Set();
+  }
+}

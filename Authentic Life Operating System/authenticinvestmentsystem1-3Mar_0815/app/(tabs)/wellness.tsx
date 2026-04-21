@@ -30,6 +30,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { DomainCard } from '@/components/wellness/DomainCard';
+import { PhysicalToolshed } from '@/components/wellness/PhysicalToolshed';
 import { getDomainStatistics, DomainStatistics } from '@/lib/roleStatistics';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
@@ -889,6 +890,9 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       // Domain view
       return (
         <View style={styles.content} pointerEvents="box-none">
+          {selectedDomain.name === 'Physical' && activeView === 'deposits' && (
+            <PhysicalToolshed domainId={selectedDomain.id} />
+          )}
           {/* 12-Week Goals Section */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && (
             <View style={styles.goalsSection}>
