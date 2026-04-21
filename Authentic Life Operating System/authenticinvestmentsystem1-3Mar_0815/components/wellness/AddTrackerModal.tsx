@@ -92,6 +92,7 @@ export function AddTrackerModal({
 }: AddTrackerModalProps) {
   const [libraryEntries, setLibraryEntries] = useState<TrackerLibraryEntry[]>([]);
   const [activatedLibraryIds, setActivatedLibraryIds] = useState<Set<string>>(new Set());
+  const [inactiveLibraryIds, setInactiveLibraryIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activatingId, setActivatingId] = useState<string | null>(null);
@@ -117,18 +118,24 @@ export function AddTrackerModal({
           .order('sort_order'),
         supabase
           .from('0008-ap-tracker-instances')
-          .select('library_id')
-          .eq('user_id', userId)
-          .eq('is_active', true),
+          .select('library_id, is_active')
+          .eq('user_id', userId),
       ]);
 
       if (libRes.error) throw libRes.error;
       if (actRes.error) throw actRes.error;
 
       setLibraryEntries((libRes.data ?? []) as TrackerLibraryEntry[]);
-      setActivatedLibraryIds(
-        new Set((actRes.data ?? []).map(r => r.library_id).filter(Boolean)),
-      );
+      const activeSet = new Set<string>();
+      const inactiveSet = new Set<string>();
+      for (const row of actRes.data ?? []) {
+        const libId = row.library_id as string | null;
+        if (!libId) continue;
+        if (row.is_active) activeSet.add(libId);
+        else inactiveSet.add(libId);
+      }
+      setActivatedLibraryIds(activeSet);
+      setInactiveLibraryIds(inactiveSet);
     } catch (err) {
       console.error('AddTrackerModal load error:', err);
     } finally {
@@ -241,7 +248,16 @@ export function AddTrackerModal({
             <IconComponent size={22} color={accentColor} />
           </View>
           <View style={styles.cardBody}>
-            <Text style={styles.cardName} numberOfLines={1}>{entry.name}</Text>
+            <View style={styles.nameRow}>
+              <Text style={[styles.cardName, { flexShrink: 1 }]} numberOfLines={1}>
+                {entry.name}
+              </Text>
+              {inactiveLibraryIds.has(entry.id) && (
+                <Text style={styles.previouslyActive} numberOfLines={1}>
+                  (previously active)
+                </Text>
+              )}
+            </View>
             {entry.description ? (
               <Text style={styles.cardDesc} numberOfLines={2}>
                 {entry.description}
@@ -423,6 +439,16 @@ const styles = StyleSheet.create({
   },
   cardBody: { flex: 1, gap: 2 },
   cardName: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  previouslyActive: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
   cardDesc: { fontSize: 12, color: '#6b7280', lineHeight: 16 },
   hintChip: {
     borderRadius: 6,

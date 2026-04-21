@@ -39,6 +39,7 @@ export interface TrackerCardProps {
   lastLogDate?: string | null;
   onPress: () => void;
   accentColor?: string;
+  overlay?: React.ReactNode;
 }
 
 const DEFAULT_ACCENT = '#16a34a';
@@ -107,6 +108,7 @@ export function TrackerCard({
   lastLogDate,
   onPress,
   accentColor = DEFAULT_ACCENT,
+  overlay,
 }: TrackerCardProps) {
   const IconComponent =
     (instance.icon && ICON_MAP[instance.icon]) || Activity;
@@ -156,6 +158,7 @@ export function TrackerCard({
           Log today
         </Text>
       )}
+      {overlay}
     </Pressable>
   );
 }
