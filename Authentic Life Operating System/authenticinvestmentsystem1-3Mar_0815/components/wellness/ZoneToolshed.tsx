@@ -22,6 +22,7 @@ import { TrackerDetailView } from './TrackerDetailView';
 
 export interface ZoneToolshedProps {
   domainId: string;
+  zoneName: string;
   accentColor?: string;
 }
 
@@ -32,6 +33,12 @@ interface TrackerInstanceRow extends TrackerInstance {
   user_id: string;
   library_id: string;
   domain_id: string | null;
+}
+
+interface InactiveTrackerRow {
+  instance_id: string;
+  library_id: string;
+  name: string;
 }
 
 interface StepLogRow {
@@ -62,6 +69,7 @@ function pickTodayValue(
 
 export function ZoneToolshed({
   domainId,
+  zoneName,
   accentColor = WELLNESS_ACCENT,
 }: ZoneToolshedProps) {
   const [userId, setUserId] = useState<string | null>(null);
@@ -78,6 +86,9 @@ export function ZoneToolshed({
     instance: TrackerInstanceRow;
     stepId: string;
   } | null>(null);
+
+  const [manageMode, setManageMode] = useState(false);
+  const [inactiveRows, setInactiveRows] = useState<InactiveTrackerRow[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -233,6 +244,85 @@ export function ZoneToolshed({
     await loadTodayValues();
   }, [loadInstancesAndSteps, loadActivity, loadTodayValues]);
 
+  const loadInactiveInstances = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: rows, error } = await supabase
+        .from('0008-ap-tracker-instances')
+        .select('id, library_id, activated_at')
+        .eq('user_id', userId)
+        .eq('domain_id', domainId)
+        .eq('is_active', false)
+        .order('activated_at', { ascending: false });
+      if (error) throw error;
+
+      const libIds = Array.from(
+        new Set((rows ?? []).map(r => r.library_id).filter(Boolean)),
+      ) as string[];
+      const nameById = new Map<string, string>();
+      if (libIds.length > 0) {
+        const { data: libs, error: libErr } = await supabase
+          .from('0008-ap-tracker-library')
+          .select('id, name')
+          .in('id', libIds);
+        if (libErr) throw libErr;
+        for (const l of libs ?? []) nameById.set(l.id as string, l.name as string);
+      }
+
+      setInactiveRows(
+        (rows ?? []).map(r => ({
+          instance_id: r.id as string,
+          library_id: r.library_id as string,
+          name: nameById.get(r.library_id as string) ?? '(Unnamed)',
+        })),
+      );
+    } catch (err) {
+      console.error('ZoneToolshed inactive instances fetch error:', err);
+    }
+  }, [userId, domainId]);
+
+  useEffect(() => {
+    if (manageMode) loadInactiveInstances();
+  }, [manageMode, loadInactiveInstances]);
+
+  const handleDeactivateTile = useCallback(async (instance: TrackerInstanceRow) => {
+    if (typeof window === 'undefined') return;
+    const ok = window.confirm(
+      `Remove ${instance.display_name} from your Toolshed? Your logs will be preserved.`,
+    );
+    if (!ok) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tracker-instances')
+        .update({ is_active: false })
+        .eq('id', instance.instance_id);
+      if (error) throw error;
+      await loadInstancesAndSteps();
+      await loadActivity();
+      await loadInactiveInstances();
+    } catch (err) {
+      console.error('ZoneToolshed deactivate error:', err);
+    }
+  }, [loadInstancesAndSteps, loadActivity, loadInactiveInstances]);
+
+  const handleReactivate = useCallback(async (row: InactiveTrackerRow) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-tracker-instances')
+        .update({ is_active: true })
+        .eq('id', row.instance_id);
+      if (error) throw error;
+      await loadInstancesAndSteps();
+      await loadActivity();
+      await loadInactiveInstances();
+    } catch (err) {
+      console.error('ZoneToolshed reactivate error:', err);
+    }
+  }, [loadInstancesAndSteps, loadActivity, loadInactiveInstances]);
+
   if (loading && instances.length === 0) {
     return (
       <View style={styles.loadingWrap}>
@@ -243,6 +333,36 @@ export function ZoneToolshed({
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>
+          {manageMode
+            ? `${zoneName.toUpperCase()} TOOLSHED · MANAGE`
+            : `${zoneName.toUpperCase()} TOOLSHED`}
+        </Text>
+        {manageMode ? (
+          <Pressable
+            onPress={() => setManageMode(false)}
+            style={[styles.doneButton, { backgroundColor: accentColor }]}
+          >
+            <Text style={styles.doneButtonText}>Done</Text>
+          </Pressable>
+        ) : (
+          <Pressable onPress={() => setManageMode(true)} hitSlop={6}>
+            <Text style={[styles.manageLink, { color: accentColor }]}>
+              Manage tools
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {manageMode && (
+        <View style={[styles.banner, { borderLeftColor: accentColor }]}>
+          <Text style={styles.bannerText}>
+            Deactivate tools you're not using. Your history stays safe — you can add them back anytime.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.grid}>
         {instances.map(instance => {
           const lastLog = activityMap.get(instance.instance_id) ?? null;
@@ -253,18 +373,49 @@ export function ZoneToolshed({
               instance={instance}
               todayValue={todayVal}
               lastLogDate={lastLog}
-              onPress={() => handleCardPress(instance)}
+              onPress={
+                manageMode ? () => {} : () => handleCardPress(instance)
+              }
               accentColor={accentColor}
+              overlay={
+                manageMode ? (
+                  <Pressable
+                    onPress={() => handleDeactivateTile(instance)}
+                    style={styles.manageBadge}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.manageBadgeText}>×</Text>
+                  </Pressable>
+                ) : null
+              }
             />
           );
         })}
-        <Pressable
-          onPress={() => setShowAddTracker(true)}
-          style={styles.addTile}
-        >
-          <Text style={styles.addTileText}>+ Add a tracker</Text>
-        </Pressable>
+        {!manageMode && (
+          <Pressable
+            onPress={() => setShowAddTracker(true)}
+            style={styles.addTile}
+          >
+            <Text style={styles.addTileText}>+ Add a tracker</Text>
+          </Pressable>
+        )}
       </View>
+
+      {manageMode && inactiveRows.length > 0 && (
+        <View style={styles.inactiveSection}>
+          <Text style={styles.inactiveSectionHeader}>INACTIVE</Text>
+          {inactiveRows.map(row => (
+            <View key={row.instance_id} style={styles.inactiveRow}>
+              <Text style={styles.inactiveRowName}>{row.name}</Text>
+              <Pressable onPress={() => handleReactivate(row)} hitSlop={6}>
+                <Text style={[styles.reactivateLink, { color: accentColor }]}>
+                  + Reactivate
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
 
       <AddTrackerModal
         visible={showAddTracker}
@@ -320,6 +471,94 @@ const styles = StyleSheet.create({
   addTileText: {
     fontSize: 12,
     color: '#6b7280',
+    fontWeight: '500',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+  },
+  headerTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    letterSpacing: 0.5,
+  },
+  manageLink: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  doneButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  doneButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  banner: {
+    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+    borderLeftWidth: 3,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  bannerText: {
+    fontSize: 13,
+    color: '#1f2937',
+    lineHeight: 18,
+  },
+  manageBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  manageBadgeText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  inactiveSection: {
+    marginTop: 24,
+    gap: 8,
+  },
+  inactiveSectionHeader: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  inactiveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
+    opacity: 0.55,
+  },
+  inactiveRowName: {
+    fontSize: 13,
+    color: '#1f2937',
+    flex: 1,
+  },
+  reactivateLink: {
+    fontSize: 13,
     fontWeight: '500',
   },
 });

@@ -891,7 +891,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       return (
         <View style={styles.content} pointerEvents="box-none">
           {selectedDomain.name === 'Physical' && activeView === 'deposits' && (
-            <ZoneToolshed domainId={selectedDomain.id} />
+            <ZoneToolshed domainId={selectedDomain.id} zoneName={selectedDomain.name} />
           )}
           {/* 12-Week Goals Section */}
           {activeView === 'deposits' && twelveWeekGoals.length > 0 && (
