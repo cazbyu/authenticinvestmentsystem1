@@ -524,7 +524,7 @@ function HeroCard({
     const current = currentValue ?? 0;
     const pct = goal > 0 ? Math.min(100, Math.round((current / goal) * 100)) : 0;
     const met = current >= goal && goal > 0;
-    const over = current > goal ? current - goal : 0;
+    const over = current > goal ? Math.round((current - goal) * 10) / 10 : 0;
 
     progressNode = (
       <>
@@ -565,7 +565,7 @@ function HeroCard({
       const goal = instance.goal_value as number;
       const current = currentValue as number;
       const reached = current <= goal;
-      const distance = current - goal;
+      const distance = Math.round((current - goal) * 10) / 10;
 
       lowerBetterNode = (
         <>
