@@ -66,7 +66,7 @@ export function WellnessHubPage({
   lastDepositByDomain,
   toolCountByDomain,
 }: WellnessHubPageProps) {
-  const { counts, needsAttentionZone } = useMemo(() => {
+  const { counts, asleepZones, bannerText } = useMemo(() => {
     const states = domains.map(d => {
       const lastAt = lastDepositByDomain.get(d.id) ?? null;
       const daysSince = getDaysSince(lastAt);
@@ -79,27 +79,31 @@ export function WellnessHubPage({
       asleep: states.filter(s => s.state === 'asleep').length,
     };
 
-    // Asleep zone with MAX daysSince; null counts as "infinitely overdue"
-    let best: { domain: Domain; daysSince: number | null } | null = null;
-    for (const s of states) {
-      if (s.state !== 'asleep') continue;
-      if (!best) {
-        best = { domain: s.domain, daysSince: s.daysSince };
-        continue;
-      }
-      const currNull = s.daysSince === null;
-      const bestNull = best.daysSince === null;
-      if (currNull && !bestNull) {
-        best = { domain: s.domain, daysSince: s.daysSince };
-      } else if (!currNull && !bestNull && s.daysSince! > best.daysSince!) {
-        best = { domain: s.domain, daysSince: s.daysSince };
-      }
-    }
+    // All Asleep zones sorted: null (never) first, then daysSince desc
+    const asleepZones = states
+      .filter(s => s.state === 'asleep')
+      .map(s => ({ domain: s.domain, daysSince: s.daysSince }))
+      .sort((a, b) => {
+        const aNull = a.daysSince === null;
+        const bNull = b.daysSince === null;
+        if (aNull && !bNull) return -1;
+        if (!aNull && bNull) return 1;
+        if (aNull && bNull) return 0;
+        return b.daysSince! - a.daysSince!;
+      });
 
-    return { counts, needsAttentionZone: best };
+    const bannerText = asleepZones
+      .map(s => {
+        if (s.daysSince === null) return `${s.domain.name} (never)`;
+        if (s.daysSince === 1) return `${s.domain.name} (1 day)`;
+        return `${s.domain.name} (${s.daysSince} days)`;
+      })
+      .join(' · ');
+
+    return { counts, asleepZones, bannerText };
   }, [domains, lastDepositByDomain]);
 
-  const showNeedsAttention = counts.asleep > 0 && needsAttentionZone !== null;
+  const showNeedsAttention = asleepZones.length > 0;
 
   return (
     <ScrollView
@@ -127,14 +131,10 @@ export function WellnessHubPage({
       </View>
 
       {/* NEEDS ATTENTION */}
-      {showNeedsAttention && needsAttentionZone && (
+      {showNeedsAttention && (
         <View style={styles.needsAttention}>
           <Text style={styles.needsAttentionLabel}>NEEDS ATTENTION</Text>
-          <Text style={styles.needsAttentionBody}>
-            {needsAttentionZone.daysSince === null
-              ? `${needsAttentionZone.domain.name} — no deposits yet`
-              : `${needsAttentionZone.domain.name} — no deposits in ${needsAttentionZone.daysSince} days`}
-          </Text>
+          <Text style={styles.needsAttentionBody}>{bannerText}</Text>
         </View>
       )}
 
