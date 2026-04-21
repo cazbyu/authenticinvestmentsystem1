@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,14 @@ import { WellnessIcon } from '@/components/icons/WellnessIcon';
 import { StatusPip } from '@/components/common/StatusPip';
 import { getDomainColor } from '@/constants/wellnessColors';
 import { getZoneTagline } from '@/constants/wellnessZoneCopy';
+import { getDaysSince, formatDaysAgo } from '@/lib/roleStatistics';
 
 /**
  * WellnessHubPage — Minimalist Executive design system
  * Content component for the redesigned 8-zone wellness hub per SS2.
  * Mounted below UniversalHeader in app/(tabs)/wellness.tsx.
- * Slice 2a = shell; Slice 2b wires real data; 2c builds balance viz.
+ * Slice 2b wires real zone activity data (last deposit + tool counts)
+ * into the overview stats, zone cards, and NEEDS ATTENTION banner.
  */
 
 interface Domain {
@@ -30,14 +32,74 @@ interface Domain {
 export interface WellnessHubPageProps {
   domains: Domain[];
   onZoneTap: (domain: Domain) => void;
+  lastDepositByDomain: Map<string, string | null>;
+  toolCountByDomain: Map<string, number>;
 }
 
-export function WellnessHubPage({ domains, onZoneTap }: WellnessHubPageProps) {
-  // 2a: no real data — these wire up in Slice 2b
-  const showNeedsAttention = false;
-  const activeCount: number | null = null;
-  const quietCount: number | null = null;
-  const asleepCount: number | null = null;
+// Paul's wellness-zone recency model
+const WELLNESS_ACTIVE_THRESHOLD_DAYS = 3;
+const WELLNESS_QUIET_THRESHOLD_DAYS = 6;
+
+type ZoneState = 'active' | 'quiet' | 'asleep';
+
+function classifyZone(daysSince: number | null): ZoneState {
+  if (daysSince === null) return 'asleep';
+  if (daysSince <= WELLNESS_ACTIVE_THRESHOLD_DAYS) return 'active';
+  if (daysSince <= WELLNESS_QUIET_THRESHOLD_DAYS) return 'quiet';
+  return 'asleep';
+}
+
+function formatZoneMeta(toolCount: number, lastDepositAt: string | null): string {
+  const hasTools = toolCount > 0;
+  const activityText = formatDaysAgo(getDaysSince(lastDepositAt));
+  const toolText = `${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}`;
+
+  if (hasTools && activityText) return `${toolText} · ${activityText}`;
+  if (hasTools && !activityText) return `${toolText} · No deposits yet`;
+  if (!hasTools && activityText) return `No tools yet · ${activityText}`;
+  return 'No tools yet';
+}
+
+export function WellnessHubPage({
+  domains,
+  onZoneTap,
+  lastDepositByDomain,
+  toolCountByDomain,
+}: WellnessHubPageProps) {
+  const { counts, needsAttentionZone } = useMemo(() => {
+    const states = domains.map(d => {
+      const lastAt = lastDepositByDomain.get(d.id) ?? null;
+      const daysSince = getDaysSince(lastAt);
+      return { domain: d, lastAt, daysSince, state: classifyZone(daysSince) };
+    });
+
+    const counts = {
+      active: states.filter(s => s.state === 'active').length,
+      quiet: states.filter(s => s.state === 'quiet').length,
+      asleep: states.filter(s => s.state === 'asleep').length,
+    };
+
+    // Asleep zone with MAX daysSince; null counts as "infinitely overdue"
+    let best: { domain: Domain; daysSince: number | null } | null = null;
+    for (const s of states) {
+      if (s.state !== 'asleep') continue;
+      if (!best) {
+        best = { domain: s.domain, daysSince: s.daysSince };
+        continue;
+      }
+      const currNull = s.daysSince === null;
+      const bestNull = best.daysSince === null;
+      if (currNull && !bestNull) {
+        best = { domain: s.domain, daysSince: s.daysSince };
+      } else if (!currNull && !bestNull && s.daysSince! > best.daysSince!) {
+        best = { domain: s.domain, daysSince: s.daysSince };
+      }
+    }
+
+    return { counts, needsAttentionZone: best };
+  }, [domains, lastDepositByDomain]);
+
+  const showNeedsAttention = counts.asleep > 0 && needsAttentionZone !== null;
 
   return (
     <ScrollView
@@ -58,18 +120,20 @@ export function WellnessHubPage({ domains, onZoneTap }: WellnessHubPageProps) {
           Where you deposit energy across the whole life. Green means you're active. Amber means it's been a while. Red means this zone is asking for attention.
         </Text>
         <View style={styles.statsRow}>
-          <StatTile value={activeCount} label="Active" />
-          <StatTile value={quietCount} label="Quiet" />
-          <StatTile value={asleepCount} label="Asleep" />
+          <StatTile value={counts.active} label="Active" />
+          <StatTile value={counts.quiet} label="Quiet" />
+          <StatTile value={counts.asleep} label="Asleep" />
         </View>
       </View>
 
-      {/* NEEDS ATTENTION — hidden until Slice 2b */}
-      {showNeedsAttention && (
+      {/* NEEDS ATTENTION */}
+      {showNeedsAttention && needsAttentionZone && (
         <View style={styles.needsAttention}>
           <Text style={styles.needsAttentionLabel}>NEEDS ATTENTION</Text>
           <Text style={styles.needsAttentionBody}>
-            Recreational — no deposits in 18 days
+            {needsAttentionZone.daysSince === null
+              ? `${needsAttentionZone.domain.name} — no deposits yet`
+              : `${needsAttentionZone.domain.name} — no deposits in ${needsAttentionZone.daysSince} days`}
           </Text>
         </View>
       )}
@@ -81,6 +145,8 @@ export function WellnessHubPage({ domains, onZoneTap }: WellnessHubPageProps) {
           <ZoneCard
             key={domain.id}
             domain={domain}
+            lastDepositAt={lastDepositByDomain.get(domain.id) ?? null}
+            toolCount={toolCountByDomain.get(domain.id) ?? 0}
             onPress={() => onZoneTap(domain)}
           />
         ))}
@@ -99,14 +165,12 @@ function StatTile({
   value,
   label,
 }: {
-  value: number | null;
+  value: number;
   label: string;
 }) {
   return (
     <View style={styles.statTile}>
-      <Text style={styles.statValue}>
-        {value === null ? '—' : value.toString()}
-      </Text>
+      <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
     </View>
   );
@@ -114,13 +178,18 @@ function StatTile({
 
 function ZoneCard({
   domain,
+  lastDepositAt,
+  toolCount,
   onPress,
 }: {
   domain: Domain;
+  lastDepositAt: string | null;
+  toolCount: number;
   onPress: () => void;
 }) {
   const color = getDomainColor(domain.name);
   const tagline = getZoneTagline(domain.name);
+  const metaText = formatZoneMeta(toolCount, lastDepositAt);
 
   return (
     <Pressable onPress={onPress} style={styles.zoneCard}>
@@ -133,10 +202,14 @@ function ZoneCard({
         <Text style={styles.zoneName} numberOfLines={1}>
           {domain.name}
         </Text>
-        <StatusPip lastActivityDate={null} />
+        <StatusPip
+          lastActivityDate={lastDepositAt}
+          activeThresholdDays={WELLNESS_ACTIVE_THRESHOLD_DAYS}
+          quietThresholdDays={WELLNESS_QUIET_THRESHOLD_DAYS}
+        />
       </View>
       {tagline ? <Text style={styles.zoneTagline}>{tagline}</Text> : null}
-      <Text style={styles.zoneMeta}>—</Text>
+      <Text style={styles.zoneMeta}>{metaText}</Text>
     </Pressable>
   );
 }
