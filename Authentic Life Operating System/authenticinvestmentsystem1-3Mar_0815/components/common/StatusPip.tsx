@@ -1,6 +1,8 @@
 import React from 'react';
 import { View } from 'react-native';
 
+import { getDaysSince } from '@/lib/roleStatistics';
+
 /**
  * StatusPip — Minimalist Executive design system
  * Colored health dot indicating recency of activity.
@@ -33,10 +35,8 @@ export function getStatusPipColor(
   activeThresholdDays: number = DEFAULT_ACTIVE_THRESHOLD_DAYS,
   quietThresholdDays: number = DEFAULT_QUIET_THRESHOLD_DAYS,
 ): string {
-  if (!lastActivityDate) return STATUS_PIP_COLORS.none;
-  const then = new Date(lastActivityDate);
-  if (Number.isNaN(then.getTime())) return STATUS_PIP_COLORS.none;
-  const daysSince = Math.floor((Date.now() - then.getTime()) / 86_400_000);
+  const daysSince = getDaysSince(lastActivityDate);
+  if (daysSince === null) return STATUS_PIP_COLORS.none;
   if (daysSince <= activeThresholdDays) return STATUS_PIP_COLORS.fresh;
   if (daysSince <= quietThresholdDays) return STATUS_PIP_COLORS.stale;
   return STATUS_PIP_COLORS.cold;
