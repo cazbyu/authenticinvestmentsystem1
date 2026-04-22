@@ -788,3 +788,98 @@ export function formatDaysAgo(daysSince: number | null): string | null {
   if (daysSince === 1) return 'yesterday';
   return `${daysSince} days ago`;
 }
+
+export async function getDepositCountsPerDomain(
+  supabase: SupabaseClient,
+  userId: string,
+  days: number = 7,
+): Promise<Map<string, number>> {
+  // Window: [today - (days-1), today] inclusive, day precision.
+  const since = new Date();
+  since.setDate(since.getDate() - (days - 1));
+  since.setHours(0, 0, 0, 0);
+  const sinceTimestamp = since.toISOString();
+  const sinceDate = formatLocalDate(since);
+  const todayDate = formatLocalDate(new Date());
+
+  const [taskMap, reflectionMap, depositIdeaMap, commitmentMap] = await Promise.all([
+    fetchDepositCountsForSource(
+      supabase, userId,
+      '0008-ap-tasks',
+      'task',
+      (q) => q
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .not('completed_at', 'is', null)
+        .gte('completed_at', sinceTimestamp),
+    ),
+    fetchDepositCountsForSource(
+      supabase, userId,
+      '0008-ap-reflections',
+      'reflection',
+      (q) => q.eq('archived', false).gte('created_at', sinceTimestamp),
+    ),
+    fetchDepositCountsForSource(
+      supabase, userId,
+      '0008-ap-deposit-ideas',
+      'depositIdea',
+      (q) => q.eq('archived', false).gte('created_at', sinceTimestamp),
+    ),
+    fetchDepositCountsForSource(
+      supabase, userId,
+      '0008-ap-commitments',
+      'commitment',
+      (q) => q.gte('date', sinceDate).lte('date', todayDate),
+    ),
+  ]);
+
+  const merged = new Map<string, number>();
+  for (const src of [taskMap, reflectionMap, depositIdeaMap, commitmentMap]) {
+    for (const [domainId, count] of src) {
+      merged.set(domainId, (merged.get(domainId) ?? 0) + count);
+    }
+  }
+  return merged;
+}
+
+async function fetchDepositCountsForSource(
+  supabase: SupabaseClient,
+  userId: string,
+  sourceTable: string,
+  parentType: string,
+  applyFilter: (q: any) => any,
+): Promise<Map<string, number>> {
+  try {
+    let sourceQuery = supabase
+      .from(sourceTable)
+      .select('id')
+      .eq('user_id', userId);
+    sourceQuery = applyFilter(sourceQuery);
+
+    const { data: rows, error: rowsError } = await sourceQuery;
+    if (rowsError) throw rowsError;
+    if (!rows || rows.length === 0) return new Map();
+
+    const ids = rows.map((r: any) => r.id as string).filter(Boolean);
+    if (ids.length === 0) return new Map();
+
+    const { data: joinData, error: joinError } = await supabase
+      .from('0008-ap-universal-domains-join')
+      .select('domain_id, parent_id')
+      .eq('user_id', userId)
+      .eq('parent_type', parentType)
+      .in('parent_id', ids);
+    if (joinError) throw joinError;
+    if (!joinData) return new Map();
+
+    const result = new Map<string, number>();
+    for (const row of joinData) {
+      if (!row.domain_id) continue;
+      result.set(row.domain_id, (result.get(row.domain_id) ?? 0) + 1);
+    }
+    return result;
+  } catch (error) {
+    console.error(`Error getting deposit counts from ${sourceTable}:`, error);
+    return new Map();
+  }
+}
