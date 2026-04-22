@@ -32,6 +32,7 @@ import { ZoneToolshed } from '@/components/wellness/ZoneToolshed';
 import { WellnessHubPage } from '@/components/wellness/WellnessHubPage';
 import {
   getLastActivityPerDomain,
+  getDepositCountsPerDomain,
   getToolCountsPerDomain,
 } from '@/lib/roleStatistics';
 import { getDomainColor } from '@/constants/wellnessColors';
@@ -91,6 +92,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   // Wellness Hub zone activity + tool counts
   const [lastDepositByDomain, setLastDepositByDomain] = useState<Map<string, string | null>>(new Map());
   const [toolCountByDomain, setToolCountByDomain] = useState<Map<string, number>>(new Map());
+  const [depositCountsByDomain, setDepositCountsByDomain] = useState<Map<string, number>>(new Map());
 
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
@@ -507,12 +509,14 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     if (!currentUserId) return;
     try {
       const supabase = getSupabaseClient();
-      const [deposits, tools] = await Promise.all([
+      const [deposits, tools, counts] = await Promise.all([
         getLastActivityPerDomain(supabase, currentUserId),
         getToolCountsPerDomain(supabase, currentUserId),
+        getDepositCountsPerDomain(supabase, currentUserId, 7),
       ]);
       setLastDepositByDomain(deposits);
       setToolCountByDomain(tools);
+      setDepositCountsByDomain(counts);
     } catch (err) {
       console.error('Error fetching hub activity data:', err);
     }
@@ -953,6 +957,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         onZoneTap={setSelectedDomain}
         lastDepositByDomain={lastDepositByDomain}
         toolCountByDomain={toolCountByDomain}
+        countsByDomain={depositCountsByDomain}
       />
     );
   };

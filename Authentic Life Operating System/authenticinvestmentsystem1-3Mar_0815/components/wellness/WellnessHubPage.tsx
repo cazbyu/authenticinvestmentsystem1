@@ -13,6 +13,7 @@ import { StatusPip } from '@/components/common/StatusPip';
 import { getDomainColor } from '@/constants/wellnessColors';
 import { getZoneTagline } from '@/constants/wellnessZoneCopy';
 import { getDaysSince, formatDaysAgo } from '@/lib/roleStatistics';
+import { WellnessBalanceBar } from './WellnessBalanceBar';
 
 /**
  * WellnessHubPage — Minimalist Executive design system
@@ -34,6 +35,7 @@ export interface WellnessHubPageProps {
   onZoneTap: (domain: Domain) => void;
   lastDepositByDomain: Map<string, string | null>;
   toolCountByDomain: Map<string, number>;
+  countsByDomain: Map<string, number>;
 }
 
 // Paul's wellness-zone recency model
@@ -65,6 +67,7 @@ export function WellnessHubPage({
   onZoneTap,
   lastDepositByDomain,
   toolCountByDomain,
+  countsByDomain,
 }: WellnessHubPageProps) {
   const { counts, asleepZones } = useMemo(() => {
     const states = domains.map(d => {
@@ -155,11 +158,11 @@ export function WellnessHubPage({
         ))}
       </View>
 
-      {/* 7-DAY BALANCE — placeholder, visualized in Slice 2c */}
+      {/* 7-DAY BALANCE */}
       <Text style={[styles.sectionHeader, styles.balanceHeader]}>
         7-DAY BALANCE
       </Text>
-      <View style={styles.balancePlaceholder} />
+      <WellnessBalanceBar domains={domains} countsByDomain={countsByDomain} />
     </ScrollView>
   );
 }
@@ -332,9 +335,4 @@ const styles = StyleSheet.create({
   zoneTagline: { fontSize: 12, color: '#4b5563' },
   zoneMeta: { fontSize: 11, color: '#6b7280' },
 
-  balancePlaceholder: {
-    height: 10,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 5,
-  },
 });
