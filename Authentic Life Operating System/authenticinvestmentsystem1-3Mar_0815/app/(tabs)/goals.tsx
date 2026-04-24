@@ -22,6 +22,7 @@ import { useGoals } from '@/hooks/useGoals';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { fetchGoalActionsForWeek } from '@/hooks/fetchGoalActionsForWeek';
 import { calculateAuthenticScore, calculateTotalGoalProgress } from '@/lib/taskUtils';
+import { calculateGoalEffortProgress } from '@/lib/goalEffortScore';
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { TemplateType } from '@/lib/activityTemplates';
@@ -196,11 +197,42 @@ export default function Goals() {
     }
   };
 
+  // Effort Score per goal — populates `timelineGoalProgress` reducer state
+  // with GoalEffortProgress shape consumed by GoalProgressCard. Per-goal
+  // try/catch so one corrupted goal doesn't hide the rest.
+  const fetchEffortGoalProgress = async (goals: any[]) => {
+    if (!selectedTimeline || goals.length === 0) {
+      setTimelineGoalProgress({});
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      const progressMap: Record<string, any> = {};
+
+      await Promise.all(
+        goals.map(async (goal) => {
+          try {
+            progressMap[goal.id] = await calculateGoalEffortProgress(supabase, goal);
+          } catch (err) {
+            console.error(`[fetchEffortGoalProgress] failed for goal ${goal.id}:`, err);
+          }
+        })
+      );
+
+      setTimelineGoalProgress(progressMap);
+    } catch (error) {
+      console.error('[fetchEffortGoalProgress] Error:', error);
+      setTimelineGoalProgress({});
+    }
+  };
+
   // MODIFIED: The useEffect now passes the state variable `timelineGoals` to the updated fetchWeekActions.
   useEffect(() => {
     if (selectedTimeline && timelineWeeks.length > 0 && timelineGoals.length > 0) {
       fetchWeekActions(timelineGoals);
       fetchTotalGoalProgress(timelineGoals);
+      fetchEffortGoalProgress(timelineGoals);
     }
   }, [selectedTimeline, currentWeekIndex, timelineGoals]);
 
@@ -1414,17 +1446,14 @@ export default function Goals() {
             data={timelineGoals}
             keyExtractor={(goal) => goal.id}
             renderItem={({ item: goal }) => {
-              const totalProgress = totalGoalProgress[goal.id] || { totalActual: 0, totalTarget: 0, percentage: 0 };
               const progress = timelineGoalProgress[goal.id] || {
                 currentWeek: currentWeek?.week_number || 1,
-                daysRemaining: timelineDaysLeft?.days_left || 0,
-                weeklyActual: 0,
-                weeklyTarget: goal.weekly_target || 0,
-                overallActual: 0,
-                overallTarget: goal.total_target || 0,
-                overallProgress: totalProgress.percentage,
-                totalActual: totalProgress.totalActual,
-                totalTarget: totalProgress.totalTarget,
+                totalWeeks: timelineWeeks.length || 12,
+                cycleStart: selectedTimeline?.start_date || '',
+                cycleEnd: selectedTimeline?.end_date || '',
+                currentWeekEffortScore: 0,
+                cumulativeEffortScore: 0,
+                weeklyBreakdown: [],
               };
 
               return (

@@ -39,6 +39,7 @@ export function ZoneGoalsSection({
               key={goal.id}
               goal={goal}
               progress={progress}
+              compact={true}
               onAddAction={() => onAddGoalTask(goal.id)}
             />
           );

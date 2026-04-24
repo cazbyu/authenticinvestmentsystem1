@@ -1,7 +1,7 @@
 import React, { useMemo, useCallback, memo, useState, useEffect, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Target, Calendar, Plus, TrendingUp, CreditCard as Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react-native';
-import { GoalProgress } from '@/hooks/useGoalProgress';
+import { GoalEffortProgress } from '@/lib/goalEffortScore';
 import { parseLocalDate, formatLocalDate } from '@/lib/dateUtils';
 import { Timeline } from '@/hooks/useGoals';
 import { DayDot } from './DayDot';
@@ -35,7 +35,7 @@ interface TaskWithLogs {
 
 interface GoalProgressCardProps {
   goal: Goal;
-  progress: GoalProgress;
+  progress: GoalEffortProgress;
   expanded?: boolean;
   week?: WeekData | null;
   weekActions?: TaskWithLogs[];
@@ -121,46 +121,34 @@ export const GoalProgressCard = memo(function GoalProgressCard({
     firstActionLogs: weekActions[0]?.logs?.slice(0, 2),
   });
 
+  // Effort Score color bands: 85+=green, 40-84=yellow, <40=red.
+  // Applies to cumulative pill, current-week percentage, and bar fill.
   const getProgressColor = useCallback((percentage: number) => {
-  if (percentage >= 85) return '#16a34a'; // Green for 85% and above
-  if (percentage >= 60) return '#eab308';
-  return '#dc2626';
-}, []);
-  
-  const getWeeklyProgressColor = useCallback((actual: number, target: number) => {
-    const percentage = target > 0 ? (actual / target) * 100 : 0;
-    return getProgressColor(percentage);
-  }, [getProgressColor]);
-
-  const formatWeeklyProgress = useCallback((actual: number, target: number) => {
-    const percentage = target > 0 ? Math.round((actual / target) * 100) : 0;
-    return `${percentage}%`;
+    if (percentage >= 85) return '#16a34a'; // Green
+    if (percentage >= 40) return '#eab308'; // Yellow
+    return '#dc2626';                        // Red
   }, []);
 
-  const formatTodayInfo = () => {
-    const today = new Date();
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    const dayName = dayNames[today.getDay()];
-    const monthName = monthNames[today.getMonth()];
-    const dayNumber = today.getDate();
-    
-    return `${monthName} ${dayNumber} (${dayName})`;
+  const getGoalTypeLabel = () => {
+    return goal.goal_type === 'custom' ? 'Custom Goal' : '12 Week Goal';
   };
 
-  const getGoalTypeLabel = () => {
-    if (goal.goal_type === 'custom') {
-      const startDate = parseLocalDate(goal.start_date);
-      const endDate = parseLocalDate(goal.end_date);
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        return 'Invalid date range';
-      }
-      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      const totalWeeks = Math.ceil(totalDays / 7);
-      return `${totalWeeks}-Week Custom Goal`;
-    }
-    return `Week ${selectedWeekNumber || progress.currentWeek}`;
+  // Format cycle date range as "Mar - Jun 2026" from YYYY-MM-DD strings.
+  const formatCycleRange = (cycleStart: string, cycleEnd: string): string => {
+    if (!cycleStart || !cycleEnd) return '';
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const start = parseLocalDate(cycleStart);
+    const end = parseLocalDate(cycleEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
+    return `${monthNames[start.getMonth()]} - ${monthNames[end.getMonth()]} ${end.getFullYear()}`;
+  };
+
+  // Format full week line: "Week X of XX (Mar - Jun 2026)"
+  const formatWeekLine = (): string => {
+    const cur = selectedWeekNumber || progress.currentWeek || 1;
+    const total = progress.totalWeeks || 12;
+    const range = formatCycleRange(progress.cycleStart, progress.cycleEnd);
+    return range ? `Week ${cur} of ${total} (${range})` : `Week ${cur} of ${total}`;
   };
   const cardColor = useMemo(() => goal.roles?.[0]?.color || '#0078d4', [goal.roles]);
 
@@ -188,16 +176,88 @@ export const GoalProgressCard = memo(function GoalProgressCard({
     return days;
   }, []);
 
-  const calculateWeeklyProgress = useCallback(() => {
-    if (!week || weekActions.length === 0) {
-      return { actual: progress.weeklyActual, target: progress.weeklyTarget };
-    }
-    
-    const totalActual = weekActions.reduce((sum, action) => sum + Math.min(action.weeklyActual, action.weeklyTarget), 0);
-    const totalTarget = weekActions.reduce((sum, action) => sum + action.weeklyTarget, 0);
-    
-    return { actual: totalActual, target: totalTarget };
-  }, [week, weekActions, progress.weeklyActual, progress.weeklyTarget]);
+  // Cumulative + current-week Effort Scores power the top summary's colors.
+  const cumulative = progress.cumulativeEffortScore ?? 0;
+  const currentWeekScore = progress.currentWeekEffortScore ?? 0;
+  const cumulativeColor = getProgressColor(cumulative);
+  const currentWeekColor = getProgressColor(currentWeekScore);
+
+  // Shared always-visible summary — same JSX for compact and expanded modes.
+  // Expanded adds detail sections below; compact ends here.
+  const summaryRegion = (
+    <>
+      <View style={styles.summaryHeader}>
+        <View style={styles.summaryHeaderLeft}>
+          <View style={[styles.iconContainer, { backgroundColor: cardColor }]}>
+            <Target size={20} color="#ffffff" />
+          </View>
+          <View style={styles.titleContent}>
+            <Text style={styles.title} numberOfLines={2}>
+              {goal.title}
+            </Text>
+            <TouchableOpacity
+              style={styles.subtitleRow}
+              onPress={!!week ? onToggleExpanded : undefined}
+              activeOpacity={!!week ? 0.7 : 1}
+            >
+              <Text style={styles.subtitle}>
+                {getGoalTypeLabel()}
+              </Text>
+              {!!week && (
+                <>
+                  <Text style={styles.subtitleDot}> • </Text>
+                  <Text style={styles.subtitle}>
+                    {weekActions.length} {weekActions.length === 1 ? 'Action' : 'Actions'}
+                  </Text>
+                  {onToggleExpanded && (
+                    expanded ? (
+                      <ChevronUp size={14} color="#6b7280" style={styles.chevronIcon} />
+                    ) : (
+                      <ChevronDown size={14} color="#6b7280" style={styles.chevronIcon} />
+                    )
+                  )}
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.summaryHeaderRight}>
+          <View style={[styles.cumulativePill, { borderColor: cumulativeColor }]}>
+            <Text style={[styles.cumulativePillText, { color: cumulativeColor }]}>
+              {cumulative}%
+            </Text>
+          </View>
+          {onEdit && (
+            <TouchableOpacity style={styles.editButton} onPress={onEdit}>
+              <Edit size={16} color="#6b7280" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.weekLineRow}>
+        <Text style={styles.weekLineText} numberOfLines={1}>
+          {formatWeekLine()}
+        </Text>
+        <Text style={[styles.currentWeekScore, { color: currentWeekColor }]}>
+          {currentWeekScore}%
+        </Text>
+      </View>
+
+      <View style={styles.progressBar}>
+        <View
+          style={[
+            styles.progressFill,
+            {
+              width: `${Math.min(100, currentWeekScore)}%`,
+              backgroundColor: currentWeekColor,
+            },
+          ]}
+        />
+      </View>
+    </>
+  );
 
   if (compact) {
     return (
@@ -207,58 +267,17 @@ export const GoalProgressCard = memo(function GoalProgressCard({
         activeOpacity={onPress ? 0.8 : 1}
       >
         <View style={styles.compactContent}>
-          <View style={styles.compactHeader}>
-            <Text style={styles.compactTitle} numberOfLines={1}>
-              {goal.title}
-            </Text>
-            {onAddAction && (
-              <TouchableOpacity
-                style={[styles.addTaskButton, { backgroundColor: cardColor }]}
-                onPress={onAddAction}
-              >
-                <Plus size={12} color="#ffffff" />
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          <View style={styles.compactMetrics}>
-            <View style={styles.compactMetric}>
-              <Text style={styles.compactMetricLabel}>Week {selectedWeekNumber || progress.currentWeek}</Text>
-              <Text style={[
-                styles.compactMetricValue,
-                { color: getWeeklyProgressColor(progress.weeklyActual, progress.weeklyTarget) }
-              ]}>
-                {formatWeeklyProgress(progress.weeklyActual, progress.weeklyTarget)}
-              </Text>
-            </View>
-            
-            <View style={styles.compactMetric}>
-              <Text style={styles.compactMetricLabel}>Overall</Text>
-              <Text style={[
-                styles.compactMetricValue,
-                { color: getProgressColor(progress.overallProgress) }
-              ]}>
-                {progress.overallProgress}%
-              </Text>
-            </View>
-          </View>
+          {summaryRegion}
         </View>
       </TouchableOpacity>
     );
   }
 
-  const weeklyProgress = useMemo(() => calculateWeeklyProgress(), [calculateWeeklyProgress]);
   const hasWeekContext = !!week;
-  const hasWeekActionsProvided = weekActionsProp !== undefined;
-  const shouldShowWeeklyProgress =
-    hasWeekContext ||
-    hasWeekActionsProvided ||
-    typeof progress.weeklyTarget === 'number' ||
-    typeof progress.weeklyActual === 'number';
   const shouldRenderWeekActions =
     expanded &&
     hasWeekContext &&
-    (hasWeekActionsProvided || weekActions.length > 0 || loadingWeekActions || !!onAddAction);
+    (weekActionsProp !== undefined || weekActions.length > 0 || loadingWeekActions || !!onAddAction);
 
   return (
     <TouchableOpacity
@@ -267,97 +286,7 @@ export const GoalProgressCard = memo(function GoalProgressCard({
       activeOpacity={onPress ? 0.8 : 1}
     >
       <View style={styles.cardContent}>
-        <View style={styles.header}>
-          <View style={styles.titleSection}>
-            <View style={[styles.iconContainer, { backgroundColor: cardColor }]}>
-              <Target size={20} color="#ffffff" />
-            </View>
-            <View style={styles.titleContent}>
-              <Text style={styles.title} numberOfLines={2}>
-                {goal.title}
-              </Text>
-              <TouchableOpacity
-                style={styles.subtitleRow}
-                onPress={hasWeekContext ? onToggleExpanded : undefined}
-                activeOpacity={hasWeekContext ? 0.7 : 1}
-              >
-                <Text style={styles.subtitle}>
-                  {getGoalTypeLabel()}
-                </Text>
-                {hasWeekContext && (
-                  <>
-                    <Text style={styles.subtitleDot}> • </Text>
-                    <Text style={styles.subtitle}>
-                      {weekActions.length} {weekActions.length === 1 ? 'Action' : 'Actions'}
-                    </Text>
-                    {onToggleExpanded && (
-                      expanded ? (
-                        <ChevronUp size={14} color="#6b7280" style={styles.chevronIcon} />
-                      ) : (
-                        <ChevronDown size={14} color="#6b7280" style={styles.chevronIcon} />
-                      )
-                    )}
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {onEdit && (
-            <TouchableOpacity style={styles.editButton} onPress={onEdit}>
-              <Edit size={16} color="#6b7280" />
-            </TouchableOpacity>
-          )}
-
-          {/* Individual Goal Total Score */}
-          <View style={styles.goalTotalScore}>
-            <Text style={[
-              styles.goalTotalScoreText,
-              { color: getProgressColor(progress.overallProgress) }
-            ]}>
-              Total {progress.overallProgress}%
-            </Text>
-          </View>
-          
-          {/* Removed the large "Task" button as per new requirements */}
-          {/* onAddTask && (
-            <TouchableOpacity
-              style={[styles.addTaskButtonLarge, { backgroundColor: cardColor }]}
-              onPress={onAddTask}
-            >
-              <Plus size={16} color="#ffffff" />
-              <Text style={styles.addTaskButtonText}>Task</Text>
-            </TouchableOpacity> */}
-        </View>
-
-        {/* Leading Indicator: Weekly Progress */}
-        {shouldShowWeeklyProgress && (
-          <View style={styles.progressSection}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>This Week (Leading)</Text>
-              <Text
-                style={[
-                  styles.progressValue,
-                  { color: getWeeklyProgressColor(weeklyProgress.actual, weeklyProgress.target) }
-                ]}
-              >
-                {formatWeeklyProgress(weeklyProgress.actual, weeklyProgress.target)}
-              </Text>
-            </View>
-
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${Math.min(100, (weeklyProgress.actual / Math.max(1, weeklyProgress.target)) * 100)}%`,
-                    backgroundColor: getWeeklyProgressColor(weeklyProgress.actual, weeklyProgress.target),
-                  }
-                ]}
-              />
-            </View>
-          </View>
-        )}
+        {summaryRegion}
 
         {/* Week-specific Actions (when week prop is provided) */}
         {shouldRenderWeekActions && week && expanded && (
@@ -709,6 +638,52 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  summaryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+    marginRight: 12,
+  },
+  summaryHeaderRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  cumulativePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 56,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  cumulativePillText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  weekLineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  weekLineText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6b7280',
+    flex: 1,
+    marginRight: 8,
+  },
+  currentWeekScore: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   compactMetrics: {
     flexDirection: 'row',
