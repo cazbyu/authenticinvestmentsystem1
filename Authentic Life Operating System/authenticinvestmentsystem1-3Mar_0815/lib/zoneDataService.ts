@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { formatLocalDate } from './dateUtils';
 import { calculateGoalProgress, fetchGoalsForJoinRows } from './taskUtils';
 
 /**
@@ -244,6 +245,13 @@ export async function fetchZoneGoals(
     return [];
   }
 
+  // Date-gate to the current cycle: "active goal" in ALOS means both
+  // status='active' AND today is within the goal's date window. The
+  // status column lags reality (past-cycle rows stay 'active' in the
+  // DB until backlog item 7's auto-flip trigger lands). Columns are
+  // DATE type; compared as local YYYY-MM-DD via formatLocalDate.
+  const todayStr = formatLocalDate(new Date());
+
   // Parallel-fetch active goals from both tables.
   // Pattern matches fetchGoalsForJoinRows in taskUtils: empty arm uses
   // a plain { data, error } placeholder so Promise.all resolves cleanly.
@@ -254,6 +262,8 @@ export async function fetchZoneGoals(
           .select('*')
           .eq('user_id', userId)
           .eq('status', 'active')
+          .lte('start_date', todayStr)
+          .gte('end_date', todayStr)
           .in('id', twelveWkIds)
       : { data: [] as any[], error: null },
     customIds.length
@@ -262,6 +272,8 @@ export async function fetchZoneGoals(
           .select('*')
           .eq('user_id', userId)
           .eq('status', 'active')
+          .lte('start_date', todayStr)
+          .gte('end_date', todayStr)
           .in('id', customIds)
       : { data: [] as any[], error: null },
   ]);
