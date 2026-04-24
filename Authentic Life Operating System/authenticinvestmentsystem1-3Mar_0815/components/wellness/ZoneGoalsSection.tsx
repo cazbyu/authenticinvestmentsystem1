@@ -3,13 +3,14 @@ import { View, Text, StyleSheet } from 'react-native';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 
 /**
- * ZoneGoalsSection — 12-Week Goals list for a single zone (domain).
+ * ZoneGoalsSection — Goals list for a single zone (domain).
  *
- * Extracted from the inline block in `app/(tabs)/wellness.tsx` during
- * Phase B 3b-2. Pure presentation: parent owns the `useGoalProgress` hook
- * and the task-form state; this component just maps goals into progress
- * cards. Styles preserve the original card treatment (12px radius, no
- * border, flat white) — KRTile-style polish is a separate follow-up.
+ * Renders a mix of 12wk and custom goals that share the same presentation.
+ * Parent owns data-fetching (via `fetchZoneGoals` + `fetchZoneGoalsProgress`
+ * in `lib/zoneDataService.ts`) and the task-form state; this component
+ * just maps goals into progress cards. Styles preserve the original card
+ * treatment (12px radius, no border, flat white) — KRTile-style polish
+ * is a separate follow-up.
  */
 
 export interface ZoneGoalsSectionProps {
@@ -27,7 +28,7 @@ export function ZoneGoalsSection({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.title}>12-Week Goals</Text>
+      <Text style={styles.title}>Goals</Text>
       <View style={styles.list}>
         {goals.map(goal => {
           const progress = goalProgress[goal.id];
