@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { formatLocalDate } from './dateUtils';
-import { calculateGoalProgress, fetchGoalsForJoinRows } from './taskUtils';
+import { fetchGoalsForJoinRows } from './taskUtils';
+import { calculateGoalEffortProgress, GoalEffortProgress } from './goalEffortScore';
 
 /**
  * Zone data service — deposits + ideas fetchers for a single domain (zone).
@@ -296,42 +297,30 @@ export async function fetchZoneGoals(
 }
 
 /**
- * Compute live progress for each goal, keyed by goal id.
+ * Compute Effort Score for each goal, keyed by goal id.
  *
- * Mirrors the per-goal pattern in `app/(tabs)/roles.tsx` — calls
- * `calculateGoalProgress` from taskUtils for each goal, mapping
- * `goal_type` to the progress-calc type enum ('twelve_wk_goal' ->
- * '12week', 'custom_goal' -> 'custom').
+ * Thin wrapper over `calculateGoalEffortProgress` in `lib/goalEffortScore.ts`
+ * — that function is the one source of truth for Effort Score math across
+ * all three surfaces (zone, Goal Bank, roles).
  *
- * Deliberately more defensive than roles.tsx: per-goal try/catch means
- * one bad goal (e.g. corrupted log row) is skipped and logged, while
- * the rest still render. roles.tsx uses Promise.all without per-goal
- * guards, so one failure breaks all progress. If that fails visibly in
- * roles later, mirror this pattern there.
+ * Adds per-goal try/catch resilience: a corrupted goal is skipped and
+ * logged while the rest still render. roles.tsx currently uses a fail-all
+ * Promise.all; if that becomes user-visible, mirror this pattern there.
  *
- * Target defaults (`|| 3`, `|| 36`) match roles.tsx's existing fallback.
- * Imperfect for custom goals (useGoals hydrates them to total_target=100) —
- * filed as backlog for a future "progress calc unification" pass.
+ * abortSignal is forwarded into each per-goal call so in-flight work can
+ * bail early. Caller still owns the outer state-gate on abort.
  */
 export async function fetchZoneGoalsProgress(
   supabase: SupabaseClient,
   goals: any[],
   abortSignal?: AbortSignal,
-): Promise<Record<string, any>> {
+): Promise<Record<string, GoalEffortProgress>> {
   if (goals.length === 0) return {};
 
   const entries = await Promise.all(
     goals.map(async goal => {
-      const calcType: '12week' | 'custom' =
-        goal.goal_type === 'custom_goal' ? 'custom' : '12week';
       try {
-        const progress = await calculateGoalProgress(
-          supabase,
-          goal.id,
-          calcType,
-          goal.weekly_target || 3,
-          goal.total_target || 36,
-        );
+        const progress = await calculateGoalEffortProgress(supabase, goal, abortSignal);
         return [goal.id, progress] as const;
       } catch (err) {
         console.error(`fetchZoneGoalsProgress: failed for goal ${goal.id}:`, err);
@@ -342,7 +331,7 @@ export async function fetchZoneGoalsProgress(
 
   if (abortSignal?.aborted) return {};
 
-  const map: Record<string, any> = {};
+  const map: Record<string, GoalEffortProgress> = {};
   for (const entry of entries) {
     if (entry) map[entry[0]] = entry[1];
   }

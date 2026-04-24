@@ -26,7 +26,8 @@ import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoals } from '@/hooks/useGoals';
-import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateGoalProgress, GoalProgressData, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
+import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
+import { GoalEffortProgress } from '@/lib/goalEffortScore';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -155,7 +156,7 @@ const { headerColor } = useHeaderColor();
   });
 
   // Goal progress state
-  const [goalProgress, setGoalProgress] = useState<Record<string, GoalProgressData>>({});
+  const [goalProgress, setGoalProgress] = useState<Record<string, GoalEffortProgress>>({});
   const [loadingGoalProgress, setLoadingGoalProgress] = useState(false);
 
   const [roleLinkedGoalIds, setRoleLinkedGoalIds] = useState<Set<string>>(new Set());
@@ -276,6 +277,12 @@ const { headerColor } = useHeaderColor();
     }
   };
 
+  // Minimum-change adapter (3b-4c-i): the previous calculateGoalProgress
+  // call was broken (queried nonexistent task-log.completed column) and
+  // always returned zeros. Full Effort Score wiring for roles.tsx is
+  // deferred to backlog #11. For now, feed zero-effort GoalEffortProgress
+  // shapes so the redesigned GoalProgressCard has a valid contract.
+  // Visible result: role goal cards display 0% — same as today, no regression.
   const fetchGoalProgressData = useCallback(async () => {
     if (!twelveWeekGoals || twelveWeekGoals.length === 0) {
       setGoalProgress({});
@@ -284,25 +291,21 @@ const { headerColor } = useHeaderColor();
 
     setLoadingGoalProgress(true);
     try {
-      const supabase = getSupabaseClient();
-      const progressData: Record<string, GoalProgressData> = {};
-
-      await Promise.all(
-        twelveWeekGoals.map(async (goal) => {
-          const progress = await calculateGoalProgress(
-            supabase,
-            goal.id,
-            '12week',
-            goal.weekly_target || 3,
-            goal.total_target || 36
-          );
-          progressData[goal.id] = progress;
-        })
-      );
-
+      const progressData: Record<string, GoalEffortProgress> = {};
+      for (const goal of twelveWeekGoals) {
+        progressData[goal.id] = {
+          currentWeek: 1,
+          totalWeeks: 12,
+          cycleStart: goal.start_date ?? '',
+          cycleEnd: goal.end_date ?? '',
+          currentWeekEffortScore: 0,
+          cumulativeEffortScore: 0,
+          weeklyBreakdown: [],
+        };
+      }
       setGoalProgress(progressData);
     } catch (error) {
-      console.error('Error fetching goal progress:', error);
+      console.error('Error building goal progress:', error);
     } finally {
       setLoadingGoalProgress(false);
     }
