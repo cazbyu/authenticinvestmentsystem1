@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { fetchGoalsForJoinRows } from './taskUtils';
+import { calculateGoalProgress, fetchGoalsForJoinRows } from './taskUtils';
 
 /**
  * Zone data service — deposits + ideas fetchers for a single domain (zone).
@@ -199,4 +199,140 @@ export async function fetchZoneIdeas(
     has_notes: notesData?.some(n => n.parent_id === di.id),
     has_attachments: false,
   }));
+}
+
+/**
+ * Fetch active goals (both 12wk and custom) tagged to a domain.
+ *
+ * Queries `0008-ap-universal-domains-join` for parent rows where
+ * `parent_type` in {'twelve_wk_goal', 'custom_goal'} and `domain_id`
+ * matches, splits by parent_type, then fetches each goal table in
+ * parallel with `status = 'active'`. Returns a unified array with a
+ * `goal_type` discriminator on each row ('twelve_wk_goal' | 'custom_goal').
+ *
+ * Bypasses `useGoals`' timeline-source filter (which would return only
+ * one goal type based on the active timeline). Zone goals are considered
+ * independent of timeline-source selection.
+ *
+ * Throws on query error. `abortSignal` is advisory (Supabase HTTP is
+ * not cancellable) — caller must still gate its own state updates.
+ */
+export async function fetchZoneGoals(
+  supabase: SupabaseClient,
+  domainId: string,
+  userId: string,
+  abortSignal?: AbortSignal,
+): Promise<any[]> {
+  // Get goal IDs tagged to this domain, split by goal type
+  const { data: domainJoinData, error: domainJoinError } = await supabase
+    .from('0008-ap-universal-domains-join')
+    .select('parent_id, parent_type')
+    .in('parent_type', ['twelve_wk_goal', 'custom_goal'])
+    .eq('domain_id', domainId);
+
+  if (domainJoinError) throw domainJoinError;
+  if (abortSignal?.aborted) return [];
+
+  const twelveWkIds: string[] = [];
+  const customIds: string[] = [];
+  for (const row of domainJoinData ?? []) {
+    if (row.parent_type === 'twelve_wk_goal') twelveWkIds.push(row.parent_id);
+    else if (row.parent_type === 'custom_goal') customIds.push(row.parent_id);
+  }
+
+  if (twelveWkIds.length === 0 && customIds.length === 0) {
+    return [];
+  }
+
+  // Parallel-fetch active goals from both tables.
+  // Pattern matches fetchGoalsForJoinRows in taskUtils: empty arm uses
+  // a plain { data, error } placeholder so Promise.all resolves cleanly.
+  const [twelveWkResult, customResult] = await Promise.all([
+    twelveWkIds.length
+      ? supabase
+          .from('0008-ap-goals-12wk')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .in('id', twelveWkIds)
+      : { data: [] as any[], error: null },
+    customIds.length
+      ? supabase
+          .from('0008-ap-goals-custom')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .in('id', customIds)
+      : { data: [] as any[], error: null },
+  ]);
+
+  if (twelveWkResult.error) throw twelveWkResult.error;
+  if (customResult.error) throw customResult.error;
+  if (abortSignal?.aborted) return [];
+
+  // Annotate with goal_type discriminator and unify
+  const twelveWk = (twelveWkResult.data ?? []).map(g => ({
+    ...g,
+    goal_type: 'twelve_wk_goal' as const,
+  }));
+  const custom = (customResult.data ?? []).map(g => ({
+    ...g,
+    goal_type: 'custom_goal' as const,
+  }));
+
+  return [...twelveWk, ...custom];
+}
+
+/**
+ * Compute live progress for each goal, keyed by goal id.
+ *
+ * Mirrors the per-goal pattern in `app/(tabs)/roles.tsx` — calls
+ * `calculateGoalProgress` from taskUtils for each goal, mapping
+ * `goal_type` to the progress-calc type enum ('twelve_wk_goal' ->
+ * '12week', 'custom_goal' -> 'custom').
+ *
+ * Deliberately more defensive than roles.tsx: per-goal try/catch means
+ * one bad goal (e.g. corrupted log row) is skipped and logged, while
+ * the rest still render. roles.tsx uses Promise.all without per-goal
+ * guards, so one failure breaks all progress. If that fails visibly in
+ * roles later, mirror this pattern there.
+ *
+ * Target defaults (`|| 3`, `|| 36`) match roles.tsx's existing fallback.
+ * Imperfect for custom goals (useGoals hydrates them to total_target=100) —
+ * filed as backlog for a future "progress calc unification" pass.
+ */
+export async function fetchZoneGoalsProgress(
+  supabase: SupabaseClient,
+  goals: any[],
+  abortSignal?: AbortSignal,
+): Promise<Record<string, any>> {
+  if (goals.length === 0) return {};
+
+  const entries = await Promise.all(
+    goals.map(async goal => {
+      const calcType: '12week' | 'custom' =
+        goal.goal_type === 'custom_goal' ? 'custom' : '12week';
+      try {
+        const progress = await calculateGoalProgress(
+          supabase,
+          goal.id,
+          calcType,
+          goal.weekly_target || 3,
+          goal.total_target || 36,
+        );
+        return [goal.id, progress] as const;
+      } catch (err) {
+        console.error(`fetchZoneGoalsProgress: failed for goal ${goal.id}:`, err);
+        return null;
+      }
+    }),
+  );
+
+  if (abortSignal?.aborted) return {};
+
+  const map: Record<string, any> = {};
+  for (const entry of entries) {
+    if (entry) map[entry[0]] = entry[1];
+  }
+  return map;
 }

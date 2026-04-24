@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { toLocalISOString } from '@/lib/dateUtils';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,7 +20,6 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, CreditCard as Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
@@ -35,7 +34,7 @@ import {
   getDepositCountsPerDomain,
   getToolCountsPerDomain,
 } from '@/lib/roleStatistics';
-import { fetchZoneDeposits, fetchZoneIdeas } from '@/lib/zoneDataService';
+import { fetchZoneDeposits, fetchZoneIdeas, fetchZoneGoals, fetchZoneGoalsProgress } from '@/lib/zoneDataService';
 import { getDomainColor } from '@/constants/wellnessColors';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -98,20 +97,52 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
 
-  // 12-Week Goals for selected domain (only fetch when domain is selected)
-  const goalProgressScope = useMemo(() =>
-    selectedDomain ? { type: 'domain' as const, id: selectedDomain.id } : undefined,
-    [selectedDomain?.id]
-  );
+  // Goals for selected domain (both 12wk and custom, fetched via zone service)
+  const [goals, setGoals] = useState<any[]>([]);
+  const [goalProgress, setGoalProgress] = useState<Record<string, any>>({});
+  const goalsAbortControllerRef = useRef<AbortController | null>(null);
 
-  const {
-    goals: twelveWeekGoals,
-    goalProgress,
-    loading: goalsLoading,
-    refreshGoals
-  } = useGoalProgress({
-    scope: goalProgressScope
-  });
+  const fetchGoalsForDomain = useCallback(async (domainId: string) => {
+    // Cancel any in-flight goal fetch
+    if (goalsAbortControllerRef.current) {
+      goalsAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    goalsAbortControllerRef.current = controller;
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      if (controller.signal.aborted) return;
+
+      const zoneGoals = await fetchZoneGoals(supabase, domainId, user.id, controller.signal);
+      if (controller.signal.aborted) return;
+
+      const progress = await fetchZoneGoalsProgress(supabase, zoneGoals, controller.signal);
+      if (controller.signal.aborted) return;
+
+      setGoals(zoneGoals);
+      setGoalProgress(progress);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error('Error fetching zone goals:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedDomain) {
+      fetchGoalsForDomain(selectedDomain.id);
+    } else {
+      setGoals([]);
+      setGoalProgress({});
+    }
+    return () => {
+      if (goalsAbortControllerRef.current) {
+        goalsAbortControllerRef.current.abort();
+      }
+    };
+  }, [selectedDomain?.id, fetchGoalsForDomain]);
 
   const fetchAuthenticScoreLocal = useCallback(async (forceRefresh = false, domainId?: string) => {
     // Cancel any in-flight score calculation
@@ -212,6 +243,8 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     setActiveView('deposits');
     setTasks([]);
     setDepositIdeas([]);
+    setGoals([]);
+    setGoalProgress({});
     setLoading(false);
     setTaskFormVisible(false);
     setTaskDetailVisible(false);
@@ -227,6 +260,8 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     abortControllerRef.current = null;
     scoreAbortControllerRef.current?.abort();
     scoreAbortControllerRef.current = null;
+    goalsAbortControllerRef.current?.abort();
+    goalsAbortControllerRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -248,6 +283,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       console.log('[WellnessBank] Received task event, refreshing data...');
       if (selectedDomain) {
         fetchDomainTasks(selectedDomain.id, activeView);
+        fetchGoalsForDomain(selectedDomain.id);
       }
     };
 
@@ -528,11 +564,11 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     setSelectedActivityConfig(null);
     if (selectedDomain) {
       fetchDomainTasks(selectedDomain.id, activeView);
+      fetchGoalsForDomain(selectedDomain.id);
     }
-    refreshGoals();
     // Refresh score after task creation/update
     fetchAuthenticScoreLocal(true);
-  }, [selectedDomain, activeView, fetchDomainTasks, refreshGoals, fetchAuthenticScoreLocal]);
+  }, [selectedDomain, activeView, fetchDomainTasks, fetchGoalsForDomain, fetchAuthenticScoreLocal]);
 
   const handleFormClose = useCallback(() => {
     setTaskFormVisible(false);
@@ -552,8 +588,8 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     setRefreshAssociatedItemsKey(prev => prev + 1);
     if (selectedDomain) {
       fetchDomainTasks(selectedDomain.id, activeView);
+      fetchGoalsForDomain(selectedDomain.id);
     }
-    refreshGoals();
     fetchAuthenticScoreLocal(true);
   };
 
@@ -672,10 +708,10 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
           {selectedDomain.name === 'Physical' && activeView === 'deposits' && (
             <ZoneToolshed domainId={selectedDomain.id} zoneName={selectedDomain.name} />
           )}
-          {/* 12-Week Goals Section */}
-          {activeView === 'deposits' && twelveWeekGoals.length > 0 && (
+          {/* Goals Section */}
+          {activeView === 'deposits' && goals.length > 0 && (
             <ZoneGoalsSection
-              goals={twelveWeekGoals}
+              goals={goals}
               goalProgress={goalProgress}
               onAddGoalTask={(goalId) => {
                 setEditingTask({
