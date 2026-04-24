@@ -12,6 +12,8 @@ import { Target, Calendar, TrendingUp } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
+import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
+import { calculateGoalEffortProgress, GoalEffortProgress } from '@/lib/goalEffortScore';
 
 export interface UnifiedGoal {
   id: string;
@@ -275,6 +277,59 @@ twelveWeekGoals.forEach((goal: any) => {
     fetchAllGoals();
   }, [fetchAllGoals, refreshTrigger]);
 
+  // Effort Score per goal — mirrors the per-caller pattern used by zone
+  // (ZoneGoalsSection → fetchZoneGoalsProgress) and Goal Bank's timeline
+  // detail (goals.tsx → fetchEffortGoalProgress). Consolidation target for
+  // backlog #13.
+  const [goalEffortMap, setGoalEffortMap] = useState<Record<string, GoalEffortProgress>>({});
+
+  const fetchEffortForGoals = async (goals: UnifiedGoal[]) => {
+    // Filter to types calculateGoalEffortProgress accepts. Annual ('1y')
+    // goals have no cycle weeks so we skip them defensively.
+    const effortEligible = goals.filter(
+      g => g.goal_type === '12week' || g.goal_type === 'custom',
+    );
+    if (effortEligible.length === 0) {
+      setGoalEffortMap({});
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    const map: Record<string, GoalEffortProgress> = {};
+    await Promise.all(
+      effortEligible.map(async (goal) => {
+        try {
+          map[goal.id] = await calculateGoalEffortProgress(supabase, goal as any);
+        } catch (err) {
+          console.error(`[MyGoalsView] effort fetch failed for ${goal.id}:`, err);
+        }
+      }),
+    );
+    setGoalEffortMap(map);
+  };
+
+  useEffect(() => {
+    const allGoals = [...cycleGoals, ...customGoals];
+    if (allGoals.length > 0) {
+      fetchEffortForGoals(allGoals);
+    } else {
+      setGoalEffortMap({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cycleGoals, customGoals]);
+
+  // Zero-effort fallback matches Phase 2c/2d shape. Used while effort
+  // data is loading or if the per-goal fetch fails.
+  const zeroEffort = (goal: UnifiedGoal): GoalEffortProgress => ({
+    currentWeek: goal.current_week ?? 1,
+    totalWeeks: goal.total_weeks ?? 12,
+    cycleStart: goal.start_date ?? '',
+    cycleEnd: goal.end_date ?? '',
+    currentWeekEffortScore: 0,
+    cumulativeEffortScore: 0,
+    weeklyBreakdown: [],
+  });
+
   const handleRefresh = () => {
     setRefreshing(true);
     fetchAllGoals();
@@ -315,85 +370,14 @@ twelveWeekGoals.forEach((goal: any) => {
   };
 
   const renderGoalCard = (goal: UnifiedGoal) => {
-    const isAnnualGoal = goal.goal_type === '1y';
-    const cardStyle = [
-      styles.goalCard,
-      isAnnualGoal && styles.annualGoalCard,
-      { backgroundColor: colors.surface, borderColor: colors.border },
-    ];
-
     return (
-      <TouchableOpacity
+      <GoalProgressCard
         key={goal.id}
-        style={cardStyle}
+        goal={goal as any}
+        progress={goalEffortMap[goal.id] || zeroEffort(goal)}
+        compact={true}
         onPress={() => onGoalPress(goal)}
-        activeOpacity={0.7}
-        accessibilityLabel={`${goal.title} goal`}
-        accessibilityHint="Tap to view goal details"
-        accessibilityRole="button"
-      >
-        <View style={styles.goalCardHeader}>
-  <View style={styles.goalTitleContainer}>
-    <Text
-      style={[
-        styles.goalTitle,
-        isAnnualGoal && styles.annualGoalTitle,
-        { color: colors.text }
-      ]}
-      numberOfLines={2}
-    >
-      {goal.title}
-    </Text>
-    
-    {goal.goal_type === '12week' && (
-      <View style={[styles.goalTypeBadge, { backgroundColor: '#dbeafe' }]}>
-        <Text style={[styles.goalTypeBadgeText, { color: '#1e40af' }]}>12 Week Goal</Text>
-      </View>
-    )}
-    {goal.goal_type === 'custom' && (
-      <View style={[styles.goalTypeBadge, { backgroundColor: '#f3e8ff' }]}>
-        <Text style={[styles.goalTypeBadgeText, { color: '#7c3aed' }]}>Custom Goal</Text>
-      </View>
-    )}
-  </View>
-  {goal.progress !== undefined && (
-    <View style={styles.progressBadge}>
-      <Text style={styles.progressText}>{Math.round(goal.progress)}%</Text>
-    </View>
-  )}
-</View>
-
-        <View style={styles.goalMeta}>
-          
-          {goal.goal_type === '12week' && currentCycleWeek > 0 && (
-            <View style={styles.metaItem}>
-              <Calendar size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                Week {currentCycleWeek} of 12{goal.start_date && goal.end_date ? ` ${formatGoalDateRange(goal.start_date, goal.end_date)}` : ''}
-              </Text>
-            </View>
-          )}
-
-          {goal.goal_type === 'custom' && goal.current_week && goal.total_weeks && (
-            <View style={styles.metaItem}>
-              <Calendar size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-                Week {goal.current_week} of {goal.total_weeks}{goal.start_date && goal.end_date ? ` ${formatGoalDateRange(goal.start_date, goal.end_date)}` : ''}
-              </Text>
-            </View>
-          )}
-
-          {goal.parent_goal_title && (
-            <View style={styles.metaItem}>
-              <TrendingUp size={14} color={colors.textSecondary} />
-              <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {goal.parent_goal_title}
-              </Text>
-            </View>
-          )}
-        </View>
-
-      </TouchableOpacity>
+      />
     );
   };
 
