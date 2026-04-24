@@ -22,7 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
-import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
+import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -35,6 +35,7 @@ import {
   getDepositCountsPerDomain,
   getToolCountsPerDomain,
 } from '@/lib/roleStatistics';
+import { fetchZoneDeposits, fetchZoneIdeas } from '@/lib/zoneDataService';
 import { getDomainColor } from '@/constants/wellnessColors';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -179,206 +180,14 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       }
 
       if (view === 'deposits') {
-        // First, get task IDs that are associated with this specific domain
-        const { data: domainJoinData, error: domainJoinError } = await supabase
-          .from('0008-ap-universal-domains-join')
-          .select('parent_id')
-          .eq('parent_type', 'task')
-          .eq('domain_id', domainId);
-
-        if (domainJoinError) throw domainJoinError;
-
-        const domainTaskIds = domainJoinData?.map(dj => dj.parent_id) || [];
-
-        if (domainTaskIds.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          return;
-        }
-
-        // Now fetch only the tasks that have this domain
-        const { data: tasksData, error: tasksError } = await supabase
-          .from('v_user_tasks')
-          .select('*, custom_timeline_id')
-          .eq('user_id', user.id)
-          .in('id', domainTaskIds)
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .not('status', 'in', '(completed,cancelled)')
-          .in('type', ['task', 'event']);
-
-        if (tasksError) throw tasksError;
-
-        // Check if aborted
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        // Filter out Goal Bank actions by checking for week plans
-        let allTasks: any[] = [];
-
-        if (tasksData && tasksData.length > 0) {
-          const taskIds = tasksData.map(t => t.id);
-          const { data: weekPlans, error: weekPlansError } = await supabase
-            .from('0008-ap-task-week-plan')
-            .select('task_id')
-            .in('task_id', taskIds)
-            .is('deleted_at', null);
-
-          if (weekPlansError) throw weekPlansError;
-
-          // Check if aborted
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          // Create a Set of task IDs that have week plans (Goal Bank actions)
-          const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
-
-          // Only include standalone tasks (tasks WITHOUT week plans)
-          allTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
-        }
-
-        // Fetch join data only if we have tasks
-        let rolesData: any[] = [];
-        let domainsData: any[] = [];
-        let goalsData: any[] = [];
-        let notesData: any[] = [];
-        let keyRelationshipsData: any[] = [];
-
-        if (allTasks.length > 0) {
-          const taskIdsForJoins = allTasks.map(t => t.id);
-
-          const [
-            { data: rolesDataResult, error: rolesError },
-            { data: domainsDataResult, error: domainsError },
-            { data: goalsDataResult, error: goalsError },
-            { data: notesDataResult, error: notesError },
-            { data: keyRelationshipsDataResult, error: keyRelationshipsError }
-          ] = await Promise.all([
-            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
-          ]);
-
-          if (rolesError) throw rolesError;
-          if (domainsError) throw domainsError;
-          if (goalsError) throw goalsError;
-          if (notesError) throw notesError;
-          if (keyRelationshipsError) throw keyRelationshipsError;
-
-          rolesData = rolesDataResult || [];
-          domainsData = domainsDataResult || [];
-          goalsData = goalsDataResult || [];
-          notesData = notesDataResult || [];
-          keyRelationshipsData = keyRelationshipsDataResult || [];
-        }
-
-        const goalsById = await fetchGoalsForJoinRows(supabase, goalsData);
-
-        // Check if aborted before processing
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        const transformedTasks = allTasks.map(task => ({
-          ...task,
-          roles: rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [],
-          domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
-          goals: goalsData?.filter(g => g.parent_id === task.id).map(g => goalsById.get(g.goal_id)).filter(Boolean) || [],
-          keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === task.id).map(kr => kr.key_relationship).filter(Boolean) || [],
-          has_notes: notesData?.some(n => n.parent_id === task.id),
-          has_delegates: false,
-          has_attachments: false,
-        }));
-
-        setTasks(transformedTasks);
+        const deposits = await fetchZoneDeposits(supabase, domainId, user.id, controller.signal);
+        if (controller.signal.aborted) return;
+        setTasks(deposits);
         setDepositIdeas([]);
-
       } else {
-        // First, get deposit idea IDs that are associated with this specific domain
-        const { data: domainJoinData, error: domainJoinError } = await supabase
-          .from('0008-ap-universal-domains-join')
-          .select('parent_id')
-          .eq('parent_type', 'depositIdea')
-          .eq('domain_id', domainId);
-
-        if (domainJoinError) throw domainJoinError;
-
-        const domainDepositIdeaIds = domainJoinData?.map(dj => dj.parent_id) || [];
-
-        if (domainDepositIdeaIds.length === 0) {
-          setDepositIdeas([]);
-          setTasks([]);
-          return;
-        }
-
-        // Now fetch only the deposit ideas that have this domain
-        const { data: depositIdeasData, error: depositIdeasError } = await supabase
-          .from('0008-ap-deposit-ideas')
-          .select('*')
-          .eq('user_id', user.id)
-          .in('id', domainDepositIdeaIds)
-          .eq('archived', false)
-          .eq('is_active', true)
-          .is('activated_task_id', null);
-
-        if (depositIdeasError) throw depositIdeasError;
-
-        // Check if aborted
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        // Fetch join data only if we have deposit ideas
-        let rolesData: any[] = [];
-        let domainsData: any[] = [];
-        let krData: any[] = [];
-        let notesData: any[] = [];
-
-        if (depositIdeasData && depositIdeasData.length > 0) {
-          const depositIdeaIds = depositIdeasData.map(di => di.id);
-
-          const [
-            { data: rolesDataResult, error: rolesError },
-            { data: domainsDataResult, error: domainsError },
-            { data: krDataResult, error: krError },
-            { data: notesDataResult, error: notesError }
-          ] = await Promise.all([
-            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
-          ]);
-
-          if (rolesError) throw rolesError;
-          if (domainsError) throw domainsError;
-          if (krError) throw krError;
-          if (notesError) throw notesError;
-
-          rolesData = rolesDataResult || [];
-          domainsData = domainsDataResult || [];
-          krData = krDataResult || [];
-          notesData = notesDataResult || [];
-        }
-
-        // Check if aborted before processing
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        const transformedDepositIdeas = (depositIdeasData || []).map(di => ({
-          ...di,
-          roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
-          domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
-          keyRelationships: krData?.filter(kr => kr.parent_id === di.id).map(kr => kr.key_relationship).filter(Boolean) || [],
-          has_notes: notesData?.some(n => n.parent_id === di.id),
-          has_attachments: false,
-        }));
-
-        setDepositIdeas(transformedDepositIdeas);
+        const ideas = await fetchZoneIdeas(supabase, domainId, user.id, controller.signal);
+        if (controller.signal.aborted) return;
+        setDepositIdeas(ideas);
         setTasks([]);
       }
 
