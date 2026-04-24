@@ -24,6 +24,7 @@ import { handleActionCompletion, handleActionUncompletion } from '@/lib/completi
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
 import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
 import { fetchGoalActionsForWeek, TaskWithLogs } from '@/hooks/fetchGoalActionsForWeek';
+import { calculateGoalEffortProgress, GoalEffortProgress } from '@/lib/goalEffortScore';
 import { useGoals, Timeline } from '@/hooks/useGoals';
 import { GoalJournalView } from './GoalJournalView';
 import { SessionRow } from './SessionRow';
@@ -163,16 +164,44 @@ export function GoalDetailView({
   // Week navigation state
   const [displayedWeekNumber, setDisplayedWeekNumber] = useState<number>(goal.current_week ?? 1);
 
- // Calculate weekly completion percentage from weekFilteredActions
-const weeklyCompletionPercent = useMemo(() => {
-  if (weekFilteredActions.length === 0) return 0;
-  
-  const totalCompleted = weekFilteredActions.reduce((sum, action) => sum + (action.weeklyActual || 0), 0);
-  const totalTarget = weekFilteredActions.reduce((sum, action) => sum + (action.weeklyTarget || 0), 0);
-  
-  if (totalTarget === 0) return 0;
-  return Math.round((totalCompleted / totalTarget) * 100);
-}, [weekFilteredActions]); 
+  // Effort Score (cumulative) for the detail view's "Total" pill.
+  // Self-fetched because `timelineGoalProgress` in the parent is only
+  // populated for the per-timeline detail flow — goals opened from the
+  // MyGoalsView list path have no parent data. Race-guarded via a
+  // request-version ref (see 3b-4c-iii diagnostic).
+  const [effortProgress, setEffortProgress] = useState<GoalEffortProgress | null>(null);
+  const fetchEffortVersion = React.useRef(0);
+
+  const fetchEffortProgress = useCallback(async () => {
+    const version = ++fetchEffortVersion.current;
+    try {
+      const supabase = getSupabaseClient();
+      const result = await calculateGoalEffortProgress(supabase, currentGoal as any);
+      if (version !== fetchEffortVersion.current) return;
+      setEffortProgress(result);
+    } catch (err) {
+      if (version !== fetchEffortVersion.current) return;
+      console.error('[GoalDetailView] fetchEffortProgress failed:', err);
+    }
+  }, [currentGoal]);
+
+  useEffect(() => {
+    fetchEffortProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentGoal.id, refreshTrigger]);
+
+  // Effort Score pill color bands (match GoalProgressCard L126-130).
+  const getEffortBandColor = useCallback((percentage: number) => {
+    if (percentage >= 85) return '#16a34a'; // Green
+    if (percentage >= 40) return '#eab308'; // Yellow
+    return '#dc2626';                        // Red
+  }, []);
+
+  // Neutral gray while effortProgress is null — loading state reads as
+  // "not yet evaluated", not as "failing (red)".
+  const cumulativeColor = effortProgress
+    ? getEffortBandColor(Math.round(effortProgress.cumulativeEffortScore))
+    : '#9ca3af';
 
   // Update displayedWeekNumber when goal changes or cycleWeeks loads
   // Always prefer cycleWeeks date-range matching over goal.current_week
@@ -434,7 +463,15 @@ useEffect(() => {
     }
   }, [currentGoal.id, activeTab, refreshTrigger, timeRange, displayedWeekNumber, timeline, cycleWeeks, loadingTimeline]);
 
+  // Race guard: mount sequence can fire multiple fetchActions back-to-
+  // back (timeline → week → tab gate). Without cancellation support on
+  // the underlying fetchers, last-resolved-wins setState shows stale
+  // data. Incrementing a version ref and discarding stale resolutions
+  // is the surgical fix that avoids touching shared helpers' signatures.
+  const fetchActionsVersion = React.useRef(0);
+
   const fetchActions = async () => {
+    const version = ++fetchActionsVersion.current;
     // Only show full spinner on initial load; week navigation keeps current data visible
     if (!initialLoadDone.current) {
       setLoading(true);
@@ -457,6 +494,9 @@ useEffect(() => {
           : Promise.resolve({} as Record<string, any[]>),
       ]);
 
+      // Discard results from a superseded call.
+      if (version !== fetchActionsVersion.current) return;
+
       setRecurringActions(result.recurringActions);
       setOneTimeActions(result.oneTimeActions);
 
@@ -465,11 +505,15 @@ useEffect(() => {
 
       initialLoadDone.current = true;
     } catch (error) {
+      if (version !== fetchActionsVersion.current) return;
       console.error('[GoalDetailView] Error fetching goal actions:', error);
       Alert.alert('Error', 'Failed to load actions for this goal');
     } finally {
-      setLoading(false);
-      setRefreshingWeek(false);
+      // A stale call should not clear a newer call's loading state.
+      if (version === fetchActionsVersion.current) {
+        setLoading(false);
+        setRefreshingWeek(false);
+      }
     }
   };
 
@@ -1306,9 +1350,11 @@ useEffect(() => {
                 <Text style={[styles.editLink, { color: colors.primary }]}>Edit</Text>
               </TouchableOpacity>
 
-              <Text style={[styles.totalProgress, { color: colors.text }]}>
-  Total {weeklyCompletionPercent}%
-</Text>
+              <View style={[styles.cumulativePill, { borderColor: cumulativeColor }]}>
+                <Text style={[styles.cumulativePillText, { color: cumulativeColor }]}>
+                  {effortProgress ? `${Math.round(effortProgress.cumulativeEffortScore)}%` : '—'}
+                </Text>
+              </View>
             </View>
           </View>
         )}
@@ -2595,6 +2641,19 @@ const styles = StyleSheet.create({
   totalProgress: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  cumulativePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 56,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  cumulativePillText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   tabContent: {
     flex: 1,
