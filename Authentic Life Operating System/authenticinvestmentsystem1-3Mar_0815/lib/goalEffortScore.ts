@@ -38,11 +38,13 @@ import { formatLocalDate } from './dateUtils';
  *   - `goal_type` accepts both DB-join form ('twelve_wk_goal' | 'custom_goal')
  *     and useGoals UI form ('12week' | 'custom'). Normalized internally.
  *
- * Known edge case (filed to backlog): recurring-task child occurrences
- * created via useGoalProgress.completeActionSuggestion aren't in
- * 0008-ap-task-week-plan, so completions tracked only by child rows won't
- * count under the literal definition. Only direct parent-task completion
- * flows (the dominant pattern in this codebase today) are counted.
+ * Completion counting (updated 3b-4c-i-fix): counts ALL completed tasks
+ * linked to the goal whose completed_at falls within a given week's
+ * date range, regardless of whether the completed task is a parent
+ * (with a week_plan row) or a child (created via
+ * completeActionSuggestion, no week_plan row). Prior implementation
+ * iterated week_plans and missed child completions — the dominant
+ * pattern for recurring goals. See backlog #12 history.
  */
 
 export interface GoalInputForEffort {
@@ -219,10 +221,14 @@ function buildResult(
     const plansThisWeek = weekPlans.filter(wp => wp.week_number === week.week_number);
     const planCount = plansThisWeek.length;
 
+    // Count ALL goal-linked completions whose date falls in this week's
+    // range. Prior version iterated plansThisWeek (parents only) — that
+    // missed child occurrences, which carry the real completion data for
+    // recurring goals. completedDateByTaskId already contains parents +
+    // children (the universal-goals-join fetch returns both).
     let completedCount = 0;
-    for (const wp of plansThisWeek) {
-      const d = completedDateByTaskId.get(wp.task_id);
-      if (d && d >= week.week_start && d <= week.week_end) {
+    for (const d of completedDateByTaskId.values()) {
+      if (d >= week.week_start && d <= week.week_end) {
         completedCount += 1;
       }
     }
