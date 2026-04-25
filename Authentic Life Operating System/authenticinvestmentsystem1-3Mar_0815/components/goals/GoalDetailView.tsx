@@ -197,10 +197,16 @@ export function GoalDetailView({
     return '#dc2626';                        // Red
   }, []);
 
-  // Neutral gray while effortProgress is null — loading state reads as
-  // "not yet evaluated", not as "failing (red)".
-  const cumulativeColor = effortProgress
-    ? getEffortBandColor(Math.round(effortProgress.cumulativeEffortScore))
+  // The detail-view pill + bar show the DISPLAYED week's score (tracks
+  // arrow nav). null = not yet loaded OR navigated to a future week (not
+  // in weeklyBreakdown). Neutral gray reads as "not yet evaluated" rather
+  // than "failing (red)".
+  const displayedWeekEntry = effortProgress?.weeklyBreakdown.find(
+    w => w.weekNumber === displayedWeekNumber,
+  );
+  const displayedWeekScore: number | null = displayedWeekEntry?.effortScore ?? null;
+  const weeklyColor = displayedWeekScore !== null
+    ? getEffortBandColor(displayedWeekScore)
     : '#9ca3af';
 
   // Update displayedWeekNumber when goal changes or cycleWeeks loads
@@ -1350,9 +1356,9 @@ useEffect(() => {
                 <Text style={[styles.editLink, { color: colors.primary }]}>Edit</Text>
               </TouchableOpacity>
 
-              <View style={[styles.cumulativePill, { borderColor: cumulativeColor }]}>
-                <Text style={[styles.cumulativePillText, { color: cumulativeColor }]}>
-                  {effortProgress ? `${Math.round(effortProgress.cumulativeEffortScore)}%` : '—'}
+              <View style={[styles.weeklyPill, { borderColor: weeklyColor }]}>
+                <Text style={[styles.weeklyPillText, { color: weeklyColor }]}>
+                  {displayedWeekScore !== null ? `${displayedWeekScore}%` : '—'}
                 </Text>
               </View>
             </View>
@@ -1375,16 +1381,19 @@ useEffect(() => {
   </View>
 )}
 
-        {currentGoal.progress !== undefined && activeTab === 'act' && (
-  <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
-    <View
-      style={[
-        styles.progressBarFill,
-        { backgroundColor: colors.primary, width: `${currentGoal.progress}%` },
-      ]}
-    />
-  </View>
-)}
+        {showWeekNav && activeTab === 'act' && (
+          <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  backgroundColor: displayedWeekScore !== null ? weeklyColor : colors.border,
+                  width: `${displayedWeekScore ?? 0}%`,
+                },
+              ]}
+            />
+          </View>
+        )}
 
         {currentGoal.parent_goal_title && (
           <TouchableOpacity style={styles.parentGoalLink} activeOpacity={0.7}>
@@ -2642,7 +2651,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  cumulativePill: {
+  weeklyPill: {
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -2651,7 +2660,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
   },
-  cumulativePillText: {
+  weeklyPillText: {
     fontSize: 14,
     fontWeight: '700',
   },
