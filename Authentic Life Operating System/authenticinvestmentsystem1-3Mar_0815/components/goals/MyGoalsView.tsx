@@ -14,6 +14,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { formatLocalDate, parseLocalDate } from '@/lib/dateUtils';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { calculateGoalEffortProgress, GoalEffortProgress } from '@/lib/goalEffortScore';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 
 export interface UnifiedGoal {
   id: string;
@@ -283,6 +284,12 @@ twelveWeekGoals.forEach((goal: any) => {
   // backlog #13.
   const [goalEffortMap, setGoalEffortMap] = useState<Record<string, GoalEffortProgress>>({});
 
+  // Counter bumped by event-bus handler (3b-4c-v) to force the effort
+  // effect to re-run after task completion/update/delete from any surface.
+  // Strategy (c) from the discovery: handler is a stable closure that just
+  // bumps state; the effect captures fresh goals from closure on rerun.
+  const [effortRefreshCounter, setEffortRefreshCounter] = useState(0);
+
   const fetchEffortForGoals = async (goals: UnifiedGoal[]) => {
     // Filter to types calculateGoalEffortProgress accepts. Annual ('1y')
     // goals have no cycle weeks so we skip them defensively.
@@ -316,7 +323,22 @@ twelveWeekGoals.forEach((goal: any) => {
       setGoalEffortMap({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cycleGoals, customGoals]);
+  }, [cycleGoals, customGoals, effortRefreshCounter]);
+
+  // Cross-surface refresh: when a task is completed/updated/deleted from
+  // any surface, bump the counter so the effort effect re-runs against
+  // current goals state. Subscribed once on mount; handler is stable.
+  useEffect(() => {
+    const handleTaskChange = () => setEffortRefreshCounter(prev => prev + 1);
+    eventBus.on(EVENTS.TASK_COMPLETED, handleTaskChange);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskChange);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskChange);
+    return () => {
+      eventBus.off(EVENTS.TASK_COMPLETED, handleTaskChange);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskChange);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskChange);
+    };
+  }, []);
 
   // Zero-effort fallback matches Phase 2c/2d shape. Used while effort
   // data is loading or if the per-goal fetch fails.

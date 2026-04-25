@@ -24,6 +24,7 @@ import { fetchGoalActionsForWeek } from '@/hooks/fetchGoalActionsForWeek';
 import { calculateAuthenticScore, calculateTotalGoalProgress } from '@/lib/taskUtils';
 import { calculateGoalEffortProgress } from '@/lib/goalEffortScore';
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { TemplateType } from '@/lib/activityTemplates';
 import { getWeeklyCompletionCountWithTarget, syncCompletionAcrossViews, completionEvents } from '@/lib/completionSync';
@@ -227,6 +228,14 @@ export default function Goals() {
     }
   };
 
+  // Counter bumped by event-bus handler (3b-4c-v) to force the effort
+  // fetch to re-run after task completion/update/delete from any surface.
+  // Same strategy as MyGoalsView — handler is a stable closure that just
+  // bumps state; the effect captures fresh state on rerun.
+  // (Re-runs all three fetchers in this useEffect; surgical-per-fetcher
+  // split is a future optimization — backlog #26.)
+  const [effortRefreshCounter, setEffortRefreshCounter] = useState(0);
+
   // MODIFIED: The useEffect now passes the state variable `timelineGoals` to the updated fetchWeekActions.
   useEffect(() => {
     if (selectedTimeline && timelineWeeks.length > 0 && timelineGoals.length > 0) {
@@ -234,7 +243,22 @@ export default function Goals() {
       fetchTotalGoalProgress(timelineGoals);
       fetchEffortGoalProgress(timelineGoals);
     }
-  }, [selectedTimeline, currentWeekIndex, timelineGoals]);
+  }, [selectedTimeline, currentWeekIndex, timelineGoals, effortRefreshCounter]);
+
+  // Cross-surface refresh: when a task is completed/updated/deleted from
+  // any surface, bump the counter so the fetchers re-run against current
+  // state. Subscribed once on mount; handler is stable.
+  useEffect(() => {
+    const handleTaskChange = () => setEffortRefreshCounter(prev => prev + 1);
+    eventBus.on(EVENTS.TASK_COMPLETED, handleTaskChange);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskChange);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskChange);
+    return () => {
+      eventBus.off(EVENTS.TASK_COMPLETED, handleTaskChange);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskChange);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskChange);
+    };
+  }, []);
 
   // Fetch today's committed task IDs for contract icon display on goal actions
   useEffect(() => {
