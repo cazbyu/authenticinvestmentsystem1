@@ -22,6 +22,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { handleActionCompletion, handleActionUncompletion } from '@/lib/completionHandler';
 import { formatLocalDate, toLocalISOString, parseLocalDate } from '@/lib/dateUtils';
+import { eventBus, EVENTS } from '@/lib/eventBus';
 import { fetchGoalActions, RecurringActionResult, OneTimeActionResult } from '@/hooks/fetchGoalActions';
 import { fetchGoalActionsForWeek, TaskWithLogs } from '@/hooks/fetchGoalActionsForWeek';
 import { calculateGoalEffortProgress, GoalEffortProgress } from '@/lib/goalEffortScore';
@@ -95,6 +96,23 @@ export function GoalDetailView({
   // Week-specific actions from fetchGoalActionsForWeek (has correct weeklyTarget)
   const [weekFilteredActions, setWeekFilteredActions] = useState<TaskWithLogs[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Cross-surface refresh (3b-4c-v): bump refreshTrigger when a task is
+  // completed/updated/deleted from any surface. Local in-tap completions
+  // already bump refreshTrigger directly (L558 and elsewhere); this
+  // belt-and-suspenders catches completions originating from another
+  // surface (e.g., Goal Bank timeline detail) while this view is mounted.
+  useEffect(() => {
+    const handleTaskChange = () => setRefreshTrigger(prev => prev + 1);
+    eventBus.on(EVENTS.TASK_COMPLETED, handleTaskChange);
+    eventBus.on(EVENTS.TASK_UPDATED, handleTaskChange);
+    eventBus.on(EVENTS.TASK_DELETED, handleTaskChange);
+    return () => {
+      eventBus.off(EVENTS.TASK_COMPLETED, handleTaskChange);
+      eventBus.off(EVENTS.TASK_UPDATED, handleTaskChange);
+      eventBus.off(EVENTS.TASK_DELETED, handleTaskChange);
+    };
+  }, []);
 
   // Timeline and weeks state for ActionEffortModal
   const [timeline, setTimeline] = useState<Timeline | null>(null);

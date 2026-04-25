@@ -290,12 +290,14 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     eventBus.on(EVENTS.TASK_CREATED, handleTaskEvent);
     eventBus.on(EVENTS.TASK_UPDATED, handleTaskEvent);
     eventBus.on(EVENTS.TASK_DELETED, handleTaskEvent);
+    eventBus.on(EVENTS.TASK_COMPLETED, handleTaskEvent);
 
     return () => {
       unregisterResetHandler('wellness');
       eventBus.off(EVENTS.TASK_CREATED, handleTaskEvent);
       eventBus.off(EVENTS.TASK_UPDATED, handleTaskEvent);
       eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
+      eventBus.off(EVENTS.TASK_COMPLETED, handleTaskEvent);
     };
   }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain, selectedDomain, activeView]);
 
