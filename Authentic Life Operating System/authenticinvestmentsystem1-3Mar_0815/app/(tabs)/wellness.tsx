@@ -29,6 +29,10 @@ import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { ZoneToolshed } from '@/components/wellness/ZoneToolshed';
 import { WellnessHubPage } from '@/components/wellness/WellnessHubPage';
 import { ZoneGoalsSection } from '@/components/wellness/ZoneGoalsSection';
+import { ZoneIdentityHeader } from '@/components/wellness/ZoneIdentityHeader';
+import { ZoneVisionCallout } from '@/components/wellness/ZoneVisionCallout';
+import { ZoneNorthStarPlaceholder } from '@/components/wellness/ZoneNorthStarPlaceholder';
+import { WELLNESS_ZONE_COPY } from '@/constants/wellnessZoneCopy';
 import {
   getLastActivityPerDomain,
   getDepositCountsPerDomain,
@@ -708,7 +712,22 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       return (
         <View style={styles.content} pointerEvents="box-none">
           {selectedDomain.name === 'Physical' && activeView === 'deposits' && (
-            <ZoneToolshed domainId={selectedDomain.id} zoneName={selectedDomain.name} />
+            <View style={styles.physicalLandingTop}>
+              <ZoneIdentityHeader
+                zoneName={selectedDomain.name}
+                tagline={WELLNESS_ZONE_COPY[selectedDomain.name]?.tagline ?? ''}
+                iconColor={getDomainColor(selectedDomain.name)}
+              />
+              {currentUserId && (
+                <ZoneVisionCallout
+                  domainId={selectedDomain.id}
+                  zoneName={selectedDomain.name}
+                  userId={currentUserId}
+                />
+              )}
+              <ZoneNorthStarPlaceholder zoneName={selectedDomain.name} />
+              <ZoneToolshed domainId={selectedDomain.id} zoneName={selectedDomain.name} />
+            </View>
           )}
           {/* Goals Section */}
           {activeView === 'deposits' && goals.length > 0 && (
@@ -914,6 +933,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  physicalLandingTop: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 12,
   },
   timePeriodContainer: {
     paddingHorizontal: 16,
