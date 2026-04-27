@@ -5,6 +5,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Plus, X } from 'lucide-react-native';
 
 /**
  * CollapsiblePanel — Minimalist Executive design system
@@ -47,9 +48,11 @@ export function CollapsiblePanel({
         >
           {title}
         </Text>
-        <Text style={[styles.chevron, { color: accentColor }]}>
-          {isOpen ? '−' : '+'}
-        </Text>
+        {isOpen ? (
+          <X size={18} color={accentColor} strokeWidth={2.5} />
+        ) : (
+          <Plus size={18} color={accentColor} strokeWidth={2.5} />
+        )}
       </Pressable>
       {isOpen ? <View style={styles.body}>{children}</View> : null}
     </View>
