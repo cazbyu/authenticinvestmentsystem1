@@ -758,7 +758,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
               }}
             />
           )}
-          <ScrollView style={styles.taskList}>
+          <ScrollView style={styles.taskList} contentContainerStyle={styles.taskListContent}>
             {activeView === 'journal' ? (
               <JournalView
                 scope={{ type: 'domain', id: selectedDomain.id, name: selectedDomain.name }}
@@ -984,11 +984,12 @@ const styles = StyleSheet.create({
   timePeriodButtonTextActive: {
     color: '#ffffff',
   },
-  taskListContainer: {
+  taskList: {
     flex: 1,
   },
-  taskList: {
+  taskListContent: {
     padding: 16,
+    paddingBottom: 24,
   },
   loadingContainer: {
     padding: 40,
