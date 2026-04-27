@@ -711,7 +711,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       // Domain view
       return (
         <View style={styles.content} pointerEvents="box-none">
-          {selectedDomain.name === 'Physical' && activeView === 'deposits' && (
+          {activeView === 'deposits' && (
             <View style={styles.physicalLandingTop}>
               <ZoneIdentityHeader
                 zoneName={selectedDomain.name}
@@ -726,7 +726,11 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                 />
               )}
               <ZoneNorthStarPlaceholder zoneName={selectedDomain.name} />
-              <ZoneToolshed domainId={selectedDomain.id} zoneName={selectedDomain.name} />
+              <ZoneToolshed
+                domainId={selectedDomain.id}
+                zoneName={selectedDomain.name}
+                accentColor={getDomainColor(selectedDomain.name)}
+              />
             </View>
           )}
           {/* Goals Section */}
