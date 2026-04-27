@@ -711,7 +711,11 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     if (selectedDomain) {
       // Domain view
       return (
-        <View style={styles.content} pointerEvents="box-none">
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentScrollInner}
+          pointerEvents="box-none"
+        >
           {activeView === 'deposits' && (
             <View style={styles.physicalLandingTop}>
               <ZoneIdentityHeader
@@ -758,7 +762,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
               }}
             />
           )}
-          <ScrollView style={styles.taskList} contentContainerStyle={styles.taskListContent}>
+          <View style={styles.taskListContent}>
             {activeView === 'journal' ? (
               <JournalView
                 scope={{ type: 'domain', id: selectedDomain.id, name: selectedDomain.name }}
@@ -810,8 +814,8 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                 <Text style={styles.emptyText}>Feature coming soon!</Text>
               </View>
             )}
-          </ScrollView>
-        </View>
+          </View>
+        </ScrollView>
       );
     }
 
@@ -984,12 +988,12 @@ const styles = StyleSheet.create({
   timePeriodButtonTextActive: {
     color: '#ffffff',
   },
-  taskList: {
-    flex: 1,
+  contentScrollInner: {
+    flexGrow: 1,
+    paddingBottom: 24,
   },
   taskListContent: {
     padding: 16,
-    paddingBottom: 24,
   },
   loadingContainer: {
     padding: 40,
