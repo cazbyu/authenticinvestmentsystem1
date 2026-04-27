@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ChevronRight, Compass } from 'lucide-react-native';
 
 /**
@@ -16,10 +16,13 @@ export function ZoneNorthStarPlaceholder({
   zoneName,
 }: ZoneNorthStarPlaceholderProps) {
   const handlePress = () => {
-    Alert.alert(
-      'Coming soon',
-      `This space is coming soon. We're designing the deeper questions experience for each ${zoneName} zone.`
-    );
+    const message = `This space is coming soon. We're designing the deeper questions experience for each ${zoneName} zone.`;
+    if (Platform.OS === 'web') {
+      // Alert.alert() does not render on React Native Web; use the browser's native modal.
+      window.alert(`Coming soon\n\n${message}`);
+    } else {
+      Alert.alert('Coming soon', message);
+    }
   };
 
   return (
