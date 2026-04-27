@@ -32,6 +32,7 @@ import { ZoneGoalsSection } from '@/components/wellness/ZoneGoalsSection';
 import { ZoneIdentityHeader } from '@/components/wellness/ZoneIdentityHeader';
 import { ZoneVisionCallout } from '@/components/wellness/ZoneVisionCallout';
 import { ZoneNorthStarPlaceholder } from '@/components/wellness/ZoneNorthStarPlaceholder';
+import { ZoneStatsRow } from '@/components/wellness/ZoneStatsRow';
 import { WELLNESS_ZONE_COPY } from '@/constants/wellnessZoneCopy';
 import {
   getLastActivityPerDomain,
@@ -726,6 +727,13 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                 />
               )}
               <ZoneNorthStarPlaceholder zoneName={selectedDomain.name} />
+              {currentUserId && (
+                <ZoneStatsRow
+                  domainId={selectedDomain.id}
+                  userId={currentUserId}
+                  activeGoalsCount={goals.length}
+                />
+              )}
               <ZoneToolshed
                 domainId={selectedDomain.id}
                 zoneName={selectedDomain.name}
