@@ -33,6 +33,7 @@ import { ZoneIdentityHeader } from '@/components/wellness/ZoneIdentityHeader';
 import { ZoneVisionCallout } from '@/components/wellness/ZoneVisionCallout';
 import { ZoneNorthStarPlaceholder } from '@/components/wellness/ZoneNorthStarPlaceholder';
 import { ZoneStatsRow } from '@/components/wellness/ZoneStatsRow';
+import { ZoneMySpaceSection } from '@/components/wellness/ZoneMySpaceSection';
 import { WELLNESS_ZONE_COPY } from '@/constants/wellnessZoneCopy';
 import {
   getLastActivityPerDomain,
@@ -736,6 +737,20 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                   domainId={selectedDomain.id}
                   userId={currentUserId}
                   activeGoalsCount={goals.length}
+                />
+              )}
+              {currentUserId && (
+                <ZoneMySpaceSection
+                  domainId={selectedDomain.id}
+                  userId={currentUserId}
+                  zoneName={selectedDomain.name}
+                  onIdeaUpdate={handleUpdateDepositIdea}
+                  onIdeaCancel={handleCancelDepositIdea}
+                  onIdeaPress={handleDepositIdeaPress}
+                  onTaskComplete={(task) => handleCompleteTask(task.id)}
+                  onTaskDelete={(task) => handleDeleteTask(task.id)}
+                  onTaskPress={handleTaskPress}
+                  onJournalEntryPress={handleJournalEntryPress}
                 />
               )}
               <ZoneToolshed
