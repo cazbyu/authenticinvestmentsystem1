@@ -30,6 +30,7 @@ import { ZoneVisionCallout } from '@/components/wellness/ZoneVisionCallout';
 import { ZoneNorthStarPlaceholder } from '@/components/wellness/ZoneNorthStarPlaceholder';
 import { ZoneStatsRow } from '@/components/wellness/ZoneStatsRow';
 import { ZoneMySpaceSection } from '@/components/wellness/ZoneMySpaceSection';
+import { GoalDetailView } from '@/components/goals/GoalDetailView';
 import { WELLNESS_ZONE_COPY } from '@/constants/wellnessZoneCopy';
 import {
   getLastActivityPerDomain,
@@ -72,6 +73,11 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
+  // B27: Goal detail screen-replacement state. When non-null, the
+  // ternary in the return swaps page contents for <GoalDetailView>
+  // (mirrors goals.tsx pattern). Wellness function-component itself
+  // doesn't unmount, so all other state survives the swap.
+  const [selectedGoalForDetail, setSelectedGoalForDetail] = useState<any | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [domainAuthenticScore, setDomainAuthenticScore] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -546,6 +552,36 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     }
   }, []);
 
+  // B27: goal-detail handlers. Mirror goals.tsx:1363-1379 verbatim
+  // semantics — open via setting state, close via clearing, update
+  // via re-fetching goals + score.
+  const handleGoalPress = useCallback((goal: any) => {
+    setSelectedGoalForDetail(goal);
+  }, []);
+
+  const handleCloseGoalDetail = useCallback(() => {
+    setSelectedGoalForDetail(null);
+  }, []);
+
+  const handleGoalDetailUpdated = useCallback(() => {
+    if (selectedDomain) {
+      fetchGoalsForDomain(selectedDomain.id);
+    }
+    fetchAuthenticScoreLocal(true, selectedDomain?.id);
+  }, [selectedDomain, fetchGoalsForDomain, fetchAuthenticScoreLocal]);
+
+  const handleAddActionFromGoalDetail = useCallback(() => {
+    if (!selectedGoalForDetail) return;
+    setEditingTask({
+      type: 'task',
+      selectedGoalIds: [selectedGoalForDetail.id],
+      isGoal: true,
+      selectedDomainIds: selectedDomain ? [selectedDomain.id] : [],
+    } as any);
+    setSelectedActivityConfig(null);
+    setTaskFormVisible(true);
+  }, [selectedGoalForDetail, selectedDomain]);
+
   // Speed Dial FAB handler - creates activity with context-aware domain pre-selection
   const handleSpeedDialSelect = useCallback((config: ActivityConfig) => {
     // Build initial data with context-aware pre-selections
@@ -655,6 +691,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                 setSelectedActivityConfig(null);
                 setTaskFormVisible(true);
               }}
+              onGoalPress={handleGoalPress}
               onJournalEntryPress={handleJournalEntryPress}
               openSurface={openToolshedSurface}
               onSurfaceChange={handleToolshedSurfaceChange}
@@ -678,13 +715,27 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
   return (
     <SafeAreaView style={styles.container}>
-      {renderWellnessBankHeader()}
-      {renderContent()}
+      {selectedGoalForDetail ? (
+        <GoalDetailView
+          goal={selectedGoalForDetail}
+          onClose={handleCloseGoalDetail}
+          onGoalUpdated={handleGoalDetailUpdated}
+          onAddAction={handleAddActionFromGoalDetail}
+          authenticScore={authenticScore}
+        />
+      ) : (
+        <>
+          {renderWellnessBankHeader()}
+          {renderContent()}
 
-      {/* Speed Dial FAB - replaces old DraggableFab */}
-      <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
+          {/* Speed Dial FAB - replaces old DraggableFab */}
+          <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
+        </>
+      )}
 
-      {/* Modals */}
+      {/* Modals — outside the ternary so they overlay either the
+          GoalDetailView or the normal page contents. Mirrors
+          goals.tsx pattern. */}
       <Modal visible={taskFormVisible} animationType="slide" presentationStyle="pageSheet">
         <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}><ActivityIndicator size="large" color="#3b82f6" /></View>}>
           <TaskEventForm

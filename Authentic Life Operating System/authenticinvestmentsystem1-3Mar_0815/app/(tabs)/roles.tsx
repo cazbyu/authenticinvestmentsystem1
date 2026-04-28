@@ -25,6 +25,7 @@ import { Plus, Users, UserX, Ban, Menu, CreditCard as Edit2, Pencil, ChevronLeft
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
+import { GoalDetailView } from '@/components/goals/GoalDetailView';
 import { useGoals } from '@/hooks/useGoals';
 import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { GoalEffortProgress } from '@/lib/goalEffortScore';
@@ -100,6 +101,10 @@ const { headerColor } = useHeaderColor();
   // Selected items
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
+  // B27: Goal detail screen-replacement state. Mirrors the wellness.tsx
+  // and goals.tsx pattern — when non-null, the page-body ternary swaps
+  // contents for <GoalDetailView>.
+  const [selectedGoalForDetail, setSelectedGoalForDetail] = useState<any | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [editingKR, setEditingKR] = useState<KeyRelationship | null>(null);
@@ -1301,6 +1306,37 @@ const { headerColor } = useHeaderColor();
     fetchInProgressRef.current = false;
   }, []);
 
+  // B27: goal-detail handlers. Same shape as wellness.tsx (which
+  // mirrors goals.tsx). Roles surface re-fetches goal-progress and
+  // role-scoped score on update.
+  const handleGoalPress = useCallback((goal: any) => {
+    setSelectedGoalForDetail(goal);
+  }, []);
+
+  const handleCloseGoalDetail = useCallback(() => {
+    setSelectedGoalForDetail(null);
+  }, []);
+
+  const handleGoalDetailUpdated = useCallback(() => {
+    fetchGoalProgressData();
+    if (selectedRole) {
+      refreshScoreForRole(selectedRole.id, true);
+    }
+  }, [fetchGoalProgressData, selectedRole, refreshScoreForRole]);
+
+  const handleAddActionFromGoalDetail = useCallback(() => {
+    if (!selectedGoalForDetail) return;
+    setEditingTask({
+      type: 'task',
+      selectedGoalIds: [selectedGoalForDetail.id],
+      twelveWeekGoalChecked: true,
+      countsTowardWeeklyProgress: true,
+      selectedRoleIds: selectedRole ? [selectedRole.id] : [],
+    } as any);
+    setSelectedActivityConfig(null);
+    setTaskFormVisible(true);
+  }, [selectedGoalForDetail, selectedRole]);
+
   const handleEditRole = (role: Role) => {
     setEditingRole(role);
     setEditRoleVisible(true);
@@ -1737,6 +1773,7 @@ const { headerColor } = useHeaderColor();
                           goal={goal}
                           progress={progress}
                           compact={true}
+                          onPress={() => handleGoalPress(goal)}
                           onAddAction={() => {
                             setEditingTask({
                               type: 'task',
@@ -1949,13 +1986,26 @@ const { headerColor } = useHeaderColor();
 
   return (
     <SafeAreaView style={styles.container}>
-      {renderRoleBankHeader()}
-      {renderContent()}
+      {selectedGoalForDetail ? (
+        <GoalDetailView
+          goal={selectedGoalForDetail}
+          onClose={handleCloseGoalDetail}
+          onGoalUpdated={handleGoalDetailUpdated}
+          onAddAction={handleAddActionFromGoalDetail}
+          authenticScore={authenticScore}
+        />
+      ) : (
+        <>
+          {renderRoleBankHeader()}
+          {renderContent()}
 
-      {/* Speed Dial FAB - replaces old DraggableFab */}
-      <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
+          {/* Speed Dial FAB - replaces old DraggableFab */}
+          <SpeedDialFab onActivitySelect={handleSpeedDialSelect} />
+        </>
+      )}
 
-      {/* Modals */}
+      {/* Modals — outside the ternary so they overlay either
+          GoalDetailView or the normal page (mirrors goals.tsx). */}
       <ManageRolesModal
         visible={manageRolesVisible}
         onClose={() => setManageRolesVisible(false)}

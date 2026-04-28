@@ -17,12 +17,16 @@ export interface ZoneGoalsSectionProps {
   goals: any[];
   goalProgress: Record<string, any>;
   onAddGoalTask: (goalId: string) => void;
+  // Optional tap-to-detail handler. When provided, each goal card
+  // becomes tappable and forwards the goal object to the parent.
+  onGoalPress?: (goal: any) => void;
 }
 
 export function ZoneGoalsSection({
   goals,
   goalProgress,
   onAddGoalTask,
+  onGoalPress,
 }: ZoneGoalsSectionProps) {
   if (goals.length === 0) return null;
 
@@ -41,6 +45,7 @@ export function ZoneGoalsSection({
               progress={progress}
               compact={true}
               onAddAction={() => onAddGoalTask(goal.id)}
+              onPress={onGoalPress ? () => onGoalPress(goal) : undefined}
             />
           );
         })}
