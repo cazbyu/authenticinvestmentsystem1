@@ -14,6 +14,14 @@ import { formatLocalDate } from './dateUtils';
  *     commitment" semantic doesn't exist on this surface — only
  *     tasks have an actionable overdue concept.
  *
+ *   Goal-tied tasks (post 1+6a-fix2): any task with a row in
+ *   0008-ap-universal-goals-join (parent_type='task') is EXCLUDED,
+ *   regardless of which goal it links to. Goal-driven work belongs
+ *   to the Goals tile (relocates to Toolshed Surfaces in 1+6b),
+ *   not to Upcoming/Overdue. Implemented as a second pre-fetch step
+ *   that resolves the goal-tied subset of the zone's task pool; the
+ *   final task query uses the filtered (non-goal-tied) ID list.
+ *
  * Strict less-than on due_date: today's due tasks belong in
  * Upcoming, not Overdue. The boundary at midnight is what flips a
  * task from upcoming to overdue.
@@ -89,6 +97,26 @@ export async function fetchZoneOverdue(
 
   if (taskIds.length === 0) return EMPTY;
 
+  // 1b. Resolve the goal-tied subset of the zone's task pool, then
+  //     derive the non-goal-tied list. Goal-driven work belongs to
+  //     the Goals tile, not Overdue.
+  const { data: goalJoinData, error: goalJoinErr } = await supabase
+    .from('0008-ap-universal-goals-join')
+    .select('parent_id')
+    .eq('parent_type', 'task')
+    .in('parent_id', taskIds);
+  if (goalJoinErr) throw goalJoinErr;
+  if (signal?.aborted) return EMPTY;
+
+  const goalTiedTaskIds = new Set(
+    (goalJoinData ?? [])
+      .map(r => r.parent_id as string | null)
+      .filter((v): v is string => Boolean(v)),
+  );
+  const filteredTaskIds = taskIds.filter(id => !goalTiedTaskIds.has(id));
+
+  if (filteredTaskIds.length === 0) return EMPTY;
+
   // 2. Fetch overdue task rows. Strict less-than on due_date so
   //    today's due tasks don't appear here (they belong in Upcoming).
   const { data, error } = await supabase
@@ -100,7 +128,7 @@ export async function fetchZoneOverdue(
     .is('parent_task_id', null)
     .in('status', ['pending', 'in_progress'])
     .lt('due_date', today)
-    .in('id', taskIds)
+    .in('id', filteredTaskIds)
     .order('due_date', { ascending: false });
 
   if (error) throw error;

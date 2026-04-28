@@ -16,6 +16,14 @@ import { formatLocalDate, toLocalISOString } from './dateUtils';
  *     Overdue (lib/zoneOverdue.ts) so the two panels stay strictly
  *     disjoint. Cancelled / completed-not-today / deleted also
  *     excluded.
+ *
+ *     Goal-tied tasks (post 1+6a-fix2): any task with a row in
+ *     0008-ap-universal-goals-join (parent_type='task') is EXCLUDED,
+ *     regardless of which goal it links to. Goal-driven work belongs
+ *     to the Goals tile (relocates to Toolshed Surfaces in 1+6b),
+ *     not to Upcoming/Overdue. Implemented as a third pre-fetch step
+ *     that resolves the goal-tied subset of the zone's task pool;
+ *     the final task query uses the filtered (non-goal-tied) ID list.
  *   - Events: 0008-ap-commitments rows where date >= local-midnight
  *     today AND status != 'archived' (mirror Act tab).
  *
@@ -126,10 +134,32 @@ export async function fetchZoneUpcoming(
     .map(r => r.parent_id as string | null)
     .filter((v): v is string => Boolean(v));
 
+  // 1b. Resolve the goal-tied subset of the zone's task pool, then
+  //     derive the non-goal-tied list. Goal-driven work belongs to
+  //     the Goals tile, not Upcoming. Skip the lookup entirely if
+  //     no zone-scoped tasks exist.
+  let filteredTaskIds = taskIds;
+  if (taskIds.length > 0) {
+    const { data: goalJoinData, error: goalJoinErr } = await supabase
+      .from('0008-ap-universal-goals-join')
+      .select('parent_id')
+      .eq('parent_type', 'task')
+      .in('parent_id', taskIds);
+    if (goalJoinErr) throw goalJoinErr;
+    if (signal?.aborted) return EMPTY;
+
+    const goalTiedTaskIds = new Set(
+      (goalJoinData ?? [])
+        .map(r => r.parent_id as string | null)
+        .filter((v): v is string => Boolean(v)),
+    );
+    filteredTaskIds = taskIds.filter(id => !goalTiedTaskIds.has(id));
+  }
+
   // 2. Fetch source rows in parallel. Skip the source query entirely if
   //    there are no scoped IDs.
   const [tasksRes, eventsRes] = await Promise.all([
-    taskIds.length === 0
+    filteredTaskIds.length === 0
       ? { data: [] as any[], error: null }
       : supabase
           .from('0008-ap-tasks')
@@ -151,7 +181,7 @@ export async function fetchZoneUpcoming(
             `and(or(due_date.is.null,due_date.gte.${today}),status.in.(pending,in_progress)),` +
             `and(status.eq.completed,completed_at.gte.${todayStartISO})`
           )
-          .in('id', taskIds)
+          .in('id', filteredTaskIds)
           .order('due_date', { ascending: true }),
     commitmentIds.length === 0
       ? { data: [] as any[], error: null }
