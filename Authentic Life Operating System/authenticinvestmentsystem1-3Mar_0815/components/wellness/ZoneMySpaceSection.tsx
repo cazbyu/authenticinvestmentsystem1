@@ -55,6 +55,10 @@ export interface ZoneMySpaceSectionProps {
   onTaskComplete: (task: Task) => void;
   onTaskDelete: (task: Task) => void;
   onTaskPress: (task: Task) => void;
+  // Open-tile state lifted to parent (1+6c). Cross-section coordination
+  // with ZoneToolshed's openSurface happens in wellness.tsx.
+  openTile: TileKey | null;
+  onTileChange: (next: TileKey | null) => void;
 }
 
 export function ZoneMySpaceSection({
@@ -67,10 +71,11 @@ export function ZoneMySpaceSection({
   onTaskComplete,
   onTaskDelete,
   onTaskPress,
+  openTile,
+  onTileChange,
 }: ZoneMySpaceSectionProps) {
   const accentColor = getDomainColor(zoneName);
 
-  const [openTile, setOpenTile] = useState<TileKey | null>(null);
   const [ideaCount, setIdeaCount] = useState<number | null>(null);
   const [upcomingCount, setUpcomingCount] = useState<number | null>(null);
   const [overdueCount, setOverdueCount] = useState<number | null>(null);
@@ -127,7 +132,7 @@ export function ZoneMySpaceSection({
   }, [loadCounts]);
 
   const toggle = (key: TileKey) => {
-    setOpenTile(prev => (prev === key ? null : key));
+    onTileChange(openTile === key ? null : key);
   };
 
   const tiles: Array<{
@@ -188,7 +193,7 @@ export function ZoneMySpaceSection({
             icon={panelIcon(openTile)}
             accentColor={accentColor}
             isOpen={true}
-            onToggle={() => setOpenTile(null)}
+            onToggle={() => onTileChange(null)}
           >
             {openTile === 'idea' && (
               <ZoneIdeaJarPanel

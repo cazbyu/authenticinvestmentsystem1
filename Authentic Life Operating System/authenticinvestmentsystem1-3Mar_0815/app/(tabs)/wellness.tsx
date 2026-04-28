@@ -6,21 +6,18 @@ import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { SpeedDialFab } from '@/components/SpeedDialFab';
 import { ActivityConfig, ACTIVITY_CONFIGS } from '@/lib/activityConfig';
-import { TaskCard, Task } from '@/components/tasks/TaskCard';
-import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
+import { Task } from '@/components/tasks/TaskCard';
 const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
 import { DepositIdeaDetailModal } from '@/components/depositIdeas/DepositIdeaDetailModal';
-import { JournalView } from '@/components/journal/JournalView';
 const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
 import JournalForm from '@/components/reflections/JournalForm';
 import { ReflectionDetailsModal } from '@/components/reflections/ReflectionDetailsModal';
 import { ReflectionWithRelations, fetchReflectionById } from '@/lib/reflectionUtils';
-import { AnalyticsView } from '@/components/analytics/AnalyticsView';
 import { getSupabaseClient } from '@/lib/supabase';
 import { Plus, Heart, CreditCard as Edit, UserX, Ban, Menu, CreditCard as Edit2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain, calculateAuthenticScoreForPeriod } from '@/lib/taskUtils';
+import { calculateAuthenticScore as calculateAuthenticScoreUtil, calculateAuthenticScoreForDomain } from '@/lib/taskUtils';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,7 +25,6 @@ import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { ZoneToolshed } from '@/components/wellness/ZoneToolshed';
 import { WellnessHubPage } from '@/components/wellness/WellnessHubPage';
-import { ZoneGoalsSection } from '@/components/wellness/ZoneGoalsSection';
 import { ZoneIdentityHeader } from '@/components/wellness/ZoneIdentityHeader';
 import { ZoneVisionCallout } from '@/components/wellness/ZoneVisionCallout';
 import { ZoneNorthStarPlaceholder } from '@/components/wellness/ZoneNorthStarPlaceholder';
@@ -40,7 +36,7 @@ import {
   getDepositCountsPerDomain,
   getToolCountsPerDomain,
 } from '@/lib/roleStatistics';
-import { fetchZoneDeposits, fetchZoneIdeas, fetchZoneGoals, fetchZoneGoalsProgress } from '@/lib/zoneDataService';
+import { fetchZoneGoals, fetchZoneGoalsProgress } from '@/lib/zoneDataService';
 import { getDomainColor } from '@/constants/wellnessColors';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -60,10 +56,6 @@ export default function Wellness() {
   const { width } = useWindowDimensions();
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
 
   const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
 const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
@@ -85,8 +77,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scoreAbortControllerRef = useRef<AbortController | null>(null);
-  const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
-  const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
 
   // Follow-through TaskEventForm state
   const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
@@ -107,6 +97,15 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const [goals, setGoals] = useState<any[]>([]);
   const [goalProgress, setGoalProgress] = useState<Record<string, any>>({});
   const goalsAbortControllerRef = useRef<AbortController | null>(null);
+
+  // 1+6c: cross-section open-panel coordination. Only one of these
+  // is non-null at a time — coordinator callbacks below enforce that
+  // invariant. Lifted from the section components when the old tabs
+  // were removed.
+  const [openMySpaceTile, setOpenMySpaceTile] =
+    useState<'upcoming' | 'overdue' | 'idea' | null>(null);
+  const [openToolshedSurface, setOpenToolshedSurface] =
+    useState<'goals' | 'journal' | 'analytics' | null>(null);
 
   const fetchGoalsForDomain = useCallback(async (domainId: string) => {
     // Cancel any in-flight goal fetch
@@ -195,63 +194,11 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     }
   }, [fetchAuthenticScoreLocal]);
 
-  const fetchDomainTasks = useCallback(async (domainId: string, view: 'deposits' | 'ideas' = activeView) => {
-    // Cancel any in-flight request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Create new AbortController for this fetch
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setLoading(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Check if aborted
-      if (controller.signal.aborted) {
-        return;
-      }
-
-      if (view === 'deposits') {
-        const deposits = await fetchZoneDeposits(supabase, domainId, user.id, controller.signal);
-        if (controller.signal.aborted) return;
-        setTasks(deposits);
-        setDepositIdeas([]);
-      } else {
-        const ideas = await fetchZoneIdeas(supabase, domainId, user.id, controller.signal);
-        if (controller.signal.aborted) return;
-        setDepositIdeas(ideas);
-        setTasks([]);
-      }
-
-    } catch (error) {
-      // Don't show errors if request was aborted
-      if (controller.signal.aborted) {
-        return;
-      }
-      console.error(`Error fetching domain ${view}:`, error);
-      Alert.alert('Error', (error as Error).message);
-    } finally {
-      if (!controller.signal.aborted) {
-        setLoading(false);
-      }
-    }
-  }, [activeView]);
-
-
   // Reset to main Wellness Bank view when tab is pressed
   const resetToMain = useCallback(() => {
     setSelectedDomain(null);
-    setActiveView('deposits');
-    setTasks([]);
-    setDepositIdeas([]);
     setGoals([]);
     setGoalProgress({});
-    setLoading(false);
     setTaskFormVisible(false);
     setTaskDetailVisible(false);
     setDepositIdeaDetailVisible(false);
@@ -260,8 +207,8 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     setEditingTask(null);
     setSelectedActivityConfig(null);
     setDomainAuthenticScore(0);
-    setPeriodScore(undefined);
-    setJournalDateRange('week');
+    setOpenMySpaceTile(null);
+    setOpenToolshedSurface(null);
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     scoreAbortControllerRef.current?.abort();
@@ -288,7 +235,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     const handleTaskEvent = () => {
       console.log('[WellnessBank] Received task event, refreshing data...');
       if (selectedDomain) {
-        fetchDomainTasks(selectedDomain.id, activeView);
         fetchGoalsForDomain(selectedDomain.id);
       }
     };
@@ -305,32 +251,10 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
       eventBus.off(EVENTS.TASK_COMPLETED, handleTaskEvent);
     };
-  }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain, selectedDomain, activeView]);
-
-  const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', domainId: string) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const score = await calculateAuthenticScoreForPeriod(
-        supabase,
-        user.id,
-        dateRange,
-        { type: 'domain', id: domainId }
-      );
-      setPeriodScore(score);
-    } catch (error) {
-      console.error('Error calculating period score:', error);
-      setPeriodScore(undefined);
-    }
-  }, []);
+  }, [fetchDomains, registerResetHandler, unregisterResetHandler, resetToMain, selectedDomain, fetchGoalsForDomain]);
 
   useEffect(() => {
     if (selectedDomain) {
-      if (activeView === 'deposits' || activeView === 'ideas') {
-        fetchDomainTasks(selectedDomain.id, activeView);
-      }
       // Calculate domain-specific score
       fetchAuthenticScoreLocal(true, selectedDomain.id);
     } else {
@@ -347,16 +271,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         scoreAbortControllerRef.current.abort();
       }
     };
-  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
-
-  useEffect(() => {
-    // Calculate period score when journal view is active and domain is selected
-    if (activeView === 'journal' && selectedDomain) {
-      calculatePeriodScore(journalDateRange, selectedDomain.id);
-    } else {
-      setPeriodScore(undefined);
-    }
-  }, [activeView, selectedDomain?.id, journalDateRange, calculatePeriodScore]);
+  }, [selectedDomain, fetchAuthenticScoreLocal]);
 
   const fetchHubData = useCallback(async () => {
     if (!currentUserId) return;
@@ -403,12 +318,24 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     };
   }, [currentUserId, domains.length, selectedDomain, fetchHubData]);
 
-  const handleViewChange = useCallback((view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
-    setActiveView(view);
-    if (selectedDomain && (view === 'deposits' || view === 'ideas')) {
-      fetchDomainTasks(selectedDomain.id, view);
-    }
-  }, [selectedDomain, fetchDomainTasks]);
+  // 1+6c: cross-section coordinators. Setting either slot to a
+  // non-null value clears the other so only one panel is open at a
+  // time across MY SPACE + Toolshed Surfaces.
+  const handleMySpaceTileChange = useCallback(
+    (next: 'upcoming' | 'overdue' | 'idea' | null) => {
+      if (next !== null) setOpenToolshedSurface(null);
+      setOpenMySpaceTile(next);
+    },
+    [],
+  );
+
+  const handleToolshedSurfaceChange = useCallback(
+    (next: 'goals' | 'journal' | 'analytics' | null) => {
+      if (next !== null) setOpenMySpaceTile(null);
+      setOpenToolshedSurface(next);
+    },
+    [],
+  );
 
   const handleCompleteTask = useCallback(async (taskId: string) => {
     try {
@@ -420,15 +347,12 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
       if (error) throw error;
 
-      if (selectedDomain) {
-        fetchDomainTasks(selectedDomain.id, activeView);
-      }
       // Refresh score after task completion
       fetchAuthenticScoreLocal(true);
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
-  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
+  }, [fetchAuthenticScoreLocal]);
 
   const handleDeleteTask = useCallback(async (taskId: string) => {
     try {
@@ -443,15 +367,12 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
       if (error) throw error;
 
-      if (selectedDomain) {
-        fetchDomainTasks(selectedDomain.id, activeView);
-      }
       // Refresh score after task deletion
       fetchAuthenticScoreLocal(true);
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
-  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
+  }, [fetchAuthenticScoreLocal]);
 
   const handleDeleteReflection = useCallback(async (reflection: ReflectionWithRelations) => {
     try {
@@ -463,14 +384,11 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
       if (error) throw error;
 
-      if (selectedDomain) {
-        fetchDomainTasks(selectedDomain.id, activeView);
-      }
       fetchAuthenticScoreLocal(true);
     } catch (error) {
       Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
     }
-  }, [selectedDomain, activeView, fetchDomainTasks, fetchAuthenticScoreLocal]);
+  }, [fetchAuthenticScoreLocal]);
 
   const handleUpdateDepositIdea = useCallback((depositIdea: any) => {
     const editData = {
@@ -496,14 +414,10 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         .eq('id', depositIdea.id);
 
       if (error) throw error;
-
-      if (selectedDomain) {
-        fetchDomainTasks(selectedDomain.id, activeView);
-      }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
-  }, [selectedDomain, activeView, fetchDomainTasks]);
+  }, []);
 
   const handleActivateDepositIdea = useCallback(async (depositIdea: any) => {
     try {
@@ -557,26 +471,21 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       if (error) throw error;
       Alert.alert('Success', 'Task has been cancelled');
       setTaskDetailVisible(false);
-
-      if (selectedDomain) {
-        fetchDomainTasks(selectedDomain.id, activeView);
-      }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
-  }, [selectedDomain, activeView, fetchDomainTasks]);
+  }, []);
 
   const handleFormSubmitSuccess = useCallback(() => {
     setTaskFormVisible(false);
     setEditingTask(null);
     setSelectedActivityConfig(null);
     if (selectedDomain) {
-      fetchDomainTasks(selectedDomain.id, activeView);
       fetchGoalsForDomain(selectedDomain.id);
     }
     // Refresh score after task creation/update
     fetchAuthenticScoreLocal(true);
-  }, [selectedDomain, activeView, fetchDomainTasks, fetchGoalsForDomain, fetchAuthenticScoreLocal]);
+  }, [selectedDomain, fetchGoalsForDomain, fetchAuthenticScoreLocal]);
 
   const handleFormClose = useCallback(() => {
     setTaskFormVisible(false);
@@ -595,7 +504,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
     setFollowThroughFormVisible(false);
     setRefreshAssociatedItemsKey(prev => prev + 1);
     if (selectedDomain) {
-      fetchDomainTasks(selectedDomain.id, activeView);
       fetchGoalsForDomain(selectedDomain.id);
     }
     fetchAuthenticScoreLocal(true);
@@ -637,13 +545,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
       }
     }
   }, []);
-
-  const handleJournalDateRangeChange = useCallback((dateRange: 'week' | 'month' | 'all') => {
-    setJournalDateRange(dateRange);
-    if (selectedDomain) {
-      calculatePeriodScore(dateRange, selectedDomain.id);
-    }
-  }, [selectedDomain, calculatePeriodScore]);
 
   // Speed Dial FAB handler - creates activity with context-aware domain pre-selection
   const handleSpeedDialSelect = useCallback((config: ActivityConfig) => {
@@ -689,21 +590,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
             </View>
           </View>
         </View>
-        <View style={styles.customHeaderBottom}>
-          <View style={styles.customToggleGroup}>
-            {(['deposits', 'ideas', 'journal', 'analytics'] as const).map((view) => (
-              <TouchableOpacity
-                key={view}
-                style={[styles.customToggleButton, activeView === view && styles.customActiveToggle]}
-                onPress={() => handleViewChange(view)}
-              >
-                <Text style={[styles.customToggleText, activeView === view && styles.customActiveToggleText]}>
-                  {view.charAt(0).toUpperCase() + view.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
       </View>
     );
   };
@@ -717,64 +603,46 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
           contentContainerStyle={styles.contentScrollInner}
           pointerEvents="box-none"
         >
-          {activeView === 'deposits' && (
-            <View style={styles.physicalLandingTop}>
-              <ZoneIdentityHeader
-                zoneName={selectedDomain.name}
-                tagline={WELLNESS_ZONE_COPY[selectedDomain.name]?.tagline ?? ''}
-                iconColor={getDomainColor(selectedDomain.name)}
-              />
-              {currentUserId && (
-                <ZoneVisionCallout
-                  domainId={selectedDomain.id}
-                  zoneName={selectedDomain.name}
-                  userId={currentUserId}
-                />
-              )}
-              <ZoneNorthStarPlaceholder zoneName={selectedDomain.name} />
-              {currentUserId && (
-                <ZoneStatsRow
-                  domainId={selectedDomain.id}
-                  userId={currentUserId}
-                  activeGoalsCount={goals.length}
-                />
-              )}
-              {currentUserId && (
-                <ZoneMySpaceSection
-                  domainId={selectedDomain.id}
-                  userId={currentUserId}
-                  zoneName={selectedDomain.name}
-                  onIdeaUpdate={handleUpdateDepositIdea}
-                  onIdeaCancel={handleCancelDepositIdea}
-                  onIdeaPress={handleDepositIdeaPress}
-                  onTaskComplete={(task) => handleCompleteTask(task.id)}
-                  onTaskDelete={(task) => handleDeleteTask(task.id)}
-                  onTaskPress={handleTaskPress}
-                />
-              )}
-              <ZoneToolshed
+          <View style={styles.physicalLandingTop}>
+            <ZoneIdentityHeader
+              zoneName={selectedDomain.name}
+              tagline={WELLNESS_ZONE_COPY[selectedDomain.name]?.tagline ?? ''}
+              iconColor={getDomainColor(selectedDomain.name)}
+            />
+            {currentUserId && (
+              <ZoneVisionCallout
                 domainId={selectedDomain.id}
                 zoneName={selectedDomain.name}
-                accentColor={getDomainColor(selectedDomain.name)}
-                goals={goals}
-                goalProgress={goalProgress}
-                onAddGoalTask={(goalId) => {
-                  setEditingTask({
-                    type: 'task',
-                    selectedGoalIds: [goalId],
-                    isGoal: true,
-                    selectedDomainIds: selectedDomain ? [selectedDomain.id] : [],
-                  } as any);
-                  setSelectedActivityConfig(null);
-                  setTaskFormVisible(true);
-                }}
-                onJournalEntryPress={handleJournalEntryPress}
+                userId={currentUserId}
               />
-            </View>
-          )}
-          {/* Goals Section */}
-          {activeView === 'deposits' && goals.length > 0 && (
-            <ZoneGoalsSection
+            )}
+            <ZoneNorthStarPlaceholder zoneName={selectedDomain.name} />
+            {currentUserId && (
+              <ZoneStatsRow
+                domainId={selectedDomain.id}
+                userId={currentUserId}
+                activeGoalsCount={goals.length}
+              />
+            )}
+            {currentUserId && (
+              <ZoneMySpaceSection
+                domainId={selectedDomain.id}
+                userId={currentUserId}
+                zoneName={selectedDomain.name}
+                onIdeaUpdate={handleUpdateDepositIdea}
+                onIdeaCancel={handleCancelDepositIdea}
+                onIdeaPress={handleDepositIdeaPress}
+                onTaskComplete={(task) => handleCompleteTask(task.id)}
+                onTaskDelete={(task) => handleDeleteTask(task.id)}
+                onTaskPress={handleTaskPress}
+                openTile={openMySpaceTile}
+                onTileChange={handleMySpaceTileChange}
+              />
+            )}
+            <ZoneToolshed
+              domainId={selectedDomain.id}
+              zoneName={selectedDomain.name}
+              accentColor={getDomainColor(selectedDomain.name)}
               goals={goals}
               goalProgress={goalProgress}
               onAddGoalTask={(goalId) => {
@@ -787,60 +655,10 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                 setSelectedActivityConfig(null);
                 setTaskFormVisible(true);
               }}
+              onJournalEntryPress={handleJournalEntryPress}
+              openSurface={openToolshedSurface}
+              onSurfaceChange={handleToolshedSurfaceChange}
             />
-          )}
-          <View style={styles.taskListContent}>
-            {activeView === 'journal' ? (
-              <JournalView
-                scope={{ type: 'domain', id: selectedDomain.id, name: selectedDomain.name }}
-                onEntryPress={handleJournalEntryPress}
-                dateRange={journalDateRange}
-                showTimePeriodSelector={true}
-                onDateRangeChange={handleJournalDateRangeChange}
-              />
-            ) : activeView === 'analytics' ? (
-              <AnalyticsView
-                scope={{ type: 'domain', id: selectedDomain.id, name: selectedDomain.name }}
-              />
-            ) : loading ? (
-              null
-            ) : activeView === 'deposits' ? (
-              tasks.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No deposits found for this domain</Text>
-                </View>
-              ) : (
-                tasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={() => handleCompleteTask(task.id)}
-                    onDelete={() => handleDeleteTask(task.id)}
-                    onPress={handleTaskPress}
-                  />
-                ))
-              )
-            ) : activeView === 'ideas' ? (
-              depositIdeas.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No ideas found for this domain</Text>
-                </View>
-              ) : (
-                depositIdeas.map(depositIdea => (
-                  <DepositIdeaCard
-                    key={depositIdea.id}
-                    depositIdea={depositIdea}
-                    onUpdate={handleUpdateDepositIdea}
-                    onCancel={handleCancelDepositIdea}
-                    onPress={handleDepositIdeaPress}
-                  />
-                ))
-              )
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>Feature coming soon!</Text>
-              </View>
-            )}
           </View>
         </ScrollView>
       );
@@ -930,9 +748,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         onSaveSuccess={() => {
           setReflectionFormVisible(false);
           setSelectedReflection(null);
-          if (selectedDomain) {
-            fetchDomainTasks(selectedDomain.id);
-          }
         }}
       />
 
@@ -1019,9 +834,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 24,
   },
-  taskListContent: {
-    padding: 16,
-  },
   loadingContainer: {
     padding: 40,
     alignItems: 'center',
@@ -1029,16 +841,6 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#6b7280',
     fontSize: 16,
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#6b7280',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 16,
   },
   // Custom header styles
   customHeader: {
@@ -1096,39 +898,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
   },
-  customHeaderBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   customMainToggleGroup: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 16,
     padding: 2,
-  },
-  customToggleGroup: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 16,
-    padding: 2,
-  },
-  customToggleButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  customActiveToggle: {
-    backgroundColor: '#ffffff',
-  },
-  customToggleText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  customActiveToggleText: {
-    color: '#0078d4',
   },
   // Manage Domains tab styles
   manageContent: {
