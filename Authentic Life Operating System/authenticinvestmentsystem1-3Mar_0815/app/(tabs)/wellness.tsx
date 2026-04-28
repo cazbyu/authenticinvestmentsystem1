@@ -750,7 +750,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                   onTaskComplete={(task) => handleCompleteTask(task.id)}
                   onTaskDelete={(task) => handleDeleteTask(task.id)}
                   onTaskPress={handleTaskPress}
-                  onJournalEntryPress={handleJournalEntryPress}
                 />
               )}
               <ZoneToolshed
