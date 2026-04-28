@@ -144,8 +144,8 @@ export function ZoneMySpaceSection({
     count: number | null;
     Icon: React.ComponentType<{ size?: number; color?: string }>;
   }> = [
-    { key: 'idea', name: 'Idea Jar', count: ideaCount, Icon: Lightbulb },
     { key: 'upcoming', name: 'Upcoming', count: upcomingCount, Icon: Calendar },
+    { key: 'idea', name: 'Idea Jar', count: ideaCount, Icon: Lightbulb },
     { key: 'journal', name: 'Journal', count: journalCount, Icon: BookOpen },
   ];
 
