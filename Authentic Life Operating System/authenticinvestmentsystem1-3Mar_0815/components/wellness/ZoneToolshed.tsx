@@ -25,6 +25,12 @@ import { ZoneAnalyticsToolshedPanel } from './ZoneAnalyticsToolshedPanel';
  * today's values + Add tile + activation/logging modals.
  */
 
+/**
+ * Open-surface key for the Toolshed Surfaces section. Promoted to
+ * module scope (1+6c) so the props interface can reference it.
+ */
+export type SurfaceKey = 'goals' | 'journal' | 'analytics';
+
 export interface ZoneToolshedProps {
   domainId: string;
   zoneName: string;
@@ -37,6 +43,11 @@ export interface ZoneToolshedProps {
   onAddGoalTask?: (goalId: string) => void;
   // Journal tile (Toolshed Surfaces). Pass-through from wellness.tsx.
   onJournalEntryPress?: (entry: any) => void;
+  // Open-surface state lifted to parent (1+6c). Cross-section
+  // coordination with ZoneMySpaceSection's openTile happens in
+  // wellness.tsx.
+  openSurface: SurfaceKey | null;
+  onSurfaceChange: (next: SurfaceKey | null) => void;
 }
 
 const WELLNESS_ACCENT = '#16a34a';
@@ -88,6 +99,8 @@ export function ZoneToolshed({
   goalProgress,
   onAddGoalTask,
   onJournalEntryPress,
+  openSurface,
+  onSurfaceChange,
 }: ZoneToolshedProps) {
   const [userId, setUserId] = useState<string | null>(null);
   const [instances, setInstances] = useState<TrackerInstanceRow[]>([]);
@@ -106,11 +119,6 @@ export function ZoneToolshed({
 
   const [manageMode, setManageMode] = useState(false);
   const [inactiveRows, setInactiveRows] = useState<InactiveTrackerRow[]>([]);
-
-  // Surfaces section state (1+6b). Toolshed-internal; cross-section
-  // coordination with MY SPACE happens in 1+6c.
-  type SurfaceKey = 'goals' | 'journal' | 'analytics';
-  const [openSurface, setOpenSurface] = useState<SurfaceKey | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -394,7 +402,7 @@ export function ZoneToolshed({
           <View style={styles.surfacesGrid}>
             <Pressable
               onPress={() =>
-                setOpenSurface(openSurface === 'goals' ? null : 'goals')
+                onSurfaceChange(openSurface === 'goals' ? null : 'goals')
               }
               style={[
                 styles.surfaceTile,
@@ -409,7 +417,7 @@ export function ZoneToolshed({
             </Pressable>
             <Pressable
               onPress={() =>
-                setOpenSurface(openSurface === 'journal' ? null : 'journal')
+                onSurfaceChange(openSurface === 'journal' ? null : 'journal')
               }
               style={[
                 styles.surfaceTile,
@@ -424,7 +432,7 @@ export function ZoneToolshed({
             </Pressable>
             <Pressable
               onPress={() =>
-                setOpenSurface(openSurface === 'analytics' ? null : 'analytics')
+                onSurfaceChange(openSurface === 'analytics' ? null : 'analytics')
               }
               style={[
                 styles.surfaceTile,
@@ -456,7 +464,7 @@ export function ZoneToolshed({
                 }
                 accentColor={accentColor}
                 isOpen={true}
-                onToggle={() => setOpenSurface(null)}
+                onToggle={() => onSurfaceChange(null)}
               >
                 {openSurface === 'goals' && goals && goalProgress && onAddGoalTask && (
                   <ZoneGoalsToolshedPanel
