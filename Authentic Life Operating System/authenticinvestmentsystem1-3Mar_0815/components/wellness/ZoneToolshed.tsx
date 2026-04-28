@@ -41,6 +41,8 @@ export interface ZoneToolshedProps {
   goals?: any[];
   goalProgress?: Record<string, any>;
   onAddGoalTask?: (goalId: string) => void;
+  // Optional tap-to-detail handler for the Goals tile. Pass-through.
+  onGoalPress?: (goal: any) => void;
   // Journal tile (Toolshed Surfaces). Pass-through from wellness.tsx.
   onJournalEntryPress?: (entry: any) => void;
   // Open-surface state lifted to parent (1+6c). Cross-section
@@ -98,6 +100,7 @@ export function ZoneToolshed({
   goals,
   goalProgress,
   onAddGoalTask,
+  onGoalPress,
   onJournalEntryPress,
   openSurface,
   onSurfaceChange,
@@ -471,6 +474,7 @@ export function ZoneToolshed({
                     goals={goals}
                     goalProgress={goalProgress}
                     onAddGoalTask={onAddGoalTask}
+                    onGoalPress={onGoalPress}
                   />
                 )}
                 {openSurface === 'journal' && onJournalEntryPress && (

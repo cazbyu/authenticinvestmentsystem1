@@ -22,18 +22,21 @@ export interface ZoneGoalsToolshedPanelProps {
   goals: any[];
   goalProgress: Record<string, any>;
   onAddGoalTask: (goalId: string) => void;
+  onGoalPress?: (goal: any) => void;
 }
 
 export function ZoneGoalsToolshedPanel({
   goals,
   goalProgress,
   onAddGoalTask,
+  onGoalPress,
 }: ZoneGoalsToolshedPanelProps) {
   return (
     <ZoneGoalsSection
       goals={goals}
       goalProgress={goalProgress}
       onAddGoalTask={onAddGoalTask}
+      onGoalPress={onGoalPress}
     />
   );
 }
