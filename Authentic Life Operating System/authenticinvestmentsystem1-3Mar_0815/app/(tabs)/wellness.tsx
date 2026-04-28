@@ -756,6 +756,19 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                 domainId={selectedDomain.id}
                 zoneName={selectedDomain.name}
                 accentColor={getDomainColor(selectedDomain.name)}
+                goals={goals}
+                goalProgress={goalProgress}
+                onAddGoalTask={(goalId) => {
+                  setEditingTask({
+                    type: 'task',
+                    selectedGoalIds: [goalId],
+                    isGoal: true,
+                    selectedDomainIds: selectedDomain ? [selectedDomain.id] : [],
+                  } as any);
+                  setSelectedActivityConfig(null);
+                  setTaskFormVisible(true);
+                }}
+                onJournalEntryPress={handleJournalEntryPress}
               />
             </View>
           )}
