@@ -13,6 +13,11 @@ import { formatLocalDate } from '@/lib/dateUtils';
 import { TrackerCard, TrackerInstance } from './TrackerCard';
 import { AddTrackerModal } from './AddTrackerModal';
 import { TrackerDetailView } from './TrackerDetailView';
+import { CollapsiblePanel } from '@/components/common/CollapsiblePanel';
+import { Target, BookOpen, BarChart3 } from 'lucide-react-native';
+import { ZoneGoalsToolshedPanel } from './ZoneGoalsToolshedPanel';
+import { ZoneJournalPanel } from './ZoneJournalPanel';
+import { ZoneAnalyticsToolshedPanel } from './ZoneAnalyticsToolshedPanel';
 
 /**
  * ZoneToolshed — Minimalist Executive design system
@@ -24,6 +29,14 @@ export interface ZoneToolshedProps {
   domainId: string;
   zoneName: string;
   accentColor?: string;
+  // Goals tile (Toolshed Surfaces). Pass-through from wellness.tsx.
+  // Optional for backward compatibility; if any of these are missing,
+  // the Goals tile renders nothing in its panel body.
+  goals?: any[];
+  goalProgress?: Record<string, any>;
+  onAddGoalTask?: (goalId: string) => void;
+  // Journal tile (Toolshed Surfaces). Pass-through from wellness.tsx.
+  onJournalEntryPress?: (entry: any) => void;
 }
 
 const WELLNESS_ACCENT = '#16a34a';
@@ -71,6 +84,10 @@ export function ZoneToolshed({
   domainId,
   zoneName,
   accentColor = WELLNESS_ACCENT,
+  goals,
+  goalProgress,
+  onAddGoalTask,
+  onJournalEntryPress,
 }: ZoneToolshedProps) {
   const [userId, setUserId] = useState<string | null>(null);
   const [instances, setInstances] = useState<TrackerInstanceRow[]>([]);
@@ -89,6 +106,11 @@ export function ZoneToolshed({
 
   const [manageMode, setManageMode] = useState(false);
   const [inactiveRows, setInactiveRows] = useState<InactiveTrackerRow[]>([]);
+
+  // Surfaces section state (1+6b). Toolshed-internal; cross-section
+  // coordination with MY SPACE happens in 1+6c.
+  type SurfaceKey = 'goals' | 'journal' | 'analytics';
+  const [openSurface, setOpenSurface] = useState<SurfaceKey | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -363,6 +385,105 @@ export function ZoneToolshed({
         </View>
       )}
 
+      {/* Surfaces section (1+6b): Goals / Journal / Analytics tiles
+          with inline-expand panels. Hidden in manage-mode since
+          tools-management is tracker-domain work — Surfaces are
+          irrelevant there. */}
+      {!manageMode && (
+        <View style={styles.surfacesSection}>
+          <View style={styles.surfacesGrid}>
+            <Pressable
+              onPress={() =>
+                setOpenSurface(openSurface === 'goals' ? null : 'goals')
+              }
+              style={[
+                styles.surfaceTile,
+                openSurface === 'goals' && {
+                  borderColor: accentColor,
+                  borderWidth: 1.5,
+                },
+              ]}
+            >
+              <Target size={22} color={accentColor} />
+              <Text style={styles.surfaceTileName} numberOfLines={1}>Goals</Text>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                setOpenSurface(openSurface === 'journal' ? null : 'journal')
+              }
+              style={[
+                styles.surfaceTile,
+                openSurface === 'journal' && {
+                  borderColor: accentColor,
+                  borderWidth: 1.5,
+                },
+              ]}
+            >
+              <BookOpen size={22} color={accentColor} />
+              <Text style={styles.surfaceTileName} numberOfLines={1}>Journal</Text>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                setOpenSurface(openSurface === 'analytics' ? null : 'analytics')
+              }
+              style={[
+                styles.surfaceTile,
+                openSurface === 'analytics' && {
+                  borderColor: accentColor,
+                  borderWidth: 1.5,
+                },
+              ]}
+            >
+              <BarChart3 size={22} color={accentColor} />
+              <Text style={styles.surfaceTileName} numberOfLines={1}>Analytics</Text>
+            </Pressable>
+          </View>
+
+          {openSurface && (
+            <View style={styles.surfacePanelWrap}>
+              <CollapsiblePanel
+                title={
+                  openSurface === 'goals' ? 'Goals'
+                  : openSurface === 'journal' ? 'Journal'
+                  : 'Analytics'
+                }
+                icon={
+                  openSurface === 'goals'
+                    ? <Target size={18} color={accentColor} />
+                    : openSurface === 'journal'
+                    ? <BookOpen size={18} color={accentColor} />
+                    : <BarChart3 size={18} color={accentColor} />
+                }
+                accentColor={accentColor}
+                isOpen={true}
+                onToggle={() => setOpenSurface(null)}
+              >
+                {openSurface === 'goals' && goals && goalProgress && onAddGoalTask && (
+                  <ZoneGoalsToolshedPanel
+                    goals={goals}
+                    goalProgress={goalProgress}
+                    onAddGoalTask={onAddGoalTask}
+                  />
+                )}
+                {openSurface === 'journal' && onJournalEntryPress && (
+                  <ZoneJournalPanel
+                    domainId={domainId}
+                    zoneName={zoneName}
+                    onEntryPress={onJournalEntryPress}
+                  />
+                )}
+                {openSurface === 'analytics' && (
+                  <ZoneAnalyticsToolshedPanel
+                    domainId={domainId}
+                    zoneName={zoneName}
+                  />
+                )}
+              </CollapsiblePanel>
+            </View>
+          )}
+        </View>
+      )}
+
       <View style={styles.grid}>
         {instances.map(instance => {
           const lastLog = activityMap.get(instance.instance_id) ?? null;
@@ -451,6 +572,34 @@ const styles = StyleSheet.create({
   loadingWrap: {
     paddingVertical: 24,
     alignItems: 'center',
+  },
+  surfacesSection: {
+    marginBottom: 16,
+  },
+  surfacesGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  surfaceTile: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 6,
+    position: 'relative',
+  },
+  surfaceTileName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1f2937',
+    textAlign: 'center',
+  },
+  surfacePanelWrap: {
+    marginTop: 8,
   },
   grid: {
     flexDirection: 'row',
