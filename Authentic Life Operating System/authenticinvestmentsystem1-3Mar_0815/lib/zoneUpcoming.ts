@@ -6,13 +6,16 @@ import { formatLocalDate, toLocalISOString } from './dateUtils';
  * Physical-zone-landing's MY SPACE > Upcoming tile.
  *
  * Definitions (locked):
- *   - Tasks: mirrors the Dashboard Act tab's filter semantics —
- *     type='task', deleted_at IS NULL, parent_task_id IS NULL
- *     (top-level only), and status pending/in_progress OR
- *     completed-today (so today's checked-off items remain visible).
- *     NO due_date filter — past-due, no-date, and future-dated tasks
- *     all flow through if the status condition holds. Cancelled tasks
- *     are silently excluded by the status .or() clause.
+ *   - Tasks (post 1+6a-fix): type='task', deleted_at IS NULL,
+ *     parent_task_id IS NULL (top-level only), AND one of two clauses:
+ *     (a) status pending/in_progress AND (due_date IS NULL OR
+ *         due_date >= today) — today, future, or no-date active work
+ *     (b) status completed AND completed_at >= today's local
+ *         midnight — Act-tab-style "today's progress stays visible"
+ *     Past-due pending/in_progress tasks are EXCLUDED — they live in
+ *     Overdue (lib/zoneOverdue.ts) so the two panels stay strictly
+ *     disjoint. Cancelled / completed-not-today / deleted also
+ *     excluded.
  *   - Events: 0008-ap-commitments rows where date >= local-midnight
  *     today AND status != 'archived' (mirror Act tab).
  *
@@ -29,9 +32,11 @@ import { formatLocalDate, toLocalISOString } from './dateUtils';
  * owns its outer state-gate on abort.
  *
  * Pattern: two-step lookup (universal-domains-join filtered to parent_type,
- * then source table filtered by id IN list). Status filter chain mirrors
- * Dashboard Act tab's filter='all' branch (ActionsTableView.tsx:472-535)
- * for consistency — Upcoming = "actionable items in this zone."
+ * then source table filtered by id IN list). Status filter chain partially
+ * mirrors Dashboard Act tab's filter='all' branch (ActionsTableView.tsx:472-535)
+ * — same completed-today carve-out, but Upcoming additionally requires
+ * future-or-no-date for active tasks (Act admits all due_date <= period.end
+ * including past-due; we hand past-due to Overdue instead).
  */
 
 export interface ZoneUpcomingTask {
@@ -133,10 +138,19 @@ export async function fetchZoneUpcoming(
           .eq('type', 'task')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          // Status: pending OR in_progress OR completed-today.
-          // Mirror Act tab — cancelled tasks drop out via this filter.
-          // No due_date bound — past-due / no-date tasks pass through.
-          .or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`)
+          // Strict separation from Overdue (1+6a-fix):
+          //   - Branch 1: pending/in_progress AND (due_date IS NULL
+          //     OR due_date >= today) — today/future/no-date active work
+          //   - Branch 2: completed AND completed_at >= today's local
+          //     midnight — today's progress carve-out (Act-tab style)
+          //   - Past-due pending/in_progress tasks fail Branch 1's
+          //     due_date condition and are excluded; they live in
+          //     Overdue (lib/zoneOverdue.ts).
+          //   - Cancelled / completed-not-today drop out via Branch 2.
+          .or(
+            `and(or(due_date.is.null,due_date.gte.${today}),status.in.(pending,in_progress)),` +
+            `and(status.eq.completed,completed_at.gte.${todayStartISO})`
+          )
           .in('id', taskIds)
           .order('due_date', { ascending: true }),
     commitmentIds.length === 0
