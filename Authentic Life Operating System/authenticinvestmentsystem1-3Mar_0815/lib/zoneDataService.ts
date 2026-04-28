@@ -210,7 +210,12 @@ export async function fetchZoneIdeas(
  * `parent_type` in {'twelve_wk_goal', 'custom_goal'} and `domain_id`
  * matches, splits by parent_type, then fetches each goal table in
  * parallel with `status = 'active'`. Returns a unified array with a
- * `goal_type` discriminator on each row ('twelve_wk_goal' | 'custom_goal').
+ * `goal_type` discriminator on each row ('12week' | 'custom') — aligned
+ * with `useGoals`' UI-friendly form so consumers (GoalDetailView,
+ * GoalProgressCard subtitle label) gate identically to the Goals tab.
+ * The join-table `parent_type` filter on lines 232/241/242 still uses
+ * the DB form ('twelve_wk_goal' | 'custom_goal') — those are the
+ * join-table column values, not the in-memory discriminator.
  *
  * Bypasses `useGoals`' timeline-source filter (which would return only
  * one goal type based on the active timeline). Zone goals are considered
@@ -283,14 +288,15 @@ export async function fetchZoneGoals(
   if (customResult.error) throw customResult.error;
   if (abortSignal?.aborted) return [];
 
-  // Annotate with goal_type discriminator and unify
+  // Annotate with goal_type discriminator and unify. UI-friendly form
+  // ('12week' | 'custom') — see header comment for rationale.
   const twelveWk = (twelveWkResult.data ?? []).map(g => ({
     ...g,
-    goal_type: 'twelve_wk_goal' as const,
+    goal_type: '12week' as const,
   }));
   const custom = (customResult.data ?? []).map(g => ({
     ...g,
-    goal_type: 'custom_goal' as const,
+    goal_type: 'custom' as const,
   }));
 
   return [...twelveWk, ...custom];
