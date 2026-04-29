@@ -14,10 +14,11 @@ import { TrackerCard, TrackerInstance } from './TrackerCard';
 import { AddTrackerModal } from './AddTrackerModal';
 import { TrackerDetailView } from './TrackerDetailView';
 import { CollapsiblePanel } from '@/components/common/CollapsiblePanel';
-import { Target, BookOpen, BarChart3 } from 'lucide-react-native';
+import { Target, BookOpen, BarChart3, Compass } from 'lucide-react-native';
 import { ZoneGoalsToolshedPanel } from './ZoneGoalsToolshedPanel';
 import { ZoneJournalPanel } from './ZoneJournalPanel';
 import { ZoneAnalyticsToolshedPanel } from './ZoneAnalyticsToolshedPanel';
+import { fireComingSoonAlert } from '@/lib/comingSoonAlert';
 
 /**
  * ZoneToolshed — Minimalist Executive design system
@@ -417,6 +418,15 @@ export function ZoneToolshed({
             >
               <Target size={22} color={accentColor} />
               <Text style={styles.surfaceTileName} numberOfLines={1}>Goals</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => fireComingSoonAlert(zoneName)}
+              style={styles.surfaceTile}
+            >
+              <Compass size={22} color={accentColor} />
+              <Text style={styles.surfaceTileName} numberOfLines={1}>
+                North Star Questions
+              </Text>
             </Pressable>
             <Pressable
               onPress={() =>

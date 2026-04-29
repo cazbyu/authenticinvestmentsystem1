@@ -23,11 +23,10 @@ import { useTabReset } from '@/contexts/TabResetContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
-import { ZoneToolshed } from '@/components/wellness/ZoneToolshed';
+import { ZoneToolshed, SurfaceKey } from '@/components/wellness/ZoneToolshed';
 import { WellnessHubPage } from '@/components/wellness/WellnessHubPage';
 import { ZoneIdentityHeader } from '@/components/wellness/ZoneIdentityHeader';
 import { ZoneVisionCallout } from '@/components/wellness/ZoneVisionCallout';
-import { ZoneNorthStarPlaceholder } from '@/components/wellness/ZoneNorthStarPlaceholder';
 import { ZoneStatsRow } from '@/components/wellness/ZoneStatsRow';
 import { ZoneMySpaceSection } from '@/components/wellness/ZoneMySpaceSection';
 import { GoalDetailView } from '@/components/goals/GoalDetailView';
@@ -111,7 +110,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const [openMySpaceTile, setOpenMySpaceTile] =
     useState<'upcoming' | 'overdue' | 'idea' | null>(null);
   const [openToolshedSurface, setOpenToolshedSurface] =
-    useState<'goals' | 'journal' | 'analytics' | null>(null);
+    useState<SurfaceKey | null>(null);
 
   const fetchGoalsForDomain = useCallback(async (domainId: string) => {
     // Cancel any in-flight goal fetch
@@ -336,7 +335,7 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   );
 
   const handleToolshedSurfaceChange = useCallback(
-    (next: 'goals' | 'journal' | 'analytics' | null) => {
+    (next: SurfaceKey | null) => {
       if (next !== null) setOpenMySpaceTile(null);
       setOpenToolshedSurface(next);
     },
@@ -652,7 +651,6 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
                 userId={currentUserId}
               />
             )}
-            <ZoneNorthStarPlaceholder zoneName={selectedDomain.name} />
             {currentUserId && (
               <ZoneStatsRow
                 domainId={selectedDomain.id}
