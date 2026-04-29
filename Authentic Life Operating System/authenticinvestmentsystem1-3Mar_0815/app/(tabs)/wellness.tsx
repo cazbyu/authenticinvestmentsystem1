@@ -352,6 +352,9 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
 
       if (error) throw error;
 
+      // Notify subscribed panels (Overdue / Upcoming) to refetch.
+      eventBus.emit(EVENTS.TASK_UPDATED, { taskId });
+
       // Refresh score after task completion
       fetchAuthenticScoreLocal(true);
     } catch (error) {
@@ -371,6 +374,9 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         .eq('id', taskId);
 
       if (error) throw error;
+
+      // Notify subscribed panels (Overdue / Upcoming) to refetch.
+      eventBus.emit(EVENTS.TASK_DELETED, { taskId });
 
       // Refresh score after task deletion
       fetchAuthenticScoreLocal(true);
@@ -419,6 +425,9 @@ const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
         .eq('id', depositIdea.id);
 
       if (error) throw error;
+
+      // Notify subscribed panels (Idea Jar) to refetch.
+      eventBus.emit(EVENTS.DEPOSIT_IDEA_UPDATED);
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
