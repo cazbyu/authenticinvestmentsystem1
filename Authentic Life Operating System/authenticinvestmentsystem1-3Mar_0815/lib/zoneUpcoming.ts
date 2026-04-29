@@ -1,21 +1,21 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { formatLocalDate, toLocalISOString } from './dateUtils';
+import { formatLocalDate } from './dateUtils';
 
 /**
  * Zone upcoming service — actionable items + future events for the
- * Physical-zone-landing's MY SPACE > Upcoming tile.
+ * MY SPACE > Upcoming tile.
  *
  * Definitions (locked):
- *   - Tasks (post 1+6a-fix): type='task', deleted_at IS NULL,
- *     parent_task_id IS NULL (top-level only), AND one of two clauses:
- *     (a) status pending/in_progress AND (due_date IS NULL OR
- *         due_date >= today) — today, future, or no-date active work
- *     (b) status completed AND completed_at >= today's local
- *         midnight — Act-tab-style "today's progress stays visible"
+ *   - Tasks: type='task', deleted_at IS NULL, parent_task_id IS NULL
+ *     (top-level only), status IN ('pending','in_progress'), AND
+ *     (due_date IS NULL OR due_date >= today). Today/future/no-date
+ *     active work only.
+ *
  *     Past-due pending/in_progress tasks are EXCLUDED — they live in
  *     Overdue (lib/zoneOverdue.ts) so the two panels stay strictly
- *     disjoint. Cancelled / completed-not-today / deleted also
- *     excluded.
+ *     disjoint. Completed and cancelled tasks are EXCLUDED — completed
+ *     work belongs in Journal (B31 removed the prior completed-today
+ *     carve-out so Upcoming stays purely forward-looking).
  *
  *     Goal-tied tasks (post 1+6a-fix2): any task with a row in
  *     0008-ap-universal-goals-join (parent_type='task') is EXCLUDED,
@@ -31,20 +31,13 @@ import { formatLocalDate, toLocalISOString } from './dateUtils';
  * (parent_type='task' for tasks; parent_type='commitment' for commitments).
  *
  * `today` is local-midnight today (user's timezone) formatted as YYYY-MM-DD
- * via formatLocalDate (used for the events lower bound). For the task
- * status carve-out, todayStartISO is the local-midnight ISO timestamp
- * via toLocalISOString — same composition Act tab uses
- * (ActionsTableView.tsx:457-459).
+ * via formatLocalDate.
  *
  * abortSignal is advisory (Supabase HTTP is not cancellable); caller still
  * owns its outer state-gate on abort.
  *
  * Pattern: two-step lookup (universal-domains-join filtered to parent_type,
- * then source table filtered by id IN list). Status filter chain partially
- * mirrors Dashboard Act tab's filter='all' branch (ActionsTableView.tsx:472-535)
- * — same completed-today carve-out, but Upcoming additionally requires
- * future-or-no-date for active tasks (Act admits all due_date <= period.end
- * including past-due; we hand past-due to Overdue instead).
+ * then source table filtered by id IN list).
  */
 
 export interface ZoneUpcomingTask {
@@ -101,13 +94,6 @@ export async function fetchZoneUpcoming(
   signal?: AbortSignal,
 ): Promise<ZoneUpcomingResult> {
   const today = formatLocalDate(new Date());
-
-  // todayStartISO — local-midnight today as ISO timestamp. Used in the
-  // task status .or() clause to keep tasks completed today visible.
-  // Composition mirrors ActionsTableView.tsx:457-459 verbatim.
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartISO = toLocalISOString(todayStart);
 
   // 1. Resolve domain-scoped IDs for both source types in parallel.
   const [taskJoinRes, commitmentJoinRes] = await Promise.all([
@@ -168,19 +154,15 @@ export async function fetchZoneUpcoming(
           .eq('type', 'task')
           .is('deleted_at', null)
           .is('parent_task_id', null)
-          // Strict separation from Overdue (1+6a-fix):
-          //   - Branch 1: pending/in_progress AND (due_date IS NULL
-          //     OR due_date >= today) — today/future/no-date active work
-          //   - Branch 2: completed AND completed_at >= today's local
-          //     midnight — today's progress carve-out (Act-tab style)
-          //   - Past-due pending/in_progress tasks fail Branch 1's
-          //     due_date condition and are excluded; they live in
-          //     Overdue (lib/zoneOverdue.ts).
-          //   - Cancelled / completed-not-today drop out via Branch 2.
-          .or(
-            `and(or(due_date.is.null,due_date.gte.${today}),status.in.(pending,in_progress)),` +
-            `and(status.eq.completed,completed_at.gte.${todayStartISO})`
-          )
+          // Strict separation from Overdue + Journal (B31):
+          //   - pending/in_progress only — completed work belongs in
+          //     Journal, not in forward-looking panels.
+          //   - due_date IS NULL OR due_date >= today — past-due
+          //     active work fails this condition and lives in Overdue
+          //     (lib/zoneOverdue.ts).
+          //   - cancelled drops out via the status filter.
+          .in('status', ['pending', 'in_progress'])
+          .or(`due_date.is.null,due_date.gte.${today}`)
           .in('id', filteredTaskIds)
           .order('due_date', { ascending: true }),
     commitmentIds.length === 0
