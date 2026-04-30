@@ -1971,31 +1971,50 @@ export default function TaskEventForm({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* C-2: header rebuilt — type icon + title + subtitle on the left,
+          save button on the right. Inline type-picker chip below header
+          removed from the task/event layout (the reflection layout still
+          uses renderTypeSelector at its earlier invocation site). */}
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={onClose}>
-          <X size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {initialData?.id ? 'Edit' : 'New'} {
-              formData.type === 'reflection'
-                ? formData.reflectionMode === 'rose'
-                  ? 'Rose'
-                  : formData.reflectionMode === 'thorn'
-                    ? 'Thorn'
-                    : formData.reflectionMode === 'reflection'
-                      ? 'Reflection'
-                      : 'Deposit Idea'
-                : formData.type === 'depositIdea'
-                  ? 'Item'
-                  : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
-            }
-          </Text>
-          {isEditingCompletedTask && (
-            <View style={[styles.completedBadge, { backgroundColor: '#16a34a' }]}>
-              <Text style={styles.completedBadgeText}>✓ Completed</Text>
-            </View>
-          )}
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={onClose}>
+            <X size={24} color={colors.text} />
+          </TouchableOpacity>
+          <View style={[styles.headerIconContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Image
+              source={
+                formData.type === 'task' ? require('@/assets/images/task-list.png') :
+                formData.type === 'event' ? require('@/assets/images/calendar.png') :
+                require('@/assets/images/reflections-72.png')
+              }
+              style={styles.headerIcon}
+            />
+          </View>
+          <View style={styles.headerTitleBlock}>
+            <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+              {initialData?.id ? 'Edit' : 'New'} {
+                formData.type === 'reflection'
+                  ? formData.reflectionMode === 'rose'
+                    ? 'Rose'
+                    : formData.reflectionMode === 'thorn'
+                      ? 'Thorn'
+                      : formData.reflectionMode === 'reflection'
+                        ? 'Reflection'
+                        : 'Deposit Idea'
+                  : formData.type === 'depositIdea'
+                    ? 'Item'
+                    : formData.type.charAt(0).toUpperCase() + formData.type.slice(1)
+              }
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              Create or capture an action item
+            </Text>
+            {isEditingCompletedTask && (
+              <View style={[styles.completedBadge, { backgroundColor: '#16a34a' }]}>
+                <Text style={styles.completedBadgeText}>✓ Completed</Text>
+              </View>
+            )}
+          </View>
         </View>
         <TouchableOpacity
           style={[
@@ -2430,8 +2449,9 @@ export default function TaskEventForm({
                 />
               </View>
 
-              {/* Type Selector - only show if no config passed */}
-              {!config && renderTypeSelector()}
+              {/* C-2: type-picker chip removed from task/event layout — its icon + label
+                   now live in the header. Reflection layout still uses renderTypeSelector
+                   at the earlier invocation site. */}
             </>
           )}
 
@@ -3263,15 +3283,37 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
-  headerTitleContainer: {
+  headerLeft: {
     flex: 1,
-    alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  headerIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
     justifyContent: 'center',
-    gap: 4,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  headerIcon: {
+    width: 22,
+    height: 22,
+    resizeMode: 'contain',
+  },
+  headerTitleBlock: {
+    flex: 1,
+    paddingTop: 1,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  headerSubtitle: {
+    fontSize: 12.5,
+    marginTop: 3,
   },
   completedBadge: {
     paddingHorizontal: 8,
