@@ -1480,7 +1480,19 @@ export default function TaskEventForm({
           updated_at: toLocalISOString(new Date())
         } : {
           status: 'pending'
-        })
+        }),
+        // C-4: Capture mode override — when toggle is ON in create mode, save as completed.
+        // Locked decision #2: captured items live in 0008-ap-tasks (type='task' or 'event').
+        // Locked decision #3: recurrence is forcibly null in capture mode (defensive — UI
+        //   hides the dropdown but stale formData could leak).
+        // Locked decision #4: capture is create-only; this branch never fires in edit mode
+        //   because C-3 hides the toggle, but we gate explicitly anyway for safety.
+        ...(captureMode && mode === 'create' ? {
+          status: 'completed',
+          completed_at: toLocalISOString(new Date()),
+          recurrence_rule: null,
+          recurrence_end_date: null,
+        } : {}),
       };
 
       // Sanitize: Convert any empty strings to null for timestamp fields
@@ -1686,6 +1698,15 @@ export default function TaskEventForm({
           taskId: mainRecordId,
           type: formData.type,
         });
+        // C-4: When created via capture mode, also emit TASK_COMPLETED so Journal
+        // panels and other completion-listeners refetch (locked decision #7). Same
+        // refetch path that green-check-tap uses (B30 pattern).
+        if (captureMode && mode === 'create') {
+          eventBus.emit(EVENTS.TASK_COMPLETED, {
+            taskId: mainRecordId,
+            type: formData.type,
+          });
+        }
       }
 
       onSubmitSuccess();
