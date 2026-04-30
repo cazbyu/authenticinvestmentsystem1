@@ -231,9 +231,6 @@ export default function TaskEventForm({
   const [inlinePanel, setInlinePanel] = useState<'priority' | 'roles' | 'wellness' | 'goals' | 'notes' | 'delegate' | null>(null);
   const notesInputRef = useRef<TextInput>(null);
 
-  // Context banner for Speed Dial
-  const [showContextBanner, setShowContextBanner] = useState(true);
-  
   // Goal Mode (when a goal is selected + goalToggle true)
   const [goalMode, setGoalMode] = useState(false);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
@@ -391,9 +388,6 @@ export default function TaskEventForm({
         
         return { ...prev, ...updates };
       });
-      
-      // Show the context banner
-      setShowContextBanner(true);
     }
   }, [config, mode]);
 
@@ -1720,48 +1714,6 @@ export default function TaskEventForm({
     formData.selectedRoleIds.includes(kr.role_id)
   );
 
-  // ============================================
-  // NEW: Context Banner for Speed Dial
-  // ============================================
-  const renderContextBanner = () => {
-    // Only show if config is provided, we're in create mode, and banner not dismissed
-    if (!config || mode !== 'create' || !showContextBanner) {
-      return null;
-    }
-
-    return (
-      <View style={[
-        styles.contextBanner,
-        { 
-          backgroundColor: `${config.color}15`, // 15% opacity
-          borderColor: `${config.color}40`, // 40% opacity
-        }
-      ]}>
-        <View style={styles.contextBannerContent}>
-          <Image
-            source={config.imageSource}
-            style={styles.contextBannerIcon}
-            resizeMode="contain"
-          />
-          <View style={styles.contextBannerText}>
-            <Text style={[styles.contextBannerLabel, { color: config.color }]}>
-              {config.label}
-            </Text>
-            <Text style={[styles.contextBannerDescription, { color: colors.textSecondary }]}>
-              {config.description}
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.contextBannerDismiss}
-          onPress={() => setShowContextBanner(false)}
-        >
-          <X size={18} color={colors.textSecondary} />
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   const renderTypeSelector = () => (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>Type</Text>
@@ -2035,9 +1987,6 @@ export default function TaskEventForm({
 
       <ScrollView ref={scrollRef} style={styles.content}>
         <View style={styles.form}>
-          {/* Context Banner - Shows at top when coming from Speed Dial */}
-          {renderContextBanner()}
-
           {/* REFLECTION FORM LAYOUT */}
           {formData.type === 'reflection' && (
             <View style={styles.reflectionContainer}>
@@ -3393,40 +3342,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
-  },
-  // Context Banner Styles (Speed Dial)
-  contextBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 20,
-  },
-  contextBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  contextBannerIcon: {
-    width: 32,
-    height: 32,
-  },
-  contextBannerText: {
-    flex: 1,
-  },
-  contextBannerLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  contextBannerDescription: {
-    fontSize: 13,
-  },
-  contextBannerDismiss: {
-    padding: 4,
   },
   switchesRowWrapper: {
     width: '100%',
