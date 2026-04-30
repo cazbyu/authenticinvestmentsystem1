@@ -1,6 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { calculateAuthenticScoreForPeriod } from './taskUtils';
 import { formatLocalDate } from './dateUtils';
+import { computeStreak } from './zoneActivity';
+import {
+  fetchRoleActivity30Days,
+  fetchActivityDaySetForRoleStreak,
+} from './roleActivity';
 
 export interface RoleStatistics {
   completedDeposits: number;
@@ -515,102 +520,129 @@ export async function getDomainStatistics(
   }
 }
 
+/**
+ * R-1: 4-source upgrade. Was tasks-only pre-R-1 (single query against
+ * 0008-ap-tasks via 0008-ap-universal-roles-join). Now mirrors
+ * getLastActivityPerDomain's gold-standard pattern: tasks + reflections +
+ * depositIdeas + commitments, merged by max timestamp per role.
+ *
+ * Date semantics (locked):
+ *   - tasks         → completed_at (status='completed', not deleted)
+ *   - reflections   → created_at (archived=false)
+ *   - deposit-ideas → created_at (archived=false)
+ *   - commitments   → date (date <= today)
+ */
 export async function getLastActivityPerRole(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<Map<string, string | null>> {
-  try {
-    const { data: tasks, error: tasksError } = await supabase
-      .from('0008-ap-tasks')
-      .select('id, completed_at')
-      .eq('user_id', userId)
-      .eq('status', 'completed')
-      .is('deleted_at', null)
-      .not('completed_at', 'is', null);
+  const [taskMap, reflectionMap, depositIdeaMap, commitmentMap] = await Promise.all([
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-tasks',
+      'task',
+      'completed_at',
+      (q) => q
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .not('completed_at', 'is', null),
+      'role',
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-reflections',
+      'reflection',
+      'created_at',
+      (q) => q.eq('archived', false),
+      'role',
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-deposit-ideas',
+      'depositIdea',
+      'created_at',
+      (q) => q.eq('archived', false),
+      'role',
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-commitments',
+      'commitment',
+      'date',
+      (q) => q.lte('date', formatLocalDate(new Date())),
+      'role',
+    ),
+  ]);
 
-    if (tasksError) throw tasksError;
-    if (!tasks || tasks.length === 0) return new Map();
-
-    const taskCompletedAt = new Map<string, string>();
-    for (const task of tasks) {
-      if (task.completed_at) taskCompletedAt.set(task.id, task.completed_at);
-    }
-
-    const { data: joinData, error: joinError } = await supabase
-      .from('0008-ap-universal-roles-join')
-      .select('role_id, parent_id')
-      .eq('user_id', userId)
-      .eq('parent_type', 'task')
-      .in('parent_id', Array.from(taskCompletedAt.keys()));
-
-    if (joinError) throw joinError;
-    if (!joinData) return new Map();
-
-    const result = new Map<string, string | null>();
-    for (const row of joinData) {
-      if (!row.role_id) continue;
-      const completedAt = taskCompletedAt.get(row.parent_id);
-      if (!completedAt) continue;
-      const existing = result.get(row.role_id);
-      if (!existing || completedAt > existing) {
-        result.set(row.role_id, completedAt);
+  const merged = new Map<string, string | null>();
+  for (const src of [taskMap, reflectionMap, depositIdeaMap, commitmentMap]) {
+    for (const [roleId, ts] of src) {
+      const existing = merged.get(roleId);
+      if (!existing || (ts !== null && ts > existing)) {
+        merged.set(roleId, ts);
       }
     }
-
-    return result;
-  } catch (error) {
-    console.error('Error getting last activity per role:', error);
-    return new Map();
   }
+  return merged;
 }
 
+/**
+ * R-1: 4-source upgrade. Same pattern as getLastActivityPerRole, scope='key_relationship'.
+ * Per universal-key-relationships-join production data: KRs have task,
+ * reflection, commitment, depositIdea joins (no twelve_wk_goal / 1y_goal).
+ */
 export async function getLastActivityPerKR(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<Map<string, string | null>> {
-  try {
-    const { data: tasks, error: tasksError } = await supabase
-      .from('0008-ap-tasks')
-      .select('id, completed_at')
-      .eq('user_id', userId)
-      .eq('status', 'completed')
-      .is('deleted_at', null)
-      .not('completed_at', 'is', null);
+  const [taskMap, reflectionMap, depositIdeaMap, commitmentMap] = await Promise.all([
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-tasks',
+      'task',
+      'completed_at',
+      (q) => q
+        .eq('status', 'completed')
+        .is('deleted_at', null)
+        .not('completed_at', 'is', null),
+      'key_relationship',
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-reflections',
+      'reflection',
+      'created_at',
+      (q) => q.eq('archived', false),
+      'key_relationship',
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-deposit-ideas',
+      'depositIdea',
+      'created_at',
+      (q) => q.eq('archived', false),
+      'key_relationship',
+    ),
+    fetchLastActivityForSource(
+      supabase, userId,
+      '0008-ap-commitments',
+      'commitment',
+      'date',
+      (q) => q.lte('date', formatLocalDate(new Date())),
+      'key_relationship',
+    ),
+  ]);
 
-    if (tasksError) throw tasksError;
-    if (!tasks || tasks.length === 0) return new Map();
-
-    const taskCompletedAt = new Map<string, string>();
-    for (const task of tasks) {
-      if (task.completed_at) taskCompletedAt.set(task.id, task.completed_at);
-    }
-
-    const { data: joinData, error: joinError } = await supabase
-      .from('0008-ap-universal-key-relationships-join')
-      .select('key_relationship_id, parent_id')
-      .eq('user_id', userId)
-      .eq('parent_type', 'task')
-      .in('parent_id', Array.from(taskCompletedAt.keys()));
-
-    if (joinError) throw joinError;
-    if (!joinData) return new Map();
-
-    const result = new Map<string, string | null>();
-    for (const row of joinData) {
-      if (!row.key_relationship_id) continue;
-      const completedAt = taskCompletedAt.get(row.parent_id);
-      if (!completedAt) continue;
-      const existing = result.get(row.key_relationship_id);
-      if (!existing || completedAt > existing) {
-        result.set(row.key_relationship_id, completedAt);
+  const merged = new Map<string, string | null>();
+  for (const src of [taskMap, reflectionMap, depositIdeaMap, commitmentMap]) {
+    for (const [krId, ts] of src) {
+      const existing = merged.get(krId);
+      if (!existing || (ts !== null && ts > existing)) {
+        merged.set(krId, ts);
       }
     }
-
-    return result;
-  } catch (error) {
-    console.error('Error getting last activity per key relationship:', error);
-    return new Map();
   }
+  return merged;
 }
 
 export async function fetchRoleLinkedGoalIds(
@@ -698,6 +730,18 @@ export async function getLastActivityPerDomain(
   return merged;
 }
 
+/**
+ * Fan-out helper for last-activity-per-scope queries.
+ *
+ * R-1: generalized to accept a scopeType discriminator. Default 'domain'
+ * preserves existing callers (getLastActivityPerDomain). New role and
+ * key-relationship variants (getLastActivityPerRole, getLastActivityPerKR)
+ * pass scopeType='role' or 'key_relationship' respectively.
+ *
+ * The returned Map's keys are the scope-discriminated IDs (domain_id /
+ * role_id / key_relationship_id). Values are the latest timestamp per
+ * scope.
+ */
 async function fetchLastActivityForSource(
   supabase: SupabaseClient,
   userId: string,
@@ -705,7 +749,16 @@ async function fetchLastActivityForSource(
   parentType: string,
   timestampField: string,
   applyFilter: (q: any) => any,
+  scopeType: 'role' | 'domain' | 'key_relationship' = 'domain',
 ): Promise<Map<string, string | null>> {
+  const joinTable =
+    scopeType === 'role' ? '0008-ap-universal-roles-join' :
+    scopeType === 'domain' ? '0008-ap-universal-domains-join' :
+    '0008-ap-universal-key-relationships-join';
+  const idField =
+    scopeType === 'role' ? 'role_id' :
+    scopeType === 'domain' ? 'domain_id' :
+    'key_relationship_id';
   try {
     let sourceQuery = supabase
       .from(sourceTable)
@@ -725,8 +778,8 @@ async function fetchLastActivityForSource(
     if (tsById.size === 0) return new Map();
 
     const { data: joinData, error: joinError } = await supabase
-      .from('0008-ap-universal-domains-join')
-      .select('domain_id, parent_id')
+      .from(joinTable)
+      .select(`${idField}, parent_id`)
       .eq('user_id', userId)
       .eq('parent_type', parentType)
       .in('parent_id', Array.from(tsById.keys()));
@@ -734,18 +787,19 @@ async function fetchLastActivityForSource(
     if (!joinData) return new Map();
 
     const result = new Map<string, string | null>();
-    for (const row of joinData) {
-      if (!row.domain_id) continue;
+    for (const row of joinData as any[]) {
+      const scopeId = row[idField];
+      if (!scopeId) continue;
       const ts = tsById.get(row.parent_id);
       if (!ts) continue;
-      const existing = result.get(row.domain_id);
+      const existing = result.get(scopeId);
       if (!existing || ts > existing) {
-        result.set(row.domain_id, ts);
+        result.set(scopeId, ts);
       }
     }
     return result;
   } catch (error) {
-    console.error(`Error getting last activity from ${sourceTable}:`, error);
+    console.error(`Error getting last activity from ${sourceTable} (scope=${scopeType}):`, error);
     return new Map();
   }
 }
@@ -894,4 +948,113 @@ async function fetchDepositCountsForSource(
     console.error(`Error getting deposit counts from ${sourceTable}:`, error);
     return new Map();
   }
+}
+
+/**
+ * R-1: Day Streak for a role.
+ *
+ * Composes fetchActivityDaySetForRoleStreak (lib/roleActivity.ts) with
+ * computeStreak (lib/zoneActivity.ts — already scope-agnostic, reused as-is).
+ * Returns the count of consecutive days back from today with at least one
+ * role-tagged deposit across all 4 sources.
+ *
+ * Mirrors lib/zoneActivity.ts's streak composition for parity with wellness.
+ */
+export async function getRoleStreak(
+  supabase: SupabaseClient,
+  roleId: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  const days = await fetchActivityDaySetForRoleStreak(supabase, roleId, userId, 365, signal);
+  if (signal?.aborted) return 0;
+  return computeStreak(days);
+}
+
+/**
+ * R-1: Last 30 day actions count for a role.
+ *
+ * Returns the count of role-tagged deposits across 4 sources within the
+ * last 30 days (inclusive of today). Thin wrapper over
+ * fetchRoleActivity30Days's .count field.
+ */
+export async function getRoleActionCount30d(
+  supabase: SupabaseClient,
+  roleId: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  const result = await fetchRoleActivity30Days(supabase, roleId, userId, signal);
+  if (signal?.aborted) return 0;
+  return result.count;
+}
+
+/**
+ * R-1: Active goals count for a role.
+ *
+ * Counts 12wk + custom goals linked to this role with status='active' AND
+ * today within the goal's date window. 1y goals are excluded — per the
+ * Spine, 1y goals are planning containers (tasks never link to 1y), and
+ * the Stats Row tile counts only "actionable" goals consistent with
+ * fetchZoneGoals semantics.
+ *
+ * Mirrors fetchZoneGoals's date-gating logic (lib/zoneDataService.ts:259-285).
+ */
+export async function getRoleActiveGoalsCount(
+  supabase: SupabaseClient,
+  roleId: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  // Get goal IDs tagged to this role, split by goal type
+  const { data: roleJoinData, error: roleJoinError } = await supabase
+    .from('0008-ap-universal-roles-join')
+    .select('parent_id, parent_type')
+    .eq('user_id', userId)
+    .eq('role_id', roleId)
+    .in('parent_type', ['twelve_wk_goal', 'custom_goal']);
+
+  if (roleJoinError) throw roleJoinError;
+  if (signal?.aborted) return 0;
+
+  const twelveWkIds: string[] = [];
+  const customIds: string[] = [];
+  for (const row of roleJoinData ?? []) {
+    if (row.parent_type === 'twelve_wk_goal') twelveWkIds.push(row.parent_id);
+    else if (row.parent_type === 'custom_goal') customIds.push(row.parent_id);
+  }
+
+  if (twelveWkIds.length === 0 && customIds.length === 0) return 0;
+
+  // Date-gate to current cycle: status='active' AND today within window.
+  const todayStr = formatLocalDate(new Date());
+
+  const [twelveWkResult, customResult] = await Promise.all([
+    twelveWkIds.length
+      ? supabase
+          .from('0008-ap-goals-12wk')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .lte('start_date', todayStr)
+          .gte('end_date', todayStr)
+          .in('id', twelveWkIds)
+      : { count: 0, error: null },
+    customIds.length
+      ? supabase
+          .from('0008-ap-goals-custom')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .lte('start_date', todayStr)
+          .gte('end_date', todayStr)
+          .in('id', customIds)
+      : { count: 0, error: null },
+  ]);
+
+  if (twelveWkResult.error) throw twelveWkResult.error;
+  if (customResult.error) throw customResult.error;
+  if (signal?.aborted) return 0;
+
+  return (twelveWkResult.count ?? 0) + (customResult.count ?? 0);
 }

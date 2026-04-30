@@ -343,3 +343,160 @@ export async function fetchZoneGoalsProgress(
   }
   return map;
 }
+
+/**
+ * R-1: Fetch active deposit ideas tagged to a role. Sibling of fetchZoneIdeas.
+ * Mirrors filter shape: archived=false, is_active=true, activated_task_id IS NULL.
+ */
+export async function fetchRoleIdeas(
+  supabase: SupabaseClient,
+  roleId: string,
+  userId: string,
+  abortSignal?: AbortSignal,
+): Promise<any[]> {
+  const { data: roleJoinData, error: roleJoinError } = await supabase
+    .from('0008-ap-universal-roles-join')
+    .select('parent_id')
+    .eq('parent_type', 'depositIdea')
+    .eq('role_id', roleId);
+
+  if (roleJoinError) throw roleJoinError;
+
+  const roleDepositIdeaIds = roleJoinData?.map(rj => rj.parent_id) || [];
+
+  if (roleDepositIdeaIds.length === 0) return [];
+
+  const { data: depositIdeasData, error: depositIdeasError } = await supabase
+    .from('0008-ap-deposit-ideas')
+    .select('*')
+    .eq('user_id', userId)
+    .in('id', roleDepositIdeaIds)
+    .eq('archived', false)
+    .eq('is_active', true)
+    .is('activated_task_id', null);
+
+  if (depositIdeasError) throw depositIdeasError;
+  if (abortSignal?.aborted) return [];
+
+  // Fetch enrichment joins (mirrors fetchZoneIdeas pattern).
+  let rolesData: any[] = [];
+  let domainsData: any[] = [];
+  let krData: any[] = [];
+  let notesData: any[] = [];
+
+  if (depositIdeasData && depositIdeasData.length > 0) {
+    const depositIdeaIds = depositIdeasData.map(di => di.id);
+
+    const [
+      { data: rolesDataResult, error: rolesError },
+      { data: domainsDataResult, error: domainsError },
+      { data: krDataResult, error: krError },
+      { data: notesDataResult, error: notesError }
+    ] = await Promise.all([
+      supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+      supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+      supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+      supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
+    ]);
+
+    if (rolesError) throw rolesError;
+    if (domainsError) throw domainsError;
+    if (krError) throw krError;
+    if (notesError) throw notesError;
+
+    rolesData = rolesDataResult || [];
+    domainsData = domainsDataResult || [];
+    krData = krDataResult || [];
+    notesData = notesDataResult || [];
+  }
+
+  if (abortSignal?.aborted) return [];
+
+  return (depositIdeasData || []).map(di => ({
+    ...di,
+    roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
+    domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
+    keyRelationships: krData?.filter(kr => kr.parent_id === di.id).map(kr => kr.key_relationship).filter(Boolean) || [],
+    has_notes: notesData?.some(n => n.parent_id === di.id),
+    has_attachments: false,
+  }));
+}
+
+/**
+ * R-1: Fetch active goals (12wk + custom) tagged to a role. Sibling of fetchZoneGoals.
+ *
+ * Annotates each goal with goal_type discriminator ('12week' | 'custom') in UI form.
+ * 1y goals excluded — per the Spine, 1y goals are planning containers (tasks never
+ * link to 1y), and the role-side Goals surface counts only "actionable" goals
+ * consistent with fetchZoneGoals semantics.
+ *
+ * Bypasses useGoals' timeline-source filter — role goals are independent of
+ * timeline-source selection (same locked decision as zone goals).
+ *
+ * Throws on query error. abortSignal is advisory.
+ */
+export async function fetchRoleGoals(
+  supabase: SupabaseClient,
+  roleId: string,
+  userId: string,
+  abortSignal?: AbortSignal,
+): Promise<any[]> {
+  const { data: roleJoinData, error: roleJoinError } = await supabase
+    .from('0008-ap-universal-roles-join')
+    .select('parent_id, parent_type')
+    .eq('user_id', userId)
+    .eq('role_id', roleId)
+    .in('parent_type', ['twelve_wk_goal', 'custom_goal']);
+
+  if (roleJoinError) throw roleJoinError;
+  if (abortSignal?.aborted) return [];
+
+  const twelveWkIds: string[] = [];
+  const customIds: string[] = [];
+  for (const row of roleJoinData ?? []) {
+    if (row.parent_type === 'twelve_wk_goal') twelveWkIds.push(row.parent_id);
+    else if (row.parent_type === 'custom_goal') customIds.push(row.parent_id);
+  }
+
+  if (twelveWkIds.length === 0 && customIds.length === 0) return [];
+
+  const todayStr = formatLocalDate(new Date());
+
+  const [twelveWkResult, customResult] = await Promise.all([
+    twelveWkIds.length
+      ? supabase
+          .from('0008-ap-goals-12wk')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .lte('start_date', todayStr)
+          .gte('end_date', todayStr)
+          .in('id', twelveWkIds)
+      : { data: [] as any[], error: null },
+    customIds.length
+      ? supabase
+          .from('0008-ap-goals-custom')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .lte('start_date', todayStr)
+          .gte('end_date', todayStr)
+          .in('id', customIds)
+      : { data: [] as any[], error: null },
+  ]);
+
+  if (twelveWkResult.error) throw twelveWkResult.error;
+  if (customResult.error) throw customResult.error;
+  if (abortSignal?.aborted) return [];
+
+  const twelveWk = (twelveWkResult.data ?? []).map(g => ({
+    ...g,
+    goal_type: '12week' as const,
+  }));
+  const custom = (customResult.data ?? []).map(g => ({
+    ...g,
+    goal_type: 'custom' as const,
+  }));
+
+  return [...twelveWk, ...custom];
+}
