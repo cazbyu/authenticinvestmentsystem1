@@ -14,7 +14,7 @@ import {
   Image,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp, Flag, FileText, UserPlus, User, Zap, Star, Target, Heart } from 'lucide-react-native';
+import { X, Calendar as CalendarIcon, Repeat, Paperclip, Image as ImageIcon, File, ChevronDown, ChevronUp, Flag, FileText, UserPlus, User, Zap, Star, Target, Heart, Check } from 'lucide-react-native';
 import { RoleIcon, WellnessIcon, GoalIcon } from '@/components/icons/CustomIcons';
 import CommitmentEnrichmentModal from '@/components/calendar/CommitmentEnrichmentModal';
 import { EnrichmentChip, chipWrapStyle, ENRICHMENT_CHIP_COLORS } from '@/components/common/EnrichmentChip';
@@ -230,6 +230,10 @@ export default function TaskEventForm({
   // Inline panel shown below the enrichment icon row in create mode
   const [inlinePanel, setInlinePanel] = useState<'priority' | 'roles' | 'wellness' | 'goals' | 'notes' | 'delegate' | null>(null);
   const notesInputRef = useRef<TextInput>(null);
+
+  // C-3: Capture mode — when ON, save creates a completed task/event (C-4 wires save behavior).
+  // Hidden in edit mode (capture is create-only); only renders for task/event types.
+  const [captureMode, setCaptureMode] = useState(false);
 
   // Goal Mode (when a goal is selected + goalToggle true)
   const [goalMode, setGoalMode] = useState(false);
@@ -1971,7 +1975,7 @@ export default function TaskEventForm({
         <TouchableOpacity
           style={[
             styles.saveButton,
-            { backgroundColor: colors.primary },
+            { backgroundColor: captureMode ? '#059669' : colors.primary },
             (formData.type !== 'reflection' && !formData.title.trim()) || saving ? { backgroundColor: colors.textSecondary } : null
           ]}
           onPress={handleSubmit}
@@ -2397,6 +2401,57 @@ export default function TaskEventForm({
                   placeholderTextColor={colors.textSecondary}
                 />
               </View>
+
+              {/* C-3: Capture mode toggle. Visible only in create mode (capture is
+                   create-only — locked decision #4). Tap toggles captureMode state;
+                   when ON, save (C-4) will create a completed task/event row. */}
+              {mode === 'create' && (
+                <TouchableOpacity
+                  style={[
+                    styles.captureToggle,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    captureMode && styles.captureToggleActive,
+                  ]}
+                  onPress={() => {
+                    const next = !captureMode;
+                    setCaptureMode(next);
+                    // Locked decision #10: flip date default to today when entering capture mode.
+                    // Also reset followUpEnabled defensively — Follow Up section hides when
+                    // captureMode is ON; this prevents stale validation if user had previously
+                    // toggled Follow Up ON before tapping capture.
+                    if (next) {
+                      const today = formatLocalDate(new Date());
+                      setFormData(prev => ({
+                        ...prev,
+                        followUpEnabled: false,
+                        ...(prev.type === 'task' ? { dueDate: today } : {}),
+                        ...(prev.type === 'event' ? { startDate: today } : {}),
+                      }));
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.captureCheckbox, { borderColor: colors.border }, captureMode && styles.captureCheckboxActive]}>
+                    {captureMode && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                  </View>
+                  <View style={styles.captureToggleText}>
+                    <Text style={[
+                      styles.captureToggleLabel,
+                      { color: colors.text },
+                      captureMode && styles.captureToggleLabelActive,
+                    ]}>
+                      Capture as already complete
+                    </Text>
+                    <Text style={[
+                      styles.captureToggleSub,
+                      { color: colors.textSecondary },
+                      captureMode && styles.captureToggleSubActive,
+                    ]}>
+                      Logging something that already happened
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
 
               {/* C-2: type-picker chip removed from task/event layout — its icon + label
                    now live in the header. Reflection layout still uses renderTypeSelector
@@ -2925,8 +2980,10 @@ export default function TaskEventForm({
             </View>
           )}
 
-          {/* Google Calendar-style Recurrence Dropdown (always visible for tasks and events when Goal is OFF) */}
-          {!formData.isGoal && (formData.type === 'task' || formData.type === 'event') && (
+          {/* Google Calendar-style Recurrence Dropdown (always visible for tasks and events when Goal is OFF).
+               C-3: hidden when captureMode is ON — locked decision #3 (capture × recurrence
+               disabled to avoid breaking v_tasks_with_recurrence_expanded semantics). */}
+          {!formData.isGoal && !captureMode && (formData.type === 'task' || formData.type === 'event') && (
             <View style={styles.field}>
               <RecurrenceDropdown
                 value={formData.recurrenceRule}
@@ -2954,8 +3011,9 @@ export default function TaskEventForm({
             </View>
           )}
 
-          {/* Follow Up toggle - Only for task and event types */}
-          {(formData.type === 'task' || formData.type === 'event') && (
+          {/* Follow Up toggle - Only for task and event types.
+               C-3: hidden when captureMode is ON. */}
+          {(formData.type === 'task' || formData.type === 'event') && !captureMode && (
             <View style={[styles.switchesRowWrapper, isMobile && styles.switchesRowWrapperMobile]}>
               <View style={[styles.switchesRow, isMobile && styles.switchesRowMobile]}>
                 {renderSwitchField('Follow Up', formData.followUpEnabled, (value) => setFormData(prev => ({ ...prev, followUpEnabled: value })))}
@@ -2963,8 +3021,9 @@ export default function TaskEventForm({
             </View>
           )}
 
-          {/* Follow Up Date/Time (when enabled) */}
-          {(formData.type === 'task' || formData.type === 'event') && formData.followUpEnabled && (
+          {/* Follow Up Date/Time (when enabled).
+               C-3: hidden when captureMode is ON. */}
+          {(formData.type === 'task' || formData.type === 'event') && formData.followUpEnabled && !captureMode && (
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.text }]}>Follow Up Date & Time</Text>
               <View style={styles.dateTimeRow}>
@@ -3283,6 +3342,49 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  // C-3: Capture mode toggle styles
+  captureToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  captureToggleActive: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#059669',
+  },
+  captureCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureCheckboxActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  captureToggleText: {
+    flex: 1,
+  },
+  captureToggleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  captureToggleSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  captureToggleLabelActive: {
+    color: '#065f46',
+  },
+  captureToggleSubActive: {
+    color: '#047857',
   },
   content: {
     flex: 1,
