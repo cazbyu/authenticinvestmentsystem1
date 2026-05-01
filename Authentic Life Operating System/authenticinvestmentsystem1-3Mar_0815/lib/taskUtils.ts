@@ -141,10 +141,16 @@ export async function calculateAuthenticScore(
       const taskIds = tasksData.map(t => t.id);
 
       // Get alignment data
+      // B41-narrow: predeclare with any[] annotation to suppress
+      // ParserError on subsequent body reads. Pattern from zoneDataService.ts.
+      let rolesData: any[] = [];
+      let domainsData: any[] = [];
+      let goalsData: any[] = [];
+
       const [
-        { data: rolesData },
-        { data: domainsData },
-        { data: goalsData }
+        { data: rolesDataResult },
+        { data: domainsDataResult },
+        { data: goalsDataResult }
       ] = await Promise.all([
         supabase
           .from('0008-ap-universal-roles-join')
@@ -162,6 +168,10 @@ export async function calculateAuthenticScore(
           .in('parent_id', taskIds)
           .eq('parent_type', 'task'),
       ]);
+
+      rolesData = rolesDataResult || [];
+      domainsData = domainsDataResult || [];
+      goalsData = goalsDataResult || [];
 
       const goalsById = await fetchGoalsForJoinRows(supabase, goalsData || []);
 
@@ -335,10 +345,16 @@ export async function calculateAuthenticScoreForRole(
     const taskIds = tasksData.map(t => t.id);
 
     // 2. Roles + Domains + Goals via join tables
+    // B41-narrow: predeclare with any[] annotation to suppress
+    // ParserError on subsequent body reads. Pattern from zoneDataService.ts.
+    let rolesData: any[] = [];
+    let domainsData: any[] = [];
+    let goalsData: any[] = [];
+
     const [
-      { data: rolesData, error: rolesErr },
-      { data: domainsData, error: domainsErr },
-      { data: goalsData, error: goalsErr }
+      { data: rolesDataResult, error: rolesErr },
+      { data: domainsDataResult, error: domainsErr },
+      { data: goalsDataResult, error: goalsErr }
     ] = await Promise.all([
         supabase
           .from('0008-ap-universal-roles-join')
@@ -360,6 +376,10 @@ export async function calculateAuthenticScoreForRole(
     if (rolesErr) throw rolesErr;
     if (domainsErr) throw domainsErr;
     if (goalsErr) throw goalsErr;
+
+    rolesData = rolesDataResult || [];
+    domainsData = domainsDataResult || [];
+    goalsData = goalsDataResult || [];
 
     const goalsById = await fetchGoalsForJoinRows(supabase, goalsData || []);
 
@@ -439,10 +459,16 @@ export async function calculateAuthenticScoreForDomain(
     const taskIds = tasksData.map(t => t.id);
 
     // 2. Roles + Domains + Goals via join tables
+    // B41-narrow: predeclare with any[] annotation to suppress
+    // ParserError on subsequent body reads. Pattern from zoneDataService.ts.
+    let rolesData: any[] = [];
+    let domainsData: any[] = [];
+    let goalsData: any[] = [];
+
     const [
-      { data: rolesData, error: rolesErr },
-      { data: domainsData, error: domainsErr },
-      { data: goalsData, error: goalsErr }
+      { data: rolesDataResult, error: rolesErr },
+      { data: domainsDataResult, error: domainsErr },
+      { data: goalsDataResult, error: goalsErr }
     ] = await Promise.all([
         supabase
           .from('0008-ap-universal-roles-join')
@@ -464,6 +490,10 @@ export async function calculateAuthenticScoreForDomain(
     if (rolesErr) throw rolesErr;
     if (domainsErr) throw domainsErr;
     if (goalsErr) throw goalsErr;
+
+    rolesData = rolesDataResult || [];
+    domainsData = domainsDataResult || [];
+    goalsData = goalsDataResult || [];
 
     const goalsById = await fetchGoalsForJoinRows(supabase, goalsData || []);
 
@@ -885,11 +915,18 @@ export async function calculateAuthenticScoreForPeriod(
     const taskIds = tasksData.map(t => t.id);
 
     // 2. Roles + Domains + Key Relationships + Goals via join tables
+    // B41-narrow: predeclare with any[] annotation to suppress
+    // ParserError on subsequent body reads. Pattern from zoneDataService.ts.
+    let rolesData: any[] = [];
+    let domainsData: any[] = [];
+    let keyRelsData: any[] = [];
+    let goalsData: any[] = [];
+
     const [
-      { data: rolesData, error: rolesErr },
-      { data: domainsData, error: domainsErr },
-      { data: keyRelsData, error: keyRelsErr },
-      { data: goalsData, error: goalsErr }
+      { data: rolesDataResult, error: rolesErr },
+      { data: domainsDataResult, error: domainsErr },
+      { data: keyRelsDataResult, error: keyRelsErr },
+      { data: goalsDataResult, error: goalsErr }
     ] = await Promise.all([
       supabase
         .from('0008-ap-universal-roles-join')
@@ -917,6 +954,11 @@ export async function calculateAuthenticScoreForPeriod(
     if (domainsErr) throw domainsErr;
     if (keyRelsErr) throw keyRelsErr;
     if (goalsErr) throw goalsErr;
+
+    rolesData = rolesDataResult || [];
+    domainsData = domainsDataResult || [];
+    keyRelsData = keyRelsDataResult || [];
+    goalsData = goalsDataResult || [];
 
     const goalsById = await fetchGoalsForJoinRows(supabase, goalsData || []);
 
