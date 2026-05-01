@@ -35,6 +35,10 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
 import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { RoleBankHub } from '@/components/roles/RoleBankHub';
+import { RoleIdentityHeader } from '@/components/roles/RoleIdentityHeader';
+import { RoleStatsRow } from '@/components/roles/RoleStatsRow';
+import { RoleMySpaceSection } from '@/components/roles/RoleMySpaceSection';
+import { RoleToolshed } from '@/components/roles/RoleToolshed';
 import { KRTile } from '@/components/common/KRTile';
 import { VisionBlock } from '@/components/common/VisionBlock';
 import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR } from '@/lib/roleStatistics';
@@ -112,7 +116,7 @@ const { headerColor } = useHeaderColor();
   const [isCalculatingScore, setIsCalculatingScore] = useState(false);
   const [isLoadingRole, setIsLoadingRole] = useState(false);
   const [periodScore, setPeriodScore] = useState<number | undefined>(undefined);
-  const [journalDateRange, setJournalDateRange] = useState<'week' | 'month' | 'all'>('week');
+  const [journalDateRange, setJournalDateRange] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isWebMenuVisible, setIsWebMenuVisible] = useState(false);
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
@@ -140,15 +144,11 @@ const { headerColor } = useHeaderColor();
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
 
-  // R-5a: Goals are now fetched directly via fetchRoleGoals (R-1 sibling
-  // of fetchZoneGoals). Owned by roles.tsx and passed down to R-3/R-4.
-  // The useGoals hook + fetchRoleLinkedGoalIds 2-step chain has been
-  // collapsed into a single fetcher that already filters by role.
-  // back-compat alias `roleLinkedTwelveWeekGoals` keeps the legacy 4-tab
-  // JSX rendering until R-5b mounts the new components and R-5c removes
-  // the safety-net code paths.
+  // R-5b: goals fed directly to RoleToolshed.goals + RoleGoalsToolshedPanel.
+  // Filled by fetchGoalsForRole (line 283) on selectedRole change. The
+  // R-5a back-compat alias `roleLinkedTwelveWeekGoals` died with the
+  // 12-Week Goals strip in this commit.
   const [goals, setGoals] = useState<any[]>([]);
-  const roleLinkedTwelveWeekGoals = goals;
 
   // Goal progress state
   const [goalProgress, setGoalProgress] = useState<Record<string, GoalEffortProgress>>({});
@@ -172,7 +172,14 @@ const { headerColor } = useHeaderColor();
     return { type: 'key_relationship' as const, id: selectedKR.id, name: selectedKR.name };
   }, [selectedKR?.id, selectedKR?.name, selectedRole?.id]);
 
-  const calculatePeriodScore = useCallback(async (dateRange: 'week' | 'month' | 'all', scopeType: 'role' | 'key_relationship', scopeId: string) => {
+  const calculatePeriodScore = useCallback(async (dateRange: 'today' | 'week' | 'month' | 'all', scopeType: 'role' | 'key_relationship', scopeId: string) => {
+    // R-5b Edit 0: 'today' is supported by JournalView's period selector but
+    // calculateAuthenticScoreForPeriod (taskUtils) only accepts 'week'|'month'|'all'.
+    // Skip the score calc rather than crash; UI shows undefined.
+    if (dateRange === 'today') {
+      setPeriodScore(undefined);
+      return;
+    }
     try {
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -191,7 +198,7 @@ const { headerColor } = useHeaderColor();
     }
   }, []);
 
-  const handleJournalDateRangeChange = useCallback((dateRange: 'week' | 'month' | 'all') => {
+  const handleJournalDateRangeChange = useCallback((dateRange: 'today' | 'week' | 'month' | 'all') => {
     setJournalDateRange(dateRange);
     if (selectedRole) {
       calculatePeriodScore(dateRange, 'role', selectedRole.id);
@@ -1587,21 +1594,6 @@ const { headerColor } = useHeaderColor();
               </View>
             </View>
           </View>
-          <View style={styles.customHeaderBottom}>
-            <View style={styles.customToggleGroup}>
-              {(['deposits', 'ideas', 'journal', 'analytics'] as const).map((view) => (
-                <TouchableOpacity
-                  key={view}
-                  style={[styles.customToggleButton, activeView === view && styles.customActiveToggle]}
-                  onPress={() => handleViewChange(view)}
-                >
-                  <Text style={[styles.customToggleText, activeView === view && styles.customActiveToggleText]}>
-                    {view.charAt(0).toUpperCase() + view.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
         </View>
       );
     }
@@ -1728,160 +1720,72 @@ const { headerColor } = useHeaderColor();
         <View style={styles.content} pointerEvents="box-none">
           <ScrollView contentContainerStyle={styles.detailScroll}>
 
-          {/* Vision + Power Question — Role Landing additions */}
-          {activeView === 'deposits' && selectedRole && (
-            <View style={styles.roleLandingSection}>
-              <VisionBlock
-                label="Role Vision"
-                value={selectedRole.vision_statement ?? null}
-                onSave={(text) =>
-                  updateRoleField(selectedRole.id, { vision_statement: text })
-                }
-                accentColor={selectedRole.color || '#7c3aed'}
-                placeholder="What does thriving in this role look like?"
-              />
-              <View style={styles.powerQuestionBlock}>
-                <Text style={styles.powerQuestionLabel}>POWER QUESTION</Text>
-                <Text style={styles.powerQuestionPrompt}>
-                  Who do I want to become as a {selectedRole.label}?
-                </Text>
-                <VisionBlock
-                  label="My Answer"
-                  value={selectedRole.power_question_answer ?? null}
-                  onSave={(text) =>
-                    updateRoleField(selectedRole.id, { power_question_answer: text })
-                  }
-                  accentColor={selectedRole.color || '#7c3aed'}
-                  placeholder="Tap to reflect on this question..."
-                />
-              </View>
-              <View style={styles.statsRow}>
-                <View style={styles.statChip}>
-                  <Text style={styles.statChipNumber}>
-                    {keyRelationships.filter(kr => kr.role_id === selectedRole.id).length}
-                  </Text>
-                  <Text style={styles.statChipLabel}>Relationships</Text>
-                </View>
-                <View style={styles.statChip}>
-                  <Text style={styles.statChipNumber}>
-                    {tasks.filter(t => {
-                      if (!t.due_date) return false;
-                      const due = new Date(t.due_date);
-                      const now = new Date();
-                      const weekEnd = new Date(now);
-                      weekEnd.setDate(now.getDate() + 7);
-                      return due <= weekEnd && t.status !== 'completed';
-                    }).length}
-                  </Text>
-                  <Text style={styles.statChipLabel}>Due this week</Text>
-                </View>
-                <View style={styles.statChip}>
-                  <Text style={styles.statChipNumber}>{depositIdeas.length}</Text>
-                  <Text style={styles.statChipLabel}>Ideas</Text>
-                </View>
-              </View>
-            </View>
+          {/* R-5b: identity header + stats row replace inline VisionBlocks +
+              Power Q + 3-chip stats row. Always-mounted (no activeView gate
+              since the 4-tab toggle is gone). New stats are Day Streak /
+              30-Day Actions / Active Goals — different metrics from the
+              legacy chips, so this is a true replacement, not a port. */}
+          <RoleIdentityHeader
+            role={{
+              id: selectedRole.id,
+              label: selectedRole.label,
+              color: selectedRole.color || '#7c3aed',
+              icon: selectedRole.icon,
+              vision_statement: selectedRole.vision_statement ?? null,
+              power_question_answer: selectedRole.power_question_answer ?? null,
+            }}
+            keyRelationshipsCount={
+              keyRelationships.filter(kr => kr.role_id === selectedRole.id).length
+            }
+            onUpdate={fetchRoles}
+          />
+          {currentUserId && (
+            <RoleStatsRow
+              roleId={selectedRole.id}
+              userId={currentUserId}
+            />
           )}
-          {/* 12-Week Goals Strip - Only show when data is stable */}
-          {activeView === 'deposits' && roleLinkedTwelveWeekGoals.length > 0 && fetchState === 'complete' && (
-            <View style={styles.goalsStrip}>
-              <Text style={styles.goalsStripTitle}>12-Week Goals</Text>
-              {loadingGoalProgress ? (
-                <View style={styles.goalsStripLoading}>
-                  <Text style={styles.goalsStripLoadingText}>Loading goals...</Text>
-                </View>
-              ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.goalsStripContent}>
-                    {roleLinkedTwelveWeekGoals.map(goal => {
-                      const progress = goalProgress[goal.id];
-                      if (!progress) return null;
-
-                      return (
-                        <GoalProgressCard
-                          key={`goal-${goal.id}-${selectedRole.id}`}
-                          goal={goal}
-                          progress={progress}
-                          compact={true}
-                          onPress={() => handleGoalPress(goal)}
-                          onAddAction={() => {
-                            setEditingTask({
-                              type: 'task',
-                              selectedGoalIds: [goal.id],
-                              twelveWeekGoalChecked: true,
-                              countsTowardWeeklyProgress: true,
-                              selectedRoleIds: [selectedRole.id],
-                            } as any);
-                            setSelectedActivityConfig(null);
-                            setTaskFormVisible(true);
-                          }}
-                        />
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-              )}
-            </View>
+          {/* R-5b: 12-Week Goals strip removed. Replaced by RoleToolshed Goals
+              surface (R-4) below; that surface uses the same `goals` +
+              `goalProgress` state, plus handleAddGoalTask (line ~1356) for
+              the "+" button. Real Effort Score percentages now visible
+              (closes #11, side-effect of R-5a's fetchGoalsForRole chain). */}
+          {/* R-5b: 4-tab body replaced by MY SPACE (R-3) + Toolshed (R-4).
+              Single-open coordination across both via openMySpaceTile /
+              openToolshedSurface (R-5a coordinators). */}
+          {currentUserId && (
+            <RoleMySpaceSection
+              roleId={selectedRole.id}
+              userId={currentUserId}
+              roleName={selectedRole.label}
+              accentColor={selectedRole.color || '#7c3aed'}
+              onIdeaUpdate={handleUpdateDepositIdea}
+              onIdeaCancel={handleCancelDepositIdea}
+              onIdeaPress={handleDepositIdeaPress}
+              onTaskComplete={(task) => handleCompleteTask(task.id)}
+              onTaskDelete={(task) => handleDeleteTask(task.id)}
+              onTaskPress={handleTaskPress}
+              openTile={openMySpaceTile}
+              onTileChange={handleMySpaceTileChange}
+            />
           )}
-          <View style={styles.taskList}>
-            {activeView === 'journal' ? (
-              journalScope && (
-                <JournalView
-                  scope={journalScope}
-                  onEntryPress={handleJournalEntryPress}
-                  dateRange={journalDateRange}
-                  showTimePeriodSelector={true}
-                  onDateRangeChange={handleJournalDateRangeChange}
-                />
-              )
-            ) : activeView === 'analytics' ? (
-              journalScope && (
-                <AnalyticsView
-                  scope={journalScope}
-                />
-              )
-            ) : (loading && fetchState === 'loading-data') ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading...</Text>
-              </View>
-            ) : activeView === 'deposits' ? (
-              tasks.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No deposits found for this role</Text>
-                </View>
-              ) : (
-                tasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={() => handleCompleteTask(task.id)}
-                    onDelete={() => handleDeleteTask(task.id)}
-                    onPress={handleTaskPress}
-                  />
-                ))
-              )
-            ) : activeView === 'ideas' ? (
-              depositIdeas.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No ideas found for this role</Text>
-                </View>
-              ) : (
-                depositIdeas.map(depositIdea => (
-                  <DepositIdeaCard
-                    key={depositIdea.id}
-                    depositIdea={depositIdea}
-                    onUpdate={handleUpdateDepositIdea}
-                    onCancel={handleCancelDepositIdea}
-                    onPress={handleDepositIdeaPress}
-                  />
-                ))
-              )
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>Feature coming soon!</Text>
-              </View>
-            )}
-          </View>
+          {currentUserId && (
+            <RoleToolshed
+              roleId={selectedRole.id}
+              userId={currentUserId}
+              roleName={selectedRole.label}
+              accentColor={selectedRole.color || '#7c3aed'}
+              goals={goals}
+              goalProgress={goalProgress}
+              onAddGoalTask={handleAddGoalTask}
+              onGoalPress={handleGoalPress}
+              onJournalEntryPress={handleJournalEntryPress}
+              journalDateRange={journalDateRange}
+              onJournalDateRangeChange={setJournalDateRange}
+              openSurface={openToolshedSurface}
+              onSurfaceChange={handleToolshedSurfaceChange}
+            />
+          )}
 
           {/* Key Relationships — upgraded to KRTile */}
           {selectedRole && (
