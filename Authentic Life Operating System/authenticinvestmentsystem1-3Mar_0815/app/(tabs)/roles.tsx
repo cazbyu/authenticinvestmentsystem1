@@ -26,7 +26,7 @@ import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { GoalDetailView } from '@/components/goals/GoalDetailView';
-import { useGoals } from '@/hooks/useGoals';
+import { fetchRoleGoals, fetchZoneGoalsProgress } from '@/lib/zoneDataService';
 import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { GoalEffortProgress } from '@/lib/goalEffortScore';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
@@ -37,7 +37,7 @@ import { WebNavigationMenu } from '@/components/WebNavigationMenu';
 import { RoleBankHub } from '@/components/roles/RoleBankHub';
 import { KRTile } from '@/components/common/KRTile';
 import { VisionBlock } from '@/components/common/VisionBlock';
-import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR, fetchRoleLinkedGoalIds } from '@/lib/roleStatistics';
+import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR } from '@/lib/roleStatistics';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 
 type DrawerNavigation = DrawerNavigationProp<any>;
@@ -120,8 +120,8 @@ const { headerColor } = useHeaderColor();
   const krScrollRef = useRef<ScrollView>(null);
   const [krScrollOffset, setKrScrollOffset] = useState(0);
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
-  const previousRoleIdRef = useRef<string | null>(null);
   const fetchInProgressRef = useRef<boolean>(false);
+  const goalsAbortControllerRef = useRef<AbortController | null>(null);
 
   // Follow-through TaskEventForm state
   const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
@@ -140,56 +140,26 @@ const { headerColor } = useHeaderColor();
   // Speed Dial activity config state
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
 
-  // Memoize the scope object to prevent unnecessary re-renders
-  const goalsScope = useMemo(() => {
-    if (!selectedRole) return undefined;
-    // Only return new object if role ID actually changed
-    if (previousRoleIdRef.current === selectedRole.id) {
-      return goalsScope;
-    }
-    previousRoleIdRef.current = selectedRole.id;
-    return { type: 'role' as const, id: selectedRole.id };
-  }, [selectedRole?.id]);
-
-  // 12-Week Goals for selected role
-  const {
-    twelveWeekGoals,
-    loading: goalsLoading,
-    refreshGoals
-  } = useGoals({
-    scope: goalsScope
-  });
+  // R-5a: Goals are now fetched directly via fetchRoleGoals (R-1 sibling
+  // of fetchZoneGoals). Owned by roles.tsx and passed down to R-3/R-4.
+  // The useGoals hook + fetchRoleLinkedGoalIds 2-step chain has been
+  // collapsed into a single fetcher that already filters by role.
+  // back-compat alias `roleLinkedTwelveWeekGoals` keeps the legacy 4-tab
+  // JSX rendering until R-5b mounts the new components and R-5c removes
+  // the safety-net code paths.
+  const [goals, setGoals] = useState<any[]>([]);
+  const roleLinkedTwelveWeekGoals = goals;
 
   // Goal progress state
   const [goalProgress, setGoalProgress] = useState<Record<string, GoalEffortProgress>>({});
   const [loadingGoalProgress, setLoadingGoalProgress] = useState(false);
 
-  const [roleLinkedGoalIds, setRoleLinkedGoalIds] = useState<Set<string>>(new Set());
-
-  const roleLinkedTwelveWeekGoals = useMemo(
-    () => twelveWeekGoals.filter(g => roleLinkedGoalIds.has(g.id)),
-    [twelveWeekGoals, roleLinkedGoalIds],
-  );
-
-  useEffect(() => {
-    if (!selectedRole) {
-      setRoleLinkedGoalIds(new Set());
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const supabase = getSupabaseClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const ids = await fetchRoleLinkedGoalIds(supabase, user.id, selectedRole.id);
-        if (!cancelled) setRoleLinkedGoalIds(ids);
-      } catch (e) {
-        console.error('fetchRoleLinkedGoalIds error:', e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedRole?.id]);
+  // R-5a: Cross-section single-open coordinators. R-5b will wire these
+  // through to RoleMySpaceSection (openTile / onTileChange) and
+  // RoleToolshed (openSurface / onSurfaceChange). When one section opens
+  // a tile/surface, the other clears — same 1+6c lock wellness uses.
+  const [openMySpaceTile, setOpenMySpaceTile] = useState<'upcoming' | 'overdue' | 'idea' | null>(null);
+  const [openToolshedSurface, setOpenToolshedSurface] = useState<'goals' | 'journal' | 'analytics' | null>(null);
 
   // Memoize scope objects for JournalView and AnalyticsView to prevent unnecessary re-fetches
   const journalScope = useMemo(() => {
@@ -229,6 +199,27 @@ const { headerColor } = useHeaderColor();
       calculatePeriodScore(dateRange, 'key_relationship', selectedKR.id);
     }
   }, [selectedRole, selectedKR, calculatePeriodScore]);
+
+  // R-5a: Cross-section single-open coordinators. When MY SPACE opens a
+  // tile, Toolshed clears its open surface, and vice versa. Same 1+6c
+  // lock the wellness landing uses (W-0/B30/B31). R-5b will pass these
+  // through as openTile / onTileChange (RoleMySpaceSection) and
+  // openSurface / onSurfaceChange (RoleToolshed).
+  const handleMySpaceTileChange = useCallback(
+    (next: 'upcoming' | 'overdue' | 'idea' | null) => {
+      if (next !== null) setOpenToolshedSurface(null);
+      setOpenMySpaceTile(next);
+    },
+    [],
+  );
+
+  const handleToolshedSurfaceChange = useCallback(
+    (next: 'goals' | 'journal' | 'analytics' | null) => {
+      if (next !== null) setOpenMySpaceTile(null);
+      setOpenToolshedSurface(next);
+    },
+    [],
+  );
 
   const handleJournalEntryPress = async (entry: any) => {
     if (entry.source_type === 'task') {
@@ -282,39 +273,60 @@ const { headerColor } = useHeaderColor();
     }
   };
 
-  // Minimum-change adapter (3b-4c-i): the previous calculateGoalProgress
-  // call was broken (queried nonexistent task-log.completed column) and
-  // always returned zeros. Full Effort Score wiring for roles.tsx is
-  // deferred to backlog #11. For now, feed zero-effort GoalEffortProgress
-  // shapes so the redesigned GoalProgressCard has a valid contract.
-  // Visible result: role goal cards display 0% — same as today, no regression.
+  // R-5a: fetchGoalsForRole replaces the old useGoals →
+  // fetchRoleLinkedGoalIds 2-step chain. Single call to fetchRoleGoals
+  // (R-1) returns role-filtered goals; fetchZoneGoalsProgress (scope-
+  // agnostic) returns real Effort Scores. Side effect: closes backlog
+  // #11 — the old fetchGoalProgressData stamped zero-effort placeholders
+  // because calculateGoalProgress queried a dropped column. The new
+  // chain returns real values.
+  const fetchGoalsForRole = useCallback(async (roleId: string) => {
+    if (goalsAbortControllerRef.current) goalsAbortControllerRef.current.abort();
+    const controller = new AbortController();
+    goalsAbortControllerRef.current = controller;
+    try {
+      setLoadingGoalProgress(true);
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || controller.signal.aborted) return;
+      const roleGoals = await fetchRoleGoals(supabase, roleId, user.id, controller.signal);
+      if (controller.signal.aborted) return;
+      const progress = await fetchZoneGoalsProgress(supabase, roleGoals, controller.signal);
+      if (controller.signal.aborted) return;
+      setGoals(roleGoals);
+      setGoalProgress(progress);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error('[roles.tsx] Error fetching role goals:', error);
+    } finally {
+      if (!controller.signal.aborted) setLoadingGoalProgress(false);
+    }
+  }, []);
+
+  // R-5a: drive fetchGoalsForRole on selectedRole change. Replaces the
+  // old useGoals hook + fetchRoleLinkedGoalIds populate-effect.
+  useEffect(() => {
+    if (selectedRole) {
+      fetchGoalsForRole(selectedRole.id);
+    } else {
+      setGoals([]);
+      setGoalProgress({});
+    }
+    return () => {
+      if (goalsAbortControllerRef.current) goalsAbortControllerRef.current.abort();
+    };
+  }, [selectedRole?.id, fetchGoalsForRole]);
+
+  // R-5a: fetchGoalProgressData kept as an alias delegating to
+  // fetchGoalsForRole so existing call sites (B27 goal-detail handlers,
+  // refresh paths) still work. Returns the same Promise contract.
   const fetchGoalProgressData = useCallback(async () => {
-    if (!twelveWeekGoals || twelveWeekGoals.length === 0) {
+    if (!selectedRole) {
       setGoalProgress({});
       return;
     }
-
-    setLoadingGoalProgress(true);
-    try {
-      const progressData: Record<string, GoalEffortProgress> = {};
-      for (const goal of twelveWeekGoals) {
-        progressData[goal.id] = {
-          currentWeek: 1,
-          totalWeeks: 12,
-          cycleStart: goal.start_date ?? '',
-          cycleEnd: goal.end_date ?? '',
-          currentWeekEffortScore: 0,
-          cumulativeEffortScore: 0,
-          weeklyBreakdown: [],
-        };
-      }
-      setGoalProgress(progressData);
-    } catch (error) {
-      console.error('Error building goal progress:', error);
-    } finally {
-      setLoadingGoalProgress(false);
-    }
-  }, [twelveWeekGoals]);
+    await fetchGoalsForRole(selectedRole.id);
+  }, [selectedRole?.id, fetchGoalsForRole]);
 
   const fetchRoles = async () => {
     try {
@@ -996,13 +1008,6 @@ const { headerColor } = useHeaderColor();
   }, [selectedKR?.id, krView, isLoadingRole]);
 
   useEffect(() => {
-    if (selectedRole && !goalsLoading && twelveWeekGoals.length > 0 && fetchState === 'complete') {
-      // Only fetch goal progress after role data is fully loaded
-      fetchGoalProgressData();
-    }
-  }, [selectedRole?.id, goalsLoading, twelveWeekGoals.length, fetchState]);
-
-  useEffect(() => {
     // Calculate period score when journal view is active and role/KR is selected
     if (activeView === 'journal' && selectedRole) {
       calculatePeriodScore(journalDateRange, 'role', selectedRole.id);
@@ -1256,7 +1261,10 @@ const { headerColor } = useHeaderColor();
     if (selectedKR) {
       fetchKRTasks(selectedKR.id, krView);
     }
-    refreshGoals();
+    // R-5a: replace removed refreshGoals() with direct goal refetch.
+    if (selectedRole) {
+      fetchGoalProgressData();
+    }
   };
 
   const handleFormClose = () => {
@@ -1275,13 +1283,16 @@ const { headerColor } = useHeaderColor();
   const handleFollowThroughFormClose = () => {
     setFollowThroughFormVisible(false);
     setRefreshAssociatedItemsKey(prev => prev + 1);
+    // R-5a: Q4 fix. The previous code called fetchDataForRole /
+    // fetchDataForKR which never existed on this page (they live on
+    // wellness.tsx — TS bug latent through C-1 audit). Replace with
+    // eventBus.emit so any tab-level listeners + the soon-to-be-mounted
+    // R-5b sections all refresh. refreshGoals() is replaced with direct
+    // fetchGoalProgressData since useGoals was removed in R-5a.
+    eventBus.emit(EVENTS.REFRESH_ALL_TASKS);
     if (selectedRole) {
-      fetchDataForRole(selectedRole.id);
+      fetchGoalProgressData();
     }
-    if (selectedKR) {
-      fetchDataForKR(selectedKR.id);
-    }
-    refreshGoals();
   };
 
   const handleRolePress = useCallback((role: Role) => {
@@ -1336,6 +1347,25 @@ const { headerColor } = useHeaderColor();
     setSelectedActivityConfig(null);
     setTaskFormVisible(true);
   }, [selectedGoalForDetail, selectedRole]);
+
+  // R-5a: handler for the goal-card "+" button inside
+  // RoleGoalsToolshedPanel. Mirrors the inline onAddAction handler from
+  // the legacy 12-Week Goals strip (preserved at the bottom of the
+  // 4-tab body) and the goal-detail handler above. R-5b will wire this
+  // through as RoleToolshed.onAddGoalTask.
+  const handleAddGoalTask = useCallback((goalId: string) => {
+    if (!selectedRole) return;
+    setEditingTask({
+      type: 'task',
+      selectedGoalIds: [goalId],
+      isGoal: true,
+      twelveWeekGoalChecked: true,
+      countsTowardWeeklyProgress: true,
+      selectedRoleIds: [selectedRole.id],
+    } as any);
+    setSelectedActivityConfig(null);
+    setTaskFormVisible(true);
+  }, [selectedRole]);
 
   const handleEditRole = (role: Role) => {
     setEditingRole(role);
