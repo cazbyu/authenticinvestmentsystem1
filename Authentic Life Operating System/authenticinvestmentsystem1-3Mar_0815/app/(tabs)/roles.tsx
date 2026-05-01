@@ -58,10 +58,14 @@ interface Role {
 
 interface KeyRelationship {
   id: string;
-  name: string;
-  description?: string;
-  image_path?: string;
-  role_id: string;
+  name: string | null;
+  role_id: string | null;
+  user_id: string;
+  image_url: string | null;
+  image_path: string | null;
+  description: string | null;
+  vision_statement: string | null;  // R-6-schema NEW
+  updated_at: string | null;
 }
 
 export default function Roles() {
@@ -162,7 +166,7 @@ const { headerColor } = useHeaderColor();
   // Memoize KR scope object for JournalView and AnalyticsView to prevent unnecessary re-fetches
   const krJournalScope = useMemo(() => {
     if (!selectedKR || !selectedRole) return null;
-    return { type: 'key_relationship' as const, id: selectedKR.id, name: selectedKR.name };
+    return { type: 'key_relationship' as const, id: selectedKR.id, name: selectedKR.name ?? undefined };
   }, [selectedKR?.id, selectedKR?.name, selectedRole?.id]);
 
   const calculatePeriodScore = useCallback(async (dateRange: 'today' | 'week' | 'month' | 'all', scopeType: 'role' | 'key_relationship', scopeId: string) => {
@@ -1547,7 +1551,7 @@ const { headerColor } = useHeaderColor();
                 keyRelationships.filter(kr => kr.role_id === selectedRole.id).map(kr => (
                   <KRTile
                     key={kr.id}
-                    name={kr.name}
+                    name={kr.name ?? '(unnamed)'}
                     relationshipType={kr.description || 'Key relationship'}
                     lastInteractionDate={krLastActivityMap.get(kr.id) ?? null}
                     imageUri={krImageUrls[kr.id] ?? null}

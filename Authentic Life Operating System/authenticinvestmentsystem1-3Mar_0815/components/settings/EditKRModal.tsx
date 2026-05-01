@@ -22,10 +22,10 @@ interface EditKRModalProps {
   onUpdate: () => void;
   keyRelationship: {
     id: string;
-    name: string;
-    description?: string;
-    image_path?: string;
-    role_id: string;
+    name: string | null;
+    description?: string | null;
+    image_path?: string | null;
+    role_id: string | null;
   } | null;
   roleName?: string;
   mode?: 'edit' | 'add';
