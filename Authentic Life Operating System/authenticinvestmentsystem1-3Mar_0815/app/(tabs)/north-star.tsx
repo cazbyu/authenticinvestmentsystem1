@@ -71,7 +71,6 @@ export default function NorthStarPage() {
   // North Star data
   const [missionStatement, setMissionStatement] = useState<string | null>(null);
   const [vision, setVision] = useState<string | null>(null);
-  const [lifeMotto, setLifeMotto] = useState<string | null>(null);
   const [coreValues, setCoreValues] = useState<string[] | null>(null);
 
   // Deep captures
@@ -129,7 +128,7 @@ export default function NorthStarPage() {
 
       const { data, error } = await supabase
         .from('0008-ap-north-star')
-        .select('mission_statement, 5yr_vision, life_motto, core_values')
+        .select('mission_statement, 5yr_vision, core_values')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -141,12 +140,10 @@ export default function NorthStarPage() {
       if (data) {
         setMissionStatement(data.mission_statement);
         setVision(data['5yr_vision']);
-        setLifeMotto(data.life_motto);
         setCoreValues(Array.isArray(data.core_values) ? (data.core_values as string[]) : []);
       } else {
         setMissionStatement(null);
         setVision(null);
-        setLifeMotto(null);
         setCoreValues([]);
       }
     } catch (err) {
@@ -201,7 +198,6 @@ export default function NorthStarPage() {
       // optimistic local update
       if (field === 'mission_statement') setMissionStatement(value);
       else if (field === '5yr_vision') setVision(value);
-      else if (field === 'life_motto') setLifeMotto(value);
 
       try {
         const supabase = getSupabaseClient();
@@ -377,7 +373,6 @@ export default function NorthStarPage() {
         <NorthStarMyPurpose
           missionStatement={missionStatement}
           vision={vision}
-          lifeMotto={lifeMotto}
           coreValues={coreValues}
           onSaveField={handleSaveField}
           onSaveCoreValues={handleSaveCoreValues}
