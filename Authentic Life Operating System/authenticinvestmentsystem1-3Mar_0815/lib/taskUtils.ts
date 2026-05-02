@@ -431,6 +431,136 @@ export async function calculateAuthenticScoreForRole(
 }
 
 //
+// Calculate Authentic Score filtered by a specific key relationship.
+// R-6-lib sibling of calculateAuthenticScoreForRole. Tasks filtered via
+// 0008-ap-universal-key-relationships-join; withdrawals NOT scope-filtered
+// (mirrors role-side behavior — withdrawals are user-level, not scope-level).
+// Inherits B41-narrow's predeclare pattern from the role-side template.
+//
+export async function calculateAuthenticScoreForKR(
+  supabase: SupabaseClient,
+  userId: string,
+  krId: string
+): Promise<number> {
+  try {
+    console.log('[AuthenticScoreForKR] Starting calculation for user:', userId, 'kr:', krId);
+
+    // 1. Completed tasks (deposits)
+    const { data: tasksData, error: tasksErr } = await supabase
+      .from('0008-ap-tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .is('deleted_at', null)
+      .not('completed_at', 'is', null);
+
+    if (tasksErr) throw tasksErr;
+    if (!tasksData || tasksData.length === 0) {
+      console.log('[AuthenticScoreForKR] No completed tasks found.');
+      return 0;
+    }
+
+    const taskIds = tasksData.map(t => t.id);
+
+    // 2. Roles + Domains + Goals + KRs via join tables. Roles/domains/goals
+    // are needed for calculateTaskPoints scoring; key_relationships join is
+    // needed for the KR-scope filter at step 3. Predeclare pattern
+    // (B41-narrow) suppresses ParserErrors on subsequent body reads.
+    let rolesData: any[] = [];
+    let domainsData: any[] = [];
+    let goalsData: any[] = [];
+    let krData: any[] = [];
+
+    const [
+      { data: rolesDataResult, error: rolesErr },
+      { data: domainsDataResult, error: domainsErr },
+      { data: goalsDataResult, error: goalsErr },
+      { data: krDataResult, error: krErr }
+    ] = await Promise.all([
+        supabase
+          .from('0008-ap-universal-roles-join')
+          .select('parent_id, role:0008-ap-roles(id, label)')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-domains-join')
+          .select('parent_id, domain:0008-ap-domains(id, name)')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-goals-join')
+          .select('parent_id, goal_id, goal_type')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+        supabase
+          .from('0008-ap-universal-key-relationships-join')
+          .select('parent_id, key_relationship_id')
+          .in('parent_id', taskIds)
+          .eq('parent_type', 'task'),
+      ]);
+
+    if (rolesErr) throw rolesErr;
+    if (domainsErr) throw domainsErr;
+    if (goalsErr) throw goalsErr;
+    if (krErr) throw krErr;
+
+    rolesData = rolesDataResult || [];
+    domainsData = domainsDataResult || [];
+    goalsData = goalsDataResult || [];
+    krData = krDataResult || [];
+
+    const goalsById = await fetchGoalsForJoinRows(supabase, goalsData || []);
+
+    // 3. Filter tasks that have the specified KR
+    const krTaskIds = krData?.filter(k => k.key_relationship_id === krId).map(k => k.parent_id) || [];
+    const filteredTasks = tasksData.filter(task => krTaskIds.includes(task.id));
+
+    // 4. Calculate deposits for filtered tasks (passing each task's roles/
+    // domains/goals to calculateTaskPoints — those drive the multipliers,
+    // not the KR scope itself).
+    let totalDeposits = 0;
+    for (const task of filteredTasks) {
+      const roles =
+        rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) ?? [];
+      const domains =
+        domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) ?? [];
+
+      // Transform polymorphic goals
+      const taskGoals = goalsData?.filter(g => g.parent_id === task.id).map(g => {
+        const goal = goalsById.get(g.goal_id);
+        if (!goal || goal.status === 'archived' || goal.status === 'cancelled') return null;
+        return goal;
+      }).filter(Boolean) || [];
+
+      const pts = calculateTaskPoints(task, roles, domains, taskGoals);
+      totalDeposits += pts;
+    }
+
+    // 5. Withdrawals (user-level, not KR-scope-filtered — matches role-side)
+    const { data: withdrawalsData, error: withdrawalsErr } = await supabase
+      .from('0008-ap-withdrawals')
+      .select('amount')
+      .eq('user_id', userId);
+
+    if (withdrawalsErr) throw withdrawalsErr;
+
+    const totalWithdrawals =
+      withdrawalsData?.reduce((sum, w) => sum + parseFloat(w.amount.toString()), 0) || 0;
+
+    console.log('[AuthenticScoreForKR] Deposits:', totalDeposits);
+    console.log('[AuthenticScoreForKR] Withdrawals:', totalWithdrawals);
+
+    const finalScore = Math.round((totalDeposits - totalWithdrawals) * 10) / 10;
+    console.log('[AuthenticScoreForKR] Final Score:', finalScore);
+
+    return finalScore;
+  } catch (err) {
+    console.error('Error calculating authentic score for KR:', err);
+    return 0;
+  }
+}
+
+//
 // Calculate Authentic Score filtered by a specific domain
 //
 export async function calculateAuthenticScoreForDomain(

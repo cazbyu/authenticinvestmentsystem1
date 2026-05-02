@@ -500,3 +500,156 @@ export async function fetchRoleGoals(
 
   return [...twelveWk, ...custom];
 }
+
+/**
+ * R-6-lib: Fetch active deposit ideas tagged to a KR. Sibling of fetchRoleIdeas.
+ * Mirrors filter shape: archived=false, is_active=true, activated_task_id IS NULL.
+ */
+export async function fetchKRIdeas(
+  supabase: SupabaseClient,
+  krId: string,
+  userId: string,
+  abortSignal?: AbortSignal,
+): Promise<any[]> {
+  const { data: krJoinData, error: krJoinError } = await supabase
+    .from('0008-ap-universal-key-relationships-join')
+    .select('parent_id')
+    .eq('parent_type', 'depositIdea')
+    .eq('key_relationship_id', krId);
+
+  if (krJoinError) throw krJoinError;
+
+  const krDepositIdeaIds = krJoinData?.map(kj => kj.parent_id) || [];
+
+  if (krDepositIdeaIds.length === 0) return [];
+
+  const { data: depositIdeasData, error: depositIdeasError } = await supabase
+    .from('0008-ap-deposit-ideas')
+    .select('*')
+    .eq('user_id', userId)
+    .in('id', krDepositIdeaIds)
+    .eq('archived', false)
+    .eq('is_active', true)
+    .is('activated_task_id', null);
+
+  if (depositIdeasError) throw depositIdeasError;
+  if (abortSignal?.aborted) return [];
+
+  // Fetch enrichment joins (mirrors fetchRoleIdeas pattern, predeclare suppresses ParserErrors).
+  let rolesData: any[] = [];
+  let domainsData: any[] = [];
+  let krData: any[] = [];
+  let notesData: any[] = [];
+
+  if (depositIdeasData && depositIdeasData.length > 0) {
+    const depositIdeaIds = depositIdeasData.map(di => di.id);
+
+    const [
+      { data: rolesDataResult, error: rolesError },
+      { data: domainsDataResult, error: domainsError },
+      { data: krDataResult, error: krError },
+      { data: notesDataResult, error: notesError }
+    ] = await Promise.all([
+      supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+      supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+      supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
+      supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
+    ]);
+
+    if (rolesError) throw rolesError;
+    if (domainsError) throw domainsError;
+    if (krError) throw krError;
+    if (notesError) throw notesError;
+
+    rolesData = rolesDataResult || [];
+    domainsData = domainsDataResult || [];
+    krData = krDataResult || [];
+    notesData = notesDataResult || [];
+  }
+
+  if (abortSignal?.aborted) return [];
+
+  return (depositIdeasData || []).map(di => ({
+    ...di,
+    roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
+    domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
+    keyRelationships: krData?.filter(kr => kr.parent_id === di.id).map(kr => kr.key_relationship).filter(Boolean) || [],
+    has_notes: notesData?.some(n => n.parent_id === di.id),
+    has_attachments: false,
+  }));
+}
+
+/**
+ * R-6-lib: Fetch active CUSTOM goals tagged to a KR. Sibling of fetchRoleGoals
+ * but simpler — KRs only tag custom goals (parent_type='custom_goal' in
+ * 0008-ap-universal-key-relationships-join; 12wk goals are role/domain only
+ * per audit v2 join-table data).
+ *
+ * Annotates each goal with `goal_type: 'custom'` discriminator (UI form) so
+ * it's compatible with existing GoalProgressCard and consuming components
+ * that expect the same shape as fetchRoleGoals.
+ *
+ * Date-window filter runs JS-side, NOT at DB level. Custom goals support
+ * nullable start_date / end_date (open-ended goals). Postgres .lte/.gte
+ * against null returns false, which would silently exclude null-dated rows.
+ * All 6 currently KR-tagged custom goals (per audit) have null dates, so
+ * a DB-level strict gate would surface zero results — the JS-side filter
+ * with explicit null handling is required.
+ *
+ * Future hygiene flag: fetchRoleGoals (zoneDataService.ts:438-502) may have
+ * the same parallel null-date bug; investigate separately post-R-6-lib.
+ *
+ * Throws on query error. abortSignal is advisory (Supabase HTTP not cancellable).
+ */
+export async function fetchKRGoals(
+  supabase: SupabaseClient,
+  krId: string,
+  userId: string,
+  abortSignal?: AbortSignal,
+): Promise<any[]> {
+  const { data: krJoinData, error: krJoinError } = await supabase
+    .from('0008-ap-universal-key-relationships-join')
+    .select('parent_id')
+    .eq('user_id', userId)
+    .eq('key_relationship_id', krId)
+    .eq('parent_type', 'custom_goal');
+
+  if (krJoinError) throw krJoinError;
+  if (abortSignal?.aborted) return [];
+
+  const customIds: string[] = (krJoinData ?? [])
+    .map(row => row.parent_id as string | null)
+    .filter((id): id is string => Boolean(id));
+
+  if (customIds.length === 0) return [];
+
+  // 1b. Fetch active custom goals tagged to this KR.
+  // No date filter at the DB level — custom goals support nullable
+  // start_date / end_date (open-ended goals). DB-level .lte/.gte against
+  // null returns false, so date filter MUST run JS-side to handle nulls.
+  const { data: goalsData, error: goalsError } = await supabase
+    .from('0008-ap-goals-custom')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .in('id', customIds);
+
+  if (goalsError) throw goalsError;
+  if (abortSignal?.aborted) return [];
+
+  // 2. Date-window filter (JS-side, null-aware).
+  // Null start_date → goal hasn't been bounded on the start; treat as
+  // already-started. Null end_date → goal is ongoing; treat as not-yet-ended.
+  // Both null → fully open-ended, always surface while status='active'.
+  const todayStr = formatLocalDate(new Date());
+  const inWindow = (goalsData ?? []).filter(g => {
+    if (g.start_date && g.start_date > todayStr) return false;  // not yet started
+    if (g.end_date && g.end_date < todayStr) return false;      // already ended
+    return true;
+  });
+
+  return inWindow.map(g => ({
+    ...g,
+    goal_type: 'custom' as const,
+  }));
+}
