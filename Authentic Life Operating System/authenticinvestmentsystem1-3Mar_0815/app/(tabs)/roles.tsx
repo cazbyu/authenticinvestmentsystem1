@@ -26,8 +26,8 @@ import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { GoalProgressCard } from '@/components/goals/GoalProgressCard';
 import { GoalDetailView } from '@/components/goals/GoalDetailView';
-import { fetchRoleGoals, fetchZoneGoalsProgress } from '@/lib/zoneDataService';
-import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
+import { fetchRoleGoals, fetchZoneGoalsProgress, fetchKRGoals } from '@/lib/zoneDataService';
+import { calculateAuthenticScore as calculateScore, calculateAuthenticScoreForRole, calculateAuthenticScoreForKR, calculateAuthenticScoreForPeriod, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { GoalEffortProgress } from '@/lib/goalEffortScore';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
@@ -39,6 +39,10 @@ import { RoleIdentityHeader } from '@/components/roles/RoleIdentityHeader';
 import { RoleStatsRow } from '@/components/roles/RoleStatsRow';
 import { RoleMySpaceSection } from '@/components/roles/RoleMySpaceSection';
 import { RoleToolshed } from '@/components/roles/RoleToolshed';
+import { KRIdentityHeader } from '@/components/keyrelationships/KRIdentityHeader';
+import { KRStatsRow } from '@/components/keyrelationships/KRStatsRow';
+import { KRMySpaceSection } from '@/components/keyrelationships/KRMySpaceSection';
+import { KRToolshed } from '@/components/keyrelationships/KRToolshed';
 import { KRTile } from '@/components/common/KRTile';
 import { getRoleStatistics, RoleStatistics, getLastActivityPerRole, getLastActivityPerKR } from '@/lib/roleStatistics';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
@@ -128,6 +132,9 @@ const { headerColor } = useHeaderColor();
   const roleClickTimeout = useRef<NodeJS.Timeout | null>(null);
   const fetchInProgressRef = useRef<boolean>(false);
   const goalsAbortControllerRef = useRef<AbortController | null>(null);
+  // R-6-mount: abort controller for KR goals fetch (parallel to goalsAbortControllerRef
+  // for role-side). Cancels in-flight fetches on selectedKR change to prevent stale state.
+  const krGoalsAbortControllerRef = useRef<AbortController | null>(null);
 
   // Follow-through TaskEventForm state
   const [followThroughFormVisible, setFollowThroughFormVisible] = useState(false);
@@ -162,6 +169,29 @@ const { headerColor } = useHeaderColor();
   // a tile/surface, the other clears — same 1+6c lock wellness uses.
   const [openMySpaceTile, setOpenMySpaceTile] = useState<'upcoming' | 'overdue' | 'idea' | null>(null);
   const [openToolshedSurface, setOpenToolshedSurface] = useState<'goals' | 'journal' | 'analytics' | null>(null);
+
+  // R-6-mount: KR detail page state slots. Parallel to role-side openMySpaceTile /
+  // openToolshedSurface for cross-section single-open coordination on the KR detail
+  // page. handleKRMySpaceTileChange + handleKRToolshedSurfaceChange below cross-clear.
+  const [openKRMySpaceTile, setOpenKRMySpaceTile] = useState<'upcoming' | 'overdue' | 'idea' | null>(null);
+  const [openKRToolshedSurface, setOpenKRToolshedSurface] = useState<'goals' | 'journal' | 'analytics' | null>(null);
+
+  // R-6-mount: KR-scoped Authentic Score state. Replaces audit Q4's GLOBAL score bug
+  // at line ~1279 (KR header was rendering useAuthenticScore.authenticScore — the
+  // user-level score — instead of a KR-scoped value). Computed via
+  // calculateAuthenticScoreForKR (R-6-lib) in Phase 2 effect; rendered in Phase 3
+  // surgical fix.
+  const [krAuthenticScore, setKrAuthenticScore] = useState<number | null>(null);
+
+  // R-6-mount: KR goals + progress for KRGoalsToolshedPanel (presentational —
+  // parent owns fetch). Filled by Phase 2 effect via fetchKRGoals + fetchZoneGoalsProgress.
+  const [krGoals, setKrGoals] = useState<any[]>([]);
+  const [krGoalProgress, setKrGoalProgress] = useState<Record<string, GoalEffortProgress>>({});
+
+  // R-6-mount: KR Journal date range state (for KRToolshed Journal surface).
+  // Parallel to role-side journalDateRange. Default 'all' per audit (no tile-badge
+  // constraint on KR side, so user-friendly default to show all entries).
+  const [krJournalDateRange, setKrJournalDateRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
 
   // Memoize KR scope object for JournalView and AnalyticsView to prevent unnecessary re-fetches
   const krJournalScope = useMemo(() => {
@@ -221,6 +251,26 @@ const { headerColor } = useHeaderColor();
     (next: 'goals' | 'journal' | 'analytics' | null) => {
       if (next !== null) setOpenMySpaceTile(null);
       setOpenToolshedSurface(next);
+    },
+    [],
+  );
+
+  // R-6-mount: KR detail page cross-clear handlers. Parallel to role-side above.
+  // When user opens a KR MY SPACE tile, any open KR Toolshed surface closes (and
+  // vice versa). NOTE: independent of role-side openMySpaceTile / openToolshedSurface
+  // — KR detail is a separate page render, role-side state is left untouched.
+  const handleKRMySpaceTileChange = useCallback(
+    (next: 'upcoming' | 'overdue' | 'idea' | null) => {
+      if (next !== null) setOpenKRToolshedSurface(null);
+      setOpenKRMySpaceTile(next);
+    },
+    [],
+  );
+
+  const handleKRToolshedSurfaceChange = useCallback(
+    (next: 'goals' | 'journal' | 'analytics' | null) => {
+      if (next !== null) setOpenKRMySpaceTile(null);
+      setOpenKRToolshedSurface(next);
     },
     [],
   );
@@ -320,6 +370,92 @@ const { headerColor } = useHeaderColor();
       if (goalsAbortControllerRef.current) goalsAbortControllerRef.current.abort();
     };
   }, [selectedRole?.id, fetchGoalsForRole]);
+
+  // R-6-mount: KR goals + progress fetcher. Parallel to fetchGoalsForRole above
+  // but scoped via fetchKRGoals (R-6-lib). fetchZoneGoalsProgress is scope-agnostic
+  // and reused as-is. Drives KRGoalsToolshedPanel which is presentational
+  // (parent owns the data per audit Q5).
+  const fetchKRGoalsAndProgress = useCallback(async (krId: string) => {
+    if (krGoalsAbortControllerRef.current) krGoalsAbortControllerRef.current.abort();
+    const controller = new AbortController();
+    krGoalsAbortControllerRef.current = controller;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || controller.signal.aborted) return;
+      const krGoalsList = await fetchKRGoals(supabase, krId, user.id, controller.signal);
+      if (controller.signal.aborted) return;
+      const progress = await fetchZoneGoalsProgress(supabase, krGoalsList, controller.signal);
+      if (controller.signal.aborted) return;
+      setKrGoals(krGoalsList);
+      setKrGoalProgress(progress);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error('[roles.tsx] Error fetching KR goals:', error);
+    }
+  }, []);
+
+  // R-6-mount: drive fetchKRGoalsAndProgress on selectedKR change. Mirrors the
+  // role-side useEffect just above. Clears state when KR is deselected.
+  useEffect(() => {
+    if (selectedKR) {
+      fetchKRGoalsAndProgress(selectedKR.id);
+    } else {
+      setKrGoals([]);
+      setKrGoalProgress({});
+    }
+    return () => {
+      if (krGoalsAbortControllerRef.current) krGoalsAbortControllerRef.current.abort();
+    };
+  }, [selectedKR?.id, fetchKRGoalsAndProgress]);
+
+  // R-6-mount: KR authentic score effect. Computes via calculateAuthenticScoreForKR
+  // (R-6-lib added in lib/taskUtils). Subscribes to task lifecycle events for
+  // real-time refresh. Resolves audit Q4's GLOBAL score bug at line ~1279
+  // (rendered in Phase 3 surgical fix).
+  useEffect(() => {
+    if (!selectedKR || !currentUserId) {
+      setKrAuthenticScore(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadScore = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const score = await calculateAuthenticScoreForKR(supabase, currentUserId, selectedKR.id);
+        if (!cancelled) setKrAuthenticScore(score);
+      } catch (e) {
+        if (!cancelled) {
+          console.error('[roles.tsx] KR authentic score load failed', e);
+          setKrAuthenticScore(null);
+        }
+      }
+    };
+
+    loadScore();
+
+    // Refresh on task lifecycle events. Matches the subscription set used by
+    // KRUpcomingPanel + KROverduePanel (R-6-components-B) — score and panels
+    // stay in sync regardless of which event fires. TASK_UPDATED is critical:
+    // re-tagging a task TO/FROM this KR's scope, uncompleting a task, or
+    // editing a tagged task should all refresh the score.
+    const refresh = () => loadScore();
+    const events = [
+      EVENTS.TASK_CREATED,
+      EVENTS.TASK_UPDATED,
+      EVENTS.TASK_DELETED,
+      EVENTS.TASK_COMPLETED,
+      EVENTS.REFRESH_ALL_TASKS,
+    ];
+    for (const e of events) eventBus.on(e, refresh);
+
+    return () => {
+      cancelled = true;
+      for (const e of events) eventBus.off(e, refresh);
+    };
+  }, [selectedKR?.id, currentUserId]);
 
   // R-5a: fetchGoalProgressData kept as an alias delegating to
   // fetchGoalsForRole so existing call sites (B27 goal-detail handlers,
@@ -1107,6 +1243,49 @@ const { headerColor } = useHeaderColor();
     setTaskFormVisible(true);
   }, [selectedRole]);
 
+  // R-6-mount: KR-aware add-goal-task handler. Parallel to role-side above but
+  // pre-fills both selectedRoleIds (parent role) AND selectedKeyRelationshipIds
+  // (the KR being viewed) so the new task auto-tags to both contexts.
+  const handleKRAddGoalTask = useCallback((goalId: string) => {
+    if (!selectedKR) return;
+    setEditingTask({
+      type: 'task',
+      selectedGoalIds: [goalId],
+      isGoal: true,
+      twelveWeekGoalChecked: true,
+      countsTowardWeeklyProgress: true,
+      selectedRoleIds: selectedRole ? [selectedRole.id] : [],
+      selectedKeyRelationshipIds: [selectedKR.id],
+    } as any);
+    setSelectedActivityConfig(null);
+    setTaskFormVisible(true);
+  }, [selectedKR, selectedRole]);
+
+  // R-6-mount: KR vision update callback for KRIdentityHeader. Writes to the
+  // R-6-schema vision_statement column on 0008-ap-key-relationships. Updates
+  // selectedKR locally to reflect the change immediately (avoids waiting for a
+  // re-fetch). Mirrors the role-side updateRoleField pattern but with KR scope.
+  const handleKRVisionUpdate = useCallback(async (text: string): Promise<void> => {
+    if (!selectedKR) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-key-relationships')
+        .update({ vision_statement: text, updated_at: toLocalISOString(new Date()) })
+        .eq('id', selectedKR.id);
+      if (error) throw error;
+      // Update local state to reflect the change immediately
+      setSelectedKR(prev => prev ? { ...prev, vision_statement: text } : prev);
+      // Also update keyRelationships list so nav back shows fresh data
+      setKeyRelationships(prev => prev.map(kr =>
+        kr.id === selectedKR.id ? { ...kr, vision_statement: text } : kr
+      ));
+    } catch (e) {
+      console.error('[handleKRVisionUpdate] failed', e);
+      throw e;
+    }
+  }, [selectedKR]);
+
   const handleEditRole = (role: Role) => {
     setEditingRole(role);
     setEditRoleVisible(true);
@@ -1276,25 +1455,15 @@ const { headerColor } = useHeaderColor();
               </TouchableOpacity>
               <View style={styles.customScoreContainer}>
                 <Text style={styles.customScoreLabel}>Authentic Score</Text>
-                <Text style={styles.customScoreValue}>{authenticScore}</Text>
+                <Text style={styles.customScoreValue}>{krAuthenticScore ?? '–'}</Text>
               </View>
             </View>
           </View>
-          <View style={styles.customHeaderBottom}>
-            <View style={styles.customToggleGroup}>
-              {(['deposits', 'ideas', 'journal', 'analytics'] as const).map((view) => (
-                <TouchableOpacity
-                  key={view}
-                  style={[styles.customToggleButton, krJournalView === view && styles.customActiveToggle]}
-                  onPress={() => handleKRJournalViewChange(view)}
-                >
-                  <Text style={[styles.customToggleText, krJournalView === view && styles.customActiveToggleText]}>
-                    {view.charAt(0).toUpperCase() + view.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          {/* R-6-mount Phase 5: customHeaderBottom 4-tab segmented control
+              (deposits/ideas/journal/analytics) removed. Replaced by
+              KRMySpaceSection + KRToolshed surfaces in the body. The state
+              `krJournalView` and handler `handleKRJournalViewChange` are
+              now orphans (deferred to R-6-cleanup per scope discipline). */}
         </View>
       );
     }
@@ -1385,63 +1554,69 @@ const { headerColor } = useHeaderColor();
         <View style={styles.content} pointerEvents="box-none">
 
           <ScrollView style={styles.taskList}>
-            {krJournalView === 'journal' ? (
-              krJournalScope && (
-                <JournalView
-                  scope={krJournalScope}
-                  onEntryPress={handleJournalEntryPress}
-                  dateRange={journalDateRange}
-                  showTimePeriodSelector={true}
-                  onDateRangeChange={handleJournalDateRangeChange}
-                />
-              )
-            ) : krJournalView === 'analytics' ? (
-              krJournalScope && (
-                <AnalyticsView
-                  scope={krJournalScope}
-                />
-              )
-            ) : (loading && fetchState === 'loading-data') ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading...</Text>
-              </View>
-            ) : krJournalView === 'deposits' ? (
-              tasks.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No deposits found for this key relationship</Text>
-                </View>
-              ) : (
-                tasks.map(task => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={() => handleCompleteTask(task.id)}
-                    onDelete={() => handleDeleteTask(task.id)}
-                    onPress={handleTaskPress}
-                  />
-                ))
-              )
-            ) : krJournalView === 'ideas' ? (
-              depositIdeas.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No ideas found for this key relationship</Text>
-                </View>
-              ) : (
-                depositIdeas.map(depositIdea => (
-                  <DepositIdeaCard
-                    key={depositIdea.id}
-                    depositIdea={depositIdea}
-                    onUpdate={handleUpdateDepositIdea}
-                    onCancel={handleCancelDepositIdea}
-                    onPress={handleDepositIdeaPress}
-                  />
-                ))
-              )
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>Feature coming soon!</Text>
-              </View>
+            {/* R-6-mount Phase 4: KR detail components mounted above the legacy
+                4-tab body. Phase 5 will remove the legacy ternary block beneath.
+                Render order mirrors role-side R-5b mount: IdentityHeader → StatsRow
+                → MySpaceSection → Toolshed. Accent color inherits from selectedRole
+                per audit Q6 lock (KRs do not own a per-KR color override).
+                currentUserId gates the userId-bearing components so we never pass
+                undefined down to fetchers. */}
+            <KRIdentityHeader
+              name={selectedKR.name}
+              vision={selectedKR.vision_statement}
+              imageUrl={krImageUrls[selectedKR.id] ?? null}
+              parentRoleName={selectedRole?.label ?? null}
+              accentColor={selectedRole?.color || '#7c3aed'}
+              onVisionUpdate={handleKRVisionUpdate}
+            />
+            {currentUserId && (
+              <KRStatsRow
+                krId={selectedKR.id}
+                userId={currentUserId}
+                accentColor={selectedRole?.color || '#7c3aed'}
+              />
             )}
+            {currentUserId && (
+              <KRMySpaceSection
+                krId={selectedKR.id}
+                userId={currentUserId}
+                krName={selectedKR.name}
+                accentColor={selectedRole?.color || '#7c3aed'}
+                onIdeaUpdate={handleUpdateDepositIdea}
+                onIdeaCancel={handleCancelDepositIdea}
+                onIdeaPress={handleDepositIdeaPress}
+                onTaskComplete={(task) => handleCompleteTask(task.id)}
+                onTaskDelete={(task) => handleDeleteTask(task.id)}
+                onTaskPress={handleTaskPress}
+                openTile={openKRMySpaceTile}
+                onTileChange={handleKRMySpaceTileChange}
+              />
+            )}
+            {currentUserId && (
+              <KRToolshed
+                krId={selectedKR.id}
+                userId={currentUserId}
+                krName={selectedKR.name}
+                accentColor={selectedRole?.color || '#7c3aed'}
+                goals={krGoals}
+                goalProgress={krGoalProgress}
+                onAddGoalTask={handleKRAddGoalTask}
+                onJournalEntryPress={handleJournalEntryPress}
+                journalDateRange={krJournalDateRange}
+                onJournalDateRangeChange={setKrJournalDateRange}
+                openSurface={openKRToolshedSurface}
+                onSurfaceChange={handleKRToolshedSurfaceChange}
+              />
+            )}
+            {/* R-6-mount Phase 5: legacy 4-tab ternary body removed.
+                Was rendering JournalView / AnalyticsView / TaskCard list /
+                DepositIdeaCard list / "Feature coming soon!" based on
+                krJournalView. All four surfaces are now reached via the
+                R-6 components above (Toolshed > Journal/Analytics, MY
+                SPACE > Upcoming/Overdue/Idea Jar, plus Toolshed > Goals).
+                Orphans deferred to R-6-cleanup: krJournalView state,
+                krJournalScope memo, fetchKRTasks dispatch, tasks +
+                depositIdeas state. */}
           </ScrollView>
         </View>
       );
