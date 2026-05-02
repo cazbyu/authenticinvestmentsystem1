@@ -16,8 +16,8 @@ import {
 import { ChevronDown, Plus, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
-type RowKey = 'mission' | 'vision' | 'motto' | 'values' | 'pq';
-type TextRowKey = 'mission' | 'vision' | 'motto';
+type RowKey = 'mission' | 'vision' | 'values' | 'pq';
+type TextRowKey = 'mission' | 'vision';
 type EditField = 'mission_statement' | '5yr_vision' | 'life_motto';
 
 const POWER_QUESTIONS = [
@@ -30,7 +30,6 @@ const POWER_QUESTIONS = [
 export interface NorthStarMyPurposeProps {
   missionStatement: string | null;
   vision: string | null;
-  lifeMotto: string | null;
   coreValues: string[] | null;
   accentColor?: string;
   onSaveField: (field: EditField, value: string) => Promise<void>;
@@ -42,7 +41,6 @@ export interface NorthStarMyPurposeProps {
 export function NorthStarMyPurpose({
   missionStatement,
   vision,
-  lifeMotto,
   coreValues,
   accentColor = '#8b1a1a',
   onSaveField,
@@ -232,19 +230,7 @@ export function NorthStarMyPurpose({
         onRefineVision,
       )}
 
-      {/* Row 3 — Life Motto */}
-      <View style={[styles.divider, { backgroundColor: colors.border }]} />
-      {renderTextRow(
-        'motto',
-        'Life Motto',
-        'life_motto',
-        lifeMotto,
-        'The phrase that anchors your life...',
-        () => {},
-        false,
-      )}
-
-      {/* Row 4 — Core values */}
+      {/* Row 3 — Core values */}
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
       <View style={styles.row}>
         <TouchableOpacity
