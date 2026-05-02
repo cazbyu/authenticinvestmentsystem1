@@ -83,13 +83,9 @@ const { headerColor } = useHeaderColor();
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [keyRelationships, setKeyRelationships] = useState<KeyRelationship[]>([]);
   const [selectedKR, setSelectedKR] = useState<KeyRelationship | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [depositIdeas, setDepositIdeas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchState, setFetchState] = useState<'idle' | 'loading-role' | 'loading-data' | 'complete'>('idle');
   const [krLoading, setKRLoading] = useState(false);
-  const [krView, setKRView] = useState<'deposits' | 'ideas'>('deposits');
-  const [krJournalView, setKRJournalView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
 
   // Main tab navigation state
   const [activeMainTab, setActiveMainTab] = useState<'roles' | 'keyrelationships' | 'manageRoles'>('roles');
@@ -192,12 +188,6 @@ const { headerColor } = useHeaderColor();
   // Parallel to role-side journalDateRange. Default 'all' per audit (no tile-badge
   // constraint on KR side, so user-friendly default to show all entries).
   const [krJournalDateRange, setKrJournalDateRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
-
-  // Memoize KR scope object for JournalView and AnalyticsView to prevent unnecessary re-fetches
-  const krJournalScope = useMemo(() => {
-    if (!selectedKR || !selectedRole) return null;
-    return { type: 'key_relationship' as const, id: selectedKR.id, name: selectedKR.name ?? undefined };
-  }, [selectedKR?.id, selectedKR?.name, selectedRole?.id]);
 
   const calculatePeriodScore = useCallback(async (dateRange: 'today' | 'week' | 'month' | 'all', scopeType: 'role' | 'key_relationship', scopeId: string) => {
     // R-5b Edit 0: 'today' is supported by JournalView's period selector but
@@ -538,207 +528,6 @@ const { headerColor } = useHeaderColor();
     }
   }, []);
 
-  const fetchKRTasks = useCallback(async (krId: string, view: 'deposits' | 'ideas') => {
-    if (loading) return;
-
-    setLoading(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      if (view === 'deposits') {
-        // First, get task IDs that are associated with this specific key relationship
-        const { data: krJoinData, error: krJoinError } = await supabase
-          .from('0008-ap-universal-key-relationships-join')
-          .select('parent_id')
-          .eq('parent_type', 'task')
-          .eq('key_relationship_id', krId);
-
-        if (krJoinError) throw krJoinError;
-
-        const krTaskIds = krJoinData?.map(krj => krj.parent_id) || [];
-
-        if (krTaskIds.length === 0) {
-          setTasks([]);
-          setDepositIdeas([]);
-          return;
-        }
-
-        // Now fetch only the tasks that have this key relationship
-        const { data: tasksData, error: tasksError } = await supabase
-          .from('v_user_tasks')
-          .select('*')
-          .eq('user_id', user.id)
-          .in('id', krTaskIds)
-          .is('deleted_at', null)
-          .is('parent_task_id', null)
-          .not('status', 'in', '(completed,cancelled)')
-          .in('type', ['task', 'event']);
-
-        if (tasksError) throw tasksError;
-
-        // Filter out Goal Bank actions by checking for week plans
-        let allKRTasks: any[] = [];
-
-        if (tasksData && tasksData.length > 0) {
-          const taskIds = tasksData.map(t => t.id);
-          const { data: weekPlans, error: weekPlansError } = await supabase
-            .from('0008-ap-task-week-plan')
-            .select('task_id')
-            .in('task_id', taskIds)
-            .is('deleted_at', null);
-
-          if (weekPlansError) throw weekPlansError;
-
-          // Create a Set of task IDs that have week plans (Goal Bank actions)
-          const goalBankActionIds = new Set(weekPlans?.map(wp => wp.task_id) || []);
-
-          // Only include standalone tasks (tasks WITHOUT week plans)
-          allKRTasks = tasksData.filter(task => !goalBankActionIds.has(task.id));
-        }
-
-        // Fetch join data only if we have tasks
-        let rolesData: any[] = [];
-        let domainsData: any[] = [];
-        let goalsData: any[] = [];
-        let notesData: any[] = [];
-        let delegatesData: any[] = [];
-        let keyRelationshipsData: any[] = [];
-
-        if (allKRTasks.length > 0) {
-          const taskIdsForJoins = allKRTasks.map(t => t.id);
-
-          const [
-            { data: rolesDataResult, error: rolesError },
-            { data: domainsDataResult, error: domainsError },
-            { data: goalsDataResult, error: goalsError },
-            { data: notesDataResult, error: notesError },
-            { data: delegatesDataResult, error: delegatesError },
-            { data: keyRelationshipsDataResult, error: keyRelationshipsError }
-          ] = await Promise.all([
-            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-goals-join').select('parent_id, goal_id, goal_type').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-delegates-join').select('parent_id, delegate_id').in('parent_id', taskIdsForJoins).eq('parent_type', 'task'),
-            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', taskIdsForJoins).eq('parent_type', 'task')
-          ]);
-
-          if (rolesError) throw rolesError;
-          if (domainsError) throw domainsError;
-          if (goalsError) throw goalsError;
-          if (notesError) throw notesError;
-          if (delegatesError) throw delegatesError;
-          if (keyRelationshipsError) throw keyRelationshipsError;
-
-          rolesData = rolesDataResult || [];
-          domainsData = domainsDataResult || [];
-          goalsData = goalsDataResult || [];
-          notesData = notesDataResult || [];
-          delegatesData = delegatesDataResult || [];
-          keyRelationshipsData = keyRelationshipsDataResult || [];
-
-          const goalsById = await fetchGoalsForJoinRows(supabase, goalsData);
-        }
-
-        const transformedTasks = allKRTasks.map(task => ({
-          ...task,
-          roles: rolesData?.filter(r => r.parent_id === task.id).map(r => r.role).filter(Boolean) || [],
-          domains: domainsData?.filter(d => d.parent_id === task.id).map(d => d.domain).filter(Boolean) || [],
-          goals: goalsData?.filter(g => g.parent_id === task.id).map(g => goalsById.get(g.goal_id)).filter(Boolean) || [],
-          keyRelationships: keyRelationshipsData?.filter(kr => kr.parent_id === task.id).map(kr => kr.key_relationship).filter(Boolean) || [],
-          has_notes: notesData?.some(n => n.parent_id === task.id),
-          has_delegates: delegatesData?.some(d => d.parent_id === task.id),
-          has_attachments: false,
-        }));
-
-        setTasks(transformedTasks);
-        setDepositIdeas([]);
-
-      } else {
-        // First, get deposit idea IDs that are associated with this specific key relationship
-        const { data: krJoinData, error: krJoinError } = await supabase
-          .from('0008-ap-universal-key-relationships-join')
-          .select('parent_id')
-          .eq('parent_type', 'depositIdea')
-          .eq('key_relationship_id', krId);
-
-        if (krJoinError) throw krJoinError;
-
-        const krDepositIdeaIds = krJoinData?.map(krj => krj.parent_id) || [];
-
-        if (krDepositIdeaIds.length === 0) {
-          setDepositIdeas([]);
-          setTasks([]);
-          return;
-        }
-
-        // Now fetch only the deposit ideas that have this key relationship
-        const { data: depositIdeasData, error: depositIdeasError } = await supabase
-          .from('0008-ap-deposit-ideas')
-          .select('*')
-          .eq('user_id', user.id)
-          .in('id', krDepositIdeaIds)
-          .eq('archived', false)
-          .eq('is_active', true)
-          .is('activated_task_id', null);
-
-        if (depositIdeasError) throw depositIdeasError;
-
-        // Fetch join data only if we have deposit ideas
-        let rolesData: any[] = [];
-        let domainsData: any[] = [];
-        let krData: any[] = [];
-        let notesData: any[] = [];
-
-        if (depositIdeasData && depositIdeasData.length > 0) {
-          const depositIdeaIds = depositIdeasData.map(di => di.id);
-
-          const [
-            { data: rolesDataResult, error: rolesError },
-            { data: domainsDataResult, error: domainsError },
-            { data: krDataResult, error: krError },
-            { data: notesDataResult, error: notesError }
-          ] = await Promise.all([
-            supabase.from('0008-ap-universal-roles-join').select('parent_id, role:0008-ap-roles(id, label)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-            supabase.from('0008-ap-universal-domains-join').select('parent_id, domain:0008-ap-domains(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-            supabase.from('0008-ap-universal-key-relationships-join').select('parent_id, key_relationship:0008-ap-key-relationships(id, name)').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea'),
-            supabase.from('0008-ap-universal-notes-join').select('parent_id, note_id').in('parent_id', depositIdeaIds).eq('parent_type', 'depositIdea')
-          ]);
-
-          if (rolesError) throw rolesError;
-          if (domainsError) throw domainsError;
-          if (krError) throw krError;
-          if (notesError) throw notesError;
-
-          rolesData = rolesDataResult || [];
-          domainsData = domainsDataResult || [];
-          krData = krDataResult || [];
-          notesData = notesDataResult || [];
-        }
-
-        const transformedDepositIdeas = (depositIdeasData || []).map(di => ({
-          ...di,
-          roles: rolesData?.filter(r => r.parent_id === di.id).map(r => r.role).filter(Boolean) || [],
-          domains: domainsData?.filter(d => d.parent_id === di.id).map(d => d.domain).filter(Boolean) || [],
-          keyRelationships: krData?.filter(kr => kr.parent_id === di.id).map(kr => kr.key_relationship).filter(Boolean) || [],
-          has_notes: notesData?.some(n => n.parent_id === di.id),
-          has_attachments: false,
-        }));
-
-        setDepositIdeas(transformedDepositIdeas);
-        setTasks([]);
-      }
-
-    } catch (error) {
-      console.error(`Error fetching KR ${view}:`, error);
-      Alert.alert('Error', (error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [loading]);
-
   const fetchAllKeyRelationships = async () => {
     try {
       const supabase = getSupabaseClient();
@@ -764,12 +553,8 @@ const { headerColor } = useHeaderColor();
     setSelectedRole(null);
     setSelectedKR(null);
     setActiveMainTab('roles');
-    setKRView('deposits');
-    setKRJournalView('deposits');
     setJournalDateRange('week');
     setPeriodScore(undefined);
-    setTasks([]);
-    setDepositIdeas([]);
     // Clear KRs to prevent showing stale data from previous views
     setKeyRelationships([]);
     setFetchState('idle');
@@ -830,9 +615,6 @@ const { headerColor } = useHeaderColor();
     // Listen for task creation events from other components
     const handleTaskEvent = () => {
       console.log('[RoleBank] Received task event, refreshing data...');
-      if (selectedKR) {
-        fetchKRTasks(selectedKR.id, krView);
-      }
       fetchLastActivity();
     };
 
@@ -852,7 +634,7 @@ const { headerColor } = useHeaderColor();
       eventBus.off(EVENTS.TASK_UPDATED, handleTaskEvent);
       eventBus.off(EVENTS.TASK_DELETED, handleTaskEvent);
     };
-  }, [registerResetHandler, unregisterResetHandler, resetToMain, selectedRole, selectedKR, krView, fetchLastActivity]);
+  }, [registerResetHandler, unregisterResetHandler, resetToMain, selectedRole, selectedKR, fetchLastActivity]);
 
   useEffect(() => {
     if (selectedRole && !isLoadingRole && !fetchInProgressRef.current) {
@@ -900,43 +682,6 @@ const { headerColor } = useHeaderColor();
     }
   }, [selectedRole?.id, isLoadingRole]);
 
-  useEffect(() => {
-    if (selectedKR && !isLoadingRole && !fetchInProgressRef.current) {
-      const controller = new AbortController();
-      fetchAbortController.current = controller;
-
-      const fetchKRData = async () => {
-        try {
-          fetchInProgressRef.current = true;
-          await fetchKRTasks(selectedKR.id, krView);
-        } catch (error) {
-          if (!controller.signal.aborted) {
-            console.error('Error fetching KR data:', error);
-          }
-        } finally {
-          fetchInProgressRef.current = false;
-        }
-      };
-
-      fetchKRData();
-
-      return () => {
-        controller.abort();
-      };
-    }
-  }, [selectedKR?.id, krView, isLoadingRole]);
-
-  useEffect(() => {
-    // R-5c: Calculate period score when KR detail's journal tab is active.
-    // Role-side period score died with R-5b's 4-tab toggle removal; the new
-    // RoleToolshed Journal surface doesn't display Authentic Score.
-    if (krJournalView === 'journal' && selectedKR) {
-      calculatePeriodScore(journalDateRange, 'key_relationship', selectedKR.id);
-    } else {
-      setPeriodScore(undefined);
-    }
-  }, [krJournalView, selectedKR?.id, journalDateRange, calculatePeriodScore]);
-
   // Fetch all KRs when Key Relationships tab is selected (for the main tab view)
   useEffect(() => {
     if (activeMainTab === 'keyrelationships' && !selectedRole && !selectedKR) {
@@ -982,22 +727,6 @@ const { headerColor } = useHeaderColor();
     fetchRoleStatistics();
   }, [activeMainTab, roles.length, roleStatsPeriod, selectedRole]);
 
-  const handleKRViewChange = (view: 'deposits' | 'ideas') => {
-    setKRView(view);
-    setKRJournalView(view);
-    if (selectedKR) {
-      fetchKRTasks(selectedKR.id, view);
-    }
-  };
-
-  const handleKRJournalViewChange = (view: 'deposits' | 'ideas' | 'journal' | 'analytics') => {
-    setKRJournalView(view);
-    if (view !== 'journal' && view !== 'analytics' && selectedKR) {
-      setKRView(view as 'deposits' | 'ideas');
-      fetchKRTasks(selectedKR.id, view as 'deposits' | 'ideas');
-    }
-  };
-
   const handleCompleteTask = async (taskId: string) => {
     try {
       const supabase = getSupabaseClient();
@@ -1007,10 +736,6 @@ const { headerColor } = useHeaderColor();
         .eq('id', taskId);
 
       if (error) throw error;
-
-      if (selectedKR) {
-        fetchKRTasks(selectedKR.id, krView);
-      }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
@@ -1028,10 +753,6 @@ const { headerColor } = useHeaderColor();
         .eq('id', taskId);
 
       if (error) throw error;
-
-      if (selectedKR) {
-        fetchKRTasks(selectedKR.id, krView);
-      }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
@@ -1046,10 +767,6 @@ const { headerColor } = useHeaderColor();
         .eq('id', reflection.id);
 
       if (error) throw error;
-
-      if (selectedKR) {
-        fetchKRTasks(selectedKR.id, krJournalView);
-      }
     } catch (error) {
       Alert.alert('Error', (error as Error).message || 'Failed to delete reflection.');
     }
@@ -1079,10 +796,6 @@ const { headerColor } = useHeaderColor();
         .eq('id', depositIdea.id);
 
       if (error) throw error;
-
-      if (selectedKR) {
-        fetchKRTasks(selectedKR.id, krView);
-      }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
@@ -1121,10 +834,6 @@ const { headerColor } = useHeaderColor();
       if (error) throw error;
       Alert.alert('Success', 'Task has been cancelled');
       setTaskDetailVisible(false);
-
-      if (selectedKR) {
-        fetchKRTasks(selectedKR.id, krView);
-      }
     } catch (error) {
       Alert.alert('Error', (error as Error).message);
     }
@@ -1134,9 +843,6 @@ const { headerColor } = useHeaderColor();
     setTaskFormVisible(false);
     setEditingTask(null);
     setSelectedActivityConfig(null);
-    if (selectedKR) {
-      fetchKRTasks(selectedKR.id, krView);
-    }
     // R-5a: replace removed refreshGoals() with direct goal refetch.
     if (selectedRole) {
       fetchGoalProgressData();
@@ -1459,11 +1165,6 @@ const { headerColor } = useHeaderColor();
               </View>
             </View>
           </View>
-          {/* R-6-mount Phase 5: customHeaderBottom 4-tab segmented control
-              (deposits/ideas/journal/analytics) removed. Replaced by
-              KRMySpaceSection + KRToolshed surfaces in the body. The state
-              `krJournalView` and handler `handleKRJournalViewChange` are
-              now orphans (deferred to R-6-cleanup per scope discipline). */}
         </View>
       );
     }
@@ -1608,15 +1309,6 @@ const { headerColor } = useHeaderColor();
                 onSurfaceChange={handleKRToolshedSurfaceChange}
               />
             )}
-            {/* R-6-mount Phase 5: legacy 4-tab ternary body removed.
-                Was rendering JournalView / AnalyticsView / TaskCard list /
-                DepositIdeaCard list / "Feature coming soon!" based on
-                krJournalView. All four surfaces are now reached via the
-                R-6 components above (Toolshed > Journal/Analytics, MY
-                SPACE > Upcoming/Overdue/Idea Jar, plus Toolshed > Goals).
-                Orphans deferred to R-6-cleanup: krJournalView state,
-                krJournalScope memo, fetchKRTasks dispatch, tasks +
-                depositIdeas state. */}
           </ScrollView>
         </View>
       );
@@ -2305,10 +1997,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
   },
-  customHeaderBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   customMainTabsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2320,30 +2008,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 16,
     padding: 2,
-  },
-  customToggleGroup: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 16,
-    padding: 2,
-  },
-  customToggleButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  customActiveToggle: {
-    backgroundColor: '#ffffff',
-  },
-  customToggleText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  customActiveToggleText: {
-    color: '#0078d4',
   },
   customSingleButton: {
     paddingVertical: 6,
