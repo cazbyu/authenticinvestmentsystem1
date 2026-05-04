@@ -1532,7 +1532,7 @@ const renderDashboardTabs = () => (
 
   {activeTab === 'home' ? (
     <>
-      <CompassView />
+      <CompassView enablePanels={true} defaultZone="south" />
       <TodaysCommitmentsWidget userId={userId} onRefresh={refreshScore} />
     </>
         ) : activeTab === 'reflect' ? (

@@ -40,6 +40,7 @@ interface LifeCompassProps {
   onTaskFormOpen?: (formType: 'task' | 'event' | 'depositIdea') => void;
   onJournalFormOpen?: (formType: 'rose' | 'thorn' | 'reflection') => void;
   onCeremonyComplete?: () => void;
+  suppressNavigation?: boolean;
 }
 
 type CompassMode = 'spark' | 'exploration' | 'ceremony';
@@ -146,6 +147,7 @@ export function LifeCompass({
   onTaskFormOpen,
   onJournalFormOpen,
   onCeremonyComplete,
+  suppressNavigation,
 }: LifeCompassProps) {
   const router = useRouter();
   const rotation = useSharedValue(0);
@@ -597,7 +599,9 @@ export function LifeCompass({
 
     // Navigate to the corresponding page
     const route = CARDINAL_ROUTES[cardinal];
-    router.push(route as any);
+    if (!suppressNavigation) {
+      router.push(route as any);
+    }
 
   }, [
     compassState.isSpinning,
@@ -607,6 +611,7 @@ export function LifeCompass({
     sparkQuestions,
     recordQuestionShown,
     router,
+    suppressNavigation,
   ]);
 
   const handleGoldSpindleSnap = useCallback((direction: 0 | 90 | 180 | 270) => {
