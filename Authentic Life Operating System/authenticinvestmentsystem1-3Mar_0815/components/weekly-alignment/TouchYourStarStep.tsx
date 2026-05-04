@@ -889,7 +889,7 @@ export function TouchYourStarStep({
       let query = supabase
         .from('0008-ap-power-questions')
         .select('id, question_text, question_context, ob_priority')
-        .eq('power_question', 1)
+        .eq('power_question_id', 1)
         .is('core_identity', null)
         .is('strategy_type', null)
         .eq('is_active', true)
