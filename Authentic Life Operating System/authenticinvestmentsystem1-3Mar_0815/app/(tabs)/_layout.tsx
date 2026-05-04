@@ -43,7 +43,7 @@ export default function TabLayout() {
           }
         },
       }}>
-      
+
       {/* North Star - First tab */}
       <Tabs.Screen
         name="north-star"

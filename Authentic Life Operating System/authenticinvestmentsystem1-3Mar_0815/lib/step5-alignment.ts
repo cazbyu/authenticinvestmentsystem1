@@ -9,7 +9,7 @@ export interface PowerQuestion {
   id: string;
   question_text: string;
   question_context: string | null;
-  power_question: number;
+  power_question_id: number;
   role_name: string | null;
   role_category: string | null;
   is_repeatable: boolean;
@@ -31,8 +31,8 @@ export async function selectPQ3Question(
   // 1. Get universal PQ3 questions only (no role, no wellness zone)
   const { data: allPQ3 } = await supabase
     .from('0008-ap-power-questions')
-    .select('id, question_text, question_context, power_question, role_name, role_category, is_repeatable, is_active, ob_priority')
-    .eq('power_question', 3)
+    .select('id, question_text, question_context, power_question_id, role_name, role_category, is_repeatable, is_active, ob_priority')
+    .eq('power_question_id', 3)
     .eq('is_active', true)
     .is('role_id', null)
     .is('role_name', null)
@@ -80,8 +80,8 @@ export async function selectPQ5Question(
   // 1. Get universal PQ5 questions only (no role, no wellness zone, exclude template)
   const { data: allPQ5 } = await supabase
     .from('0008-ap-power-questions')
-    .select('id, question_text, question_context, power_question, role_name, role_category, is_repeatable, is_active, ob_priority')
-    .eq('power_question', 5)
+    .select('id, question_text, question_context, power_question_id, role_name, role_category, is_repeatable, is_active, ob_priority')
+    .eq('power_question_id', 5)
     .eq('is_active', true)
     .is('role_id', null)
     .is('role_name', null)
@@ -279,7 +279,7 @@ export async function addToPersonalLibrary(
       user_id: userId,
       question_text: question.question_text,
       question_context: question.question_context,
-      power_question: question.power_question,
+      power_question: question.power_question_id,
       source_question_id: question.id,
       source_type: 'alignment_check',
       is_active: true,
