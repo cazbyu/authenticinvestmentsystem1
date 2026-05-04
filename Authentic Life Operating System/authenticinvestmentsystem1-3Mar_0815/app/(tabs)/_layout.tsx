@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { useHeaderColor, TAB_COLORS } from '@/contexts/HeaderColorContext';
-import { NorthStarIcon, WellnessIcon, GoalIcon, RoleIcon } from '@/components/icons/CustomIcons';
+import { NorthStarIcon, WellnessIcon, GoalIcon, RoleIcon, CompassIcon } from '@/components/icons/CustomIcons';
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -43,8 +43,20 @@ export default function TabLayout() {
           }
         },
       }}>
-      
-      {/* North Star - First tab */}
+
+      {/* Compass (Dashboard) - First visible tab */}
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Compass',
+          tabBarActiveTintColor: TAB_COLORS['dashboard'],
+          tabBarIcon: ({ size, color }) => (
+            <CompassIcon size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* North Star - Hidden from tab bar but still accessible via cardinal tap on Compass */}
       <Tabs.Screen
         name="north-star"
         options={{
@@ -53,6 +65,7 @@ export default function TabLayout() {
           tabBarIcon: ({ size, color }) => (
             <NorthStarIcon size={size} color={color} />
           ),
+          href: null,
         }}
       />
 
@@ -89,14 +102,6 @@ export default function TabLayout() {
           tabBarIcon: ({ size, color }) => (
             <GoalIcon size={size} color={color} />
           ),
-        }}
-      />
-
-      {/* Dashboard - Hidden from tab bar but still accessible via header compass */}
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          href: null,
         }}
       />
 
