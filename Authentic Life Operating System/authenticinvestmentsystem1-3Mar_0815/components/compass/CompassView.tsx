@@ -1,4 +1,4 @@
-import React, { useState, useRef, lazy, Suspense } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AspirationalQuote } from './AspirationalQuote';
@@ -12,6 +12,7 @@ type Direction = 'north' | 'south' | 'east' | 'west';
 interface CompassViewProps {
   enablePanels?: boolean;
   defaultZone?: Direction;
+  onDirectionChange?: (dir: Direction | null) => void;
 }
 
 const ZONE_TO_DIRECTION: Record<'mission' | 'wellness' | 'goals' | 'roles', Direction> = {
@@ -61,6 +62,7 @@ const PANEL_CONFIG: Record<Direction, { label: string; body: string; hint: strin
 export function CompassView({
   enablePanels = false,
   defaultZone = 'south',
+  onDirectionChange,
 }: CompassViewProps = {}) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -70,7 +72,7 @@ export function CompassView({
   );
   const [compassSize, setCompassSize] = useState(enablePanels ? 240 : 300);
 
-  const hasInteractedRef = useRef(false);
+  const [userHasNavigated, setUserHasNavigated] = useState(false);
 
   const [isTaskEventFormVisible, setIsTaskEventFormVisible] = useState(false);
   const [taskEventFormType, setTaskEventFormType] = useState<'task' | 'event' | 'depositIdea'>('task');
@@ -93,13 +95,14 @@ export function CompassView({
 
   const handleZoneChange = (zone: 'mission' | 'wellness' | 'goals' | 'roles') => {
     if (!enablePanels) return;
-    if (!hasInteractedRef.current) {
-      hasInteractedRef.current = true;
-      return; // skip mount-fired event, keep defaultZone
-    }
     const dir = ZONE_TO_DIRECTION[zone];
+    if (!userHasNavigated && dir === 'north') {
+      return; // skip mount-fired event — keep South default
+    }
+    setUserHasNavigated(true);
     setActiveZone(dir);
     setCompassSize(240);
+    onDirectionChange?.(dir);
   };
 
   const handlePanelPress = () => {
@@ -109,6 +112,7 @@ export function CompassView({
 
   const renderPanel = () => {
     if (!enablePanels || !activeZone) return null;
+    if (activeZone === 'south') return null; // South handled by parent (dashboard)
     const config = PANEL_CONFIG[activeZone];
     const accent = DIRECTION_COLORS[activeZone];
 
