@@ -7,6 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { G, Circle, Defs, Filter, FeGaussianBlur, FeOffset, FeComponentTransfer, FeFuncA, FeMerge, FeMergeNode } from 'react-native-svg';
 import { NorthStarIcon, WellnessIcon, GoalIcon, RoleIcon } from '@/components/icons/CustomIcons';
+import { CalendarDays } from 'lucide-react-native';
 
 interface CardinalIconsProps {
   activeCardinal: 'north' | 'east' | 'south' | 'west' | null;
@@ -25,14 +26,14 @@ interface CardinalIconsProps {
 const ICON_COMPONENTS = {
   north: NorthStarIcon,
   east: WellnessIcon,
-  south: GoalIcon,
+  south: CalendarDays,
   west: RoleIcon,
 };
 
 const CARDINAL_CONFIG = {
   north: { angle: 0, color: '#ed1c24', label: 'Mission' },
   east: { angle: 90, color: '#39b54a', label: 'Wellness' },
-  south: { angle: 180, color: '#4169E1', label: 'Goals' },
+  south: { angle: 180, color: '#4b3a8f', label: 'Today' },
   west: { angle: 270, color: '#9370DB', label: 'Roles' },
 };
 

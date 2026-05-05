@@ -36,7 +36,6 @@ import { SettingsSidebar } from '@/components/SettingsSidebar';
 import { CompassIcon } from '@/components/icons/CustomIcons';
 import { useHeaderColor } from '@/contexts/HeaderColorContext';
 import { FlashingArrow } from '@/components/compass/FlashingArrow';
-import TodaysCommitmentsWidget from '@/components/TodaysCommitmentsWidget';
 import { useAttentionState } from '@/hooks/useAttentionState';
 import { ChatBubbleContainer, detectActiveRitual } from '@/components/chat-bubble';
 
@@ -1609,7 +1608,7 @@ const renderDashboardTabs = () => (
 
       {(!compassDirection || compassDirection === 'south') && (
         <>
-          <TodaysCommitmentsWidget userId={userId} onRefresh={refreshScore} />
+          {actionsTableViewElement}
           {compassGoals.length > 0 && (
             <View style={styles.goalsStrip}>
               <Text style={[styles.goalsStripLabel, { color: '#b45309' }]}>
