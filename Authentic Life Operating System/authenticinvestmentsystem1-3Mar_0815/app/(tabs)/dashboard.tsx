@@ -83,7 +83,7 @@ export default function Dashboard() {
   const [compassDirection, setCompassDirection] = useState<
     'north' | 'south' | 'east' | 'west' | null
   >(null);
-  type CompassGoal = { id: string; title: string; progress: number };
+  type CompassGoal = { id: string; title: string };
   const [compassGoals, setCompassGoals] = useState<CompassGoal[]>([]);
 
   // Speed Dial FAB state - tracks which activity was selected
@@ -115,12 +115,10 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const { data } = await supabase
-        .from('0008-ap-goals-12wk')
-        .select('id, title, progress')
+        .from('v_unified_goals_12wk')
+        .select('id, title')
         .eq('user_id', user.id)
-        .eq('is_active', true)
-        .eq('archived', false)
-        .order('start_date', { ascending: false })
+        .eq('status', 'active')
         .limit(5);
       setCompassGoals((data ?? []) as CompassGoal[]);
     } catch (err) {
@@ -1622,17 +1620,6 @@ const renderDashboardTabs = () => (
                   <Text style={styles.goalName} numberOfLines={1}>
                     {goal.title}
                   </Text>
-                  <View style={styles.goalTrack}>
-                    <View
-                      style={[
-                        styles.goalFill,
-                        { width: `${Math.min(goal.progress ?? 0, 100)}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.goalPct}>
-                    {Math.round(goal.progress ?? 0)}%
-                  </Text>
                 </View>
               ))}
             </View>
@@ -2106,23 +2093,5 @@ devResetLinkText: {
       fontSize: 12,
       flex: 1,
       color: '#111827',
-    },
-    goalTrack: {
-      width: 60,
-      height: 4,
-      backgroundColor: '#f3f4f6',
-      borderRadius: 2,
-      overflow: 'hidden',
-    },
-    goalFill: {
-      height: '100%',
-      backgroundColor: '#b45309',
-      borderRadius: 2,
-    },
-    goalPct: {
-      fontSize: 11,
-      width: 32,
-      textAlign: 'right',
-      color: '#6b7280',
     },
 });
