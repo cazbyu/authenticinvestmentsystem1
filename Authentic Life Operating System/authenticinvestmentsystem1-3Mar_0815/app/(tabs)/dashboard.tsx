@@ -79,6 +79,13 @@ export default function Dashboard() {
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
   const [shouldHideHandEmoji, setShouldHideHandEmoji] = useState(false);
 
+  // Compass-3: directional panel + 12-week goals strip for home tab
+  const [compassDirection, setCompassDirection] = useState<
+    'north' | 'south' | 'east' | 'west' | null
+  >(null);
+  type CompassGoal = { id: string; title: string; progress: number };
+  const [compassGoals, setCompassGoals] = useState<CompassGoal[]>([]);
+
   // Speed Dial FAB state - tracks which activity was selected
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -100,6 +107,30 @@ export default function Dashboard() {
     }
   }, [slotLoading, getSlotLabel, roleMappings, wellnessMappings, slotError]);
   // === END TEST CODE ===
+
+  // Compass-3: fetch active 12-week goals for the home-tab Goals strip
+  const fetchCompassGoals = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('0008-ap-goals-12wk')
+        .select('id, title, progress')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .eq('archived', false)
+        .order('start_date', { ascending: false })
+        .limit(5);
+      setCompassGoals((data ?? []) as CompassGoal[]);
+    } catch (err) {
+      console.error('[Compass-3] fetchCompassGoals error:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCompassGoals();
+  }, [fetchCompassGoals]);
 
  
 
@@ -1532,8 +1563,82 @@ const renderDashboardTabs = () => (
 
   {activeTab === 'home' ? (
     <>
-      <CompassView enablePanels={true} defaultZone="south" />
-      <TodaysCommitmentsWidget userId={userId} onRefresh={refreshScore} />
+      <CompassView
+        enablePanels={true}
+        defaultZone="south"
+        onDirectionChange={setCompassDirection}
+      />
+
+      {compassDirection === 'north' && (
+        <TouchableOpacity
+          style={styles.dirPanel}
+          onPress={() => router.push('/north-star' as any)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.dirPanelLabel, { color: '#8b1a1a' }]}>
+            NORTH — YOUR NORTH STAR
+          </Text>
+          <Text style={styles.dirPanelBody}>Mission, Vision & Purpose</Text>
+          <Text style={styles.dirPanelHint}>Tap to open North Star →</Text>
+        </TouchableOpacity>
+      )}
+      {compassDirection === 'east' && (
+        <TouchableOpacity
+          style={styles.dirPanel}
+          onPress={() => router.push('/wellness' as any)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.dirPanelLabel, { color: '#0f6e56' }]}>
+            EAST — WELLNESS
+          </Text>
+          <Text style={styles.dirPanelBody}>Your wellness zones</Text>
+          <Text style={styles.dirPanelHint}>Tap to open Wellness →</Text>
+        </TouchableOpacity>
+      )}
+      {compassDirection === 'west' && (
+        <TouchableOpacity
+          style={styles.dirPanel}
+          onPress={() => router.push('/roles' as any)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.dirPanelLabel, { color: '#1e3a5f' }]}>
+            WEST — ROLES
+          </Text>
+          <Text style={styles.dirPanelBody}>Your roles overview</Text>
+          <Text style={styles.dirPanelHint}>Tap to open Roles →</Text>
+        </TouchableOpacity>
+      )}
+
+      {(!compassDirection || compassDirection === 'south') && (
+        <>
+          <TodaysCommitmentsWidget userId={userId} onRefresh={refreshScore} />
+          {compassGoals.length > 0 && (
+            <View style={styles.goalsStrip}>
+              <Text style={[styles.goalsStripLabel, { color: '#b45309' }]}>
+                12-WEEK GOALS
+              </Text>
+              {compassGoals.map((goal) => (
+                <View key={goal.id} style={styles.goalRow}>
+                  <Text style={styles.goalName} numberOfLines={1}>
+                    {goal.title}
+                  </Text>
+                  <View style={styles.goalTrack}>
+                    <View
+                      style={[
+                        styles.goalFill,
+                        { width: `${Math.min(goal.progress ?? 0, 100)}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.goalPct}>
+                    {Math.round(goal.progress ?? 0)}%
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
+      )}
     </>
         ) : activeTab === 'reflect' ? (
           <ReflectionTableView
@@ -1944,5 +2049,80 @@ devResetLinkText: {
     },
     subTabTextActive: {
       color: '#ffffff',
+    },
+
+    // Compass-3: directional panels for N/E/W
+    dirPanel: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      borderRadius: 12,
+      borderWidth: 0.5,
+      borderColor: '#e5e7eb',
+      backgroundColor: '#ffffff',
+      padding: 12,
+      gap: 6,
+    },
+    dirPanelLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      letterSpacing: 0.6,
+    },
+    dirPanelBody: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: '#111827',
+    },
+    dirPanelHint: {
+      fontSize: 11,
+      fontStyle: 'italic',
+      textAlign: 'right',
+      color: '#6b7280',
+    },
+
+    // Compass-3: 12-week goals strip (south default)
+    goalsStrip: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      borderRadius: 12,
+      borderWidth: 0.5,
+      backgroundColor: '#ffffff',
+      borderColor: '#e5e7eb',
+      padding: 12,
+      gap: 6,
+    },
+    goalsStripLabel: {
+      fontSize: 10,
+      fontWeight: '600',
+      letterSpacing: 0.6,
+      marginBottom: 4,
+    },
+    goalRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 3,
+    },
+    goalName: {
+      fontSize: 12,
+      flex: 1,
+      color: '#111827',
+    },
+    goalTrack: {
+      width: 60,
+      height: 4,
+      backgroundColor: '#f3f4f6',
+      borderRadius: 2,
+      overflow: 'hidden',
+    },
+    goalFill: {
+      height: '100%',
+      backgroundColor: '#b45309',
+      borderRadius: 2,
+    },
+    goalPct: {
+      fontSize: 11,
+      width: 32,
+      textAlign: 'right',
+      color: '#6b7280',
     },
 });
