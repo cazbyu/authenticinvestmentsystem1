@@ -27,7 +27,7 @@ export const COMPASS_WAYPOINTS: CompassWaypoint[] = [
     size: 'large',
     type: 'navigation',
     action: 'navigate',
-    route: '/(tabs)/dashboard',
+    route: '/north-star',
     labelPosition: 'top',
     radius: 115,
     showDot: false,
