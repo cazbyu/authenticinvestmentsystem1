@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Animated, Easing, Platform, FlatList, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DepositIdeaCard } from '@/components/depositIdeas/DepositIdeaCard';
 import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
-import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
 const ActionDetailsModal = lazy(() => import('@/components/tasks/ActionDetailsModal').then(m => ({ default: m.ActionDetailsModal })));
 const TaskEventForm = lazy(() => import('@/components/tasks/TaskEventForm'));
@@ -22,38 +20,52 @@ import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useAuthenticScore } from '@/contexts/AuthenticScoreContext';
 import { useTabReset } from '@/contexts/TabResetContext';
 import { eventBus, EVENTS } from '@/lib/eventBus';
-import { PeriodSelector } from '@/components/dashboard/PeriodSelector';
-import ReflectionHistoryView from '@/components/reflections/ReflectionHistoryView';
-import { ReflectionTableView } from '@/components/dashboard/ReflectionTableView';
 import { ActionsTableView } from '@/components/dashboard/ActionsTableView';
-import { CompassView } from '@/components/compass/CompassView';
 import { router, useFocusEffect } from 'expo-router';
 import { shouldShowRitual } from '@/lib/ritualUtils';
 import { getUserPreferences } from '@/lib/userPreferences';
-import { useSlotMapping } from '@/hooks/compass/useSlotMapping';
 import { UniversalHeader } from '@/components/UniversalHeader';
 import { SettingsSidebar } from '@/components/SettingsSidebar';
-import { CompassIcon } from '@/components/icons/CustomIcons';
-import { useHeaderColor } from '@/contexts/HeaderColorContext';
-import { FlashingArrow } from '@/components/compass/FlashingArrow';
 import { useAttentionState } from '@/hooks/useAttentionState';
 import { ChatBubbleContainer, detectActiveRitual } from '@/components/chat-bubble';
+import MorningSpark from '@/components/dashboard/MorningSpark';
+import RecalibrateView, { OverdueTask } from '@/components/dashboard/RecalibrateView';
+import UpcomingView, { UpcomingItem } from '@/components/dashboard/UpcomingView';
 
-type DashboardTab = 'home' | 'reflect' | 'act' | 'journal';
+type DashboardTab = 'today' | 'upcoming' | 'recalibrate';
+
+function isEventPast(startDate: string, startTime: string | null): boolean {
+  if (!startTime) return false;
+  try {
+    const eventDt = new Date(`${startDate}T${startTime}`);
+    return eventDt < new Date();
+  } catch {
+    return false;
+  }
+}
+
+function formatEventTime(startTime: string | null): string {
+  if (!startTime) return '';
+  const parts = startTime.split(':');
+  if (parts.length < 2) return startTime;
+  const h24 = parseInt(parts[0], 10);
+  const m = parts[1];
+  if (isNaN(h24)) return startTime;
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 || 12;
+  return `${h12}:${m} ${ampm}`;
+}
 
 export default function Dashboard() {
   const { authenticScore, refreshScore } = useAuthenticScore();
-  const { headerColor } = useHeaderColor();
   const { showOnboardingArrow } = useAttentionState();
   const { registerResetHandler, unregisterResetHandler } = useTabReset();
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('home');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('today');
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [journalPeriodScore, setJournalPeriodScore] = useState<number>(0);
   const [activeView, setActiveView] = useState<'deposits' | 'ideas' | 'journal' | 'analytics'>('deposits');
-  const [reflectFilter, setReflectFilter] = useState<'all' | 'depositIdea' | 'rose' | 'thorn' | 'reflection'>('all');
   const [sortOption, setSortOption] = useState('due_date');
-  const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
   const [recurringActionModal, setRecurringActionModal] = useState<{
     visible: boolean;
@@ -76,72 +88,36 @@ export default function Dashboard() {
   const [selectedReflectionDetail, setSelectedReflectionDetail] = useState<any>(null);
   const [isReflectionDetailModalVisible, setIsReflectionDetailModalVisible] = useState(false);
   const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(false);
-  const [shouldHideHandEmoji, setShouldHideHandEmoji] = useState(false);
-
-  // Compass-3: directional panel + 12-week goals strip for home tab
-  const [compassDirection, setCompassDirection] = useState<
-    'north' | 'south' | 'east' | 'west' | null
-  >(null);
-  type CompassGoal = { id: string; title: string };
-  const [compassGoals, setCompassGoals] = useState<CompassGoal[]>([]);
 
   // Speed Dial FAB state - tracks which activity was selected
   const [selectedActivityConfig, setSelectedActivityConfig] = useState<ActivityConfig | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [coachingChatEnabled, setCoachingChatEnabled] = useState(true);
 
-  
-  // === SLOT MAPPING TEST - DELETE AFTER TESTING ===
-  const { getSlotLabel, roleMappings, wellnessMappings, loading: slotLoading, error: slotError } = useSlotMapping();
-
-  useEffect(() => {
-    if (!slotLoading) {
-      console.log('=== SLOT MAPPING TEST ===');
-      console.log('R4 Label:', getSlotLabel('R4'));
-      console.log('WZ3 Label:', getSlotLabel('WZ3'));
-      console.log('Total Roles:', roleMappings.length);
-      console.log('Total Wellness:', wellnessMappings.length);
-      if (slotError) console.log('Error:', slotError);
-      console.log('=========================');
-    }
-  }, [slotLoading, getSlotLabel, roleMappings, wellnessMappings, slotError]);
-  // === END TEST CODE ===
-
-  // Compass-3: fetch active 12-week goals for the home-tab Goals strip
-  const fetchCompassGoals = useCallback(async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from('v_unified_goals_12wk')
-        .select('id, title')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .limit(5);
-      setCompassGoals((data ?? []) as CompassGoal[]);
-    } catch (err) {
-      console.error('[Compass-3] fetchCompassGoals error:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCompassGoals();
-  }, [fetchCompassGoals]);
-
- 
-
   // Ritual state
   const [showMorningSpark, setShowMorningSpark] = useState(false);
   const [showEveningReview, setShowEveningReview] = useState(false);
   const [showWeeklyAlignment, setShowWeeklyAlignment] = useState(false);
   const [showTodaysContract, setShowTodaysContract] = useState(false);
-  const sparkAnimation = useState(new Animated.Value(1))[0];
-  const reviewAnimation = useState(new Animated.Value(1))[0];
-  const alignmentAnimation = useState(new Animated.Value(1))[0];
 
   // Follow-through TaskEventForm state
   const [refreshAssociatedItemsKey, setRefreshAssociatedItemsKey] = useState(0);
+
+  // D1 — Today view data
+  type TodayEvent = {
+    id: string;
+    title: string;
+    start_date: string;
+    start_time: string | null;
+    end_time: string | null;
+  };
+  const [todayEvents, setTodayEvents] = useState<TodayEvent[]>([]);
+
+  // D1 — Overdue tasks for Recalibrate view
+  const [overdueTasks, setOverdueTasks] = useState<OverdueTask[]>([]);
+
+  // D1 — Upcoming items for Upcoming view
+  const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
 
   // Import functions from useGoalProgress hook
   const {
@@ -270,12 +246,10 @@ export default function Dashboard() {
   };
 
   const resetToMain = useCallback(() => {
-    setActiveTab('home');
+    setActiveTab('today');
     setSelectedPeriod('week');
     setActiveView('deposits');
-    setReflectFilter('all');
     setSortOption('due_date');
-    setIsSortModalVisible(false);
     setIsFormModalVisible(false);
     setIsDetailModalVisible(false);
     setSelectedTask(null);
@@ -562,24 +536,36 @@ export default function Dashboard() {
       console.log('[Dashboard] Received task created event, refreshing...');
       fetchData();
       loadJournalPeriodScore();
+      fetchTodayEvents();
+      fetchOverdueTasks();
+      fetchUpcomingItems();
     };
 
     const handleTaskUpdated = () => {
       console.log('[Dashboard] Received task updated event, refreshing...');
       fetchData();
       loadJournalPeriodScore();
+      fetchTodayEvents();
+      fetchOverdueTasks();
+      fetchUpcomingItems();
     };
 
     const handleTaskDeleted = () => {
       console.log('[Dashboard] Received task deleted event, refreshing...');
       fetchData();
       loadJournalPeriodScore();
+      fetchTodayEvents();
+      fetchOverdueTasks();
+      fetchUpcomingItems();
     };
 
     const handleRefreshAll = () => {
       console.log('[Dashboard] Received refresh all event, refreshing...');
       fetchData();
       loadJournalPeriodScore();
+      fetchTodayEvents();
+      fetchOverdueTasks();
+      fetchUpcomingItems();
     };
 
     eventBus.on(EVENTS.TASK_CREATED, handleTaskCreated);
@@ -638,6 +624,113 @@ export default function Dashboard() {
     }
   }, [userId]);
 
+  // D1 — fetch today's events (with start_time for past-fade logic)
+  const fetchTodayEvents = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const supabase = getSupabaseClient();
+      const todayStr = formatLocalDate(new Date());
+
+      // Tasks table events
+      const { data: taskEvents } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, title, start_date, start_time, end_time')
+        .eq('user_id', userId)
+        .eq('type', 'event')
+        .eq('due_date', todayStr)
+        .is('deleted_at', null)
+        .order('start_time', { ascending: true });
+
+      // Commitments table events
+      const { data: commitEvents } = await supabase
+        .from('0008-ap-commitments')
+        .select('id, title, date, start_time, end_time')
+        .eq('user_id', userId)
+        .eq('date', todayStr)
+        .is('deleted_at', null)
+        .order('start_time', { ascending: true });
+
+      const taskEvs: TodayEvent[] = (taskEvents ?? []).map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        start_date: e.start_date ?? todayStr,
+        start_time: e.start_time ?? null,
+        end_time: e.end_time ?? null,
+      }));
+
+      const commitEvs: TodayEvent[] = (commitEvents ?? []).map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        start_date: e.date ?? todayStr,
+        start_time: e.start_time ?? null,
+        end_time: e.end_time ?? null,
+      }));
+
+      const all = [...taskEvs, ...commitEvs].sort((a, b) => {
+        if (!a.start_time) return 1;
+        if (!b.start_time) return -1;
+        return a.start_time.localeCompare(b.start_time);
+      });
+
+      setTodayEvents(all);
+    } catch (err) {
+      console.error('[D1] fetchTodayEvents error:', err);
+    }
+  }, [userId]);
+
+  // D1 — fetch overdue tasks for Recalibrate view
+  const fetchOverdueTasks = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const supabase = getSupabaseClient();
+      const todayStr = formatLocalDate(new Date());
+      const { data } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, title, due_date')
+        .eq('user_id', userId)
+        .lt('due_date', todayStr)
+        .neq('status', 'completed')
+        .is('deleted_at', null)
+        .neq('type', 'event')
+        .order('due_date', { ascending: true });
+
+      setOverdueTasks((data ?? []) as OverdueTask[]);
+    } catch (err) {
+      console.error('[D1] fetchOverdueTasks error:', err);
+    }
+  }, [userId]);
+
+  // D1 — fetch upcoming items for Upcoming view
+  const fetchUpcomingItems = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const supabase = getSupabaseClient();
+      const todayStr = formatLocalDate(new Date());
+
+      const { data: tasks } = await supabase
+        .from('0008-ap-tasks')
+        .select('id, title, type, due_date, start_time')
+        .eq('user_id', userId)
+        .gt('due_date', todayStr)
+        .neq('status', 'completed')
+        .is('deleted_at', null)
+        .order('due_date', { ascending: true })
+        .limit(40);
+
+      const items: UpcomingItem[] = (tasks ?? []).map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        type: t.type === 'event' ? 'event' : 'task',
+        due_date: t.due_date,
+        start_time: t.start_time ?? null,
+      }));
+
+      setUpcomingItems(items);
+    } catch (err) {
+      console.error('[D1] fetchUpcomingItems error:', err);
+    }
+  }, [userId]);
+
   const checkHandEmojiVisibility = useCallback(async () => {
     if (!userId) return;
 
@@ -666,7 +759,6 @@ export default function Dashboard() {
 
       // Hide hand if EITHER condition is true
       const shouldHide = step1CompletedThisWeek || twoOrMoreDaysSinceWeekStart;
-      setShouldHideHandEmoji(shouldHide);
 
       console.log('[Dashboard] Hand emoji logic:', {
         step1CompletedThisWeek,
@@ -679,167 +771,30 @@ export default function Dashboard() {
     }
   }, [userId]);
 
-  const handleDevResetSpark = async () => {
-  try {
-    const supabase = getSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const today = formatLocalDate(new Date());
-
-    // Reset today's spark
-    await supabase
-      .from('0008-ap-daily-sparks')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('spark_date', today);
-
-    // Reset North Star data (Mission, Vision, Core Values, AND Identity)
-    await supabase
-      .from('0008-ap-north-star')
-      .update({
-        mission_statement: null,
-        '5yr_vision': null,
-        core_values: null,
-        core_identity: null,
-        identity_insights: null,
-        identity_prompt_id: null,
-        identity_answered_at: null,
-      })
-      .eq('user_id', user.id);
-
-    // Clear question responses (for fresh onboarding)
-    await supabase
-      .from('0008-ap-question-responses')
-      .delete()
-      .eq('user_id', user.id);
-
-    // Clear prompt responses (so hero-question shows again)
-    await supabase
-      .from('0008-ap-prompt-responses')
-      .delete()
-      .eq('user_id', user.id);
-
-    // Reset weekly alignment completion for today
-    await supabase
-      .from('0008-ap-ritual-completions')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('ritual_type', 'weekly_alignment')
-      .gte('completed_at', today);
-
-    // Clear chat bubble data
-    await supabase.from('0008-ap-conversation-summaries').delete().eq('user_id', user.id);
-    await supabase.from('0008-ap-conversation-messages').delete().eq('user_id', user.id);
-    await supabase.from('0008-ap-captures').delete().eq('user_id', user.id);
-
-    // Clear committed tasks (before sessions, since FK cascades)
-    await supabase.from('0008-ap-ritual-committed-tasks').delete().eq('user_id', user.id);
-
-    // Clear ritual sessions
-    await supabase.from('0008-ap-ritual-sessions').delete().eq('user_id', user.id);
-
-    // Clear stale task flags from previous approaches
-    await supabase
-      .from('0008-ap-tasks')
-      .update({ one_thing: false, committed_date: null })
-      .eq('user_id', user.id)
-      .eq('one_thing', true);
-
-    await checkRitualAvailability();
-    Alert.alert('Dev Reset Complete', 'All ritual data, committed tasks, and responses have been cleared.');
-  } catch (error) {
-    console.error('Error resetting dev data:', error);
-    Alert.alert('Error', 'Failed to reset dev data');
-  }
-};
-
   useEffect(() => {
     checkRitualAvailability();
     checkHandEmojiVisibility();
+    fetchTodayEvents();
+    fetchOverdueTasks();
+    fetchUpcomingItems();
     const interval = setInterval(() => {
       checkRitualAvailability();
       checkHandEmojiVisibility();
     }, 60000);
 
     return () => clearInterval(interval);
-  }, [checkRitualAvailability, checkHandEmojiVisibility]);
+  }, [checkRitualAvailability, checkHandEmojiVisibility, fetchTodayEvents, fetchOverdueTasks, fetchUpcomingItems]);
 
   useFocusEffect(
     useCallback(() => {
       checkRitualAvailability();
       checkHandEmojiVisibility();
-    }, [checkRitualAvailability, checkHandEmojiVisibility])
+      fetchTodayEvents();
+      fetchOverdueTasks();
+      fetchUpcomingItems();
+    }, [checkRitualAvailability, checkHandEmojiVisibility, fetchTodayEvents, fetchOverdueTasks, fetchUpcomingItems])
   );
 
-  useEffect(() => {
-    if (showMorningSpark) {
-      const animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(sparkAnimation, {
-            toValue: 1.05,
-            duration: 750,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(sparkAnimation, {
-            toValue: 1,
-            duration: 750,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      animation.start();
-      return () => animation.stop();
-    }
-  }, [showMorningSpark, sparkAnimation]);
-
-  useEffect(() => {
-    if (showEveningReview) {
-      const animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(reviewAnimation, {
-            toValue: 1.05,
-            duration: 750,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(reviewAnimation, {
-            toValue: 1,
-            duration: 750,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      animation.start();
-      return () => animation.stop();
-    }
-  }, [showEveningReview, reviewAnimation]);
-
-  useEffect(() => {
-    if (showWeeklyAlignment) {
-      const animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(alignmentAnimation, {
-            toValue: 1.05,
-            duration: 750,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(alignmentAnimation, {
-            toValue: 1,
-            duration: 750,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      animation.start();
-      return () => animation.stop();
-    }
-  }, [showWeeklyAlignment, alignmentAnimation]);
 
   const handleCompleteTask = async (task: Task) => {
     try {
@@ -975,54 +930,9 @@ export default function Dashboard() {
     }
   };
 
-  const handleTaskPress = (task: Task) => { setSelectedTask(task); setIsDetailModalVisible(true); };
   const [selectedDepositIdea, setSelectedDepositIdea] = useState<any>(null);
   const [isDepositIdeaDetailVisible, setIsDepositIdeaDetailVisible] = useState(false);
 
-  const handleDepositIdeaPress = (depositIdea: any) => {
-    setSelectedDepositIdea(depositIdea);
-    setIsDepositIdeaDetailVisible(true);
-  };
-
-  const handleTaskPressById = async (taskId: string) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: task, error } = await supabase
-        .from('0008-ap-tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
-
-      if (error) throw error;
-      if (task) {
-        setSelectedTask(task as Task);
-        setIsDetailModalVisible(true);
-      }
-    } catch (error) {
-      console.error('Error loading task:', error);
-      Alert.alert('Error', 'Failed to load task details');
-    }
-  };
-
-  const handleDepositIdeaPressById = async (ideaId: string) => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: idea, error } = await supabase
-        .from('0008-ap-deposit-ideas')
-        .select('*')
-        .eq('id', ideaId)
-        .single();
-
-      if (error) throw error;
-      if (idea) {
-        setSelectedDepositIdea(idea);
-        setIsDepositIdeaDetailVisible(true);
-      }
-    } catch (error) {
-      console.error('Error loading deposit idea:', error);
-      Alert.alert('Error', 'Failed to load deposit idea details');
-    }
-  };
   const handleUpdateDepositIdea = async (depositIdea: any) => {
     const editData = {
       ...depositIdea,
@@ -1185,6 +1095,55 @@ export default function Dashboard() {
     }
   };
 
+  // D1 — Recalibrate actions
+  const handleRecalibrateReschedule = useCallback((taskId: string) => {
+    const task = overdueTasks.find(t => t.id === taskId);
+    if (task) {
+      setSelectedTask({ id: task.id, title: task.title } as any);
+      setIsDetailModalVisible(true);
+    }
+  }, [overdueTasks]);
+
+  const handleRecalibrateComplete = useCallback(async (taskId: string) => {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: task } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('id', taskId)
+        .maybeSingle();
+      if (task) {
+        await handleCompleteTask(task as Task);
+      }
+      setOverdueTasks(prev => prev.filter(t => t.id !== taskId));
+    } catch (err) {
+      console.error('[D1] Recalibrate complete error:', err);
+    }
+  }, []);
+
+  const handleRecalibrateRelease = useCallback(async (taskId: string) => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        'Release this task? It will be removed from your list.',
+      );
+      if (!confirmed) return;
+    }
+    try {
+      const supabase = getSupabaseClient();
+      const { data: task } = await supabase
+        .from('0008-ap-tasks')
+        .select('*')
+        .eq('id', taskId)
+        .maybeSingle();
+      if (task) {
+        await handleDeleteTask(task as Task);
+      }
+      setOverdueTasks(prev => prev.filter(t => t.id !== taskId));
+    } catch (err) {
+      console.error('[D1] Recalibrate release error:', err);
+    }
+  }, []);
+
   const handleAssociatedItemPress = async (item: any) => {
     console.log('[Dashboard] Associated item pressed:', item);
 
@@ -1243,7 +1202,6 @@ export default function Dashboard() {
     }, 300);
   };
 
-  const handleDragEnd = ({ data }: { data: Task[] }) => setTasks(data);
   const sortOptions = [
     { value: 'due_date', label: 'Due Date' },
     { value: 'priority', label: 'Priority' },
@@ -1251,64 +1209,73 @@ export default function Dashboard() {
   ];
 
 // Sub-header tabs component for Dashboard
-const renderDashboardTabs = () => (
-  <View style={styles.subHeaderContainer}>
-    <View style={styles.tabsRow}>
-      <TouchableOpacity
-        style={[styles.subTab, activeTab === 'home' && { backgroundColor: headerColor }]}
-        onPress={() => setActiveTab('home')}
-        accessibilityLabel="Compass tab"
-        accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'home' }}
-      >
-        <View style={{ marginVertical: -4 }}>
-  <CompassIcon size={24} color={activeTab === 'home' ? '#ffffff' : '#6b7280'} />
-</View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.subTab, activeTab === 'reflect' && { backgroundColor: headerColor }]}
-        onPress={() => setActiveTab('reflect')}
-        accessibilityLabel="Reflect tab"
-        accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'reflect' }}
-      >
-        <Text style={[styles.subTabText, activeTab === 'reflect' && styles.subTabTextActive]}>
-          Reflect
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.subTab, activeTab === 'act' && { backgroundColor: headerColor }]}
-        onPress={() => setActiveTab('act')}
-        accessibilityLabel="Act tab"
-        accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'act' }}
-      >
-        <Text style={[styles.subTabText, activeTab === 'act' && styles.subTabTextActive]}>
-          Act
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.subTab, activeTab === 'journal' && { backgroundColor: headerColor }]}
-        onPress={() => setActiveTab('journal')}
-        accessibilityLabel="Journal tab"
-        accessibilityRole="tab"
-        accessibilityState={{ selected: activeTab === 'journal' }}
-      >
-        <Text style={[styles.subTabText, activeTab === 'journal' && styles.subTabTextActive]}>
-          Journal
-        </Text>
-      </TouchableOpacity>
+const renderTopBar = () => {
+  const TABS: Array<{ key: DashboardTab; label: string }> = [
+    { key: 'today', label: 'Today' },
+    { key: 'upcoming', label: 'Upcoming' },
+    { key: 'recalibrate', label: 'Recalibrate' },
+  ];
+  return (
+    <View style={styles.topBar}>
+      <View style={styles.topBarPills}>
+        {TABS.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[
+              styles.topBarPill,
+              activeTab === tab.key && styles.topBarPillActive,
+            ]}
+            onPress={() => setActiveTab(tab.key)}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.topBarPillText,
+                activeTab === tab.key && styles.topBarPillTextActive,
+              ]}
+            >
+              {tab.label}
+              {tab.key === 'recalibrate' && overdueTasks.length > 0
+                ? ` (${overdueTasks.length})`
+                : ''}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.topBarRituals}>
+        {(showWeeklyAlignment || true) && (
+          <TouchableOpacity
+            style={styles.ritualIconBtn}
+            onPress={() => router.push('/weekly-alignment' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.ritualIconCircle, { backgroundColor: '#dbeafe' }]}>
+              <Text style={styles.ritualIconEmoji}>🧭</Text>
+            </View>
+            <Text style={styles.ritualIconLabel}>Align</Text>
+          </TouchableOpacity>
+        )}
+        {(showEveningReview || true) && (
+          <TouchableOpacity
+            style={styles.ritualIconBtn}
+            onPress={() => router.push('/evening-review-compass' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.ritualIconCircle, { backgroundColor: '#ede9fe' }]}>
+              <Text style={styles.ritualIconEmoji}>🌙</Text>
+            </View>
+            <Text style={styles.ritualIconLabel}>Evening</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
   const actionsTableViewElement = (
     <ActionsTableView
       filter={'all'}
-      period={selectedPeriod}
+      period={'today'}
       userId={userId}
       onRefresh={() => {
         refreshScore();
@@ -1450,269 +1417,138 @@ const renderDashboardTabs = () => (
       {/* Universal Header */}
       <UniversalHeader onOpenSettings={() => setSettingsSidebarVisible(true)} />
       
-      {/* Dashboard Sub-Header Tabs */}
-      {renderDashboardTabs()}
+      {renderTopBar()}
 
-      {activeTab === 'act' || activeTab === 'journal' ? (
-        <View style={styles.scrollContainer}>
-          <View style={styles.summarySection}>
-            <View style={styles.controlsRow}>
-              <PeriodSelector
-                selectedPeriod={selectedPeriod}
-                onPeriodChange={setSelectedPeriod}
-                score={activeTab === 'journal' ? journalPeriodScore : undefined}
-              />
-            </View>
-          </View>
-          <View style={{ flex: 1 }}>
-            {activeTab === 'act' ? (
-              actionsTableViewElement
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── TODAY ── */}
+        {activeTab === 'today' && (
+          <>
+            <View style={styles.sectionGap} />
+
+            <MorningSpark userId={userId} />
+
+            <View style={styles.sectionGap} />
+
+            <Text style={styles.sectionLabel}>
+              <Text style={styles.sectionLabelIcon}>▶ </Text>
+              Events
+            </Text>
+            {todayEvents.length === 0 ? (
+              <Text style={styles.emptySection}>No events today.</Text>
             ) : (
+              todayEvents.map(ev => {
+                const past = isEventPast(ev.start_date, ev.start_time);
+                return (
+                  <View
+                    key={ev.id}
+                    style={[styles.eventCard, past && styles.eventCardPast]}
+                  >
+                    <Text style={[styles.eventTime, past && styles.eventTimePast]}>
+                      {formatEventTime(ev.start_time)}
+                    </Text>
+                    <View style={[styles.eventDot, past && styles.eventDotPast]} />
+                    <Text
+                      style={[styles.eventTitle, past && styles.eventTitlePast]}
+                      numberOfLines={1}
+                    >
+                      {ev.title}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+
+            <View style={styles.sectionGap} />
+
+            <Text style={styles.sectionLabel}>
+              <Text style={styles.sectionLabelIcon}>✓ </Text>
+              Tasks
+            </Text>
+            {actionsTableViewElement}
+
+            <View style={styles.sectionGap} />
+
+            <View style={styles.captureCard}>
+              <Text style={styles.captureSectionLabel}>CAPTURE</Text>
+              <View style={styles.captureBtnRow}>
+                {([
+                  { label: 'Rose', emoji: '❤', color: '#fce7f3', type: 'rose' as const },
+                  { label: 'Thorn', emoji: '✗', color: '#fef2f2', type: 'thorn' as const },
+                  { label: 'Reflect', emoji: '✎', color: '#ede9fe', type: 'reflection' as const },
+                  { label: 'Idea', emoji: '☁', color: '#e0e7ff', type: 'depositIdea' as const },
+                  { label: 'Align', emoji: '⊙', color: '#fef3c7', type: 'align' as const },
+                ] as const).map(btn => (
+                  <TouchableOpacity
+                    key={btn.label}
+                    style={styles.captureBtn}
+                    onPress={() => {
+                      if (btn.type === 'rose' || btn.type === 'thorn' || btn.type === 'reflection') {
+                        setSelectedActivityConfig(getActivityConfig(btn.type));
+                      } else if (btn.type === 'depositIdea') {
+                        setSelectedActivityConfig(getActivityConfig('depositIdea'));
+                      } else {
+                        if (Platform.OS === 'web') window.alert('Align coming soon');
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.captureBtnIcon, { backgroundColor: btn.color }]}>
+                      <Text style={styles.captureBtnEmoji}>{btn.emoji}</Text>
+                    </View>
+                    <Text style={styles.captureBtnLabel}>{btn.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.sectionGap} />
+
+            <View style={styles.journalCard}>
+              <View style={styles.journalCardHeader}>
+                <Text style={styles.journalCardTitle}>TODAY'S JOURNAL</Text>
+                <Text style={styles.journalCardDate}>
+                  {formatLocalDate(new Date()).split('-').slice(1).join('/')}
+                </Text>
+              </View>
               <JournalView
                 scope={{ type: 'user', id: userId }}
                 onEntryPress={handleJournalEntryPress}
-                dateRange={selectedPeriod}
-                refreshKey={journalRefreshKey}
-              />
-            )}
-          </View>
-        </View>
-      ) : (
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={true}>
-        {activeTab !== 'home' && (
-          <View style={styles.summarySection}>
-            <View style={styles.controlsRow}>
-              <PeriodSelector
-                selectedPeriod={selectedPeriod}
-                onPeriodChange={setSelectedPeriod}
-                score={activeTab === 'journal' ? journalPeriodScore : undefined}
+                dateRange="today"
+                refreshKey={0}
               />
             </View>
-          </View>
+
+            <View style={{ height: 100 }} />
+          </>
         )}
 
-        <View style={styles.content} pointerEvents="box-none">
+        {/* ── UPCOMING ── */}
+        {activeTab === 'upcoming' && (
+          <>
+            <View style={styles.sectionGap} />
+            <UpcomingView items={upcomingItems} />
+            <View style={{ height: 100 }} />
+          </>
+        )}
 
-  {activeTab === 'home' && (
-  <>
-    {/* Ritual Icons Row - Left aligned under subheader */}
-    <View style={styles.ritualIconsRow}>
-      {/* Weekly Alignment - always show if onboarding arrow needed */}
-      {(showWeeklyAlignment || showOnboardingArrow) && (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Animated.View style={{ transform: [{ scale: showWeeklyAlignment ? alignmentAnimation : 1 }] }}>
-            <TouchableOpacity
-              onPress={() => router.push('/weekly-alignment')}
-              style={[
-                styles.ritualIcon, 
-                { backgroundColor: showWeeklyAlignment ? '#D1FAE5' : '#F3F4F6' }
-              ]}
-              activeOpacity={0.7}
-            >
-              <Text style={{ fontSize: 24 }}>🎯</Text>
-            </TouchableOpacity>
-          </Animated.View>
-          <FlashingArrow visible={showOnboardingArrow && !shouldHideHandEmoji} />
-        </View>
-      )}
-
-      {showMorningSpark && (
-        <Animated.View style={{ transform: [{ scale: sparkAnimation }] }}>
-          <TouchableOpacity
-            onPress={() => router.push('/morning-spark-compass')}
-            style={[styles.ritualIcon, { backgroundColor: '#FEE2E2' }]}
-            activeOpacity={0.7}
-          >
-            <Text style={{ fontSize: 24 }}>🔥</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      {showEveningReview && (
-        <Animated.View style={{ transform: [{ scale: reviewAnimation }] }}>
-          <TouchableOpacity
-            onPress={() => router.push('/evening-review-compass')}
-            style={[styles.ritualIcon, { backgroundColor: '#EDE9FE' }]}
-            activeOpacity={0.7}
-          >
-            <Text style={{ fontSize: 24 }}>🌙</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      {showTodaysContract && (
-        <TouchableOpacity
-          onPress={() => router.push('/todays-contract')}
-          style={[styles.ritualIcon, { backgroundColor: '#DBEAFE' }]}
-          activeOpacity={0.7}
-        >
-          <Text style={{ fontSize: 24 }}>📋</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Dev Reset - small text link */}
-      <TouchableOpacity onPress={handleDevResetSpark} style={styles.devResetLink}>
-        <Text style={styles.devResetLinkText}>Reset (Dev)</Text>
-      </TouchableOpacity>
-    </View>
-  </>
-)}
-
-  {activeTab === 'home' ? (
-    <>
-      <CompassView
-        enablePanels={true}
-        defaultZone="south"
-        onDirectionChange={setCompassDirection}
-      />
-
-      {compassDirection === 'north' && (
-        <TouchableOpacity
-          style={styles.dirPanel}
-          onPress={() => router.push('/north-star' as any)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.dirPanelLabel, { color: '#8b1a1a' }]}>
-            NORTH — YOUR NORTH STAR
-          </Text>
-          <Text style={styles.dirPanelBody}>Mission, Vision & Purpose</Text>
-          <Text style={styles.dirPanelHint}>Tap to open North Star →</Text>
-        </TouchableOpacity>
-      )}
-      {compassDirection === 'east' && (
-        <TouchableOpacity
-          style={styles.dirPanel}
-          onPress={() => router.push('/wellness' as any)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.dirPanelLabel, { color: '#0f6e56' }]}>
-            EAST — WELLNESS
-          </Text>
-          <Text style={styles.dirPanelBody}>Your wellness zones</Text>
-          <Text style={styles.dirPanelHint}>Tap to open Wellness →</Text>
-        </TouchableOpacity>
-      )}
-      {compassDirection === 'west' && (
-        <TouchableOpacity
-          style={styles.dirPanel}
-          onPress={() => router.push('/roles' as any)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.dirPanelLabel, { color: '#1e3a5f' }]}>
-            WEST — ROLES
-          </Text>
-          <Text style={styles.dirPanelBody}>Your roles overview</Text>
-          <Text style={styles.dirPanelHint}>Tap to open Roles →</Text>
-        </TouchableOpacity>
-      )}
-
-      {(!compassDirection || compassDirection === 'south') && (
-        <>
-          {actionsTableViewElement}
-          {compassGoals.length > 0 && (
-            <View style={styles.goalsStrip}>
-              <Text style={[styles.goalsStripLabel, { color: '#b45309' }]}>
-                12-WEEK GOALS
-              </Text>
-              {compassGoals.map((goal) => (
-                <View key={goal.id} style={styles.goalRow}>
-                  <Text style={styles.goalName} numberOfLines={1}>
-                    {goal.title}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </>
-      )}
-    </>
-        ) : activeTab === 'reflect' ? (
-          <ReflectionTableView
-            filter={reflectFilter}
-            period={selectedPeriod}
-            userId={userId}
-            onReflectionPress={(reflection: any) => {
-              setSelectedReflectionDetail(reflection);
-              setIsReflectionDetailModalVisible(true);
-            }}
-            onTaskPress={handleTaskPressById}
-            onDepositIdeaPress={handleDepositIdeaPressById}
-          />
-        ) : activeTab === 'act' ? (
-          actionsTableViewElement
-        ) : activeTab === 'journal' ? (
-          <JournalView
-            scope={{ type: 'user', id: userId }}
-            onEntryPress={handleJournalEntryPress}
-            dateRange={selectedPeriod}
-            refreshKey={journalRefreshKey}
-          />
-        ) : loading ? null
-          : (activeView === 'deposits' && tasks.length === 0) || (activeView === 'ideas' && depositIdeas.length === 0) ?
-            <View style={styles.emptyContainer}><Text style={styles.emptyText}>No {activeView} found</Text></View>
-          : activeView === 'deposits' ? 
-            Platform.OS === 'web' ? (
-              <FlatList
-                data={tasks}
-                renderItem={({ item }) => (
-                  <TaskCard
-                    task={item}
-                    onComplete={handleCompleteTask}
-                    onDelete={handleDeleteTask}
-                    onLongPress={() => {}}
-                    onPress={handleTaskPress}
-                    isDragging={false}
-                  />
-                )}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.taskList}
-                showsVerticalScrollIndicator={true}
-                style={styles.draggableList}
-              />
-            ) : (
-              <DraggableFlatList 
-                data={tasks} 
-                renderItem={({ item, drag, isActive }) => (
-                  <TaskCard
-                    task={item}
-                    onComplete={handleCompleteTask}
-                    onDelete={handleDeleteTask}
-                    onLongPress={drag}
-                    onPress={handleTaskPress}
-                    isDragging={isActive}
-                  />
-                )}
-                keyExtractor={(item) => item.id} 
-                onDragEnd={handleDragEnd} 
-                contentContainerStyle={styles.taskList} 
-                showsVerticalScrollIndicator={true}
-                scrollEnabled={true}
-                style={styles.draggableList}
-              />
-            )
-          : <ScrollView 
-              style={styles.scrollContent} 
-              showsVerticalScrollIndicator={true}
-              scrollEnabled={true}
-              contentContainerStyle={styles.scrollContentContainer}
-            >
-              <View style={styles.taskList}>
-                {depositIdeas.map(depositIdea =>
-                  <DepositIdeaCard
-                    key={depositIdea.id}
-                    depositIdea={depositIdea}
-                    onUpdate={handleUpdateDepositIdea}
-                    onCancel={handleCancelDepositIdea}
-                    onActivate={handleActivateDepositIdea}
-                    onPress={handleDepositIdeaPress}
-                  />
-                )}
-              </View>
-            </ScrollView>
-        }
-        </View>
+        {/* ── RECALIBRATE ── */}
+        {activeTab === 'recalibrate' && (
+          <>
+            <View style={styles.sectionGap} />
+            <RecalibrateView
+              tasks={overdueTasks}
+              onReschedule={handleRecalibrateReschedule}
+              onComplete={handleRecalibrateComplete}
+              onRelease={handleRecalibrateRelease}
+            />
+            <View style={{ height: 100 }} />
+          </>
+        )}
       </ScrollView>
-      )}
 
       {/* Speed Dial FAB - Coach option when enabled, else direct to capture */}
       <SpeedDialFab
@@ -1765,15 +1601,6 @@ const renderDashboardTabs = () => (
         onRefreshAssociatedItems={refreshAssociatedItemsKey > 0 ? () => {} : undefined}
         onItemPress={handleAssociatedItemPress}
       />
-      <Modal visible={isSortModalVisible} transparent animationType="fade" onRequestClose={() => setIsSortModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}><Text style={styles.modalTitle}>Sort by</Text><TouchableOpacity onPress={() => setIsSortModalVisible(false)} style={styles.closeButton}><X size={20} color="#6b7280" /></TouchableOpacity></View>
-            <View style={styles.sortOptions}>{sortOptions.map(option => <TouchableOpacity key={option.value} style={[styles.sortOption, sortOption === option.value && styles.activeSortOption]} onPress={() => { setSortOption(option.value); setIsSortModalVisible(false); }}><Text style={[styles.sortOptionText, sortOption === option.value && styles.activeSortOptionText]}>{option.label}</Text></TouchableOpacity>)}</View>
-          </View>
-        </View>
-      </Modal>
-
       <RecurringTaskActionModal
         visible={recurringActionModal.visible}
         onClose={() => setRecurringActionModal({ visible: false, task: null, actionType: 'delete' })}
@@ -1928,7 +1755,7 @@ const styles = StyleSheet.create({
     },
     content: { flex: 1, ...Platform.select({ web: { overflow: 'visible' } as any, default: {} }) },
     draggableList: { flex: 1 },
-    scrollContent: { flex: 1 },
+    scrollContent: { paddingTop: 0, paddingBottom: 100 },
     scrollContentContainer: { flexGrow: 1, paddingBottom: 100 },
     taskList: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
     tag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
@@ -2093,4 +1920,41 @@ devResetLinkText: {
       flex: 1,
       color: '#111827',
     },
+
+    // D1 styles
+    topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#ffffff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
+    topBarPills: { flexDirection: 'row', gap: 5 },
+    topBarPill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 0.5, borderColor: '#d1d5db' },
+    topBarPillActive: { backgroundColor: '#1a1a2e', borderColor: '#1a1a2e' },
+    topBarPillText: { fontSize: 12, fontWeight: '500', color: '#6b7280' },
+    topBarPillTextActive: { color: '#ffffff' },
+    topBarRituals: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+    ritualIconBtn: { alignItems: 'center', gap: 2 },
+    ritualIconCircle: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    ritualIconEmoji: { fontSize: 13 },
+    ritualIconLabel: { fontSize: 8, color: '#6b7280', fontWeight: '500' },
+    sectionGap: { height: 10 },
+    sectionLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.06, color: '#6b7280', textTransform: 'uppercase', paddingHorizontal: 16, paddingBottom: 6 },
+    sectionLabelIcon: { color: '#9ca3af' },
+    emptySection: { fontSize: 12, color: '#9ca3af', fontStyle: 'italic', paddingHorizontal: 16, paddingBottom: 8 },
+    eventCard: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff', marginHorizontal: 16, marginBottom: 4, borderRadius: 8, borderWidth: 0.5, borderColor: '#e5e7eb', paddingVertical: 8, paddingHorizontal: 10 },
+    eventCardPast: { opacity: 0.38, backgroundColor: '#f3f4f6' },
+    eventTime: { fontSize: 10, color: '#6b7280', width: 52, flexShrink: 0 },
+    eventTimePast: { color: '#9ca3af' },
+    eventDot: { width: 10, height: 10, borderRadius: 2, backgroundColor: '#818cf8', flexShrink: 0 },
+    eventDotPast: { backgroundColor: '#9ca3af' },
+    eventTitle: { fontSize: 12, color: '#111827', flex: 1 },
+    eventTitlePast: { color: '#6b7280' },
+    captureCard: { marginHorizontal: 16, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 0.5, borderColor: '#e5e7eb', padding: 12 },
+    captureSectionLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, color: '#6b7280', marginBottom: 10 },
+    captureBtnRow: { flexDirection: 'row', gap: 6 },
+    captureBtn: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 8, borderWidth: 0.5, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
+    captureBtnIcon: { width: 26, height: 26, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+    captureBtnEmoji: { fontSize: 12 },
+    captureBtnLabel: { fontSize: 9, color: '#6b7280', fontWeight: '500' },
+    journalCard: { marginHorizontal: 16, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 0.5, borderColor: '#e5e7eb', overflow: 'hidden' },
+    journalCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
+    journalCardTitle: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, color: '#6b7280' },
+    journalCardDate: { fontSize: 10, color: '#6b7280' },
+    scrollView: { flex: 1 },
 });
