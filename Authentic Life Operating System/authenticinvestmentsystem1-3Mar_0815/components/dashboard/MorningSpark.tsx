@@ -61,6 +61,29 @@ export default function MorningSpark({
   const [captures] = useState(0);
   const [score] = useState(0);
 
+  // MS-1 — expanded panels for action buttons
+  const [expandedSection, setExpandedSection] = useState<
+    'coach' | 'inspiration' | 'align' | null
+  >(null);
+
+  // Coach Talk
+  const [coachMessage, setCoachMessage] = useState<string | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [noCoachMessage, setNoCoachMessage] = useState(false);
+
+  // Today's Inspiration
+  const [inspiration, setInspiration] = useState<{
+    content: string; attribution: string | null;
+  } | null>(null);
+  const [inspirationLoading, setInspirationLoading] = useState(false);
+  const [noInspiration, setNoInspiration] = useState(false);
+
+  // Alignment Questions
+  const [alignQuestions, setAlignQuestions] = useState<
+    Array<{ id: string; question: string }>
+  >([]);
+  const [alignLoading, setAlignLoading] = useState(false);
+
   const flickerAnim = useRef(new Animated.Value(1)).current;
 
   // Initial fetch: was Spark already committed today?
@@ -159,10 +182,158 @@ export default function MorningSpark({
     setCheckmarkFilled(false);
   };
 
-  const handleComingSoon = (feature: string) => {
-    if (typeof window !== 'undefined' && (window as any).alert) {
-      (window as any).alert(`${feature} coming soon`);
+  // Coach Talk — query order:
+  //   1. Most recent message from the user's connected primary coach
+  //   2. Fall back to most recent broadcast message (Jenny/Paul defaults)
+  const fetchCoachMessage = async () => {
+    if (coachLoading) return;
+    setCoachLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      // Step 1: try messages from user's connected primary coach
+      const { data: meta } = await supabase
+        .from('0008-ap-coach-client-meta')
+        .select('coach_id')
+        .eq('client_id', userId)
+        .eq('is_primary', true)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (meta?.coach_id) {
+        const { data: targeted } = await supabase
+          .from('0008-ap-coach-messages')
+          .select('id, content')
+          .eq('user_id', userId)
+          .eq('coach_id', meta.coach_id)
+          .eq('role', 'coach')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (targeted && targeted.length > 0) {
+          setCoachMessage(targeted[0].content);
+          return;
+        }
+      }
+
+      // Step 2: fall back to broadcast messages (default Jenny/Paul content)
+      const { data: broadcast } = await supabase
+        .from('0008-ap-coach-messages')
+        .select('id, content')
+        .eq('is_broadcast', true)
+        .eq('role', 'coach')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (broadcast && broadcast.length > 0) {
+        setCoachMessage(broadcast[0].content);
+      } else {
+        setNoCoachMessage(true);
+      }
+    } catch (err) {
+      console.error('[MorningSpark] coach message error:', err);
+      setNoCoachMessage(true);
+    } finally {
+      setCoachLoading(false);
     }
+  };
+
+  // Today's Inspiration — user's spark library first, fall back to general
+  const fetchInspiration = async () => {
+    if (inspirationLoading) return;
+    setInspirationLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+
+      const { data: userItems } = await supabase
+        .from('0008-ap-spark-library')
+        .select('id, title, excerpt, source_name, times_shown')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .eq('show_in_spark', true)
+        .eq('archived', false)
+        .order('last_shown_at', { ascending: true, nullsFirst: true })
+        .limit(1);
+
+      if (userItems && userItems.length > 0) {
+        const item = userItems[0];
+        setInspiration({
+          content: item.excerpt || item.title,
+          attribution: item.source_name,
+        });
+        await supabase
+          .from('0008-ap-spark-library')
+          .update({
+            last_shown_at: new Date().toISOString(),
+            times_shown: (item.times_shown ?? 0) + 1,
+          })
+          .eq('id', item.id);
+      } else {
+        const { data: general } = await supabase
+          .from('0008-ap-inspiration-library')
+          .select('id, content_text, attribution')
+          .eq('is_active', true)
+          .order('last_shown_at', { ascending: true, nullsFirst: true })
+          .limit(1);
+        if (general && general.length > 0) {
+          setInspiration({
+            content: general[0].content_text,
+            attribution: general[0].attribution,
+          });
+        } else {
+          setNoInspiration(true);
+        }
+      }
+    } catch (err) {
+      console.error('[MorningSpark] inspiration error:', err);
+      setNoInspiration(true);
+    } finally {
+      setInspirationLoading(false);
+    }
+  };
+
+  // Alignment Questions — pull 3 random morning_spark questions
+  const fetchAlignQuestions = async () => {
+    if (alignLoading || alignQuestions.length > 0) return;
+    setAlignLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data } = await supabase
+        .from('0008-ap-power-questions')
+        .select('id, question_text')
+        .in('ritual_context', ['morning_spark', 'both'])
+        .eq('is_active', true)
+        .limit(100);
+      if (data && data.length > 0) {
+        const shuffled = [...data].sort(() => Math.random() - 0.5).slice(0, 3);
+        setAlignQuestions(
+          shuffled.map((q: any) => ({
+            id: q.id,
+            question: q.question_text,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('[MorningSpark] align questions error:', err);
+    } finally {
+      setAlignLoading(false);
+    }
+  };
+
+  const handleCoachTalk = () => {
+    if (expandedSection === 'coach') { setExpandedSection(null); return; }
+    setExpandedSection('coach');
+    if (!coachMessage && !noCoachMessage) fetchCoachMessage();
+  };
+
+  const handleInspiration = () => {
+    if (expandedSection === 'inspiration') { setExpandedSection(null); return; }
+    setExpandedSection('inspiration');
+    if (!inspiration && !noInspiration) fetchInspiration();
+  };
+
+  const handleAlignQuestions = () => {
+    if (expandedSection === 'align') { setExpandedSection(null); return; }
+    setExpandedSection('align');
+    fetchAlignQuestions();
   };
 
   if (sparkState === 'trigger') {
@@ -211,7 +382,7 @@ export default function MorningSpark({
         <View style={styles.promptInner}>
           <Text style={styles.promptStar}>✦</Text>
           <Text style={styles.promptItalic}>
-            Let your actions today take you in that direction —
+            Let today's actions take you where you want to go —
           </Text>
           <Text style={styles.promptBoldSub}>it's time to build you!</Text>
           {sparkTime && (
@@ -224,7 +395,7 @@ export default function MorningSpark({
         <View style={styles.actionGrid}>
           <TouchableOpacity
             style={styles.actionTile}
-            onPress={() => handleComingSoon('Coach Talk')}
+            onPress={handleCoachTalk}
             activeOpacity={0.7}
           >
             <View
@@ -242,7 +413,7 @@ export default function MorningSpark({
 
           <TouchableOpacity
             style={styles.actionTile}
-            onPress={() => handleComingSoon("Today's Inspiration")}
+            onPress={handleInspiration}
             activeOpacity={0.7}
           >
             <View
@@ -260,7 +431,7 @@ export default function MorningSpark({
 
           <TouchableOpacity
             style={styles.actionTile}
-            onPress={() => handleComingSoon('Alignment Questions')}
+            onPress={handleAlignQuestions}
             activeOpacity={0.7}
           >
             <View
@@ -276,6 +447,67 @@ export default function MorningSpark({
             </View>
           </TouchableOpacity>
         </View>
+
+        {expandedSection === 'coach' && (
+          <View style={styles.expandedPanel}>
+            {coachLoading ? (
+              <Text style={styles.expandedLoading}>Loading...</Text>
+            ) : noCoachMessage ? (
+              <Text style={styles.expandedEmpty}>
+                Your coach hasn't sent a message yet. Jenny and Paul are your
+                default coaches — content coming soon.
+              </Text>
+            ) : coachMessage ? (
+              <>
+                <Text style={styles.expandedLabel}>FROM YOUR COACH</Text>
+                <Text style={styles.expandedContent}>{coachMessage}</Text>
+              </>
+            ) : null}
+          </View>
+        )}
+
+        {expandedSection === 'inspiration' && (
+          <View style={styles.expandedPanel}>
+            {inspirationLoading ? (
+              <Text style={styles.expandedLoading}>Loading...</Text>
+            ) : noInspiration ? (
+              <Text style={styles.expandedEmpty}>
+                Your inspiration library is empty. Add quotes, stories, or
+                videos from your North Star page to see them here.
+              </Text>
+            ) : inspiration ? (
+              <>
+                <Text style={styles.expandedLabel}>TODAY'S INSPIRATION</Text>
+                <Text style={styles.expandedContent}>{inspiration.content}</Text>
+                {inspiration.attribution ? (
+                  <Text style={styles.expandedSource}>— {inspiration.attribution}</Text>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+        )}
+
+        {expandedSection === 'align' && (
+          <View style={styles.expandedPanel}>
+            {alignLoading ? (
+              <Text style={styles.expandedLoading}>Loading questions...</Text>
+            ) : alignQuestions.length === 0 ? (
+              <Text style={styles.expandedEmpty}>No questions available right now.</Text>
+            ) : (
+              <>
+                <Text style={styles.expandedLabel}>ALIGNMENT QUESTIONS</Text>
+                {alignQuestions.map((q, i) => (
+                  <View key={q.id} style={styles.questionBlock}>
+                    <Text style={styles.questionText}>{i + 1}. {q.question}</Text>
+                  </View>
+                ))}
+                <Text style={styles.expandedHint}>
+                  Tap Reflect or Align in the Capture row to record your answers.
+                </Text>
+              </>
+            )}
+          </View>
+        )}
 
         <View style={styles.promptFooter}>
           <Text style={styles.promptFooterMuted}>
@@ -480,6 +712,61 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '600',
+  },
+
+  expandedPanel: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  expandedLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: 'rgba(255,255,255,0.45)',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  expandedContent: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+  expandedSource: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  expandedEmpty: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 4,
+    lineHeight: 17,
+  },
+  expandedLoading: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+  },
+  questionBlock: { marginBottom: 10 },
+  questionText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 19,
+  },
+  expandedHint: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.35)',
+    fontStyle: 'italic',
+    marginTop: 6,
+    textAlign: 'center',
   },
 
   // Scorecard

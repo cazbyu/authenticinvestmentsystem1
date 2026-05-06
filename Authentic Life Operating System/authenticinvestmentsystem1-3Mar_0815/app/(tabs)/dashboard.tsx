@@ -647,7 +647,6 @@ export default function Dashboard() {
         .select('id, title, date, start_time, end_time')
         .eq('user_id', userId)
         .eq('date', todayStr)
-        .is('deleted_at', null)
         .order('start_time', { ascending: true });
 
       const taskEvs: TodayEvent[] = (taskEvents ?? []).map((e: any) => ({
