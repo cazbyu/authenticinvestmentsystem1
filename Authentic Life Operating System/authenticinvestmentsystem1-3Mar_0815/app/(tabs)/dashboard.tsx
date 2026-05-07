@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Platform, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Plus, CreditCard as Edit, UserX, Ban } from 'lucide-react-native';
 import { Task, TaskCard } from '@/components/tasks/TaskCard';
@@ -1481,11 +1481,11 @@ const renderTopBar = () => {
               <Text style={styles.captureSectionLabel}>CAPTURE</Text>
               <View style={styles.captureBtnRow}>
                 {([
-                  { label: 'Rose', emoji: '❤', color: '#fce7f3', type: 'rose' as const },
-                  { label: 'Thorn', emoji: '✗', color: '#fef2f2', type: 'thorn' as const },
-                  { label: 'Reflect', emoji: '✎', color: '#ede9fe', type: 'reflection' as const },
-                  { label: 'Idea', emoji: '☁', color: '#e0e7ff', type: 'depositIdea' as const },
-                  { label: 'Align', emoji: '⊙', color: '#fef3c7', type: 'align' as const },
+                  { label: 'Rose', color: '#fce7f3', type: 'rose' as const, imageSource: getActivityConfig('rose').imageSource },
+                  { label: 'Thorn', color: '#fef2f2', type: 'thorn' as const, imageSource: getActivityConfig('thorn').imageSource },
+                  { label: 'Reflection', color: '#ede9fe', type: 'reflection' as const, imageSource: getActivityConfig('reflection').imageSource },
+                  { label: 'Idea', color: '#e0e7ff', type: 'depositIdea' as const, imageSource: getActivityConfig('depositIdea').imageSource },
+                  { label: 'Align', color: '#fef3c7', type: 'align' as const, emoji: '⊙' },
                 ] as const).map(btn => (
                   <TouchableOpacity
                     key={btn.label}
@@ -1502,7 +1502,15 @@ const renderTopBar = () => {
                     activeOpacity={0.7}
                   >
                     <View style={[styles.captureBtnIcon, { backgroundColor: btn.color }]}>
-                      <Text style={styles.captureBtnEmoji}>{btn.emoji}</Text>
+                      {btn.type === 'align' ? (
+                        <Text style={styles.captureBtnEmoji}>{btn.emoji}</Text>
+                      ) : (
+                        <Image
+                          source={btn.imageSource}
+                          style={{ width: 18, height: 18 }}
+                          resizeMode="contain"
+                        />
+                      )}
                     </View>
                     <Text style={styles.captureBtnLabel}>{btn.label}</Text>
                   </TouchableOpacity>
