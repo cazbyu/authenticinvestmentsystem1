@@ -1276,6 +1276,7 @@ const renderTopBar = () => {
       filter={'all'}
       period={'today'}
       userId={userId}
+      excludeOverdue={true}
       onRefresh={() => {
         refreshScore();
         loadJournalPeriodScore();
