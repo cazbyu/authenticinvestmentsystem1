@@ -75,7 +75,7 @@ export const ACTIVITY_CONFIGS: Record<ActivityType, ActivityConfig> = {
   },
   depositIdea: {
     key: 'depositIdea',
-    label: 'Deposit Idea',
+    label: 'Idea',
     color: '#f59e0b', // Yellow/Amber
     description: 'Capture an idea to explore later',
     imageSource: IMAGES.depositIdea,
