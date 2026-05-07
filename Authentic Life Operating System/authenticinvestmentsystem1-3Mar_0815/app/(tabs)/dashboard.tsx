@@ -119,6 +119,11 @@ export default function Dashboard() {
   // D1 — Upcoming items for Upcoming view
   const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
 
+  // Journal-1: Today's Journal date-range selector state
+  const [todayJournalDateRange, setTodayJournalDateRange] = useState<
+    'today' | 'week' | 'month' | 'all'
+  >('today');
+
   // Import functions from useGoalProgress hook
   const {
     deleteTask,
@@ -1509,7 +1514,7 @@ const renderTopBar = () => {
 
             <View style={styles.journalCard}>
               <View style={styles.journalCardHeader}>
-                <Text style={styles.journalCardTitle}>TODAY'S JOURNAL</Text>
+                <Text style={styles.journalCardTitle}>JOURNAL</Text>
                 <Text style={styles.journalCardDate}>
                   {formatLocalDate(new Date()).split('-').slice(1).join('/')}
                 </Text>
@@ -1517,7 +1522,9 @@ const renderTopBar = () => {
               <JournalView
                 scope={{ type: 'user', id: userId }}
                 onEntryPress={handleJournalEntryPress}
-                dateRange="today"
+                dateRange={todayJournalDateRange}
+                onDateRangeChange={setTodayJournalDateRange}
+                showTimePeriodSelector={true}
                 refreshKey={0}
               />
             </View>
