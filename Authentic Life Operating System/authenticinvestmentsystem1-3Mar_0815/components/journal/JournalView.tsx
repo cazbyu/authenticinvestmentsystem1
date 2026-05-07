@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, SectionList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
-import { SquareCheck, BookOpen, Calendar, FileText } from 'lucide-react-native';
+import { SquareCheck, BookOpen, Calendar, FileText, HelpCircle } from 'lucide-react-native';
 import { getSupabaseClient } from '@/lib/supabase';
 import { calculateTaskPoints, fetchGoalsForJoinRows } from '@/lib/taskUtils';
 import { fetchBulkLinkedItemsCountsDetailed, LinkedItemCounts } from '@/lib/followThroughUtils';
@@ -16,12 +16,12 @@ interface JournalEntry {
   id: string;
   date: string;
   description: string;
-  type: 'deposit' | 'withdrawal' | 'reflection';
+  type: 'deposit' | 'withdrawal' | 'reflection' | 'question_response';
   amount: number;
   balance: number;
   has_notes: boolean;
   source_id: string;
-  source_type: 'task' | 'withdrawal' | 'reflection' | 'depositIdea';
+  source_type: 'task' | 'withdrawal' | 'reflection' | 'depositIdea' | 'question_response';
   source_data?: any;
   linked_count?: number;
   linkedCounts?: LinkedItemCounts;
@@ -633,6 +633,56 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
         }
       }
 
+      // 4) Question Responses — alignment questions answered in Morning Spark
+      // (user-scoped only; no role/domain/key_relationship joins exist for these)
+      if (scope.type === 'user') {
+        let questionResponsesQuery = supabase
+          .from('0008-ap-question-responses')
+          .select('id, response_text, question_id, created_at, context_type')
+          .eq('user_id', user.id);
+
+        if (dateFilter) {
+          questionResponsesQuery = questionResponsesQuery.gte('created_at', dateFilter);
+        }
+
+        const { data: qrData, error: qrError } = await questionResponsesQuery;
+        if (qrError) {
+          console.error('Question responses query error:', qrError);
+          throw qrError;
+        }
+
+        if (qrData && qrData.length) {
+          const qIds = [...new Set(qrData.map((q: any) => q.question_id).filter(Boolean))];
+          let questionsById = new Map<string, string>();
+          if (qIds.length) {
+            const { data: questionsData } = await supabase
+              .from('0008-ap-power-questions')
+              .select('id, question_text')
+              .in('id', qIds);
+            questionsById = new Map((questionsData ?? []).map((q: any) => [q.id, q.question_text]));
+          }
+
+          for (const r of qrData) {
+            const questionText = questionsById.get(r.question_id) ?? 'Alignment question';
+            journalEntries.push({
+              id: r.id,
+              date: r.created_at,
+              description: r.response_text,
+              type: 'question_response',
+              amount: 0,
+              balance: 0,
+              has_notes: false,
+              source_id: r.id,
+              source_type: 'question_response',
+              source_data: {
+                ...r,
+                question_text: questionText,
+              },
+            });
+          }
+        }
+      }
+
       // Sort entries by date (newest first)
       journalEntries.sort((a, b) => {
         const ta = new Date(a.date).getTime();
@@ -642,7 +692,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
 
       // Fetch linked items count
       const parentEntries = journalEntries
-        .filter(entry => entry.source_type !== 'withdrawal')
+        .filter(entry => entry.source_type !== 'withdrawal' && entry.source_type !== 'question_response')
         .map(entry => ({
           id: entry.source_id,
           type: (entry.source_type === 'task' ? 'task' :
@@ -888,6 +938,15 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       };
     }
 
+    // Question Response (Alignment Question — Morning Spark)
+    if (entry.source_type === 'question_response') {
+      return {
+        icon: HelpCircle,
+        bgColor: '#f3e8ff',
+        iconColor: '#7c3aed',
+      };
+    }
+
     // Event (Calendar icon)
     if (entry.type === 'deposit' && entry.source_data?.type === 'event') {
       return {
@@ -914,6 +973,11 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
   };
 
   const getPreviewText = (entry: JournalEntry): string => {
+    // Question response: subtitle is the question text
+    if (entry.source_type === 'question_response' && entry.source_data?.question_text) {
+      return entry.source_data.question_text;
+    }
+
     if (entry.source_data?.roles?.length > 0) {
       const roleNames = entry.source_data.roles.map((r: any) => r.label).join(', ');
       return roleNames;
