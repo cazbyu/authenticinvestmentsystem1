@@ -667,7 +667,7 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
             journalEntries.push({
               id: r.id,
               date: r.created_at,
-              description: r.response_text,
+              description: questionText,
               type: 'question_response',
               amount: 0,
               balance: 0,
@@ -973,9 +973,9 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
   };
 
   const getPreviewText = (entry: JournalEntry): string => {
-    // Question response: subtitle is the question text
-    if (entry.source_type === 'question_response' && entry.source_data?.question_text) {
-      return entry.source_data.question_text;
+    // Question response: subtitle is the answer (prefixed with "A: ")
+    if (entry.source_type === 'question_response') {
+      return `A: ${entry.source_data?.response_text ?? ''}`;
     }
 
     if (entry.source_data?.roles?.length > 0) {
@@ -1053,18 +1053,40 @@ export function JournalView({ scope, onEntryPress, dateRange = 'week', refreshKe
       : '';
     const impactColor = item.type === 'deposit' ? '#16a34a' : '#dc2626';
 
+    const isQR = item.source_type === 'question_response';
+
     return (
       <TouchableOpacity
         style={styles.entryRow}
         onPress={() => onEntryPress(item)}
       >
-        <View style={[styles.avatar, { backgroundColor: iconData.bgColor }]}>
-          {iconData.image ? (
-            <Image source={iconData.image} style={styles.avatarImage} resizeMode="contain" />
-          ) : iconData.icon ? (
-            React.createElement(iconData.icon, { size: 20, color: iconData.iconColor, strokeWidth: 2 })
-          ) : null}
-        </View>
+        {isQR ? (
+          // Question response: double-circle (outer purple ring + inner solid circle)
+          <View style={{
+            width: 38, height: 38, borderRadius: 19,
+            borderWidth: 1.5, borderColor: '#7c3aed',
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'transparent',
+          }}>
+            <View style={{
+              width: 28, height: 28, borderRadius: 14,
+              backgroundColor: iconData.bgColor,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              {iconData.icon ? (
+                React.createElement(iconData.icon, { size: 15, color: iconData.iconColor, strokeWidth: 2 })
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: iconData.bgColor }]}>
+            {iconData.image ? (
+              <Image source={iconData.image} style={styles.avatarImage} resizeMode="contain" />
+            ) : iconData.icon ? (
+              React.createElement(iconData.icon, { size: 20, color: iconData.iconColor, strokeWidth: 2 })
+            ) : null}
+          </View>
+        )}
 
         <View style={styles.content}>
           <View style={styles.titleRow}>
