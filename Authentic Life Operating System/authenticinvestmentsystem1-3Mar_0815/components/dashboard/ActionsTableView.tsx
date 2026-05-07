@@ -62,6 +62,7 @@ interface ActionsTableViewProps {
   filter: ActFilter;
   period: TimePeriod;
   userId: string;
+  excludeOverdue?: boolean;
   onRefresh?: () => void;
   onTaskPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
@@ -399,6 +400,7 @@ export function ActionsTableView({
   filter,
   period,
   userId,
+  excludeOverdue = false,
   onRefresh,
   onTaskPress,
   onComplete,
@@ -479,7 +481,11 @@ export function ActionsTableView({
           .is('parent_task_id', null)
           .lte('due_date', endStr);
 
-        query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
+        if (excludeOverdue && period === 'today') {
+          query = query.or(`and(status.in.(pending,in_progress),due_date.gte.${todayStr}),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
+        } else {
+          query = query.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
+        }
 
         const { data, error } = await query.order('due_date', { ascending: true });
         if (error) throw error;
@@ -517,7 +523,11 @@ export function ActionsTableView({
           .is('parent_task_id', null)
           .lte('due_date', endStr);
 
-        tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
+        if (excludeOverdue && period === 'today') {
+          tasksQuery = tasksQuery.or(`and(status.in.(pending,in_progress),due_date.gte.${todayStr}),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
+        } else {
+          tasksQuery = tasksQuery.or(`status.in.(pending,in_progress),and(status.eq.completed,completed_at.gte.${todayStartISO})`);
+        }
 
         const commitmentsQuery = supabase
           .from('0008-ap-commitments')

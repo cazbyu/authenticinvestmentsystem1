@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  TextInput,
 } from 'react-native';
 import {
   Mic,
@@ -73,7 +74,9 @@ export default function MorningSpark({
 
   // Today's Inspiration
   const [inspiration, setInspiration] = useState<{
-    content: string; attribution: string | null;
+    id: string;
+    content: string;
+    attribution: string | null;
   } | null>(null);
   const [inspirationLoading, setInspirationLoading] = useState(false);
   const [noInspiration, setNoInspiration] = useState(false);
@@ -83,6 +86,18 @@ export default function MorningSpark({
     Array<{ id: string; question: string }>
   >([]);
   const [alignLoading, setAlignLoading] = useState(false);
+
+  // MS-2: Inline answer capture
+  const [activeAnswerQuestionId, setActiveAnswerQuestionId] = useState<string | null>(null);
+  const [answerDraft, setAnswerDraft] = useState<string>('');
+  const [savingAnswer, setSavingAnswer] = useState(false);
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState<Set<string>>(new Set());
+
+  // MS-2: Inline inspiration reflection
+  const [showInspirationReflection, setShowInspirationReflection] = useState(false);
+  const [reflectionDraft, setReflectionDraft] = useState<string>('');
+  const [savingReflection, setSavingReflection] = useState(false);
+  const [reflectionSaved, setReflectionSaved] = useState(false);
 
   const flickerAnim = useRef(new Animated.Value(1)).current;
 
@@ -236,51 +251,59 @@ export default function MorningSpark({
     }
   };
 
-  // Today's Inspiration — user's spark library first, fall back to general
+  // Today's Inspiration — query inspiration-library
+  // Returns user's personal items first (user_id matches), then system/coach
+  // content (user_id IS NULL), prioritizing least-recently-shown
   const fetchInspiration = async () => {
     if (inspirationLoading) return;
     setInspirationLoading(true);
     try {
       const supabase = getSupabaseClient();
 
+      // Try user's own items first
       const { data: userItems } = await supabase
-        .from('0008-ap-spark-library')
-        .select('id, title, excerpt, source_name, times_shown')
+        .from('0008-ap-inspiration-library')
+        .select('id, content_text, attribution, title, last_shown_at, times_shown')
         .eq('user_id', userId)
         .eq('is_active', true)
         .eq('show_in_spark', true)
-        .eq('archived', false)
         .order('last_shown_at', { ascending: true, nullsFirst: true })
         .limit(1);
 
+      let chosen: any = null;
       if (userItems && userItems.length > 0) {
-        const item = userItems[0];
-        setInspiration({
-          content: item.excerpt || item.title,
-          attribution: item.source_name,
-        });
-        await supabase
-          .from('0008-ap-spark-library')
-          .update({
-            last_shown_at: new Date().toISOString(),
-            times_shown: (item.times_shown ?? 0) + 1,
-          })
-          .eq('id', item.id);
+        chosen = userItems[0];
       } else {
+        // Fall back to system/coach content (user_id IS NULL)
         const { data: general } = await supabase
           .from('0008-ap-inspiration-library')
-          .select('id, content_text, attribution')
+          .select('id, content_text, attribution, title, last_shown_at, times_shown')
+          .is('user_id', null)
           .eq('is_active', true)
+          .eq('show_in_spark', true)
           .order('last_shown_at', { ascending: true, nullsFirst: true })
           .limit(1);
         if (general && general.length > 0) {
-          setInspiration({
-            content: general[0].content_text,
-            attribution: general[0].attribution,
-          });
-        } else {
-          setNoInspiration(true);
+          chosen = general[0];
         }
+      }
+
+      if (chosen) {
+        setInspiration({
+          id: chosen.id,
+          content: chosen.content_text || chosen.title || '',
+          attribution: chosen.attribution,
+        });
+        // Update last_shown_at and times_shown
+        await supabase
+          .from('0008-ap-inspiration-library')
+          .update({
+            last_shown_at: new Date().toISOString(),
+            times_shown: (chosen.times_shown ?? 0) + 1,
+          })
+          .eq('id', chosen.id);
+      } else {
+        setNoInspiration(true);
       }
     } catch (err) {
       console.error('[MorningSpark] inspiration error:', err);
@@ -316,6 +339,77 @@ export default function MorningSpark({
     } finally {
       setAlignLoading(false);
     }
+  };
+
+  // MS-2: Save alignment question answer
+  const handleSaveAnswer = async (questionId: string) => {
+    if (!answerDraft.trim() || savingAnswer) return;
+    setSavingAnswer(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('0008-ap-question-responses')
+        .insert({
+          user_id: userId,
+          question_id: questionId,
+          response_text: answerDraft.trim(),
+          context_type: 'morning_spark',
+        });
+      if (error) throw error;
+      setAnsweredQuestionIds(prev => new Set(prev).add(questionId));
+      setActiveAnswerQuestionId(null);
+      setAnswerDraft('');
+    } catch (err) {
+      console.error('[MorningSpark] save answer error:', err);
+    } finally {
+      setSavingAnswer(false);
+    }
+  };
+
+  const handleCancelAnswer = () => {
+    setActiveAnswerQuestionId(null);
+    setAnswerDraft('');
+  };
+
+  const handleStartAnswer = (questionId: string) => {
+    setActiveAnswerQuestionId(questionId);
+    setAnswerDraft('');
+  };
+
+  // MS-2: Save inspiration reflection
+  // parent_type is always 'inspiration_library' since spark-library is being merged
+  const handleSaveReflection = async () => {
+    if (!reflectionDraft.trim() || savingReflection || !inspiration) return;
+    setSavingReflection(true);
+    try {
+      const supabase = getSupabaseClient();
+      const todayStr = formatLocalDate(new Date());
+      const { error } = await supabase
+        .from('0008-ap-reflections')
+        .insert({
+          user_id: userId,
+          content: reflectionDraft.trim(),
+          date: todayStr,
+          reflection_type: 'inspiration_reflection',
+          parent_type: 'inspiration_library',
+          parent_id: inspiration.id,
+          authentic_score: 0,
+          archived: false,
+        });
+      if (error) throw error;
+      setReflectionSaved(true);
+      setShowInspirationReflection(false);
+      setReflectionDraft('');
+    } catch (err) {
+      console.error('[MorningSpark] save reflection error:', err);
+    } finally {
+      setSavingReflection(false);
+    }
+  };
+
+  const handleCancelReflection = () => {
+    setShowInspirationReflection(false);
+    setReflectionDraft('');
   };
 
   const handleCoachTalk = () => {
@@ -482,6 +576,59 @@ export default function MorningSpark({
                 {inspiration.attribution ? (
                   <Text style={styles.expandedSource}>— {inspiration.attribution}</Text>
                 ) : null}
+
+                {/* MS-2: inline reflection capture */}
+                {!showInspirationReflection && !reflectionSaved && (
+                  <TouchableOpacity
+                    style={styles.reflectionAddBtn}
+                    onPress={() => setShowInspirationReflection(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.reflectionAddBtnText}>+ Add reflection</Text>
+                  </TouchableOpacity>
+                )}
+
+                {reflectionSaved && (
+                  <View style={styles.reflectionSavedBadge}>
+                    <Text style={styles.reflectionSavedText}>✓ Reflection saved</Text>
+                  </View>
+                )}
+
+                {showInspirationReflection && (
+                  <View style={styles.answerInputBlock}>
+                    <TextInput
+                      style={styles.answerTextInput}
+                      value={reflectionDraft}
+                      onChangeText={setReflectionDraft}
+                      placeholder="What does this inspire in you?"
+                      placeholderTextColor="rgba(255,255,255,0.3)"
+                      multiline
+                      autoFocus
+                    />
+                    <View style={styles.answerActionRow}>
+                      <TouchableOpacity
+                        style={styles.answerCancelBtn}
+                        onPress={handleCancelReflection}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.answerCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.answerSaveBtn,
+                          (!reflectionDraft.trim() || savingReflection) && styles.answerSaveBtnDisabled,
+                        ]}
+                        onPress={handleSaveReflection}
+                        activeOpacity={0.7}
+                        disabled={!reflectionDraft.trim() || savingReflection}
+                      >
+                        <Text style={styles.answerSaveText}>
+                          {savingReflection ? 'Saving...' : 'Save'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </>
             ) : null}
           </View>
@@ -496,14 +643,68 @@ export default function MorningSpark({
             ) : (
               <>
                 <Text style={styles.expandedLabel}>ALIGNMENT QUESTIONS</Text>
-                {alignQuestions.map((q, i) => (
-                  <View key={q.id} style={styles.questionBlock}>
-                    <Text style={styles.questionText}>{i + 1}. {q.question}</Text>
-                  </View>
-                ))}
-                <Text style={styles.expandedHint}>
-                  Tap Reflect or Align in the Capture row to record your answers.
-                </Text>
+                {alignQuestions.map((q, i) => {
+                  const isActive = activeAnswerQuestionId === q.id;
+                  const isAnswered = answeredQuestionIds.has(q.id);
+                  return (
+                    <View key={q.id} style={styles.questionBlock}>
+                      <View style={styles.questionRow}>
+                        <Text style={styles.questionText}>
+                          {i + 1}. {q.question}
+                        </Text>
+                        {!isActive && !isAnswered && (
+                          <TouchableOpacity
+                            style={styles.questionAddBtn}
+                            onPress={() => handleStartAnswer(q.id)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.questionAddBtnText}>+</Text>
+                          </TouchableOpacity>
+                        )}
+                        {isAnswered && !isActive && (
+                          <View style={styles.questionAnsweredBadge}>
+                            <Text style={styles.questionAnsweredBadgeText}>✓ answered</Text>
+                          </View>
+                        )}
+                      </View>
+                      {isActive && (
+                        <View style={styles.answerInputBlock}>
+                          <TextInput
+                            style={styles.answerTextInput}
+                            value={answerDraft}
+                            onChangeText={setAnswerDraft}
+                            placeholder="Your answer..."
+                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            multiline
+                            autoFocus
+                          />
+                          <View style={styles.answerActionRow}>
+                            <TouchableOpacity
+                              style={styles.answerCancelBtn}
+                              onPress={handleCancelAnswer}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.answerCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.answerSaveBtn,
+                                (!answerDraft.trim() || savingAnswer) && styles.answerSaveBtnDisabled,
+                              ]}
+                              onPress={() => handleSaveAnswer(q.id)}
+                              activeOpacity={0.7}
+                              disabled={!answerDraft.trim() || savingAnswer}
+                            >
+                              <Text style={styles.answerSaveText}>
+                                {savingAnswer ? 'Saving...' : 'Save'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </>
             )}
           </View>
@@ -767,6 +968,113 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 6,
     textAlign: 'center',
+  },
+
+  // MS-2 inline answer / reflection capture
+  questionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  questionAddBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  questionAddBtnText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: -2,
+  },
+  questionAnsweredBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.18)',
+    marginTop: 1,
+  },
+  questionAnsweredBadgeText: {
+    color: '#22c55e',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  answerInputBlock: {
+    marginTop: 8,
+    gap: 6,
+  },
+  answerTextInput: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 6,
+    padding: 10,
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 13,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  answerActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  answerCancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  answerCancelText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+  },
+  answerSaveBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#8b1a1a',
+  },
+  answerSaveBtnDisabled: {
+    opacity: 0.4,
+  },
+  answerSaveText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  reflectionAddBtn: {
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  reflectionAddBtnText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  reflectionSavedBadge: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.18)',
+    alignSelf: 'flex-start',
+  },
+  reflectionSavedText: {
+    color: '#22c55e',
+    fontSize: 11,
+    fontWeight: '600',
   },
 
   // Scorecard
