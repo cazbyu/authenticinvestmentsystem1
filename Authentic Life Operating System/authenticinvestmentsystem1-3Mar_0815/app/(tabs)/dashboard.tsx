@@ -1492,9 +1492,9 @@ const renderTopBar = () => {
                     style={styles.captureBtn}
                     onPress={() => {
                       if (btn.type === 'rose' || btn.type === 'thorn' || btn.type === 'reflection') {
-                        setSelectedActivityConfig(getActivityConfig(btn.type));
+                        handleActivitySelect(getActivityConfig(btn.type));
                       } else if (btn.type === 'depositIdea') {
-                        setSelectedActivityConfig(getActivityConfig('depositIdea'));
+                        handleActivitySelect(getActivityConfig('depositIdea'));
                       } else {
                         if (Platform.OS === 'web') window.alert('Align coming soon');
                       }
