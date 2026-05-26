@@ -1,0 +1,4 @@
+project_id = "wyipyiahvjcvnwoxwttd"
+
+[functions.alignment-coach]
+verify_jwt = false

@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 /**
  * Alignment Coach - Unified Edge Function
@@ -14,6 +15,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
  */
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,10 +36,12 @@ function buildSystemPrompt(
   fuelReason: string | null,
   userState: any,
   step1Context?: any,
-  stepContext?: any
+  stepContext?: any,
+  ddMemory?: { patterns: any[]; curriculum: any[] },
 ): string {
   let prompt = buildBaseIdentity();
   prompt += buildUserContext(userState);
+  prompt += buildLearnedMemory(ddMemory);
 
   if (mode === "weekly" && step) {
     prompt += buildWeeklyStepContext(step, trigger, userState, step1Context, stepContext);
@@ -187,6 +192,70 @@ function buildUserContext(us: any): string {
   }
 
   return ctx;
+}
+
+// --- Learned Memory Block ---
+//
+// Renders the DD's accumulated read of this person:
+//   - OBSERVATIONS: patterns the DD has come to notice (private lens — frames
+//     attention, doesn't get recited back).
+//   - CONCEPTS: curriculum progress (what's been introduced vs. practiced).
+//
+// Empty-safe by design: if both arrays are empty (the current reality — no
+// patterns exist yet), returns "" so the assembled prompt is byte-identical
+// to today. This guarantees zero behavior change until Step 4 starts writing
+// real patterns. 0008-ap-dd-assumptions is deliberately NOT rendered here —
+// assumptions are never coach-visible and must never reach a Claude prompt.
+
+function buildLearnedMemory(
+  ddMemory: { patterns: any[]; curriculum: any[] } | null | undefined,
+): string {
+  const patterns = ddMemory?.patterns ?? [];
+  const curriculum = ddMemory?.curriculum ?? [];
+
+  if (patterns.length === 0 && curriculum.length === 0) {
+    return "";
+  }
+
+  let block = "";
+
+  if (patterns.length > 0) {
+    block += `\nWHAT YOU'VE COME TO NOTICE ABOUT THIS PERSON:
+These are your own quiet observations, gathered over time — a private lens, not a list to read aloud. Unlike the activity above, which you can name directly, these are inferences about who they are. Let them shape the question you choose, where you place your attention, and how gently you tread — but do not announce that you remember, and do not recite them back. Name one only on the rare occasion when saying it out loud hands this person an insight into themselves — and then for their sake, never to prove that you noticed. Lean on settled observations; hold forming ones lightly, and never state a forming one as fact.
+
+OBSERVATIONS:
+`;
+
+    patterns.forEach((p: any) => {
+      const text = p?.pattern_text;
+      if (!text) return;
+      const confidence = p?.confidence;
+      const domain = p?.domain;
+      let line = "- ";
+      if (confidence) line += `(${confidence}) `;
+      line += text;
+      if (domain) line += ` — ${domain}`;
+      block += `${line}\n`;
+    });
+  }
+
+  if (curriculum.length > 0) {
+    block += `\nCONCEPTS THEY'VE WORKED WITH:
+`;
+
+    curriculum.forEach((c: any) => {
+      const concept = c?.concept;
+      if (!concept) return;
+      const status = c?.status;
+      let line = `- ${concept}`;
+      if (status) line += ` — ${status}`;
+      block += `${line}\n`;
+    });
+
+    block += `Build on ideas they've already met. Don't assume fluency with anything not listed here.\n`;
+  }
+
+  return block;
 }
 
 // ============================================
@@ -1540,6 +1609,195 @@ Deno.serve(async (req: Request) => {
       step_context: stepContext,
     } = body;
 
+    // ============================================================
+    // DD identity verification (LOG-ONLY, no gating)
+    // First pass of the DD engine arc. Resolves the caller's user_id
+    // from their bearer token and stands up a service-role Supabase
+    // client for future DD-memory reads/writes. Crucially: no gating,
+    // no DB access, no behavior change. If any step here fails, we
+    // log and fall through to the existing flow exactly as today.
+    // ============================================================
+    let ddServiceRoleClient: ReturnType<typeof createClient> | null = null;
+    // Hoisted to outer scope so the Step 2 memory load + breadcrumb
+    // upsert (below) can see the resolved identity. Assignment still
+    // happens inside the inner verification try (no behavior change
+    // to the verification flow itself).
+    let resolvedUserId: string | null = null;
+    let isAnonymous: boolean | null = null;
+    let getUserOk = false;
+    let ddMemory: { patterns: any[]; curriculum: any[] } = { patterns: [], curriculum: [] };
+    try {
+      const authHeader =
+        req.headers.get("Authorization") ?? req.headers.get("authorization");
+      const token =
+        authHeader && authHeader.toLowerCase().startsWith("bearer ")
+          ? authHeader.slice(7).trim()
+          : null;
+
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        ddServiceRoleClient = createClient(
+          SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY,
+        );
+      }
+
+      let getUserError: string | null = null;
+
+      if (token && ddServiceRoleClient) {
+        const { data: userData, error: userError } =
+          await ddServiceRoleClient.auth.getUser(token);
+        if (userError) {
+          getUserError = userError.message ?? "unknown getUser error";
+        } else if (userData?.user) {
+          resolvedUserId = userData.user.id;
+          isAnonymous =
+            (userData.user as { is_anonymous?: boolean }).is_anonymous ?? null;
+          getUserOk = true;
+        }
+      }
+
+      console.log(
+        "[alignment-coach][dd-identity]",
+        JSON.stringify({
+          token_present: !!token,
+          service_role_client_ready: !!ddServiceRoleClient,
+          get_user_ok: getUserOk,
+          get_user_error: getUserError,
+          user_id: resolvedUserId,
+          is_anonymous: isAnonymous,
+          mode: mode ?? null,
+          trigger: trigger ?? null,
+          step: step ?? null,
+        }),
+      );
+    } catch (verifyErr) {
+      // Verification must NEVER throw into the ritual path.
+      console.log(
+        "[alignment-coach][dd-identity][error]",
+        JSON.stringify({
+          error:
+            verifyErr instanceof Error
+              ? verifyErr.message
+              : String(verifyErr),
+          mode: mode ?? null,
+          trigger: trigger ?? null,
+        }),
+      );
+    }
+    // ============================================================
+    // DD memory load (Step 2 — gated read, NO prompt/response use)
+    // Loads the user's learned memory (patterns + curriculum) into
+    // ddMemory and holds it. Unused by the prompt/response this pass
+    // (Step 3 weaves it in). On any failure or missing user_id we
+    // leave ddMemory empty and let the ritual proceed exactly as
+    // today. Independent failure domain from the verification block.
+    // 0008-ap-dd-assumptions is intentionally NOT read here — those
+    // are never coach-visible and never make it to a Claude prompt.
+    // is_anonymous: true is a valid identity → empty memory (first-touch).
+    // ============================================================
+    try {
+      if (resolvedUserId && ddServiceRoleClient) {
+        const [patternsRes, curriculumRes] = await Promise.all([
+          ddServiceRoleClient
+            .from("0008-ap-dd-patterns")
+            .select(
+              "pattern_text, domain, confidence, status, last_reinforced_at, times_observed",
+            )
+            .eq("user_id", resolvedUserId)
+            .eq("status", "active")
+            .order("last_reinforced_at", { ascending: false, nullsFirst: false })
+            .limit(25),
+          ddServiceRoleClient
+            .from("0008-ap-dd-curriculum-progress")
+            .select("concept, status, first_practiced_at, times_reinforced")
+            .eq("user_id", resolvedUserId),
+        ]);
+
+        if (patternsRes.error) {
+          console.warn(
+            "[alignment-coach][dd-memory][patterns-error]",
+            JSON.stringify({
+              message: patternsRes.error.message,
+              user_id: resolvedUserId,
+            }),
+          );
+        }
+        if (curriculumRes.error) {
+          console.warn(
+            "[alignment-coach][dd-memory][curriculum-error]",
+            JSON.stringify({
+              message: curriculumRes.error.message,
+              user_id: resolvedUserId,
+            }),
+          );
+        }
+
+        ddMemory = {
+          patterns: patternsRes.data ?? [],
+          curriculum: curriculumRes.data ?? [],
+        };
+      }
+    } catch (memErr) {
+      // Memory load must NEVER throw into the ritual path.
+      console.warn(
+        "[alignment-coach][dd-memory][error]",
+        JSON.stringify({
+          error: memErr instanceof Error ? memErr.message : String(memErr),
+          user_id: resolvedUserId,
+        }),
+      );
+      ddMemory = { patterns: [], curriculum: [] };
+    }
+
+    // ============================================================
+    // DD engine-state breadcrumb (Step 2 — queryable telemetry upsert)
+    // One row per user in 0008-ap-dd-engine-state; service-role bypasses
+    // RLS for the write. Telemetry-write failure must NEVER break a
+    // ritual — its own try/catch.
+    // ============================================================
+    if (resolvedUserId && ddServiceRoleClient) {
+      try {
+        const nowIso = new Date().toISOString();
+        const { error: stateErr } = await ddServiceRoleClient
+          .from("0008-ap-dd-engine-state")
+          .upsert(
+            {
+              user_id: resolvedUserId,
+              last_load: {
+                is_anonymous: isAnonymous,
+                get_user_ok: getUserOk,
+                patterns_loaded: ddMemory.patterns.length,
+                curriculum_loaded: ddMemory.curriculum.length,
+                fn_version: "step2",
+                ts: nowIso,
+              },
+              last_load_at: nowIso,
+            },
+            { onConflict: "user_id" },
+          );
+        if (stateErr) {
+          console.warn(
+            "[alignment-coach][dd-engine-state][upsert-error]",
+            JSON.stringify({
+              message: stateErr.message,
+              user_id: resolvedUserId,
+            }),
+          );
+        }
+      } catch (stateErr) {
+        console.warn(
+          "[alignment-coach][dd-engine-state][error]",
+          JSON.stringify({
+            error: stateErr instanceof Error ? stateErr.message : String(stateErr),
+            user_id: resolvedUserId,
+          }),
+        );
+      }
+    }
+
+    // NOTE: ddMemory is intentionally unused by the prompt/response
+    // this pass. Step 3 weaves it into the system prompt.
+
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY not configured");
     }
@@ -1615,7 +1873,8 @@ Deno.serve(async (req: Request) => {
       fuelReason ?? null,
       userState,
       step1Context,
-      stepContext
+      stepContext,
+      ddMemory,
     );
 
     // Determine messages to send
