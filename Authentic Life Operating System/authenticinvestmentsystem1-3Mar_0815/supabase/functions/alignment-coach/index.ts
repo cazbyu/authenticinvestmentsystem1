@@ -36,10 +36,12 @@ function buildSystemPrompt(
   fuelReason: string | null,
   userState: any,
   step1Context?: any,
-  stepContext?: any
+  stepContext?: any,
+  ddMemory?: { patterns: any[]; curriculum: any[] },
 ): string {
   let prompt = buildBaseIdentity();
   prompt += buildUserContext(userState);
+  prompt += buildLearnedMemory(ddMemory);
 
   if (mode === "weekly" && step) {
     prompt += buildWeeklyStepContext(step, trigger, userState, step1Context, stepContext);
@@ -190,6 +192,70 @@ function buildUserContext(us: any): string {
   }
 
   return ctx;
+}
+
+// --- Learned Memory Block ---
+//
+// Renders the DD's accumulated read of this person:
+//   - OBSERVATIONS: patterns the DD has come to notice (private lens — frames
+//     attention, doesn't get recited back).
+//   - CONCEPTS: curriculum progress (what's been introduced vs. practiced).
+//
+// Empty-safe by design: if both arrays are empty (the current reality — no
+// patterns exist yet), returns "" so the assembled prompt is byte-identical
+// to today. This guarantees zero behavior change until Step 4 starts writing
+// real patterns. 0008-ap-dd-assumptions is deliberately NOT rendered here —
+// assumptions are never coach-visible and must never reach a Claude prompt.
+
+function buildLearnedMemory(
+  ddMemory: { patterns: any[]; curriculum: any[] } | null | undefined,
+): string {
+  const patterns = ddMemory?.patterns ?? [];
+  const curriculum = ddMemory?.curriculum ?? [];
+
+  if (patterns.length === 0 && curriculum.length === 0) {
+    return "";
+  }
+
+  let block = "";
+
+  if (patterns.length > 0) {
+    block += `\nWHAT YOU'VE COME TO NOTICE ABOUT THIS PERSON:
+These are your own quiet observations, gathered over time — a private lens, not a list to read aloud. Unlike the activity above, which you can name directly, these are inferences about who they are. Let them shape the question you choose, where you place your attention, and how gently you tread — but do not announce that you remember, and do not recite them back. Name one only on the rare occasion when saying it out loud hands this person an insight into themselves — and then for their sake, never to prove that you noticed. Lean on settled observations; hold forming ones lightly, and never state a forming one as fact.
+
+OBSERVATIONS:
+`;
+
+    patterns.forEach((p: any) => {
+      const text = p?.pattern_text;
+      if (!text) return;
+      const confidence = p?.confidence;
+      const domain = p?.domain;
+      let line = "- ";
+      if (confidence) line += `(${confidence}) `;
+      line += text;
+      if (domain) line += ` — ${domain}`;
+      block += `${line}\n`;
+    });
+  }
+
+  if (curriculum.length > 0) {
+    block += `\nCONCEPTS THEY'VE WORKED WITH:
+`;
+
+    curriculum.forEach((c: any) => {
+      const concept = c?.concept;
+      if (!concept) return;
+      const status = c?.status;
+      let line = `- ${concept}`;
+      if (status) line += ` — ${status}`;
+      block += `${line}\n`;
+    });
+
+    block += `Build on ideas they've already met. Don't assume fluency with anything not listed here.\n`;
+  }
+
+  return block;
 }
 
 // ============================================
@@ -1807,7 +1873,8 @@ Deno.serve(async (req: Request) => {
       fuelReason ?? null,
       userState,
       step1Context,
-      stepContext
+      stepContext,
+      ddMemory,
     );
 
     // Determine messages to send
