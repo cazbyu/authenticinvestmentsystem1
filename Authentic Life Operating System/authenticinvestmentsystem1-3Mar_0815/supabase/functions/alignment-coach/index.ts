@@ -1552,6 +1552,14 @@ Deno.serve(async (req: Request) => {
     // log and fall through to the existing flow exactly as today.
     // ============================================================
     let ddServiceRoleClient: ReturnType<typeof createClient> | null = null;
+    // Hoisted to outer scope so the Step 2 memory load + breadcrumb
+    // upsert (below) can see the resolved identity. Assignment still
+    // happens inside the inner verification try (no behavior change
+    // to the verification flow itself).
+    let resolvedUserId: string | null = null;
+    let isAnonymous: boolean | null = null;
+    let getUserOk = false;
+    let ddMemory: { patterns: any[]; curriculum: any[] } = { patterns: [], curriculum: [] };
     try {
       const authHeader =
         req.headers.get("Authorization") ?? req.headers.get("authorization");
@@ -1567,9 +1575,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      let resolvedUserId: string | null = null;
-      let isAnonymous: boolean | null = null;
-      let getUserOk = false;
       let getUserError: string | null = null;
 
       if (token && ddServiceRoleClient) {
@@ -1613,8 +1618,119 @@ Deno.serve(async (req: Request) => {
         }),
       );
     }
-    // NOTE: ddServiceRoleClient is intentionally unused in this pass.
-    // Future passes (DD memory reads/writes) will consume it.
+    // ============================================================
+    // DD memory load (Step 2 — gated read, NO prompt/response use)
+    // Loads the user's learned memory (patterns + curriculum) into
+    // ddMemory and holds it. Unused by the prompt/response this pass
+    // (Step 3 weaves it in). On any failure or missing user_id we
+    // leave ddMemory empty and let the ritual proceed exactly as
+    // today. Independent failure domain from the verification block.
+    // 0008-ap-dd-assumptions is intentionally NOT read here — those
+    // are never coach-visible and never make it to a Claude prompt.
+    // is_anonymous: true is a valid identity → empty memory (first-touch).
+    // ============================================================
+    try {
+      if (resolvedUserId && ddServiceRoleClient) {
+        const [patternsRes, curriculumRes] = await Promise.all([
+          ddServiceRoleClient
+            .from("0008-ap-dd-patterns")
+            .select(
+              "pattern_text, domain, confidence, status, last_reinforced_at, times_observed",
+            )
+            .eq("user_id", resolvedUserId)
+            .eq("status", "active")
+            .order("last_reinforced_at", { ascending: false, nullsFirst: false })
+            .limit(25),
+          ddServiceRoleClient
+            .from("0008-ap-dd-curriculum-progress")
+            .select("concept, status, first_practiced_at, times_reinforced")
+            .eq("user_id", resolvedUserId),
+        ]);
+
+        if (patternsRes.error) {
+          console.warn(
+            "[alignment-coach][dd-memory][patterns-error]",
+            JSON.stringify({
+              message: patternsRes.error.message,
+              user_id: resolvedUserId,
+            }),
+          );
+        }
+        if (curriculumRes.error) {
+          console.warn(
+            "[alignment-coach][dd-memory][curriculum-error]",
+            JSON.stringify({
+              message: curriculumRes.error.message,
+              user_id: resolvedUserId,
+            }),
+          );
+        }
+
+        ddMemory = {
+          patterns: patternsRes.data ?? [],
+          curriculum: curriculumRes.data ?? [],
+        };
+      }
+    } catch (memErr) {
+      // Memory load must NEVER throw into the ritual path.
+      console.warn(
+        "[alignment-coach][dd-memory][error]",
+        JSON.stringify({
+          error: memErr instanceof Error ? memErr.message : String(memErr),
+          user_id: resolvedUserId,
+        }),
+      );
+      ddMemory = { patterns: [], curriculum: [] };
+    }
+
+    // ============================================================
+    // DD engine-state breadcrumb (Step 2 — queryable telemetry upsert)
+    // One row per user in 0008-ap-dd-engine-state; service-role bypasses
+    // RLS for the write. Telemetry-write failure must NEVER break a
+    // ritual — its own try/catch.
+    // ============================================================
+    if (resolvedUserId && ddServiceRoleClient) {
+      try {
+        const nowIso = new Date().toISOString();
+        const { error: stateErr } = await ddServiceRoleClient
+          .from("0008-ap-dd-engine-state")
+          .upsert(
+            {
+              user_id: resolvedUserId,
+              last_load: {
+                is_anonymous: isAnonymous,
+                get_user_ok: getUserOk,
+                patterns_loaded: ddMemory.patterns.length,
+                curriculum_loaded: ddMemory.curriculum.length,
+                fn_version: "step2",
+                ts: nowIso,
+              },
+              last_load_at: nowIso,
+            },
+            { onConflict: "user_id" },
+          );
+        if (stateErr) {
+          console.warn(
+            "[alignment-coach][dd-engine-state][upsert-error]",
+            JSON.stringify({
+              message: stateErr.message,
+              user_id: resolvedUserId,
+            }),
+          );
+        }
+      } catch (stateErr) {
+        console.warn(
+          "[alignment-coach][dd-engine-state][error]",
+          JSON.stringify({
+            error: stateErr instanceof Error ? stateErr.message : String(stateErr),
+            user_id: resolvedUserId,
+          }),
+        );
+      }
+    }
+
+    // NOTE: ddMemory is intentionally unused by the prompt/response
+    // this pass. Step 3 weaves it into the system prompt.
 
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY not configured");
