@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 /**
  * Alignment Coach - Unified Edge Function
@@ -14,6 +15,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
  */
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1539,6 +1542,79 @@ Deno.serve(async (req: Request) => {
       step1_context: step1Context,
       step_context: stepContext,
     } = body;
+
+    // ============================================================
+    // DD identity verification (LOG-ONLY, no gating)
+    // First pass of the DD engine arc. Resolves the caller's user_id
+    // from their bearer token and stands up a service-role Supabase
+    // client for future DD-memory reads/writes. Crucially: no gating,
+    // no DB access, no behavior change. If any step here fails, we
+    // log and fall through to the existing flow exactly as today.
+    // ============================================================
+    let ddServiceRoleClient: ReturnType<typeof createClient> | null = null;
+    try {
+      const authHeader =
+        req.headers.get("Authorization") ?? req.headers.get("authorization");
+      const token =
+        authHeader && authHeader.toLowerCase().startsWith("bearer ")
+          ? authHeader.slice(7).trim()
+          : null;
+
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        ddServiceRoleClient = createClient(
+          SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY,
+        );
+      }
+
+      let resolvedUserId: string | null = null;
+      let isAnonymous: boolean | null = null;
+      let getUserOk = false;
+      let getUserError: string | null = null;
+
+      if (token && ddServiceRoleClient) {
+        const { data: userData, error: userError } =
+          await ddServiceRoleClient.auth.getUser(token);
+        if (userError) {
+          getUserError = userError.message ?? "unknown getUser error";
+        } else if (userData?.user) {
+          resolvedUserId = userData.user.id;
+          isAnonymous =
+            (userData.user as { is_anonymous?: boolean }).is_anonymous ?? null;
+          getUserOk = true;
+        }
+      }
+
+      console.log(
+        "[alignment-coach][dd-identity]",
+        JSON.stringify({
+          token_present: !!token,
+          service_role_client_ready: !!ddServiceRoleClient,
+          get_user_ok: getUserOk,
+          get_user_error: getUserError,
+          user_id: resolvedUserId,
+          is_anonymous: isAnonymous,
+          mode: mode ?? null,
+          trigger: trigger ?? null,
+          step: step ?? null,
+        }),
+      );
+    } catch (verifyErr) {
+      // Verification must NEVER throw into the ritual path.
+      console.log(
+        "[alignment-coach][dd-identity][error]",
+        JSON.stringify({
+          error:
+            verifyErr instanceof Error
+              ? verifyErr.message
+              : String(verifyErr),
+          mode: mode ?? null,
+          trigger: trigger ?? null,
+        }),
+      );
+    }
+    // NOTE: ddServiceRoleClient is intentionally unused in this pass.
+    // Future passes (DD memory reads/writes) will consume it.
 
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY not configured");
