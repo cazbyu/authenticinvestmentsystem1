@@ -470,8 +470,10 @@ export default function WeeklyAlignmentScreen() {
         completed_at: new Date().toISOString(),
       };
 
+      let alignmentRowId: string | null = null;
       if (existingAlignment || weeklyAlignmentId) {
         const rowId = existingAlignment?.id || weeklyAlignmentId;
+        alignmentRowId = rowId ?? null;
         await supabase
           .from('0008-ap-weekly-alignments')
           .update(alignmentRecord)
@@ -482,7 +484,26 @@ export default function WeeklyAlignmentScreen() {
           .insert(alignmentRecord)
           .select('id')
           .single();
-        if (inserted) setWeeklyAlignmentId(inserted.id);
+        if (inserted) {
+          setWeeklyAlignmentId(inserted.id);
+          alignmentRowId = inserted.id;
+        }
+      }
+
+      // DD Step 4 — fire-and-forget reflection. Never awaited, never blocks
+      // ritual completion; a failure is swallowed with a console.warn.
+      try {
+        supabase.functions.invoke('alignment-coach', {
+          body: {
+            mode: 'weekly',
+            trigger: 'session_complete',
+            user_state: {},
+            messages: coach.messages,
+            session_context: { record_id: alignmentRowId, ...alignmentData },
+          },
+        }).catch((e: any) => console.warn('[dd-reflection] weekly invoke failed', e));
+      } catch (e) {
+        console.warn('[dd-reflection] weekly invoke threw', e);
       }
 
       // Track week plan items created during ritual in 0008-ap-ritual-items
