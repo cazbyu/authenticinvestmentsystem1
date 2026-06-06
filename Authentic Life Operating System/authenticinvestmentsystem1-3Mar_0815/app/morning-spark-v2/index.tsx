@@ -437,6 +437,29 @@ export default function MorningSparkV2Screen() {
       }
       // Save using the committed items' score, not the full contract score
       await commitMorningSparkV2(sparkId, userId, committedTargetScore, Array.from(committedTaskIds), pointsMap);
+
+      // DD Step 4 — fire-and-forget reflection. Never awaited, never blocks
+      // ritual completion; a failure is swallowed with a console.warn.
+      try {
+        const supabase = getSupabaseClient();
+        supabase.functions.invoke('alignment-coach', {
+          body: {
+            mode: 'morning',
+            trigger: 'session_complete',
+            user_state: {},
+            messages: [],
+            session_context: {
+              record_id: sparkId,
+              target_score: committedTargetScore,
+              committed_task_ids: Array.from(committedTaskIds),
+              committed_count: committedItems.length,
+            },
+          },
+        }).catch((e: any) => console.warn('[dd-reflection] morning invoke failed', e));
+      } catch (e) {
+        console.warn('[dd-reflection] morning invoke threw', e);
+      }
+
       // ContractCloseStep handles the celebration animation
       // After 3 seconds, navigate to dashboard
       setTimeout(() => {

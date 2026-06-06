@@ -230,11 +230,11 @@ OBSERVATIONS:
       const text = p?.pattern_text;
       if (!text) return;
       const confidence = p?.confidence;
-      const domain = p?.domain;
+      const lifeArea = p?.life_area;
       let line = "- ";
       if (confidence) line += `(${confidence}) `;
       line += text;
-      if (domain) line += ` — ${domain}`;
+      if (lifeArea) line += ` — ${lifeArea}`;
       block += `${line}\n`;
     });
   }
@@ -1590,6 +1590,117 @@ function buildDefaultUserMessage(
 // MAIN HANDLER
 // ============================================
 
+// ============================================================
+// DD Step 4 — closed-set vocabularies + reflection helpers
+// Closed-set validation and confidence are BRANCH-controlled
+// (never trusted to the model). See GATE A §4.
+// ============================================================
+const DD_LIFE_AREAS = new Set<string>([
+  "Spiritual", "Financial", "Social", "Emotional", "Intellectual",
+  "Physical", "Recreational", "Community",
+  "Roles", "Goals", "Tasks", "Fuel", "North Star",
+]);
+const DD_CONCEPTS = new Set<string>([
+  "morning_spark", "evening_review", "weekly_alignment", "fuel_level",
+  "role_patterns", "compass_coordinates", "goal_setting", "north_star",
+  "spiritual", "financial", "social", "emotional", "intellectual",
+  "physical", "recreation", "community",
+]);
+const DD_PROMOTE_THRESHOLD = 3;          // times_observed >= 3 -> emerging -> confirmed
+const DD_EVIDENCE_CAP = 20;              // bound the evidence trail
+const DD_STATUS_RANK: Record<string, number> = { not_introduced: 0, introduced: 1, practiced: 2 };
+
+function ddNormalize(s: string): string {
+  return (s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+function ddTokens(s: string): Set<string> {
+  return new Set(ddNormalize(s).split(" ").filter(Boolean));
+}
+function ddJaccard(a: string, b: string): number {
+  const ta = ddTokens(a), tb = ddTokens(b);
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter++;
+  return inter / (ta.size + tb.size - inter);
+}
+function ddIsSamePattern(a: string, b: string): boolean {
+  const na = ddNormalize(a), nb = ddNormalize(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  return ddJaccard(a, b) >= 0.6;
+}
+
+const DD_REFLECTION_SOUL = `You are the reflective memory of a life-planning companion. A person has just finished a guided ritual — a weekly alignment or a morning intention-setting. Your only job right now is to quietly notice what is worth remembering about this person, so that future conversations can be gentler, sharper, and more attuned to who they actually are.
+
+You are a patient noticer. You are not a profiler. The difference matters.
+
+A patient noticer writes down almost nothing. Most sessions reveal nothing new worth recording — a person showing up and doing their ritual is not a pattern, it is just a Tuesday. You record an observation only when a genuine, recurring signal is visible in the structured data of this session set against the person's recent history. One occurrence is never a pattern. The same thing appearing across sessions, or a single signal so pronounced it would be strange not to note it, is the bar. When in doubt, write nothing. An empty hands is the correct and common outcome.
+
+Everything you record begins as tentative. You are forming an impression, not filing a verdict. You do not know this person — you are beginning to notice them. Write each observation the way you would mention something to a trusted friend about someone you both care about: "I get the sense that..." rather than "This person is...". The data shows you what happened; it does not grant you the right to declare who they are.
+
+When you do record an observation, make it specific. A vague note like "struggles with wellness" is useless — it cannot be distinguished from any other vague note later, and it hands no real insight back to the person. A specific note — "energy reliably dips in the days after the Spiritual zone goes quiet" — can be recognized, reinforced, or gently corrected. Specificity is what lets an observation earn trust over time. Write the observation as a single clear sentence about a tendency, not a summary of the session.
+
+It helps to understand how this person's life is structured, because the most valuable thing you can notice is where that structure strains. Their days are made of small activities — tasks, events, deposited ideas, reflections, and the roses and thorns they name. Those activities, along with the wellness zones they tend and the roles they carry, are all meant to point upward: toward goals, toward a vision, toward a mission — which together are this person's answer to the deepest questions about how they want to live. When that chain holds, things feel coherent. When it strains — effort pouring into tasks that connect to no goal, roles carefully tended while the larger vision goes untouched, ideas captured but never ripening into anything — that strain is often the truest thing worth noticing, because the person rarely sees it themselves. An activity is only ever how you noticed something; the observation itself is about the area of life it touches and where it sits in that chain. Name the area, and let the activity be the evidence.
+
+You are also tracking, separately and lightly, which parts of the planning method this person is actually exercising — whether they engaged with fuel-setting, role review, goal work, and so on. This is not judgment; it is simply a map of what they have and haven't yet explored, so the companion knows what is familiar to them and what is still new.
+
+What you must never do: do not flatter, do not diagnose, do not infer hidden emotional states the data doesn't show, do not reach for insight that isn't earned by the evidence in front of you. Do not record anything you would be uncomfortable having the person read in their own words. You are building a quiet, honest, accumulating sense of someone — the kind a good companion holds lightly and updates often.
+
+You will be given this session's structured outcomes, a window of the person's recent sessions for comparison, and possibly a short transcript for color. Reflect on all of it, then return only the structured record described below. If nothing is worth recording, return empty arrays. That is not a failure. That is the patient noticer doing the job correctly.`;
+
+const DD_REFLECTION_FORMAT = `
+
+---
+
+OUTPUT FORMAT — return ONLY this, as raw JSON. No preamble, no markdown fences, no commentary.
+
+{
+  "patterns": [
+    { "pattern_text": "<one specific sentence describing a tendency>",
+      "life_area": "<exactly one value from LIFE AREAS below>",
+      "confidence": "emerging",
+      "evidence": "<brief note of what in this session's data prompted the observation>" }
+  ],
+  "curriculum": [
+    { "concept": "<exactly one key from CONCEPTS below>",
+      "status": "introduced" }
+  ]
+}
+
+Both arrays may be empty. Returning {"patterns": [], "curriculum": []} is correct and common — it is the patient noticer doing the job well.
+
+LIFE AREAS — use these exact strings, capitalization included. Pick the single area each observation most belongs to:
+Spiritual, Financial, Social, Emotional, Intellectual, Physical, Recreational, Community, Roles, Goals, Tasks, Fuel, North Star
+
+CONCEPTS — use these exact lowercase keys, and only ones this session genuinely exercised:
+morning_spark, evening_review, weekly_alignment, fuel_level, role_patterns, compass_coordinates, goal_setting, north_star, spiritual, financial, social, emotional, intellectual, physical, recreation, community
+
+"confidence" is always "emerging". "status" is "introduced" or "practiced" only.`;
+
+const DD_REFLECTION_SYSTEM = DD_REFLECTION_SOUL + "\n" + DD_REFLECTION_FORMAT;
+
+function buildReflectionUserMessage(
+  mode: string,
+  sessionContext: any,
+  recentHistory: any[],
+  messages: any[] | undefined,
+): string {
+  const parts: string[] = [];
+  parts.push(`RITUAL: ${mode === "weekly" ? "Weekly Alignment" : "Morning Spark"}`);
+  parts.push(`\nTHIS SESSION'S STRUCTURED OUTCOMES:\n${JSON.stringify(sessionContext ?? {}, null, 2)}`);
+  parts.push(`\nRECENT SESSIONS (most recent first, for comparison):\n${JSON.stringify(recentHistory ?? [], null, 2)}`);
+  const transcript = (messages ?? [])
+    .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && m.content)
+    .map((m: any) => `${m.role}: ${m.content}`)
+    .join("\n");
+  if (transcript) {
+    parts.push(`\nCONVERSATION (color only; the structured data above is primary):\n${transcript}`);
+  }
+  parts.push(`\nReflect, then return only the JSON described in your instructions.`);
+  return parts.join("\n");
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -1607,6 +1718,7 @@ Deno.serve(async (req: Request) => {
       user_state: userState,
       step1_context: step1Context,
       step_context: stepContext,
+      session_context: sessionContext,
     } = body;
 
     // ============================================================
@@ -1701,7 +1813,7 @@ Deno.serve(async (req: Request) => {
           ddServiceRoleClient
             .from("0008-ap-dd-patterns")
             .select(
-              "pattern_text, domain, confidence, status, last_reinforced_at, times_observed",
+              "pattern_text, life_area, confidence, status, last_reinforced_at, times_observed",
             )
             .eq("user_id", resolvedUserId)
             .eq("status", "active")
@@ -1768,7 +1880,7 @@ Deno.serve(async (req: Request) => {
                 get_user_ok: getUserOk,
                 patterns_loaded: ddMemory.patterns.length,
                 curriculum_loaded: ddMemory.curriculum.length,
-                fn_version: "step2",
+                fn_version: "step4",
                 ts: nowIso,
               },
               last_load_at: nowIso,
@@ -1797,6 +1909,214 @@ Deno.serve(async (req: Request) => {
 
     // NOTE: ddMemory is intentionally unused by the prompt/response
     // this pass. Step 3 weaves it into the system prompt.
+
+    // ============================================================
+    // DD Step 4 — session-complete reflection (patient-noticer write path)
+    // Special early-return branch. Reflects on this session's structured
+    // outcomes against recent history and quietly writes pattern/curriculum
+    // memory. Every block is independently guarded: a reflection failure
+    // returns {ok:false} and NEVER affects ritual completion (the client
+    // fires this fire-and-forget after the ritual is already saved).
+    // ============================================================
+    if (trigger === "session_complete") {
+      const nowIso = new Date().toISOString();
+      const recordId = sessionContext?.record_id ?? null;
+      let patternsWritten = 0, patternsReinforced = 0, curriculumAdvanced = 0, reflectionOk = false;
+
+      if (resolvedUserId && ddServiceRoleClient && ANTHROPIC_API_KEY) {
+        try {
+          // 1) Recent structured history (server-side, service-role)
+          let recentHistory: any[] = [];
+          if (mode === "weekly") {
+            const { data } = await ddServiceRoleClient
+              .from("0008-ap-weekly-alignments")
+              .select("id, week_start_date, roles_reviewed, wellness_zones_reviewed, goals_reviewed, one_thing, personal_commitment, committed_tasks, delegated_tasks, completed_at")
+              .eq("user_id", resolvedUserId)
+              .order("week_start_date", { ascending: false })
+              .limit(4);
+            recentHistory = data ?? [];
+          } else {
+            const { data } = await ddServiceRoleClient
+              .from("0008-ap-daily-sparks")
+              .select("id, spark_date, fuel_level, fuel_1_why, fuel_3_why, initial_target_score, committed_task_ids, spark_points, commit_rose, commit_thorn, commit_reflection, commit_evening_review, committed_at")
+              .eq("user_id", resolvedUserId)
+              .order("spark_date", { ascending: false })
+              .limit(14);
+            recentHistory = data ?? [];
+          }
+
+          // 2) Reflection call (Sonnet, structured JSON)
+          const reflResp = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": ANTHROPIC_API_KEY,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 1024,
+              system: DD_REFLECTION_SYSTEM,
+              messages: [
+                { role: "user", content: buildReflectionUserMessage(mode, sessionContext, recentHistory, messages) },
+              ],
+            }),
+          });
+          const reflData = await reflResp.json();
+          if (reflData.error) throw new Error(reflData.error.message || "reflection API error");
+          const rawText = (reflData.content || [])
+            .filter((b: any) => b.type === "text")
+            .map((b: any) => b.text)
+            .join("\n")
+            .trim();
+          const cleaned = rawText.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+          let parsed: any = { patterns: [], curriculum: [] };
+          try {
+            parsed = JSON.parse(cleaned);
+          } catch (_e) {
+            console.warn("[alignment-coach][dd-reflection][parse-error]", JSON.stringify({ user_id: resolvedUserId, sample: cleaned.slice(0, 200) }));
+          }
+
+          const proposedPatterns: any[] = Array.isArray(parsed.patterns) ? parsed.patterns : [];
+          const proposedCurriculum: any[] = Array.isArray(parsed.curriculum) ? parsed.curriculum : [];
+          if (proposedPatterns.length >= 4) {
+            console.warn("[alignment-coach][dd-reflection][over-eager]", JSON.stringify({ user_id: resolvedUserId, count: proposedPatterns.length }));
+          }
+
+          // 3) Patterns: dedup-or-reinforce
+          for (const p of proposedPatterns) {
+            try {
+              const pattern_text = typeof p?.pattern_text === "string" ? p.pattern_text.trim() : "";
+              const life_area = typeof p?.life_area === "string" ? p.life_area.trim() : "";
+              const note = typeof p?.evidence === "string" ? p.evidence.trim() : "";
+              if (!pattern_text || !DD_LIFE_AREAS.has(life_area)) {
+                console.warn("[alignment-coach][dd-reflection][pattern-dropped]", JSON.stringify({ user_id: resolvedUserId, life_area, has_text: !!pattern_text }));
+                continue;
+              }
+              const { data: existing } = await ddServiceRoleClient
+                .from("0008-ap-dd-patterns")
+                .select("id, pattern_text, times_observed, confidence, evidence")
+                .eq("user_id", resolvedUserId)
+                .eq("life_area", life_area)
+                .eq("status", "active");
+              const match = (existing ?? []).find((e: any) => ddIsSamePattern(e.pattern_text, pattern_text));
+              const evidenceEntry = { source: mode, ref_id: recordId, note };
+              if (match) {
+                const newTimes = (match.times_observed ?? 1) + 1;
+                const trail = Array.isArray(match.evidence) ? match.evidence : [];
+                const upd: any = {
+                  times_observed: newTimes,
+                  last_reinforced_at: nowIso,
+                  evidence: [...trail, evidenceEntry].slice(-DD_EVIDENCE_CAP),
+                };
+                if (newTimes >= DD_PROMOTE_THRESHOLD && match.confidence === "emerging") {
+                  upd.confidence = "confirmed";
+                }
+                const { error } = await ddServiceRoleClient.from("0008-ap-dd-patterns").update(upd).eq("id", match.id);
+                if (error) { console.warn("[alignment-coach][dd-reflection][reinforce-error]", JSON.stringify({ message: error.message })); continue; }
+                patternsReinforced++;
+              } else {
+                const { error } = await ddServiceRoleClient.from("0008-ap-dd-patterns").insert({
+                  user_id: resolvedUserId,
+                  pattern_text,
+                  life_area,
+                  confidence: "emerging",   // branch-forced, never trusts model
+                  status: "active",
+                  evidence: [evidenceEntry],
+                  last_reinforced_at: nowIso,
+                });
+                if (error) { console.warn("[alignment-coach][dd-reflection][insert-error]", JSON.stringify({ message: error.message })); continue; }
+                patternsWritten++;
+              }
+            } catch (pErr) {
+              console.warn("[alignment-coach][dd-reflection][pattern-error]", JSON.stringify({ error: pErr instanceof Error ? pErr.message : String(pErr) }));
+            }
+          }
+
+          // 4) Curriculum: forward-only upsert
+          for (const c of proposedCurriculum) {
+            try {
+              const concept = typeof c?.concept === "string" ? c.concept.trim() : "";
+              const status = typeof c?.status === "string" ? c.status.trim() : "";
+              if (!DD_CONCEPTS.has(concept) || !(status === "introduced" || status === "practiced")) {
+                console.warn("[alignment-coach][dd-reflection][concept-dropped]", JSON.stringify({ user_id: resolvedUserId, concept, status }));
+                continue;
+              }
+              const { data: ex } = await ddServiceRoleClient
+                .from("0008-ap-dd-curriculum-progress")
+                .select("id, status, times_reinforced, first_practiced_at")
+                .eq("user_id", resolvedUserId)
+                .eq("concept", concept)
+                .maybeSingle();
+              if (!ex) {
+                const { error } = await ddServiceRoleClient.from("0008-ap-dd-curriculum-progress").insert({
+                  user_id: resolvedUserId,
+                  concept,
+                  status,
+                  times_reinforced: 1,
+                  introduced_at: nowIso,
+                  first_practiced_at: status === "practiced" ? nowIso : null,
+                });
+                if (error) { console.warn("[alignment-coach][dd-reflection][curriculum-insert-error]", JSON.stringify({ message: error.message })); continue; }
+                curriculumAdvanced++;
+              } else {
+                const curRank = DD_STATUS_RANK[ex.status] ?? 0;
+                const newRank = DD_STATUS_RANK[status] ?? 0;
+                const finalStatus = newRank > curRank ? status : ex.status;
+                const upd: any = { status: finalStatus, times_reinforced: (ex.times_reinforced ?? 0) + 1 };
+                if (finalStatus === "practiced" && !ex.first_practiced_at) upd.first_practiced_at = nowIso;
+                const { error } = await ddServiceRoleClient.from("0008-ap-dd-curriculum-progress").update(upd).eq("id", ex.id);
+                if (error) { console.warn("[alignment-coach][dd-reflection][curriculum-update-error]", JSON.stringify({ message: error.message })); continue; }
+                if (newRank > curRank) curriculumAdvanced++;
+              }
+            } catch (cErr) {
+              console.warn("[alignment-coach][dd-reflection][concept-error]", JSON.stringify({ error: cErr instanceof Error ? cErr.message : String(cErr) }));
+            }
+          }
+
+          reflectionOk = true;
+        } catch (reflErr) {
+          console.warn("[alignment-coach][dd-reflection][error]", JSON.stringify({ error: reflErr instanceof Error ? reflErr.message : String(reflErr), user_id: resolvedUserId }));
+        }
+      }
+
+      // 5) Breadcrumb — Step 4 extended payload (own try/catch)
+      if (resolvedUserId && ddServiceRoleClient) {
+        try {
+          await ddServiceRoleClient.from("0008-ap-dd-engine-state").upsert({
+            user_id: resolvedUserId,
+            last_load: {
+              is_anonymous: isAnonymous,
+              get_user_ok: getUserOk,
+              patterns_loaded: ddMemory.patterns.length,
+              curriculum_loaded: ddMemory.curriculum.length,
+              fn_version: "step4",
+              last_reflection_at: nowIso,
+              patterns_written: patternsWritten,
+              patterns_reinforced: patternsReinforced,
+              curriculum_advanced: curriculumAdvanced,
+              summary_written: false,
+              mode: mode ?? null,
+              ts: nowIso,
+            },
+            last_load_at: nowIso,
+          }, { onConflict: "user_id" });
+        } catch (bErr) {
+          console.warn("[alignment-coach][dd-reflection][breadcrumb-error]", JSON.stringify({ error: bErr instanceof Error ? bErr.message : String(bErr) }));
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: reflectionOk,
+          patterns_written: patternsWritten,
+          patterns_reinforced: patternsReinforced,
+          curriculum_advanced: curriculumAdvanced,
+          summary_written: false,
+        }),
+        { headers: { "Content-Type": "application/json", ...corsHeaders } },
+      );
+    }
 
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY not configured");
